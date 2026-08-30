@@ -1,0 +1,203 @@
+package diagram:c4-pipeline@0.1.0;
+
+/// Shared values crossing the compiler, browser-layout, and Excalidraw-policy seams.
+interface types {
+    enum direction {
+        automatic,
+        top-to-bottom,
+        left-to-right,
+    }
+
+    enum theme {
+        light,
+        dark,
+    }
+
+    enum error-code {
+        invalid-source,
+        unsupported-syntax,
+        input-limit-exceeded,
+        browser-layout-failed,
+        invalid-layout,
+        invalid-scene,
+        policy-rejected,
+        internal-error,
+    }
+
+    record pipeline-error {
+        code: error-code,
+        message: string,
+        details: option<string>,
+    }
+
+    record point {
+        x: f64,
+        y: f64,
+    }
+
+    record bounds {
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+    }
+
+    record computed-style {
+        fill: option<string>,
+        stroke: option<string>,
+        stroke-width: option<f64>,
+        stroke-dasharray: option<string>,
+        color: option<string>,
+        font-family: option<string>,
+        font-size: option<f64>,
+        font-weight: option<string>,
+    }
+
+    record layout-node {
+        id: string,
+        shape: string,
+        bounds: bounds,
+        style: computed-style,
+    }
+
+    record layout-edge {
+        id: string,
+        source-id: string,
+        target-id: string,
+        points: list<point>,
+        style: computed-style,
+    }
+
+    record layout-text {
+        id: string,
+        text: string,
+        bounds: bounds,
+        style: computed-style,
+    }
+
+    /// Browser-derived geometry only. It intentionally contains no Excalidraw
+    /// elements so scene construction remains inside the Wasm compiler.
+    record layout-snapshot {
+        width: f64,
+        height: f64,
+        nodes: list<layout-node>,
+        edges: list<layout-edge>,
+        texts: list<layout-text>,
+        renderer: string,
+        warnings: list<string>,
+    }
+
+    record browser-render-request {
+        mermaid: string,
+        configuration-json: string,
+        maximum-output-bytes: u32,
+    }
+
+    record compile-options {
+        direction: direction,
+        theme: theme,
+        maximum-source-bytes: u32,
+        maximum-elements: u32,
+    }
+
+    record compile-request {
+        source: string,
+        options: compile-options,
+    }
+
+    /// The versioned JSON envelope avoids coupling WIT releases to every
+    /// Excalidraw element-field addition while keeping the outer contract typed.
+    record scene-envelope {
+        format: string,
+        format-version: u32,
+        elements-json: string,
+        files-json: string,
+    }
+
+    record compiled-scene {
+        scene: scene-envelope,
+        warnings: list<string>,
+    }
+
+    /// Opaque, versioned compiler state returned by prepare and consumed by
+    /// finish. Callers must not inspect or modify it.
+    record prepared-compilation {
+        state: list<u8>,
+        render-request: browser-render-request,
+    }
+
+    record admission-policy {
+        maximum-scene-bytes: u32,
+        maximum-elements: u32,
+        allow-external-urls: bool,
+        allow-embedded-files: bool,
+    }
+
+    record approved-scene {
+        scene: scene-envelope,
+        warnings: list<string>,
+    }
+}
+
+/// Port implemented by the Gondolin/Playwright adapter in production and by a
+/// deterministic in-memory adapter in compiler tests.
+interface browser-layout {
+    use types.{browser-render-request, layout-snapshot, pipeline-error};
+
+    render: func(request: browser-render-request) -> result<layout-snapshot, pipeline-error>;
+}
+
+/// Preferred deep compiler interface. Browser execution is hidden behind the
+/// imported browser-layout port.
+interface compiler {
+    use types.{compile-request, compiled-scene, pipeline-error};
+
+    compile: func(request: compile-request) -> result<compiled-scene, pipeline-error>;
+}
+
+/// Compatibility interface for hosts that cannot yet satisfy custom component
+/// imports. The host calls prepare, invokes the Gondolin adapter, then passes
+/// the unchanged state and returned snapshot to finish.
+interface compiler-core {
+    use types.{
+        compile-request,
+        compiled-scene,
+        layout-snapshot,
+        pipeline-error,
+        prepared-compilation,
+    };
+
+    prepare: func(request: compile-request) -> result<prepared-compilation, pipeline-error>;
+    finish: func(
+        state: list<u8>,
+        layout: layout-snapshot,
+    ) -> result<compiled-scene, pipeline-error>;
+}
+
+/// Independent policy module that accepts compiler output and returns the only
+/// scene that may be sent to a browser or checkpoint store.
+interface excalidraw-policy {
+    use types.{admission-policy, approved-scene, pipeline-error, scene-envelope};
+
+    approve: func(
+        scene: scene-envelope,
+        policy: admission-policy,
+    ) -> result<approved-scene, pipeline-error>;
+}
+
+/// Target composition: Wassette supplies browser-layout with a host adapter
+/// that delegates only DOM/SVG measurement to the Gondolin VM.
+world c4-compiler {
+    import browser-layout;
+    export compiler;
+}
+
+/// Current-Wassette composition: Pi explicitly orchestrates prepare/render/
+/// finish without weakening the eventual compiler interface.
+world c4-compiler-core {
+    export compiler-core;
+}
+
+world excalidraw-policy-component {
+    export excalidraw-policy;
+}

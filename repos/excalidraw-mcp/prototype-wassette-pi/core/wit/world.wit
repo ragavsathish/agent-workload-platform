@@ -1,0 +1,25 @@
+package prototype:excalidraw-core;
+
+interface diagrams {
+    record view-result {
+        checkpoint-id: string,
+        elements: string,
+        warning: string,
+    }
+
+    /// Return the compact element format instructions used by the prototype.
+    read-me: func() -> string;
+
+    /// Resolve checkpoint and delete pseudo-elements, then save a new checkpoint.
+    create-view: func(elements: string, base-elements: string) -> result<view-result, string>;
+
+    /// Validate and normalize elements before the host stores a checkpoint.
+    save-checkpoint: func(id: string, elements: string) -> result<string, string>;
+
+    /// Compile Mermaid C4 syntax into Excalidraw skeleton elements.
+    mermaid-to-elements: func(mermaid: string) -> result<string, string>;
+}
+
+world excalidraw-core {
+    export diagrams;
+}

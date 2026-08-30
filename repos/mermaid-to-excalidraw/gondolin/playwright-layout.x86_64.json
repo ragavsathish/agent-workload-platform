@@ -1,0 +1,30 @@
+{
+  "arch": "x86_64",
+  "distro": "alpine",
+  "env": {
+    "NODE_ENV": "production",
+    "MERMAID_EXCALIDRAW_BROWSER_CHANNEL": "bundled",
+    "PLAYWRIGHT_BROWSERS_PATH": "/ms-playwright"
+  },
+  "alpine": {
+    "version": "3.23.0",
+    "kernelPackage": "linux-virt",
+    "kernelImage": "vmlinuz-virt",
+    "initramfsPackages": [
+      "linux-virt"
+    ],
+    "krunfwVersion": "v5.2.1"
+  },
+  "oci": {
+    "image": "mermaid-excalidraw-layout:playwright-1.58.2-amd64",
+    "runtime": "docker",
+    "platform": "linux/amd64",
+    "pullPolicy": "never"
+  },
+  "rootfs": {
+    "label": "mermaid-layout"
+  },
+  "runtimeDefaults": {
+    "rootfsMode": "cow"
+  }
+}

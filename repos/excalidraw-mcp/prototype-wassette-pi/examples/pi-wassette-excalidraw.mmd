@@ -1,0 +1,18 @@
+C4Container
+title C4 Diagram Automation System - Container View
+
+Person(user, "User", "Requests, reviews, and edits architecture diagrams")
+
+System_Boundary(diagram_system, "C4 Diagram Automation System") {
+  Container(pi, "Pi Client", "GPT-5.6 Terra + C4 skill", "Interprets requests, applies C4 guidance, and orchestrates tool calls")
+  Container(wassette, "Wassette Runtime", "WebAssembly MCP runtime", "Executes capability-limited components and validates diagram state")
+  Container(excalidraw, "Excalidraw MCP Web App", "Browser application", "Displays and edits the generated architecture diagram")
+}
+
+System_Ext(git, "Git Repository", "Stores Mermaid source, configuration, scripts, and generated artifacts")
+
+Rel_R(user, pi, "Requests a C4 diagram", "Natural language")
+Rel_R(pi, wassette, "Submits native Excalidraw JSON", "MCP over stdio")
+Rel_R(wassette, excalidraw, "Returns validated elements", "JSON")
+Rel_D(pi, git, "Reads source and configuration", "Git")
+Rel(user, excalidraw, "Views and edits the diagram", "Browser UI")

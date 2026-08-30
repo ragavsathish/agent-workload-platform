@@ -1,0 +1,33 @@
+C4Deployment
+title Composable C4 to Excalidraw Pipeline - Deployment View
+
+Person(author, "Diagram Author", "Requests, views, and edits C4 architecture diagrams")
+
+Deployment_Node(client, "Client Machine", "User workstation", "Orchestrates diagram generation and presents the approved result") {
+  Container(pi, "Pi Coordinator", "Process", "Applies the C4 skill and orchestrates model, Gondolin, Wassette, and Excalidraw calls")
+
+  Deployment_Node(wassette, "Wassette Runtime", "WebAssembly Component Runtime", "Runs capability-limited WIT modules") {
+    Container(compiler, "C4 Compiler", "c4-compiler.wasm", "Parses C4, requests browser geometry, validates the snapshot, and emits an Excalidraw scene")
+    Container(policy, "Excalidraw Policy", "excalidraw-policy.wasm", "Applies scene admission rules before browser display or persistence")
+  }
+
+  ContainerDb(checkpoints, "Checkpoint Store", "Host memory or LeoFS", "Stores approved Excalidraw scene revisions")
+  Container(excalidraw, "Excalidraw Web App", "Browser application", "Displays and edits approved architecture diagrams")
+}
+
+Deployment_Node(gondolin, "Gondolin QEMU Micro-VM", "Playwright OCI root filesystem", "Isolates the browser-dependent layout capability") {
+  Container(layout, "Browser Layout Adapter", "Node.js, Mermaid, Playwright, Chromium", "Renders SVG and returns typed node, edge, text, and bounds geometry")
+}
+
+Deployment_Node(ai_provider, "External AI Provider", "Remote model infrastructure", "Hosts the selected architecture model") {
+  System_Ext(model, "GPT or Qwen", "Produces native C4 Mermaid from the architecture request")
+}
+
+Rel(author, pi, "Requests a C4 diagram", "Natural language")
+Rel(pi, model, "Generates C4 Mermaid with", "Model API")
+Rel(pi, compiler, "Invokes compilation", "MCP and WIT")
+Rel(compiler, layout, "Uses browser layout capability", "browser-layout.render import")
+Rel(compiler, policy, "Submits candidate scene", "scene-envelope")
+Rel(policy, checkpoints, "Stores approved revision", "Excalidraw JSON")
+Rel(policy, excalidraw, "Approves displayed and edited scenes", "Excalidraw JSON")
+Rel(author, excalidraw, "Views and edits diagram", "Browser UI")

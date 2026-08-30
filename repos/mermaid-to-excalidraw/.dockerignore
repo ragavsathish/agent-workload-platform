@@ -1,0 +1,13 @@
+.git
+.github
+node_modules
+dist
+public
+coverage
+playwright-report
+test-results
+visual-tests/public
+artifacts
+.cache
+.DS_Store
+*.log

@@ -1,0 +1,13 @@
+{
+  "name": "excalidraw-wassette-core-prototype",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "mkdir -p ./dist && jco componentize ./src/excalidraw-core.js --wit ./wit -o ./dist/excalidraw-core.wasm"
+  },
+  "dependencies": {
+    "@bytecodealliance/componentize-js": "0.19.3",
+    "@bytecodealliance/jco": "1.17.0"
+  }
+}

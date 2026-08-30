@@ -1,0 +1,19 @@
+FROM mcr.microsoft.com/playwright:v1.58.2-noble@sha256:6446946a1d9fd62d9ae501312a2d76a43ee688542b21622056a372959b65d63d
+
+WORKDIR /app
+
+COPY package.json yarn.lock ./
+RUN corepack enable \
+  && yarn install --frozen-lockfile \
+  && yarn cache clean \
+  && rm -rf \
+    /ms-playwright/chromium-* \
+    /ms-playwright/firefox-* \
+    /ms-playwright/webkit-*
+
+COPY . .
+
+ENV NODE_ENV=production \
+    MERMAID_EXCALIDRAW_BROWSER_CHANNEL=bundled
+
+ENTRYPOINT ["node", "scripts/convert-mermaid.mjs"]

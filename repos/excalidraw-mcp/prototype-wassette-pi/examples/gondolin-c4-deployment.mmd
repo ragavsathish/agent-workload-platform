@@ -1,0 +1,26 @@
+C4Deployment
+  title Pi, Gondolin, Wassette, and Excalidraw - Deployment View
+
+  Deployment_Node(client, "Client Machine", "User workstation", "Coordinates diagram jobs and displays the editable result") {
+    Container(coordinator, "Coordinator Pi", "Process", "Interprets the request and coordinates the remote diagram job")
+    Container(gondolin, "Gondolin Client", "CLI", "Controls the isolated QEMU workload and transfers job results")
+    Container(excalidraw, "Excalidraw Web App", "Web application", "Displays and edits the final validated Excalidraw scene")
+  }
+
+  Deployment_Node(vm, "Gondolin QEMU VM", "Alpine Linux", "Runs an isolated diagram-generation workload") {
+    Container(worker, "Diagram Worker Pi", "Process", "Constructs the diagram from C4 semantics and the rendered reference")
+    Container(mermaid, "Mermaid Renderer", "Mermaid CLI", "Renders the C4 source into a PNG layout reference")
+    Container(wassette, "Wassette Runtime", "WebAssembly MCP runtime", "Validates and normalizes editable Excalidraw JSON")
+    Container(headless, "Headless Excalidraw App", "Web application", "Combines the reference layout and validated scene state")
+    ContainerDb(bundle, "Result Bundle", "Artifact store", "Stores Mermaid source, PNG, Excalidraw JSON, and validation metadata")
+  }
+
+  Rel(coordinator, gondolin, "Submits diagram job", "Gondolin control channel")
+  Rel(gondolin, worker, "Starts isolated workload", "QEMU")
+  Rel(worker, mermaid, "Requests reference rendering", "Mermaid source")
+  Rel(worker, wassette, "Submits editable scene for validation", "Excalidraw JSON over MCP")
+  Rel(mermaid, headless, "Provides layout reference", "PNG")
+  Rel(wassette, headless, "Returns validated scene", "Excalidraw JSON")
+  Rel(headless, bundle, "Writes generated artifacts", "JSON + PNG")
+  Rel(bundle, gondolin, "Returns completed result bundle", "Gondolin result channel")
+  Rel(gondolin, excalidraw, "Delivers final editable scene", "Excalidraw JSON")

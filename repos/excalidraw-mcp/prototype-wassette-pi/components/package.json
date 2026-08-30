@@ -1,0 +1,13 @@
+{
+  "name": "c4-excalidraw-wassette-components",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "mkdir -p dist && jco componentize src/c4-compiler.js --wit ../contracts/c4-pipeline/wit --world-name c4-compiler-core --disable all -o dist/c4-compiler.wasm && jco componentize src/excalidraw-policy.js --wit ../contracts/c4-pipeline/wit --world-name excalidraw-policy-component --disable all -o dist/excalidraw-policy.wasm"
+  },
+  "dependencies": {
+    "@bytecodealliance/componentize-js": "0.19.3",
+    "@bytecodealliance/jco": "1.17.0"
+  }
+}
