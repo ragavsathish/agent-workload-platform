@@ -1,58 +1,56 @@
-# Diagram Pipelines Monorepo
+# Agent Workload Platform
 
-This repository owns multiple reproducible pipelines that turn structured
-diagram descriptions into editable, validated visual artifacts.
+This monorepo lets an agent running on a client machine orchestrate workloads
+across local tools, capability-limited WebAssembly modules, isolated Gondolin
+micro-VMs, browsers, storage systems, and remote model infrastructure.
+
+C4-to-Excalidraw is the first workload, not the scope of the platform.
 
 ## Interface
 
-Every pipeline implements the same lifecycle:
+Every workload implements the same lifecycle:
 
 ```bash
-./pipeline list
-./pipeline <name> setup
-./pipeline <name> check
-./pipeline <name> run [pipeline arguments...]
+./workload list
+./workload <name> setup
+./workload <name> check
+./workload <name> run [workload arguments...]
 ```
 
-The first pipeline is `c4-excalidraw`:
+For the current workload:
 
 ```bash
-./pipeline c4-excalidraw setup
-./pipeline c4-excalidraw check
-./pipeline c4-excalidraw run
+./workload c4-excalidraw setup
+./workload c4-excalidraw check
+./workload c4-excalidraw run
 ```
 
 ## Layout
 
 ```text
 .
-├── pipeline                         # common lifecycle dispatcher
-├── apps/
-│   └── excalidraw-mcp/              # shared interactive editor
-├── packages/
-│   └── mermaid-to-excalidraw/       # shared browser-layout adapter
-└── pipelines/
-    └── c4-excalidraw/
-        ├── setup.sh
-        ├── check.sh
-        ├── run.sh
-        ├── contracts/
-        ├── components/
-        └── pi-extension.ts
+├── workload                         # common lifecycle dispatcher
+├── apps/                            # reusable runnable applications
+│   └── excalidraw-mcp/
+├── workloads/                       # independently runnable agent workloads
+│   └── c4-excalidraw/
+├── adapters/                        # concrete implementations at external seams
+│   └── mermaid-to-excalidraw/
+├── components/                      # reusable WIT/WebAssembly modules
+└── runtimes/                        # Pi, Wassette, Gondolin runtime integration
 ```
 
-- `pipelines/` contains independently runnable pipeline modules.
-- `apps/` contains reusable runnable applications.
-- `packages/` contains reusable libraries and adapters.
-- Generated dependencies, Wasm builds, loaded components, and pipeline
-  artifacts are ignored by Git.
+Workload-specific contracts, prompts, examples, and modules remain inside the
+workload until another workload genuinely reuses them. Shared implementations
+then move to `components/`, `adapters/`, `apps/`, or `runtimes/` according to
+their responsibility.
 
-See [pipelines/README.md](pipelines/README.md) for the interface a new pipeline
+See [workloads/README.md](workloads/README.md) for the interface a new workload
 must implement. Imported source provenance is recorded in `PROVENANCE.md`.
 
 ## Compatibility shortcuts
 
-These remain available and delegate through the common interface:
+The following delegate to the `c4-excalidraw` workload:
 
 ```bash
 ./setup.sh
@@ -60,4 +58,4 @@ These remain available and delegate through the common interface:
 ./dogfood.sh
 ```
 
-They operate on `c4-excalidraw`; new automation should prefer `./pipeline`.
+New automation should use `./workload` directly.

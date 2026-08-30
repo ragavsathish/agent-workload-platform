@@ -5,11 +5,11 @@ ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 usage() {
   echo "usage: $0 list" >&2
-  echo "       $0 PIPELINE setup|check|run [arguments...]" >&2
+  echo "       $0 WORKLOAD setup|check|run [arguments...]" >&2
 }
 
 if [[ ${1:-} == list ]]; then
-  for directory in "$ROOT_DIR"/pipelines/*; do
+  for directory in "$ROOT_DIR"/workloads/*; do
     [[ -d $directory ]] || continue
     basename -- "$directory"
   done
@@ -21,27 +21,27 @@ if [[ $# -lt 2 ]]; then
   exit 2
 fi
 
-PIPELINE_NAME=$1
+WORKLOAD_NAME=$1
 COMMAND=$2
 shift 2
 
-[[ $PIPELINE_NAME =~ ^[a-z0-9][a-z0-9-]*$ ]] || {
-  echo "invalid pipeline name: $PIPELINE_NAME" >&2
+[[ $WORKLOAD_NAME =~ ^[a-z0-9][a-z0-9-]*$ ]] || {
+  echo "invalid workload name: $WORKLOAD_NAME" >&2
   exit 2
 }
 
 case "$COMMAND" in
   setup|check|run) ;;
   *)
-    echo "unsupported pipeline command: $COMMAND" >&2
+    echo "unsupported workload command: $COMMAND" >&2
     usage
     exit 2
     ;;
 esac
 
-ENTRYPOINT="$ROOT_DIR/pipelines/$PIPELINE_NAME/$COMMAND.sh"
+ENTRYPOINT="$ROOT_DIR/workloads/$WORKLOAD_NAME/$COMMAND.sh"
 [[ -x $ENTRYPOINT ]] || {
-  echo "pipeline '$PIPELINE_NAME' does not implement '$COMMAND'" >&2
+  echo "workload '$WORKLOAD_NAME' does not implement '$COMMAND'" >&2
   exit 2
 }
 

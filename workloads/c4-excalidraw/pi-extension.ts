@@ -20,7 +20,7 @@ const hostHtml = path.join(pipelineDir, "dist", "host.html");
 const appHtml = path.join(excalidrawRepoDir, "dist", "mcp-app.html");
 const layoutRepoDir = process.env.MERMAID_EXCALIDRAW_REPO
   ? path.resolve(process.env.MERMAID_EXCALIDRAW_REPO)
-  : path.join(monorepoRoot, "packages", "mermaid-to-excalidraw");
+  : path.join(monorepoRoot, "adapters", "mermaid-to-excalidraw");
 const layoutRunner = path.join(layoutRepoDir, "scripts", "render-layout-gondolin.sh");
 const CREATE_VIEW = "prototype_excalidraw-core_diagrams_create-view";
 const SAVE_CHECKPOINT = "prototype_excalidraw-core_diagrams_save-checkpoint";
@@ -187,7 +187,7 @@ export default function (pi: ExtensionAPI) {
 
   function requireArtifacts() {
     for (const required of [hostHtml, appHtml, path.join(componentDir, "excalidraw-core.wasm")]) {
-      if (!fs.existsSync(required)) throw new Error(`Missing ${required}. Run ./pipeline c4-excalidraw setup first.`);
+      if (!fs.existsSync(required)) throw new Error(`Missing ${required}. Run ./workload c4-excalidraw setup first.`);
     }
   }
 
@@ -198,7 +198,7 @@ export default function (pi: ExtensionAPI) {
       path.join(componentDir, "excalidraw-policy.wasm"),
       layoutRunner,
     ]) {
-      if (!fs.existsSync(required)) throw new Error(`Missing ${required}. Run ./pipeline c4-excalidraw setup first.`);
+      if (!fs.existsSync(required)) throw new Error(`Missing ${required}. Run ./workload c4-excalidraw setup first.`);
     }
   }
 

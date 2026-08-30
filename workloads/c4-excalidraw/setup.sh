@@ -7,7 +7,7 @@ REPO_DIR=${EXCALIDRAW_MCP_REPO:-"$MONOREPO_ROOT/apps/excalidraw-mcp"}
 CORE_DIR="$SCRIPT_DIR/core"
 PIPELINE_COMPONENTS_DIR="$SCRIPT_DIR/components"
 COMPONENT_DIR="$SCRIPT_DIR/.wassette-components"
-LAYOUT_REPO_DIR=${MERMAID_EXCALIDRAW_REPO:-"$MONOREPO_ROOT/packages/mermaid-to-excalidraw"}
+LAYOUT_REPO_DIR=${MERMAID_EXCALIDRAW_REPO:-"$MONOREPO_ROOT/adapters/mermaid-to-excalidraw"}
 
 command -v node >/dev/null || { echo "node is required" >&2; exit 1; }
 command -v pnpm >/dev/null || { echo "pnpm is required" >&2; exit 1; }
@@ -62,7 +62,7 @@ fi
 
 echo
 echo "Ready. Start Pi from the monorepo root with:"
-echo "  pi -e ./pipelines/c4-excalidraw/pi-extension.ts"
+echo "  pi -e ./workloads/c4-excalidraw/pi-extension.ts"
 echo
 echo "For C4 Mermaid rendering, also load the C4 skill:"
-echo "  pi --skill ~/.codex/skills/c4-diagrams -e ./pipelines/c4-excalidraw/pi-extension.ts"
+echo "  pi --skill ~/.codex/skills/c4-diagrams -e ./workloads/c4-excalidraw/pi-extension.ts"

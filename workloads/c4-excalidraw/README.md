@@ -16,13 +16,13 @@ The split is intentional:
 - `core/` retains the checkpoint compatibility module used by the cloned app.
 - `host.ts` is a thin MCP Apps parent bridge.
 - `pi-extension.ts` owns orchestration and the loopback-only HTTP server.
-- `packages/mermaid-to-excalidraw` supplies the narrow
+- `adapters/mermaid-to-excalidraw` supplies the narrow
   Gondolin/Playwright browser-layout adapter.
 
 ## Build
 
 ```bash
-./pipeline c4-excalidraw setup
+./workload c4-excalidraw setup
 ```
 
 The setup script installs pinned dependencies, builds this repository's
@@ -35,8 +35,8 @@ already present.
 ## Run with Pi
 
 ```bash
-cd /path/to/diagram-pipelines
-pi -e ./pipelines/c4-excalidraw/pi-extension.ts
+cd /path/to/agent-workload-platform
+pi -e ./workloads/c4-excalidraw/pi-extension.ts
 ```
 
 For the C4-to-Excalidraw workflow, load the C4 skill as well:
@@ -44,7 +44,7 @@ For the C4-to-Excalidraw workflow, load the C4 skill as well:
 ```bash
 pi \
   --skill ~/.codex/skills/c4-diagrams \
-  -e ./pipelines/c4-excalidraw/pi-extension.ts
+  -e ./workloads/c4-excalidraw/pi-extension.ts
 ```
 
 Then ask, for example:
@@ -58,8 +58,8 @@ To exercise the same Wasm/Gondolin/Wassette phases without asking a model to
 make the tool call, use the deterministic dogfood runner:
 
 ```bash
-./pipeline c4-excalidraw run \
-  pipelines/c4-excalidraw/examples/composable-c4-pipeline.mmd \
+./workload c4-excalidraw run \
+  workloads/c4-excalidraw/examples/composable-c4-pipeline.mmd \
   artifacts/c4-excalidraw/composable-c4-pipeline.excalidraw
 ```
 
@@ -68,7 +68,7 @@ let GPT construct editable Excalidraw JSON from both the semantic source and the
 PNG:
 
 ```bash
-./pipelines/c4-excalidraw/run-gpt-c4-workflow.sh
+./workloads/c4-excalidraw/run-gpt-c4-workflow.sh
 ```
 
 The script uses `openai-codex/gpt-5.6-terra` by default. Override it with
@@ -91,7 +91,7 @@ verified directly using the golden Mermaid PNG; this metadata is what lets Pi
 attach that image.
 
 ```bash
-./pipelines/c4-excalidraw/run-qwen-c4-request.sh \
+./workloads/c4-excalidraw/run-qwen-c4-request.sh \
   'Show a C4 container diagram for a user, Pi, Wassette, and Excalidraw'
 ```
 

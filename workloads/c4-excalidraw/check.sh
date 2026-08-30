@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 MONOREPO_ROOT=$(CDPATH= cd -- "$ROOT_DIR/../.." && pwd)
 PIPELINE_DIR="$ROOT_DIR"
-LAYOUT_REPO="$MONOREPO_ROOT/packages/mermaid-to-excalidraw"
+LAYOUT_REPO="$MONOREPO_ROOT/adapters/mermaid-to-excalidraw"
 
 echo "[1/5] Validating WIT contracts"
 sh "$PIPELINE_DIR/contracts/c4-pipeline/validate.sh"
@@ -32,7 +32,7 @@ echo "[4/5] Running Mermaid adapter tests"
 
 echo "[5/5] Checking scripts and diffs"
 bash -n \
-  "$MONOREPO_ROOT/pipeline" \
+  "$MONOREPO_ROOT/workload" \
   "$MONOREPO_ROOT/setup.sh" \
   "$MONOREPO_ROOT/check.sh" \
   "$MONOREPO_ROOT/dogfood.sh" \

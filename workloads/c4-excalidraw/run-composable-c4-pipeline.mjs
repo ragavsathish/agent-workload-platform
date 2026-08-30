@@ -18,7 +18,7 @@ const monorepoRoot = path.resolve(pipelineDir, "..", "..");
 const componentDir = path.join(pipelineDir, ".wassette-components");
 const layoutRepoDir = process.env.MERMAID_EXCALIDRAW_REPO
   ? path.resolve(process.env.MERMAID_EXCALIDRAW_REPO)
-  : path.join(monorepoRoot, "packages", "mermaid-to-excalidraw");
+  : path.join(monorepoRoot, "adapters", "mermaid-to-excalidraw");
 const layoutRunner = path.join(layoutRepoDir, "scripts", "render-layout-gondolin.sh");
 const source = await fs.readFile(path.resolve(inputPath), "utf8");
 
