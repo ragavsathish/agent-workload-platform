@@ -13,10 +13,10 @@ const [inputArgument, outputArgument] = process.argv.slice(2);
 const inputPath = inputArgument ?? path.join(pipelineDir, "examples", "composable-c4-pipeline.mmd");
 const outputPath = outputArgument ?? path.join(monorepoRoot, "artifacts", "c4-excalidraw", "composable-c4-pipeline.excalidraw");
 const componentDir = path.join(pipelineDir, ".wassette-components");
-const layoutRepoDir = process.env.MERMAID_EXCALIDRAW_REPO
-  ? path.resolve(process.env.MERMAID_EXCALIDRAW_REPO)
-  : path.join(monorepoRoot, "adapters", "mermaid-to-excalidraw");
-const layoutRunner = path.join(layoutRepoDir, "scripts", "render-layout-gondolin.sh");
+const layoutAdapterDir = process.env.C4_GONDOLIN_ADAPTER
+  ? path.resolve(process.env.C4_GONDOLIN_ADAPTER)
+  : path.join(monorepoRoot, "adapters", "c4-gondolin");
+const layoutRunner = path.join(layoutAdapterDir, "scripts", "render-layout-gondolin.sh");
 const source = await fs.readFile(path.resolve(inputPath), "utf8");
 
 const child = spawn("wassette", ["run", "--component-dir", componentDir, "--disable-builtin-tools"], {
@@ -166,7 +166,7 @@ try {
   let png;
   if (process.env.RENDER_PNG !== "0") {
     png = path.resolve(outputPath).replace(/\.excalidraw$/, ".png");
-    await run(process.execPath, [path.join(layoutRepoDir, "scripts", "render-excalidraw.mjs"), path.resolve(outputPath), png]);
+    await run(process.execPath, [path.join(layoutAdapterDir, "scripts", "render-excalidraw.mjs"), path.resolve(outputPath), png]);
   }
   process.stdout.write(`${JSON.stringify({
     output: path.resolve(outputPath),

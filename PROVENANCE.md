@@ -5,7 +5,8 @@ The platform was assembled from these repositories on 2026-08-30:
 | Directory | Source | Commit | Ownership |
 |---|---|---|---|
 | `apps/excalidraw-mcp` | <https://github.com/excalidraw/excalidraw-mcp> | `157aa23ceb1976008aadc89eb05e3444060f09d6` | Pinned Git submodule; no platform patches |
-| `adapters/mermaid-to-excalidraw` | <https://github.com/excalidraw/mermaid-to-excalidraw> plus local implementation | `e7ce159` source snapshot, followed by platform reliability changes | Vendored because the C4/Gondolin implementation is not on a public remote |
+| `adapters/mermaid-to-excalidraw` | <https://github.com/excalidraw/mermaid-to-excalidraw> | `7849b487be67cf2d439c713c847839d2494d59b6` | Pinned Git submodule; no platform patches |
+| `adapters/c4-gondolin` | Extracted from local `mermaid-to-excalidraw` commit `e7ce159` plus platform reliability changes | Continued in this monorepo | Platform-owned adapter |
 | `workloads/c4-excalidraw` | Extracted from local `excalidraw-mcp` commit `d7c1664` | Continued in this monorepo | Platform-owned workload |
 
 ## Dependency policy

@@ -18,10 +18,10 @@ const excalidrawRepoDir = process.env.EXCALIDRAW_MCP_REPO
 const componentDir = path.join(pipelineDir, ".wassette-components");
 const hostHtml = path.join(pipelineDir, "dist", "host.html");
 const appHtml = path.join(excalidrawRepoDir, "dist", "mcp-app.html");
-const layoutRepoDir = process.env.MERMAID_EXCALIDRAW_REPO
-  ? path.resolve(process.env.MERMAID_EXCALIDRAW_REPO)
-  : path.join(monorepoRoot, "adapters", "mermaid-to-excalidraw");
-const layoutRunner = path.join(layoutRepoDir, "scripts", "render-layout-gondolin.sh");
+const layoutAdapterDir = process.env.C4_GONDOLIN_ADAPTER
+  ? path.resolve(process.env.C4_GONDOLIN_ADAPTER)
+  : path.join(monorepoRoot, "adapters", "c4-gondolin");
+const layoutRunner = path.join(layoutAdapterDir, "scripts", "render-layout-gondolin.sh");
 const CREATE_VIEW = "prototype_excalidraw-core_diagrams_create-view";
 const SAVE_CHECKPOINT = "prototype_excalidraw-core_diagrams_save-checkpoint";
 const READ_ME = "prototype_excalidraw-core_diagrams_read-me";

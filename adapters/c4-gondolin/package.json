@@ -1,0 +1,34 @@
+{
+  "name": "@agent-workload-platform/c4-gondolin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && npm run bundle",
+    "bundle": "vite build --config vite.config.mjs",
+    "test": "vitest --run --config vitest.config.mjs",
+    "convert": "node scripts/convert-mermaid.mjs",
+    "gondolin:build": "sh scripts/build-playwright-gondolin.sh",
+    "gondolin:convert": "sh scripts/convert-mermaid-gondolin.sh"
+  },
+  "dependencies": {
+    "@excalidraw/excalidraw": "0.18.1",
+    "@excalidraw/mermaid-to-excalidraw": "file:../mermaid-to-excalidraw",
+    "playwright": "1.58.2",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "vite": "6.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.11",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  },
+  "overrides": {
+    "@excalidraw/mermaid-to-excalidraw": {
+      "nanoid": "5.1.16"
+    },
+    "lodash-es": "4.18.1",
+    "nanoid": "3.3.18"
+  }
+}

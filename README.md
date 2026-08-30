@@ -24,7 +24,8 @@ npm run c4
 ├── workloads/                       # independently runnable agent workloads
 │   └── c4-excalidraw/
 ├── adapters/                        # concrete implementations at external seams
-│   └── mermaid-to-excalidraw/
+│   ├── mermaid-to-excalidraw/      # untouched upstream Git submodule
+│   └── c4-gondolin/                # platform-owned C4/browser adapter
 ├── components/                      # reusable WIT/WebAssembly modules
 └── runtimes/                        # Pi, Wassette, Gondolin runtime integration
 ```

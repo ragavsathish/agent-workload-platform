@@ -1,0 +1,27 @@
+FROM mcr.microsoft.com/playwright:v1.58.2-noble@sha256:6446946a1d9fd62d9ae501312a2d76a43ee688542b21622056a372959b65d63d
+
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
+WORKDIR /app/adapters/mermaid-to-excalidraw
+COPY adapters/mermaid-to-excalidraw/package.json adapters/mermaid-to-excalidraw/yarn.lock ./
+RUN corepack enable \
+  && yarn install --frozen-lockfile \
+  && yarn cache clean \
+  && rm -rf \
+    /ms-playwright/chromium-* \
+    /ms-playwright/firefox-* \
+    /ms-playwright/webkit-*
+COPY adapters/mermaid-to-excalidraw ./
+RUN yarn build
+
+WORKDIR /app/adapters/c4-gondolin
+COPY adapters/c4-gondolin/package.json adapters/c4-gondolin/package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts \
+  && npm cache clean --force
+COPY adapters/c4-gondolin ./
+RUN npm run bundle
+
+ENV NODE_ENV=production \
+    MERMAID_EXCALIDRAW_BROWSER_CHANNEL=bundled
+
+ENTRYPOINT ["node", "/app/adapters/c4-gondolin/scripts/convert-mermaid.mjs"]

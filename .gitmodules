@@ -1,3 +1,6 @@
 [submodule "apps/excalidraw-mcp"]
 	path = apps/excalidraw-mcp
 	url = https://github.com/excalidraw/excalidraw-mcp.git
+[submodule "adapters/mermaid-to-excalidraw"]
+	path = adapters/mermaid-to-excalidraw
+	url = https://github.com/excalidraw/mermaid-to-excalidraw.git

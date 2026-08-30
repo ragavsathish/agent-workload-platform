@@ -1,0 +1,12 @@
+**/.git
+**/.github
+**/node_modules
+**/dist
+**/public
+**/coverage
+**/playwright-report
+**/test-results
+**/artifacts
+**/.cache
+.DS_Store
+*.log

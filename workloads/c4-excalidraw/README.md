@@ -16,16 +16,19 @@ The split is intentional:
 - `core/` retains the checkpoint compatibility module used by the cloned app.
 - `host.ts` is a thin MCP Apps parent bridge.
 - `pi-extension.ts` owns orchestration and the loopback-only HTTP server.
-- `adapters/mermaid-to-excalidraw` supplies the narrow
-  Gondolin/Playwright browser-layout adapter.
+- `adapters/mermaid-to-excalidraw` is the untouched upstream converter.
+- `adapters/c4-gondolin` supplies C4 preprocessing and the narrow
+  Gondolin/Playwright browser-layout adapter around it.
 
 ## Install and build
 
 ```bash
-git submodule update --init --recursive -- apps/excalidraw-mcp
+git submodule update --init --recursive
 pnpm --dir apps/excalidraw-mcp install --ignore-scripts --frozen-lockfile
 pnpm --dir apps/excalidraw-mcp run build
 yarn --cwd adapters/mermaid-to-excalidraw install --frozen-lockfile --ignore-scripts
+yarn --cwd adapters/mermaid-to-excalidraw build
+npm --prefix adapters/c4-gondolin ci --ignore-scripts
 npm --prefix workloads/c4-excalidraw ci --ignore-scripts
 npm --prefix workloads/c4-excalidraw/core ci --ignore-scripts
 npm --prefix workloads/c4-excalidraw/components ci --ignore-scripts
