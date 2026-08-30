@@ -9,9 +9,23 @@ PIPELINE_COMPONENTS_DIR="$SCRIPT_DIR/components"
 COMPONENT_DIR="$SCRIPT_DIR/.wassette-components"
 LAYOUT_REPO_DIR=${MERMAID_EXCALIDRAW_REPO:-"$MONOREPO_ROOT/adapters/mermaid-to-excalidraw"}
 
+if [ ! -f "$REPO_DIR/package.json" ] && [ "$REPO_DIR" = "$MONOREPO_ROOT/apps/excalidraw-mcp" ]; then
+  command -v git >/dev/null || {
+    echo "git is required to initialize the Excalidraw MCP submodule" >&2
+    exit 1
+  }
+  echo "Initializing the Excalidraw MCP submodule"
+  git -C "$MONOREPO_ROOT" submodule update --init --recursive -- apps/excalidraw-mcp
+fi
+
 command -v node >/dev/null || { echo "node is required" >&2; exit 1; }
 command -v pnpm >/dev/null || { echo "pnpm is required" >&2; exit 1; }
 command -v wassette >/dev/null || { echo "wassette is required" >&2; exit 1; }
+[ -f "$REPO_DIR/package.json" ] || {
+  echo "Missing Excalidraw MCP app at $REPO_DIR" >&2
+  echo "Initialize submodules or set EXCALIDRAW_MCP_REPO to its path" >&2
+  exit 1
+}
 [ -f "$LAYOUT_REPO_DIR/scripts/build-playwright-gondolin.sh" ] || {
   echo "Missing Mermaid-to-Excalidraw package at $LAYOUT_REPO_DIR" >&2
   echo "Set MERMAID_EXCALIDRAW_REPO to its path" >&2
@@ -27,10 +41,10 @@ else
   npx --yes yarn@1.22.22 --cwd "$LAYOUT_REPO_DIR" install --frozen-lockfile --ignore-scripts
 fi
 
-echo "[1/8] Installing the cloned Excalidraw MCP dependencies"
+echo "[1/8] Installing the pinned Excalidraw MCP dependencies"
 pnpm --dir "$REPO_DIR" install --ignore-scripts --frozen-lockfile
 
-echo "[2/8] Building the cloned Excalidraw MCP App and server"
+echo "[2/8] Building the pinned Excalidraw MCP app and server"
 pnpm --dir "$REPO_DIR" run build
 
 echo "[3/8] Installing the prototype component toolchain"

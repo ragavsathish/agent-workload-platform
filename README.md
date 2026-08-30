@@ -31,7 +31,7 @@ For the current workload:
 .
 ├── workload                         # common lifecycle dispatcher
 ├── apps/                            # reusable runnable applications
-│   └── excalidraw-mcp/
+│   └── excalidraw-mcp/              # pinned upstream Git submodule
 ├── workloads/                       # independently runnable agent workloads
 │   └── c4-excalidraw/
 ├── adapters/                        # concrete implementations at external seams
@@ -47,6 +47,10 @@ their responsibility.
 
 See [workloads/README.md](workloads/README.md) for the interface a new workload
 must implement. Imported source provenance is recorded in `PROVENANCE.md`.
+
+`setup` initializes the submodules required by its workload. A full checkout
+can also be prepared eagerly with `git clone --recurse-submodules` or
+`git submodule update --init --recursive`.
 
 ## Compatibility shortcuts
 

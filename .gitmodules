@@ -1,0 +1,3 @@
+[submodule "apps/excalidraw-mcp"]
+	path = apps/excalidraw-mcp
+	url = https://github.com/excalidraw/excalidraw-mcp.git
