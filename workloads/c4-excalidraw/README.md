@@ -20,6 +20,14 @@ The split is intentional:
 - `adapters/c4-gondolin` supplies C4 preprocessing and the narrow
   Gondolin/Playwright browser-layout adapter around it.
 
+The Wasm guests are authored in strict TypeScript with WIT as the source of
+truth. Their builds regenerate Jco guest declarations, run `tsc --noEmit`,
+compile to an ignored ESM intermediate, and componentize that JavaScript with
+the pinned, audited toolchain. The compiler and policy disable every implicit
+WASI feature; the checkpoint compatibility component enables only
+`wasi:random`, which it needs to create checkpoint IDs. See
+[`docs/research/wasm-wit-typescript-best-practices.md`](../../docs/research/wasm-wit-typescript-best-practices.md).
+
 ## Install and build
 
 ```bash

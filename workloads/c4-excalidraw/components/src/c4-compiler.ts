@@ -1,32 +1,72 @@
+import type {
+  Bounds,
+  CompileOptions,
+  CompileRequest,
+  CompiledScene,
+  ComputedStyle,
+  ErrorCode,
+  LayoutEdge,
+  LayoutNode,
+  LayoutSnapshot,
+  LayoutText,
+  PipelineError,
+  PreparedCompilation,
+} from "diagram:c4-pipeline/types@0.1.0";
+
+type CompilerCore = {
+  prepare(request: CompileRequest): PreparedCompilation;
+  finish(state: Uint8Array, layout: LayoutSnapshot): CompiledScene;
+};
+
+interface CompilerState {
+  version: number;
+  source: string;
+  options: CompileOptions;
+}
+
+type ElementType = "rectangle" | "ellipse" | "diamond" | "arrow" | "text";
+type LinearPoint = [number, number];
+
+interface ExcalidrawElement {
+  [key: string]: unknown;
+  id: string;
+  type: ElementType;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const STATE_VERSION = 1;
 const MAX_COORDINATE = 1_000_000;
 const MAX_STATE_BYTES = 8 * 1024 * 1024;
 
-function fail(code, message, details) {
-  throw { code, message, details };
+function fail(code: ErrorCode, message: string, details?: string): never {
+  const error: PipelineError = details === undefined ? { code, message } : { code, message, details };
+  throw error;
 }
 
-function byteLength(value) {
+function byteLength(value: string): number {
   return encoder.encode(value).length;
 }
 
-function finite(value) {
+function finite(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-function validateLimit(value, name) {
+function validateLimit(value: number, name: string): void {
   if (!Number.isInteger(value) || value <= 0) {
     fail("invalid-source", `${name} must be a positive integer`);
   }
 }
 
-function stripFence(source) {
+function stripFence(source: string): string {
   return source.replace(/^\s*```(?:mermaid)?\s*/iu, "").replace(/```\s*$/u, "").trim();
 }
 
-function validateSource(request) {
+function validateSource(request: CompileRequest): string {
   const { options } = request;
   validateLimit(options.maximumSourceBytes, "maximum-source-bytes");
   validateLimit(options.maximumElements, "maximum-elements");
@@ -40,7 +80,7 @@ function validateSource(request) {
   return source;
 }
 
-function prepare(request) {
+function prepare(request: CompileRequest): PreparedCompilation {
   const source = validateSource(request);
   const state = encoder.encode(JSON.stringify({
     version: STATE_VERSION,
@@ -61,28 +101,46 @@ function prepare(request) {
   };
 }
 
-function readState(bytes) {
+function isPipelineError(error: unknown): error is PipelineError {
+  return typeof error === "object" && error !== null && "code" in error && "message" in error;
+}
+
+function isCompilerState(value: unknown): value is CompilerState {
+  if (typeof value !== "object" || value === null || !("options" in value)) return false;
+  const state = value as Record<string, unknown>;
+  const options = state.options;
+  if (typeof options !== "object" || options === null) return false;
+  const fields = options as Record<string, unknown>;
+  return state.version === STATE_VERSION
+    && typeof state.source === "string"
+    && ["automatic", "top-to-bottom", "left-to-right"].includes(String(fields.direction))
+    && ["light", "dark"].includes(String(fields.theme))
+    && typeof fields.maximumSourceBytes === "number"
+    && typeof fields.maximumElements === "number";
+}
+
+function readState(bytes: Uint8Array): CompilerState {
   if (!bytes || typeof bytes.length !== "number" || bytes.length === 0 || bytes.length > MAX_STATE_BYTES) {
     fail("invalid-source", "Invalid opaque compiler state");
   }
   try {
-    const state = JSON.parse(decoder.decode(bytes));
-    if (state.version !== STATE_VERSION || typeof state.source !== "string" || !state.options) throw new Error("shape");
+    const state: unknown = JSON.parse(decoder.decode(bytes));
+    if (!isCompilerState(state)) throw new Error("shape");
     validateSource({ source: state.source, options: state.options });
     return state;
   } catch (error) {
-    if (error?.code) throw error;
+    if (isPipelineError(error)) throw error;
     fail("invalid-source", "Opaque compiler state is corrupt or unsupported");
   }
 }
 
-function validateId(id, kind) {
+function validateId(id: string, kind: string): void {
   if (typeof id !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/u.test(id)) {
     fail("invalid-layout", `${kind} has an invalid id`, String(id));
   }
 }
 
-function validateBounds(bounds, kind) {
+function validateBounds(bounds: Bounds, kind: string): void {
   if (!bounds || ![bounds.x, bounds.y, bounds.width, bounds.height].every(finite)) {
     fail("invalid-layout", `${kind} has non-finite bounds`);
   }
@@ -91,15 +149,15 @@ function validateBounds(bounds, kind) {
   }
 }
 
-function color(value, fallback) {
+function color(value: string | undefined, fallback: string): string {
   return typeof value === "string" && value.length <= 64 ? value : fallback;
 }
 
-function number(value, fallback, minimum, maximum) {
+function number(value: number | undefined, fallback: number, minimum: number, maximum: number): number {
   return finite(value) ? Math.min(maximum, Math.max(minimum, value)) : fallback;
 }
 
-function hash(text) {
+function hash(text: string): number {
   let value = 2166136261;
   for (let index = 0; index < text.length; index++) {
     value ^= text.charCodeAt(index);
@@ -108,7 +166,15 @@ function hash(text) {
   return value >>> 0;
 }
 
-function baseElement(id, type, x, y, width, height, style) {
+function baseElement(
+  id: string,
+  type: ElementType,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  style: ComputedStyle,
+): ExcalidrawElement {
   const seed = hash(id);
   return {
     id, type, x, y, width, height, angle: 0,
@@ -125,14 +191,14 @@ function baseElement(id, type, x, y, width, height, style) {
   };
 }
 
-function compileNode(node) {
-  const allowed = new Set(["rectangle", "ellipse", "diamond"]);
-  const type = allowed.has(node.shape) ? node.shape : "rectangle";
+function compileNode(node: LayoutNode): ExcalidrawElement {
+  const allowed = new Set<ElementType>(["rectangle", "ellipse", "diamond"]);
+  const type: ElementType = allowed.has(node.shape as ElementType) ? node.shape as ElementType : "rectangle";
   const { x, y, width, height } = node.bounds;
   return baseElement(node.id, type, x, y, width, height, node.style ?? {});
 }
 
-function compileText(text) {
+function compileText(text: LayoutText): ExcalidrawElement {
   const { x, y, width, height } = text.bounds;
   const style = text.style ?? {};
   const element = baseElement(text.id, "text", x, y, width, height, style);
@@ -151,7 +217,7 @@ function compileText(text) {
   };
 }
 
-function compileEdge(edge, nodeIds) {
+function compileEdge(edge: LayoutEdge, nodeIds: ReadonlySet<string>): ExcalidrawElement {
   if (edge.points.length < 2) fail("invalid-layout", `Edge ${edge.id} requires at least two points`);
   for (const point of edge.points) {
     if (!finite(point.x) || !finite(point.y) || Math.abs(point.x) > MAX_COORDINATE || Math.abs(point.y) > MAX_COORDINATE) {
@@ -159,7 +225,8 @@ function compileEdge(edge, nodeIds) {
     }
   }
   const start = edge.points[0];
-  const localPoints = edge.points.map((point) => [point.x - start.x, point.y - start.y]);
+  if (!start) fail("invalid-layout", `Edge ${edge.id} requires a starting point`);
+  const localPoints: LinearPoint[] = edge.points.map((point) => [point.x - start.x, point.y - start.y]);
   const xs = localPoints.map(([x]) => x);
   const ys = localPoints.map(([, y]) => y);
   const style = edge.style ?? {};
@@ -176,7 +243,7 @@ function compileEdge(edge, nodeIds) {
   };
 }
 
-function finish(stateBytes, layout) {
+function finish(stateBytes: Uint8Array, layout: LayoutSnapshot): CompiledScene {
   const state = readState(stateBytes);
   if (!layout || !finite(layout.width) || !finite(layout.height) || layout.width <= 0 || layout.height <= 0) {
     fail("invalid-layout", "Browser adapter returned invalid canvas dimensions");
@@ -185,15 +252,21 @@ function finish(stateBytes, layout) {
   if (count > state.options.maximumElements) {
     fail("input-limit-exceeded", `Layout contains ${count} elements; limit is ${state.options.maximumElements}`);
   }
-  const ids = new Set();
-  for (const [kind, values] of [["Node", layout.nodes], ["Edge", layout.edges], ["Text", layout.texts]]) {
-    for (const value of values) {
-      validateId(value.id, kind);
-      if (ids.has(value.id)) fail("invalid-layout", `Duplicate layout id: ${value.id}`);
-      ids.add(value.id);
-      if (value.bounds) validateBounds(value.bounds, `${kind} ${value.id}`);
-      if (kind === "Text" && byteLength(value.text) > 65_536) fail("invalid-layout", `Text ${value.id} is too large`);
-    }
+  const ids = new Set<string>();
+  const register = (id: string, kind: string): void => {
+    validateId(id, kind);
+    if (ids.has(id)) fail("invalid-layout", `Duplicate layout id: ${id}`);
+    ids.add(id);
+  };
+  for (const node of layout.nodes) {
+    register(node.id, "Node");
+    validateBounds(node.bounds, `Node ${node.id}`);
+  }
+  for (const edge of layout.edges) register(edge.id, "Edge");
+  for (const text of layout.texts) {
+    register(text.id, "Text");
+    validateBounds(text.bounds, `Text ${text.id}`);
+    if (byteLength(text.text) > 65_536) fail("invalid-layout", `Text ${text.id} is too large`);
   }
   const nodeIds = new Set(layout.nodes.map((node) => node.id));
   for (const edge of layout.edges) {
@@ -216,4 +289,4 @@ function finish(stateBytes, layout) {
   };
 }
 
-export const compilerCore = { prepare, finish };
+export const compilerCore: CompilerCore = { prepare, finish };

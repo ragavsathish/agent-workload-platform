@@ -3,4 +3,6 @@
 **/.vite/
 **/.wassette-components/
 **/artifacts/
+workloads/c4-excalidraw/components/generated/
+workloads/c4-excalidraw/core/generated/
 .DS_Store

@@ -4,10 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "mkdir -p dist && jco componentize src/c4-compiler.js --wit ../contracts/c4-pipeline/wit --world-name c4-compiler-core --disable all -o dist/c4-compiler.wasm && jco componentize src/excalidraw-policy.js --wit ../contracts/c4-pipeline/wit --world-name excalidraw-policy-component --disable all -o dist/excalidraw-policy.wasm"
+    "types": "jco guest-types ../contracts/c4-pipeline/wit --world-name c4-compiler-core -o generated/compiler && jco guest-types ../contracts/c4-pipeline/wit --world-name excalidraw-policy-component -o generated/policy",
+    "check": "npm run types && tsc --noEmit",
+    "build": "npm run check && mkdir -p dist/js && tsc --noEmit false --outDir dist/js --rootDir src && jco componentize dist/js/c4-compiler.js --wit ../contracts/c4-pipeline/wit --world-name c4-compiler-core --disable all -o dist/c4-compiler.wasm && jco componentize dist/js/excalidraw-policy.js --wit ../contracts/c4-pipeline/wit --world-name excalidraw-policy-component --disable all -o dist/excalidraw-policy.wasm && jco wit dist/c4-compiler.wasm > dist/c4-compiler.wit && jco wit dist/excalidraw-policy.wasm > dist/excalidraw-policy.wit"
   },
-  "dependencies": {
+  "devDependencies": {
     "@bytecodealliance/componentize-js": "0.19.3",
-    "@bytecodealliance/jco": "1.17.0"
+    "@bytecodealliance/jco": "1.17.0",
+    "typescript": "5.9.3"
   }
 }
