@@ -6,14 +6,17 @@ micro-VMs, browsers, storage systems, and remote model infrastructure.
 
 C4-to-Excalidraw is the first workload, not the scope of the platform.
 
-## Current package
+## C4 workload
 
 ```bash
-cd workloads/c4-excalidraw
-npm run build
-npm test
-npm run c4
+make c4-build
+make c4-test
+make c4
 ```
+
+`make c4` invokes the real Pi extension and writes an approved editable scene
+to `artifacts/c4-excalidraw/composable-c4-pipeline.excalidraw`. Override
+`C4_INPUT`, `C4_OUTPUT`, or `C4_MODEL` on the command line when needed.
 
 ## Layout
 

@@ -11,7 +11,6 @@
     "components:load": "mkdir -p .wassette-components && wassette component load file://$PWD/core/dist/excalidraw-core.wasm --component-dir $PWD/.wassette-components && wassette component load file://$PWD/components/dist/c4-compiler.wasm --component-dir $PWD/.wassette-components && wassette component load file://$PWD/components/dist/excalidraw-policy.wasm --component-dir $PWD/.wassette-components",
     "test:components": "npm run components:load && node smoke-test.mjs",
     "gondolin:build": "npm --prefix ../../adapters/c4-gondolin run gondolin:build",
-    "c4": "node run-composable-c4-pipeline.mjs",
     "test": "sh contracts/c4-pipeline/validate.sh && npm run build && npm run test:components && npm --prefix ../../adapters/c4-gondolin run build && npm --prefix ../../adapters/c4-gondolin test && npm --prefix ../../adapters/mermaid-to-excalidraw run build && npm --prefix ../../adapters/mermaid-to-excalidraw test -- --run tests/cssUtils.test.ts tests/examples.test.ts tests/sequence.test.ts tests/state.test.ts tests/utils.test.ts"
   },
   "dependencies": {

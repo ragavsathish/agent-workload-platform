@@ -7,9 +7,7 @@
     "build": "tsc --noEmit && npm run bundle",
     "bundle": "vite build --config vite.config.mjs",
     "test": "vitest --run --config vitest.config.mjs",
-    "convert": "node scripts/convert-mermaid.mjs",
-    "gondolin:build": "sh scripts/build-playwright-gondolin.sh",
-    "gondolin:convert": "sh scripts/convert-mermaid-gondolin.sh"
+    "gondolin:build": "sh scripts/build-playwright-gondolin.sh"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "0.18.1",

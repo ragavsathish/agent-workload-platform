@@ -34,8 +34,8 @@ Requirements:
   shape edge, no relationship label may overlap a node, and no connector may
   run through a node or unrelated label. Use a vertical stack when a horizontal
   chain would make feedback or cross-cutting relationships excessively long.
-- Do not call `excalidraw_c4_render`; its experimental parser is intentionally
-  excluded from this workflow.
+- Do not call `excalidraw_c4_render`; this prompt exercises the separate
+  vision-based scene-construction workflow.
 
 After the tool succeeds, quote the opened URL and checkpoint ID exactly as the
 tool returned them. The authoritative values are also written to the workflow's

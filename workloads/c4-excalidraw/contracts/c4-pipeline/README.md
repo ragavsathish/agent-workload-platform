@@ -29,9 +29,9 @@ implementation details hidden behind that interface.
 - `c4-compiler-core` is the compatibility world for a host that cannot yet
   satisfy custom imports. Pi calls `prepare`, sends the render request to the
   Gondolin adapter, and passes the returned snapshot to `finish`.
-- `excalidraw-policy-component` validates compiler output independently. It remains a
-  separate world so compiler and security-policy implementations can evolve or
-  be replaced independently.
+- `excalidraw-policy-component` validates compiler output independently. It
+  remains a separate world so compiler and security-policy implementations can
+  evolve or be replaced independently.
 
 The browser adapter returns typed geometry, not Excalidraw JSON. Consequently,
 the browser worker cannot take ownership of scene construction and the compiler
@@ -47,8 +47,8 @@ can reject malformed or excessive browser output before creating a scene.
   state.
 - `scene-envelope.format` is `excalidraw`; `format-version` currently equals
   `2`.
-- Only a scene returned by `excalidraw-policy.approve` may reach the browser or the
-  checkpoint store.
+- Only a scene returned by `excalidraw-policy.approve` may reach the browser or
+  the checkpoint store.
 - The Gondolin browser adapter receives no general filesystem, process, or
   browser-automation interface through WIT; it implements only `render`.
 

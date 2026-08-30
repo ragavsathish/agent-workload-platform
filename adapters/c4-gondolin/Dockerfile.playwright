@@ -24,4 +24,4 @@ RUN npm run bundle
 ENV NODE_ENV=production \
     MERMAID_EXCALIDRAW_BROWSER_CHANNEL=bundled
 
-ENTRYPOINT ["node", "/app/adapters/c4-gondolin/scripts/convert-mermaid.mjs"]
+ENTRYPOINT ["node", "/app/adapters/c4-gondolin/scripts/render-layout-snapshot.mjs"]
