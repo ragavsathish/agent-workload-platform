@@ -6,30 +6,18 @@ micro-VMs, browsers, storage systems, and remote model infrastructure.
 
 C4-to-Excalidraw is the first workload, not the scope of the platform.
 
-## Interface
-
-Every workload implements the same lifecycle:
+## Run the current workload
 
 ```bash
-./workload list
-./workload <name> setup
-./workload <name> check
-./workload <name> run [workload arguments...]
-```
-
-For the current workload:
-
-```bash
-./workload c4-excalidraw setup
-./workload c4-excalidraw check
-./workload c4-excalidraw run
+./workloads/c4-excalidraw/setup.sh
+./workloads/c4-excalidraw/check.sh
+./workloads/c4-excalidraw/run.sh
 ```
 
 ## Layout
 
 ```text
 .
-├── workload                         # common lifecycle dispatcher
 ├── apps/                            # reusable runnable applications
 │   └── excalidraw-mcp/              # pinned upstream Git submodule
 ├── workloads/                       # independently runnable agent workloads
@@ -45,21 +33,9 @@ workload until another workload genuinely reuses them. Shared implementations
 then move to `components/`, `adapters/`, `apps/`, or `runtimes/` according to
 their responsibility.
 
-See [workloads/README.md](workloads/README.md) for the interface a new workload
-must implement. Imported source provenance is recorded in `PROVENANCE.md`.
+See [workloads/README.md](workloads/README.md) for the minimal layout of a new
+workload. Imported source provenance is recorded in `PROVENANCE.md`.
 
 `setup` initializes the submodules required by its workload. A full checkout
 can also be prepared eagerly with `git clone --recurse-submodules` or
 `git submodule update --init --recursive`.
-
-## Compatibility shortcuts
-
-The following delegate to the `c4-excalidraw` workload:
-
-```bash
-./setup.sh
-./check.sh
-./dogfood.sh
-```
-
-New automation should use `./workload` directly.

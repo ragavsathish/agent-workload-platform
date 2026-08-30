@@ -32,10 +32,6 @@ echo "[4/5] Running Mermaid adapter tests"
 
 echo "[5/5] Checking scripts and diffs"
 bash -n \
-  "$MONOREPO_ROOT/workload" \
-  "$MONOREPO_ROOT/setup.sh" \
-  "$MONOREPO_ROOT/check.sh" \
-  "$MONOREPO_ROOT/dogfood.sh" \
   "$PIPELINE_DIR/setup.sh" \
   "$PIPELINE_DIR/check.sh" \
   "$PIPELINE_DIR/run.sh"

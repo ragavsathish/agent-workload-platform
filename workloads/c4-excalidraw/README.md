@@ -22,7 +22,7 @@ The split is intentional:
 ## Build
 
 ```bash
-./workload c4-excalidraw setup
+./workloads/c4-excalidraw/setup.sh
 ```
 
 The setup script installs pinned dependencies, builds this repository's
@@ -58,7 +58,7 @@ To exercise the same Wasm/Gondolin/Wassette phases without asking a model to
 make the tool call, use the deterministic dogfood runner:
 
 ```bash
-./workload c4-excalidraw run \
+./workloads/c4-excalidraw/run.sh \
   workloads/c4-excalidraw/examples/composable-c4-pipeline.mmd \
   artifacts/c4-excalidraw/composable-c4-pipeline.excalidraw
 ```

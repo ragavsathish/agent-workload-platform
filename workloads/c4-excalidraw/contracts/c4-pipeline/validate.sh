@@ -6,7 +6,7 @@ PROTOTYPE_DIR=$(CDPATH= cd -- "$CONTRACT_DIR/../.." && pwd)
 JCO=${JCO_BIN:-"$PROTOTYPE_DIR/core/node_modules/.bin/jco"}
 
 if [ ! -x "$JCO" ]; then
-  echo "Missing jco at $JCO; run ./workload c4-excalidraw setup first" >&2
+  echo "Missing jco at $JCO; run ./workloads/c4-excalidraw/setup.sh first" >&2
   exit 1
 fi
 
