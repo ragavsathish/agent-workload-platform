@@ -67,13 +67,21 @@ make the tool call, use the deterministic dogfood runner:
 
 ```bash
 npm --prefix workloads/c4-excalidraw run c4 -- \
-  workloads/c4-excalidraw/examples/composable-c4-pipeline.mmd \
-  artifacts/c4-excalidraw/composable-c4-pipeline.excalidraw
+  examples/composable-c4-pipeline.mmd \
+  ../../artifacts/c4-excalidraw/composable-c4-pipeline.excalidraw
 ```
 
-For the higher-quality GPT workflow, render Mermaid as a visual reference and
-let GPT construct editable Excalidraw JSON from both the semantic source and the
-PNG:
+This is the authoritative compiler path. Inside Gondolin, Mermaid renders the
+source into an SVG DOM so Chromium can compute layout. Only a typed
+`layout-snapshot` crosses the browser boundary into `c4-compiler.wasm`; the
+compiler emits Excalidraw JSON. Set `RENDER_PNG=0` to skip the optional final
+preview.
+
+## Experimental GPT vision workflow
+
+The repository also retains an experimental model-driven workflow. It renders
+Mermaid as a PNG visual reference and lets GPT construct editable Excalidraw
+JSON from both the semantic source and that image:
 
 ```bash
 ./workloads/c4-excalidraw/run-gpt-c4-workflow.sh
@@ -83,11 +91,12 @@ The script uses `openai-codex/gpt-5.6-terra` by default. Override it with
 `PI_C4_MODEL`. It renders `examples/pi-wassette-excalidraw.mmd` through Mermaid,
 attaches both `.mmd` and `.png` to Pi, allows only `excalidraw_wassette_open`,
 and writes validated state plus the authoritative loopback URL under
-`artifacts/`. Read the URL from that JSON rather than copying it from model
+`artifacts/`. The PNG is model input only; it never enters the deterministic C4
+compiler. Read the URL from the result JSON rather than copying it from model
 prose.
 
-This is the preferred path: Pi applies the C4 skill; Mermaid supplies a stable
-reference image; GPT translates the source and image to standard, editable
+In this experimental path, Pi applies the C4 skill; Mermaid supplies a stable
+visual reference; GPT translates the source and image to standard, editable
 Excalidraw elements; Wassette validates and checkpoints those elements; and the
 cloned MCP App renders them.
 
@@ -105,11 +114,12 @@ attach that image.
 
 The first Qwen call applies the C4 skill to turn the request into Mermaid. The
 second sees both that semantic source and its rendered PNG, then constructs the
-editable scene through Wassette. The request may also be a text-file path. Each
-run is evaluated against its own Mermaid source with `evaluate-c4.mjs`: required
-labels and descriptions, C4 shape/relationship counts, valid geometry, and
-Wassette warnings. It does not compare serialized bytes, IDs, precise
-coordinates, colors, checkpoints, or URLs.
+editable scene through Wassette. Like the GPT workflow, this is a vision-model
+experiment rather than the deterministic compiler path. The request may also be
+a text-file path. Each run is evaluated against its own Mermaid source with
+`evaluate-c4.mjs`: required labels and descriptions, C4 shape/relationship
+counts, valid geometry, and Wassette warnings. It does not compare serialized
+bytes, IDs, precise coordinates, colors, checkpoints, or URLs.
 
 To bypass request modeling when Mermaid already exists, call
 `run-qwen-c4-workflow.sh path/to/diagram.mmd`. Set `EVALUATE_GOLDEN=1` only when

@@ -2,8 +2,12 @@
 
 This platform-owned adapter translates Mermaid C4 into an ordinary flowchart,
 passes that flowchart to the unmodified `../mermaid-to-excalidraw` submodule,
-and runs browser-derived layout or PNG rendering through Playwright. Gondolin
-can isolate that browser worker in a QEMU micro-VM.
+and renders it into an SVG DOM through Playwright. It extracts the browser's
+computed node, edge, text, and bounds geometry as a typed `layout-snapshot`.
+Gondolin can isolate that browser worker in a QEMU micro-VM.
+
+The compiler consumes the typed snapshot, not a raster image. PNG export is a
+separate, optional preview of the completed Excalidraw scene.
 
 The upstream submodule contains no platform patches. C4 preprocessing, browser
 timeouts, OCI construction, and Gondolin execution live here so upstream pin
