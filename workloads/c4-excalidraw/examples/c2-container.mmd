@@ -1,0 +1,34 @@
+C4Container
+title Agent Workload Platform - Container View
+
+Person(author, "Diagram Author", "Requests, reviews, and edits architecture diagrams")
+
+System_Boundary(platform, "Agent Workload Platform") {
+  Container(pi, "Pi Coordinator", "Pi extension, TypeScript", "Applies C4 guidance and coordinates compilation, isolation, policy, and presentation")
+  Container(wassette, "Wassette Runtime", "WebAssembly component runtime", "Executes capability-limited WIT components")
+  Container(compiler, "C4 Compiler", "c4-compiler.wasm", "Prepares browser work, validates geometry, and constructs Excalidraw scenes")
+  Container(policy, "Excalidraw Policy", "excalidraw-policy.wasm", "Admits only bounded and structurally safe Excalidraw scenes")
+  Container(checkpoint, "Checkpoint Component", "excalidraw-core.wasm", "Validates editable state and creates checkpoint identifiers")
+  Container(gondolin, "Gondolin Runtime", "QEMU micro-VM runtime", "Isolates the browser-dependent workload")
+  Container(layout, "Browser Layout Worker", "Node.js, Mermaid, Playwright, Chromium", "Renders SVG and returns typed geometry")
+  Container(webapp, "Excalidraw MCP App", "React browser application", "Displays and edits approved Excalidraw scenes")
+  ContainerDb(memory, "Checkpoint Memory", "Pi process memory", "Stores approved scene revisions for the active session")
+}
+
+System_Ext(model, "AI Model Provider", "Produces native Mermaid C4 from natural-language requests")
+
+Rel(author, pi, "Requests a C4 diagram", "Natural language or Mermaid")
+Rel(pi, model, "Generates Mermaid C4 with", "Model API")
+Rel(pi, compiler, "Prepares and finishes compilation", "MCP and WIT")
+Rel(compiler, wassette, "Runs inside", "WebAssembly component")
+Rel(pi, gondolin, "Starts isolated layout workload", "Gondolin CLI")
+Rel(gondolin, layout, "Runs", "OCI root filesystem")
+Rel(layout, pi, "Returns nodes, edges, text, and bounds", "layout-snapshot JSON")
+Rel(pi, policy, "Submits candidate scene", "scene-envelope")
+Rel(policy, wassette, "Runs inside", "WebAssembly component")
+Rel(pi, checkpoint, "Validates editable state", "MCP and WIT")
+Rel(checkpoint, wassette, "Runs inside", "WebAssembly component")
+Rel(pi, memory, "Stores and restores checkpoints", "In-process calls")
+Rel(pi, webapp, "Serves approved scene", "Loopback HTTP")
+Rel(webapp, pi, "Saves edits", "Loopback HTTP")
+Rel(author, webapp, "Views and edits diagram", "Browser UI")

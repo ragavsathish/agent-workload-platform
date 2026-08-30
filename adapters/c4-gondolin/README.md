@@ -16,9 +16,10 @@ From the repository root:
 
 ```sh
 git submodule update --init --recursive -- adapters/mermaid-to-excalidraw
-yarn --cwd adapters/mermaid-to-excalidraw install --frozen-lockfile --ignore-scripts
-yarn --cwd adapters/mermaid-to-excalidraw build
-npm --prefix adapters/c4-gondolin ci --ignore-scripts
-npm --prefix adapters/c4-gondolin test
-npm --prefix adapters/c4-gondolin run gondolin:build
+corepack enable
+pnpm install --frozen-lockfile --ignore-scripts
+pnpm --dir adapters/mermaid-to-excalidraw run build
+pnpm --dir adapters/c4-gondolin test
+make c4-gondolin-build
+# Builds `artifacts/c4-gondolin/<arch>` for the SDK-backed runtime
 ```

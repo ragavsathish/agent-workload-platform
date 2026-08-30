@@ -1,0 +1,35 @@
+C4Component
+title Pi Coordinator - Component View
+
+Person(author, "Diagram Author", "Requests and edits C4 diagrams")
+
+Container_Boundary(pi, "Pi Coordinator - pi-extension.ts") {
+  Component(tools, "Tool Registration", "Pi Extension API", "Exposes C4 rendering and scene-opening tools")
+  Component(orchestrator, "C4 Pipeline Orchestrator", "TypeScript", "Coordinates prepare, layout, finish, approval, and display")
+  Component(wassette_client, "Wassette Client", "JSON-RPC over stdio", "Starts Wassette and invokes component tools")
+  Component(layout_adapter, "Gondolin Layout Adapter", "Child process adapter", "Runs the isolated browser layout command with bounded temporary files")
+  Component(layout_mapper, "Layout Mapper", "TypeScript", "Maps browser layout JSON into WIT-shaped typed geometry")
+  Component(view_controller, "Scene View Controller", "TypeScript", "Validates elements, manages checkpoints, and prepares browser state")
+  Component(http_host, "Loopback Web Host", "Node.js HTTP", "Serves the parent bridge, Excalidraw app, state, and save endpoint")
+  Component(checkpoints, "Checkpoint Store", "In-memory map", "Retains scene revisions for the Pi session")
+}
+
+System_Ext(wassette, "Wassette Runtime", "Runs the C4 compiler, policy, and checkpoint WebAssembly components")
+System_Ext(gondolin, "Gondolin QEMU VM", "Runs the Playwright and Chromium layout worker")
+System_Ext(webapp, "Excalidraw MCP App", "Displays and edits the approved scene")
+
+Rel(author, tools, "Invokes diagram tool through", "Pi conversation")
+Rel(tools, orchestrator, "Dispatches complete Mermaid source")
+Rel(orchestrator, wassette_client, "Calls prepare, finish, and approve")
+Rel(wassette_client, wassette, "Exchanges tool calls", "JSON-RPC over stdio")
+Rel(orchestrator, layout_adapter, "Requests browser geometry")
+Rel(layout_adapter, gondolin, "Runs isolated layout worker", "Gondolin CLI")
+Rel(layout_adapter, layout_mapper, "Returns layout snapshot", "JSON")
+Rel(layout_mapper, orchestrator, "Returns WIT-shaped geometry")
+Rel(orchestrator, view_controller, "Supplies approved elements")
+Rel(view_controller, wassette_client, "Validates and checkpoints scene")
+Rel(view_controller, checkpoints, "Stores and restores revisions")
+Rel(view_controller, http_host, "Publishes current scene")
+Rel(http_host, webapp, "Serves UI and state", "Loopback HTTP")
+Rel(webapp, http_host, "Submits edits", "Loopback HTTP")
+Rel(author, webapp, "Views and edits diagram", "Browser UI")

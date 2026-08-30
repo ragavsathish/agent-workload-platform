@@ -1,7 +1,4 @@
-import {
-  convertToExcalidrawElements,
-  exportToBlob,
-} from "@excalidraw/excalidraw";
+import { convertToExcalidrawElements } from "@excalidraw/excalidraw";
 
 import { parseMermaidToExcalidraw } from "@excalidraw/mermaid-to-excalidraw";
 import {
@@ -12,23 +9,10 @@ import {
 
 declare global {
   interface Window {
-    mermaidToExcalidraw: (
-      definition: string,
-      includePreview?: boolean
-    ) => Promise<unknown>;
     mermaidToLayoutSnapshot: (definition: string) => Promise<unknown>;
-    excalidrawSceneToPng: (scene: any) => Promise<string>;
   }
 }
 
-const blobToBase64 = async (blob: Blob): Promise<string> => {
-  const bytes = new Uint8Array(await blob.arrayBuffer());
-  let binary = "";
-  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
-  }
-  return btoa(binary);
-};
 
 const parseForAdapter = async (definition: string) => {
   const title = isC4Diagram(definition) ? extractC4Title(definition) : undefined;
@@ -51,37 +35,6 @@ const parseForAdapter = async (definition: string) => {
   return result;
 };
 
-window.mermaidToExcalidraw = async (
-  definition: string,
-  includePreview = false
-) => {
-  const { elements, files } = await parseForAdapter(definition);
-  const excalidrawElements = convertToExcalidrawElements(elements as any);
-  const scene = {
-    type: "excalidraw",
-    version: 2,
-    source: "@excalidraw/mermaid-to-excalidraw",
-    elements: excalidrawElements,
-    appState: {
-      viewBackgroundColor: "#ffffff",
-    },
-    files: files ?? {},
-  };
-  if (!includePreview) {
-    return { scene };
-  }
-
-  const preview = await exportToBlob({
-    elements: excalidrawElements,
-    appState: {
-      exportBackground: true,
-      viewBackgroundColor: "#ffffff",
-    },
-    files: files ?? null,
-    mimeType: "image/png",
-  });
-  return { scene, pngBase64: await blobToBase64(preview) };
-};
 
 const elementStyle = (element: any) => ({
   fill: typeof element.backgroundColor === "string" ? element.backgroundColor : null,
@@ -142,18 +95,4 @@ window.mermaidToLayoutSnapshot = async (definition: string) => {
     renderer: "@excalidraw/mermaid-to-excalidraw+playwright",
     warnings: [],
   };
-};
-
-window.excalidrawSceneToPng = async (scene: any) => {
-  if (!scene || !Array.isArray(scene.elements)) throw new Error("Expected an Excalidraw scene");
-  const preview = await exportToBlob({
-    elements: scene.elements,
-    appState: {
-      exportBackground: true,
-      viewBackgroundColor: scene.appState?.viewBackgroundColor ?? "#ffffff",
-    },
-    files: scene.files ?? null,
-    mimeType: "image/png",
-  });
-  return blobToBase64(preview);
 };

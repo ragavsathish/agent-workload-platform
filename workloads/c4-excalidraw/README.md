@@ -19,6 +19,10 @@ Pi + C4 skill -> native Mermaid C4
   -> Excalidraw MCP App -> edit and save
 ```
 
+### C2 container view
+
+![C2 container view for the C4-to-Excalidraw workload](../../docs/architecture/agent-workload-platform-c2.png)
+
 Responsibilities are separated as follows:
 
 - `pi-extension.ts` coordinates Wassette, Gondolin, and the loopback-only web
@@ -32,6 +36,10 @@ Responsibilities are separated as follows:
 - `../../adapters/mermaid-to-excalidraw/` and `../../apps/excalidraw-mcp/` are
   unchanged upstream submodules.
 
+### C3 Pi extension components
+
+![C3 component view for the Pi coordinator](../../docs/architecture/agent-workload-platform-c3.png)
+
 Only a typed `layout-snapshot` leaves the browser worker. Scene construction
 stays inside `c4-compiler.wasm`, and only a scene accepted by
 `excalidraw-policy.wasm` reaches the application.
@@ -42,17 +50,15 @@ From the repository root:
 
 ```bash
 git submodule update --init --recursive
-pnpm --dir apps/excalidraw-mcp install --ignore-scripts --frozen-lockfile
-pnpm --dir apps/excalidraw-mcp run build
-yarn --cwd adapters/mermaid-to-excalidraw install --frozen-lockfile --ignore-scripts
-yarn --cwd adapters/mermaid-to-excalidraw build
-npm --prefix adapters/c4-gondolin ci --ignore-scripts
-npm --prefix workloads/c4-excalidraw ci --ignore-scripts
-npm --prefix workloads/c4-excalidraw/core ci --ignore-scripts
-npm --prefix workloads/c4-excalidraw/components ci --ignore-scripts
+corepack enable
+pnpm install --frozen-lockfile --ignore-scripts
+pnpm --dir adapters/mermaid-to-excalidraw run build
 make c4-build
-npm --prefix workloads/c4-excalidraw run gondolin:build
+make c4-gondolin-build
 ```
+
+The repository invokes only pnpm. The upstream submodules retain their own
+lockfiles unchanged, but the root `pnpm-lock.yaml` controls platform builds.
 
 The Wasm guests use WIT as their source of truth. Their builds regenerate Jco
 guest declarations, type-check the TypeScript, compile it to an ignored ESM

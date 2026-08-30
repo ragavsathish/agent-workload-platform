@@ -16,8 +16,6 @@ interface diagrams {
     /// Validate and normalize elements before the host stores a checkpoint.
     save-checkpoint: func(id: string, elements: string) -> result<string, string>;
 
-    /// Compile Mermaid C4 syntax into Excalidraw skeleton elements.
-    mermaid-to-elements: func(mermaid: string) -> result<string, string>;
 }
 
 world excalidraw-core {

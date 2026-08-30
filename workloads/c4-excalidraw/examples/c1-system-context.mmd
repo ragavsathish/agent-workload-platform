@@ -1,0 +1,13 @@
+C4Context
+title Agent Workload Platform - System Context
+
+Person(author, "Diagram Author", "Creates and reviews architecture diagrams")
+
+System(platform, "Agent Workload Platform", "Compiles Mermaid C4 into editable, policy-approved Excalidraw scenes")
+
+System_Ext(model, "AI Model Provider", "Generates Mermaid C4 from architecture requests")
+System_Ext(github, "GitHub", "Hosts source and pinned submodules")
+
+Rel(author, platform, "Requests and edits diagrams", "Pi and browser")
+Rel(platform, model, "Generates C4 source with", "Model API")
+Rel(platform, github, "Fetches source and dependencies", "Git")

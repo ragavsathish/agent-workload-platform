@@ -24,9 +24,9 @@ const title = lines.find((line) => /^title\s+/.test(line))?.replace(/^title\s+/,
 const expectedText = [...new Set([title, ...quotedValues].filter(Boolean))];
 const expectedCounts = {
   arrow: declarations.filter((line) => /^Rel(?:_[RLUD])?\s*\(/.test(line)).length,
-  ellipse: declarations.filter((line) => /^Person(?:_Ext)?\s*\(/.test(line)).length,
+  ellipse: 0,
   rectangle: declarations.filter((line) =>
-    /^(?:System(?:_Ext)?|Container(?:Db|Queue)?|Component|Deployment_Node|Node(?:_[LR])?|(?:System|Container|Enterprise)_Boundary)\s*\(/.test(
+    /^(?:Person(?:_Ext)?|System(?:_Ext)?|Container(?:Db|Queue)?|Component|Deployment_Node|Node(?:_[LR])?|(?:System|Container|Enterprise)_Boundary)\s*\(/.test(
       line,
     ),
   ).length,

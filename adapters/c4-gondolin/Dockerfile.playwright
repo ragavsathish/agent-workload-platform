@@ -1,27 +1,48 @@
-FROM mcr.microsoft.com/playwright:v1.58.2-noble@sha256:6446946a1d9fd62d9ae501312a2d76a43ee688542b21622056a372959b65d63d
+# syntax=docker/dockerfile:1.7
 
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+FROM mcr.microsoft.com/playwright:v1.58.2-noble@sha256:6446946a1d9fd62d9ae501312a2d76a43ee688542b21622056a372959b65d63d AS deps
 
-WORKDIR /app/adapters/mermaid-to-excalidraw
-COPY adapters/mermaid-to-excalidraw/package.json adapters/mermaid-to-excalidraw/yarn.lock ./
-RUN corepack enable \
-  && yarn install --frozen-lockfile \
-  && yarn cache clean \
-  && rm -rf \
-    /ms-playwright/chromium-* \
-    /ms-playwright/firefox-* \
-    /ms-playwright/webkit-*
-COPY adapters/mermaid-to-excalidraw ./
-RUN yarn build
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+    CI=true
+WORKDIR /app
 
-WORKDIR /app/adapters/c4-gondolin
-COPY adapters/c4-gondolin/package.json adapters/c4-gondolin/package-lock.json ./
-RUN npm ci --omit=dev --ignore-scripts \
-  && npm cache clean --force
-COPY adapters/c4-gondolin ./
-RUN npm run bundle
+# Keep this layer independent from source changes so dependency installation is
+# reused unless a manifest or lockfile changes.
+COPY package.json pnpm-lock.yaml ./
+COPY adapters/mermaid-to-excalidraw/package.json adapters/mermaid-to-excalidraw/package.json
+COPY adapters/c4-gondolin/package.json adapters/c4-gondolin/package.json
+COPY pnpm-workspace.yaml ./
+RUN --mount=type=cache,id=c4-pnpm-store,target=/root/.local/share/pnpm/store \
+    corepack enable \
+  && corepack prepare pnpm@11.19.0 --activate \
+  && pnpm install --frozen-lockfile --ignore-scripts --filter @agent-workload-platform/c4-gondolin...
+
+FROM deps AS build
+
+COPY adapters/mermaid-to-excalidraw adapters/mermaid-to-excalidraw
+RUN pnpm --dir adapters/mermaid-to-excalidraw run build
+
+COPY adapters/c4-gondolin adapters/c4-gondolin
+RUN pnpm --dir adapters/c4-gondolin run bundle
+
+FROM deps AS production-deps
+
+RUN --mount=type=cache,id=c4-pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm install --prod --frozen-lockfile --ignore-scripts --filter @agent-workload-platform/c4-gondolin...
+
+FROM mcr.microsoft.com/playwright:v1.58.2-noble@sha256:6446946a1d9fd62d9ae501312a2d76a43ee688542b21622056a372959b65d63d AS runtime
 
 ENV NODE_ENV=production \
-    MERMAID_EXCALIDRAW_BROWSER_CHANNEL=bundled
+    MERMAID_EXCALIDRAW_BROWSER_CHANNEL=bundled \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+WORKDIR /app
+RUN rm -rf /ms-playwright/firefox-* /ms-playwright/webkit-*
+
+# Only production package links are needed to execute the renderer. The
+# browser binaries come from the Playwright base image.
+COPY --from=production-deps /app/node_modules ./node_modules
+COPY --from=production-deps /app/adapters/c4-gondolin/node_modules ./adapters/c4-gondolin/node_modules
+COPY --from=build /app/adapters/c4-gondolin/dist/browser ./adapters/c4-gondolin/dist/browser
+COPY --from=build /app/adapters/c4-gondolin/scripts/render-layout-snapshot.mjs ./adapters/c4-gondolin/scripts/render-layout-snapshot.mjs
 
 ENTRYPOINT ["node", "/app/adapters/c4-gondolin/scripts/render-layout-snapshot.mjs"]

@@ -4,10 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc --noEmit && npm run bundle",
+    "build": "tsc --noEmit && pnpm run bundle",
     "bundle": "vite build --config vite.config.mjs",
-    "test": "vitest --run --config vitest.config.mjs",
-    "gondolin:build": "sh scripts/build-playwright-gondolin.sh"
+    "test": "vitest --run --config vitest.config.mjs"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "0.18.1",

@@ -82,24 +82,7 @@ try {
   })));
   if (validated[1]?.label?.text !== "Pi host") throw new Error("Validation round trip failed");
 
-  const mermaid = `C4Container
-title Pi to Excalidraw C4 rendering
-Person(user, "User", "Requests an architecture view")
-System_Boundary(workflow, "Local AI workflow") {
-  Container(pi, "Pi", "TypeScript", "Uses the C4 skill and invokes tools")
-  Container(wassette, "Wassette", "WebAssembly runtime", "Compiles Mermaid safely")
-  Container(excalidraw, "Excalidraw MCP App", "React", "Renders and edits the scene")
-}
-Rel(user, pi, "Requests C4 diagram")
-Rel(pi, wassette, "Passes Mermaid", "MCP")
-Rel(wassette, excalidraw, "Returns elements", "JSON")`;
-  const compiled = JSON.parse(ok(await request("tools/call", {
-    name: "prototype_excalidraw-core_diagrams_mermaid-to-elements",
-    arguments: { mermaid },
-  })));
-  if (!compiled.some((element) => element.id === "c4_pi")) throw new Error("Mermaid C4 compilation failed");
-
-  process.stdout.write(`${JSON.stringify({ checkpointId: created["checkpoint-id"], elementCount: validated.length, c4ElementCount: compiled.length, roundTrip: "ok" }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ checkpointId: created["checkpoint-id"], elementCount: validated.length, roundTrip: "ok" }, null, 2)}\n`);
 } finally {
   child.kill("SIGTERM");
 }

@@ -1,0 +1,33 @@
+packages:
+  - apps/excalidraw-mcp
+  - adapters/mermaid-to-excalidraw
+  - adapters/c4-gondolin
+  - workloads/c4-excalidraw
+  - workloads/c4-excalidraw/core
+  - workloads/c4-excalidraw/components
+
+allowBuilds:
+  '@modelcontextprotocol/ext-apps': true
+  '@swc/core': true
+  cpu-features: true
+  esbuild: true
+  ssh2: true
+
+overrides:
+  "@types/react": 19.2.14
+  "@types/react-dom": 19.2.3
+  "@babel/preset-env": 7.13.8
+  "@excalidraw/mermaid-to-excalidraw>@excalidraw/excalidraw": 0.18.0-a9ca16e
+  "@excalidraw/mermaid-to-excalidraw>@mermaid-js/parser": 0.6.3
+  "@excalidraw/mermaid-to-excalidraw>@playwright/test": 1.58.2
+  "@excalidraw/mermaid-to-excalidraw>nanoid": 5.1.16
+  "@excalidraw/mermaid-to-excalidraw>mermaid": 11.12.1
+  "@excalidraw/mermaid-to-excalidraw>@vitest/coverage-v8": 1.6.0
+  "@excalidraw/mermaid-to-excalidraw>vitest": 1.6.0
+  lodash-es: 4.18.1
+  "nanoid@3": 3.3.18
+
+peerDependencyRules:
+  allowedVersions:
+    react: "19"
+    react-dom: "19"

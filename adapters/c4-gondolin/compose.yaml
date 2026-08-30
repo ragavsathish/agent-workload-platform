@@ -1,0 +1,16 @@
+services:
+  playwright-layout-amd64:
+    profiles: [amd64]
+    image: mermaid-excalidraw-layout:playwright-1.58.2-amd64
+    platform: linux/amd64
+    build:
+      context: ../..
+      dockerfile: adapters/c4-gondolin/Dockerfile.playwright
+
+  playwright-layout-arm64:
+    profiles: [arm64]
+    image: mermaid-excalidraw-layout:playwright-1.58.2-arm64
+    platform: linux/arm64
+    build:
+      context: ../..
+      dockerfile: adapters/c4-gondolin/Dockerfile.playwright

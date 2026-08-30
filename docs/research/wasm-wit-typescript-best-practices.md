@@ -198,7 +198,7 @@ between `prepare` and `finish` without changing either component export.
    implementation strict (`strict`, `noUncheckedIndexedAccess`, and
    `exactOptionalPropertyTypes` where the generated declaration style permits).
 4. Run `tsc --noEmit` before `jco componentize`. Modern Jco can componentize a
-   TypeScript entry directly and auto-bundles local/npm imports, but it only
+   TypeScript entry directly and auto-bundles local/package imports, but it only
    strips types. [Jco TypeScript componentization](https://bytecodealliance.github.io/jco/creating-new-js-components.html#bundling)
 
 ### Repository/toolchain note
@@ -233,7 +233,7 @@ WIT validation / guest declaration generation
 
 Recommended CI assertions:
 
-- pin local npm tools and use the lockfile; do not depend on a global Jco;
+- pin local Node.js tools and use the lockfile; do not depend on a global Jco;
 - run `wasm-tools validate` on each emitted component;
 - fail if generated guest declarations differ after a WIT change;
 - fail if `jco wit` reveals an import not allowlisted for that world;

@@ -6,3 +6,4 @@
 workloads/c4-excalidraw/components/generated/
 workloads/c4-excalidraw/core/generated/
 .DS_Store
+.pnpm-store/v11/

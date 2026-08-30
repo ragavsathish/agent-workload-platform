@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "types": "jco guest-types wit --world-name excalidraw-core -o generated",
-    "check": "npm run types && tsc --noEmit",
-    "build": "npm run check && mkdir -p dist/js && tsc --noEmit false --outDir dist/js --rootDir src && jco componentize dist/js/excalidraw-core.js --wit wit --world-name excalidraw-core --disable all --enable random -o dist/excalidraw-core.wasm && jco wit dist/excalidraw-core.wasm > dist/excalidraw-core.wit"
+    "check": "pnpm run types && tsc --noEmit",
+    "build": "pnpm run check && mkdir -p dist/js && tsc --noEmit false --outDir dist/js --rootDir src && jco componentize dist/js/excalidraw-core.js --wit wit --world-name excalidraw-core --disable all --enable random -o dist/excalidraw-core.wasm && jco wit dist/excalidraw-core.wasm > dist/excalidraw-core.wit"
   },
   "devDependencies": {
     "@bytecodealliance/componentize-js": "0.19.3",

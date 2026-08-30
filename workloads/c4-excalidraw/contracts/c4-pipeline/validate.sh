@@ -6,7 +6,7 @@ PROTOTYPE_DIR=$(CDPATH= cd -- "$CONTRACT_DIR/../.." && pwd)
 JCO=${JCO_BIN:-"$PROTOTYPE_DIR/core/node_modules/.bin/jco"}
 
 if [ ! -x "$JCO" ]; then
-  echo "Missing jco at $JCO; run npm --prefix workloads/c4-excalidraw/core ci first" >&2
+  echo "Missing jco at $JCO; run pnpm install --frozen-lockfile --ignore-scripts first" >&2
   exit 1
 fi
 

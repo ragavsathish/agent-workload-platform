@@ -8,20 +8,17 @@ import path from "node:path";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 import { Type } from "@earendil-works/pi-ai";
+import { RealFSProvider, VM } from "@earendil-works/gondolin";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 const pipelineDir = path.dirname(fileURLToPath(import.meta.url));
-const monorepoRoot = path.resolve(pipelineDir, "..", "..");
-const excalidrawRepoDir = process.env.EXCALIDRAW_MCP_REPO
-  ? path.resolve(process.env.EXCALIDRAW_MCP_REPO)
-  : path.join(monorepoRoot, "apps", "excalidraw-mcp");
 const componentDir = path.join(pipelineDir, ".wassette-components");
+const gondolinArch = process.arch === "arm64" ? "aarch64" : process.arch === "x64" ? "x86_64" : undefined;
+const gondolinAssets = path.resolve(
+  process.env.C4_GONDOLIN_ASSETS ?? path.join(pipelineDir, "..", "..", "artifacts", "c4-gondolin", gondolinArch ?? "unsupported"),
+);
 const hostHtml = path.join(pipelineDir, "dist", "host.html");
-const appHtml = path.join(excalidrawRepoDir, "dist", "mcp-app.html");
-const layoutAdapterDir = process.env.C4_GONDOLIN_ADAPTER
-  ? path.resolve(process.env.C4_GONDOLIN_ADAPTER)
-  : path.join(monorepoRoot, "adapters", "c4-gondolin");
-const layoutRunner = path.join(layoutAdapterDir, "scripts", "render-layout-gondolin.sh");
+const appHtml = path.join(pipelineDir, "dist", "mcp-app.html");
 const CREATE_VIEW = "prototype_excalidraw-core_diagrams_create-view";
 const SAVE_CHECKPOINT = "prototype_excalidraw-core_diagrams_save-checkpoint";
 const READ_ME = "prototype_excalidraw-core_diagrams_read-me";
@@ -111,20 +108,6 @@ function componentValue(result: JsonRpcResult): any {
   return value.ok;
 }
 
-function runProcess(command: string, args: string[]) {
-  return new Promise<void>((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (chunk) => { stdout += String(chunk); });
-    child.stderr.on("data", (chunk) => { stderr += String(chunk); });
-    child.once("error", reject);
-    child.once("exit", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`${command} exited with ${code}: ${stderr || stdout}`.trim()));
-    });
-  });
-}
 
 function witStyle(style: any) {
   return {
@@ -196,7 +179,7 @@ export default function (pi: ExtensionAPI) {
     for (const required of [
       path.join(componentDir, "c4-compiler.wasm"),
       path.join(componentDir, "excalidraw-policy.wasm"),
-      layoutRunner,
+      gondolinAssets,
     ]) {
       if (!fs.existsSync(required)) throw new Error(`Missing ${required}. Follow the install and build commands in workloads/c4-excalidraw/README.md.`);
     }
@@ -211,7 +194,22 @@ export default function (pi: ExtensionAPI) {
       let lastError: unknown;
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
-          await runProcess("sh", [layoutRunner, inputPath, outputPath]);
+          if (!gondolinArch) throw new Error(`Unsupported host architecture: ${process.arch}`);
+          const vm = await VM.create({
+            sandbox: { imagePath: gondolinAssets },
+            vfs: { mounts: { "/work": new RealFSProvider(tempDir) } },
+          });
+          try {
+            const result = await vm.exec([
+              "/usr/bin/node",
+              "/app/adapters/c4-gondolin/scripts/render-layout-snapshot.mjs",
+              "/work/diagram.mmd",
+              "/work/layout.json",
+            ]);
+            if (!result.ok) throw new Error(`Gondolin layout failed (${result.exitCode}): ${result.stderr}`);
+          } finally {
+            await vm.close();
+          }
           lastError = undefined;
           break;
         } catch (error) {
