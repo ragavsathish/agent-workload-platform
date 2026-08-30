@@ -25,7 +25,7 @@ type C4Token =
 
 const C4_HEADER = /^C4(?:Context|Container|Component|Dynamic|Deployment)$/;
 const NODE_DECLARATION =
-  /^(Person(?:_Ext)?|System(?:_Ext)?|Container(?:Db|Queue)?|Component)\s*\((.*)\)\s*$/u;
+  /^(Person(?:_Ext)?|System(?:_Ext)?|Container(?:Db|Queue)?(?:_Instance)?|Component)\s*\((.*)\)\s*$/u;
 const BOUNDARY_DECLARATION =
   /^(Deployment_Node|Node(?:_[LR])?|(?:System|Container|Enterprise)_Boundary)\s*\((.*)\)\s*\{?\s*$/u;
 const RELATION_DECLARATION = /^Rel(?:_[RLUD])?\s*\((.*)\)\s*$/u;
@@ -75,6 +75,7 @@ const escapeLabel = (value: string): string =>
 const nodeLabel = (node: C4Node): string => {
   const type = node.type
     .replace(/_Ext$/u, " (External)")
+    .replace(/_Instance$/u, "")
     .replace(/^ContainerDb$/u, "Container / Database")
     .replace(/^ContainerQueue$/u, "Container / Queue");
   return [node.name, `[${node.technology || type}]`, node.description]
@@ -97,10 +98,10 @@ const classFor = (type: string): string => {
   if (type.startsWith("Person")) {
     return "c4_person";
   }
-  if (type === "ContainerDb") {
+  if (type === "ContainerDb" || type === "ContainerDb_Instance") {
     return "c4_database";
   }
-  if (type === "ContainerQueue") {
+  if (type === "ContainerQueue" || type === "ContainerQueue_Instance") {
     return "c4_queue";
   }
   if (type.startsWith("System_Ext")) {
@@ -259,7 +260,14 @@ export const c4ToFlowchart = (definition: string): string => {
     }
   }
 
-  const output = ["flowchart LR"];
+  const isDeployment = header === "C4Deployment";
+  const direction = isDeployment ? "TB" : "LR";
+  const output = isDeployment
+    ? [
+        `%%{init: {"flowchart": {"nodeSpacing": 20, "rankSpacing": 30, "padding": 4}}}%%`,
+        `flowchart ${direction}`,
+      ]
+    : [`flowchart ${direction}`];
   if (title) {
     output.push(`%% ${escapeLabel(title)}`);
   }

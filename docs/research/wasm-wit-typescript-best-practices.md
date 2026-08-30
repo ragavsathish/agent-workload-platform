@@ -1,10 +1,14 @@
 # Wasm Component Model/WIT and TypeScript best practices
 
-Research date: 2026-08-30. Sources are limited to the WebAssembly Component
-Model specification/documentation and Bytecode Alliance projects (Jco,
-ComponentizeJS, and Wasmtime). Recommendations below are specifically aimed at
-porting `workloads/c4-excalidraw/components/src/*.js` to TypeScript without
-weakening the existing WIT boundary.
+Research date: 2026-08-30. This document is detailed background research, not
+the primary operational guide. Start with the [project decisions](../decisions/wasm-wit-typescript.md)
+for the rules and commands that apply to this repository.
+
+Sources are limited to the WebAssembly Component Model
+specification/documentation and Bytecode Alliance projects (Jco, ComponentizeJS,
+and Wasmtime). The research is specifically aimed at porting
+`workloads/c4-excalidraw/components/src/*.js` to TypeScript without weakening the
+existing WIT boundary.
 
 ## Executive recommendations
 
@@ -222,13 +226,13 @@ if WASI dependencies are added later. [Jco ComponentizeJS compatibility note](ht
 
 Use one reproducible command chain per world:
 
-```text
-WIT validation / guest declaration generation
-    -> tsc --noEmit
-    -> jco componentize --world-name ... --disable all
-    -> jco wit dist/component.wasm (import/export audit)
-    -> component-level functional and negative tests
-    -> full Wassette/Gondolin pipeline test
+```mermaid
+flowchart LR
+    wit[WIT validation and guest declarations] --> types[tsc --noEmit]
+    types --> componentize[jco componentize]
+    componentize --> audit[jco wit import/export audit]
+    audit --> component[Component functional and negative tests]
+    component --> pipeline[Wassette and Gondolin pipeline test]
 ```
 
 Recommended CI assertions:

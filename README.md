@@ -12,17 +12,9 @@ _C1 system context rendered from the policy-approved Excalidraw scene._
 
 ## C4 workload
 
-```bash
-corepack enable
-pnpm install --frozen-lockfile --ignore-scripts
-make c4-build
-make c4-test
-make c4
-```
-
-`make c4` invokes the real Pi extension and writes an approved editable scene
-to `artifacts/c4-excalidraw/composable-c4-pipeline.excalidraw`. Override
-`C4_INPUT`, `C4_OUTPUT`, or `C4_MODEL` on the command line when needed.
+C4-to-Excalidraw is the first platform workload. Follow the [C4 workload
+README](workloads/c4-excalidraw/README.md) for setup, build, verification, and
+the real Pi dog-food run.
 
 The source-controlled architecture views are:
 
@@ -32,18 +24,13 @@ The source-controlled architecture views are:
 
 ## Layout
 
-```text
-.
-├── apps/                            # reusable runnable applications
-│   └── excalidraw-mcp/              # pinned upstream Git submodule
-├── workloads/                       # independently runnable agent workloads
-│   └── c4-excalidraw/
-├── adapters/                        # concrete implementations at external seams
-│   ├── mermaid-to-excalidraw/      # untouched upstream Git submodule
-│   └── c4-gondolin/                # platform-owned C4/browser adapter
-├── components/                      # reusable WIT/WebAssembly modules
-└── runtimes/                        # Pi, Wassette, Gondolin runtime integration
-```
+- `apps/` — reusable runnable applications, including the pinned `excalidraw-mcp` submodule.
+- `workloads/` — independently runnable agent workloads, including `c4-excalidraw`.
+- `adapters/` — implementations at external seams:
+  - `mermaid-to-excalidraw` — untouched upstream submodule.
+  - `c4-gondolin` — platform-owned C4/browser adapter.
+- `components/` — reusable WIT/WebAssembly modules.
+- `runtimes/` — Pi, Wassette, and Gondolin runtime integration.
 
 Workload-specific contracts, prompts, examples, and modules remain inside the
 workload until another workload genuinely reuses them. Shared implementations

@@ -12,6 +12,7 @@ const deployment = `C4Deployment
 
   Deployment_Node(host, "Client Machine", "macOS", "Coordinates the workflow") {
     Container(pi, "Coordinator Pi", "Process", "Coordinates the job")
+    Container_Instance(wassette_instance, "Wassette instance", "WebAssembly runtime", "Runs the component")
     Container(wassette, "Wassette", "WebAssembly runtime", "Validates elements")
   }
 
@@ -43,7 +44,7 @@ describe("C4 preprocessor", () => {
   it("translates deployment nodes into subgraphs and relationships", () => {
     const flowchart = c4ToFlowchart(deployment);
 
-    expect(flowchart).toContain("flowchart LR");
+    expect(flowchart).toContain("flowchart TB");
     expect(flowchart).toContain(
       'subgraph host["Client Machine — [macOS] — Coordinates the workflow"]'
     );
@@ -51,6 +52,7 @@ describe("C4 preprocessor", () => {
       'pi["`Coordinator Pi\n[Process]\nCoordinates the job`"]'
     );
     expect(flowchart).toContain("class bundle c4_database");
+    expect(flowchart).toContain("wassette_instance");
     expect(flowchart).toContain(
       'pi -->|"Submits build [Gondolin channel]"| builder'
     );

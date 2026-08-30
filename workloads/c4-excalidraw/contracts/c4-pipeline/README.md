@@ -2,20 +2,15 @@
 
 This WIT package defines three independently replaceable modules:
 
-```text
-C4 source
-   |
-   v
-c4-compiler
-   | imports browser-layout
-   |          |
-   |          +-- Gondolin + Playwright adapter (production)
-   |          +-- deterministic in-memory adapter (tests)
-   v
-excalidraw-policy
-   |
-   v
-approved Excalidraw scene
+```mermaid
+flowchart TD
+    source[C4 source] --> compiler[c4-compiler]
+    compiler --> production[Gondolin + Playwright adapter]
+    compiler --> tests[Deterministic in-memory adapter]
+    production --> compiler
+    tests --> compiler
+    compiler --> policy[excalidraw-policy]
+    policy --> scene[Approved Excalidraw scene]
 ```
 
 The external compiler interface deliberately has one operation: `compile`.
@@ -54,8 +49,10 @@ can reject malformed or excessive browser output before creating a scene.
 
 ## Validate
 
+From the repository root:
+
 ```sh
-sh validate.sh
+sh workloads/c4-excalidraw/contracts/c4-pipeline/validate.sh
 ```
 
 The validator generates JavaScript bindings for every world with `jco types`.

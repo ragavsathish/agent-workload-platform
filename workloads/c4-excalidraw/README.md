@@ -7,21 +7,17 @@ micro-VM.
 
 ## Architecture
 
-```text
-Pi + C4 skill -> native Mermaid C4
-  -> Wassette -> c4-compiler.wasm.prepare
-  -> Gondolin QEMU VM -> Playwright/Chromium
-       returns typed nodes, edges, text, and bounds
-  -> Wassette -> c4-compiler.wasm.finish
-       constructs the Excalidraw scene
-  -> Wassette -> excalidraw-policy.wasm.approve
-       rejects unsafe or malformed scenes
-  -> Excalidraw MCP App -> edit and save
-```
+### C1 system context
+
+![C1 system context for the Agent Workload Platform](../../docs/architecture/agent-workload-platform-c1.png)
+
+Source: [C1 system context](examples/c1-system-context.mmd)
 
 ### C2 container view
 
 ![C2 container view for the C4-to-Excalidraw workload](../../docs/architecture/agent-workload-platform-c2.png)
+
+Source: [C2 container view](examples/c2-container.mmd)
 
 Responsibilities are separated as follows:
 
@@ -40,6 +36,8 @@ Responsibilities are separated as follows:
 
 ![C3 component view for the Pi coordinator](../../docs/architecture/agent-workload-platform-c3.png)
 
+Source: [C3 Pi extension components](examples/c3-pi-extension-components.mmd)
+
 Only a typed `layout-snapshot` leaves the browser worker. Scene construction
 stays inside `c4-compiler.wasm`, and only a scene accepted by
 `excalidraw-policy.wasm` reaches the application.
@@ -50,9 +48,8 @@ From the repository root:
 
 ```bash
 git submodule update --init --recursive
-corepack enable
+command -v corepack >/dev/null && corepack enable || npm install --global pnpm@11.19.0
 pnpm install --frozen-lockfile --ignore-scripts
-pnpm --dir adapters/mermaid-to-excalidraw run build
 make c4-build
 make c4-gondolin-build
 ```
@@ -96,8 +93,11 @@ tool; the compiler and policy components produce the output.
 make c4-test
 ```
 
-This validates the WIT contracts, builds and loads the components, tests the
-Gondolin adapter, and runs the selected upstream converter tests.
+This validates the WIT contracts, rebuilds and loads the components, exercises
+the Wassette checkpoint round trip, tests the Gondolin adapter, and runs the
+selected upstream converter tests. It does not rebuild the Gondolin guest assets;
+run `make c4-gondolin-build` for that architecture-specific Docker and QEMU
+artifact build before running the real dog-food command.
 
 ## Contracts and supported syntax
 
