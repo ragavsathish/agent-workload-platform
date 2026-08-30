@@ -10,14 +10,17 @@ import { fileURLToPath } from "node:url";
 import { Type } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-const prototypeDir = path.dirname(fileURLToPath(import.meta.url));
-const repoDir = path.dirname(prototypeDir);
-const componentDir = path.join(prototypeDir, ".wassette-components");
-const hostHtml = path.join(prototypeDir, "dist", "host.html");
-const appHtml = path.join(repoDir, "dist", "mcp-app.html");
+const pipelineDir = path.dirname(fileURLToPath(import.meta.url));
+const monorepoRoot = path.resolve(pipelineDir, "..", "..");
+const excalidrawRepoDir = process.env.EXCALIDRAW_MCP_REPO
+  ? path.resolve(process.env.EXCALIDRAW_MCP_REPO)
+  : path.join(monorepoRoot, "apps", "excalidraw-mcp");
+const componentDir = path.join(pipelineDir, ".wassette-components");
+const hostHtml = path.join(pipelineDir, "dist", "host.html");
+const appHtml = path.join(excalidrawRepoDir, "dist", "mcp-app.html");
 const layoutRepoDir = process.env.MERMAID_EXCALIDRAW_REPO
   ? path.resolve(process.env.MERMAID_EXCALIDRAW_REPO)
-  : path.resolve(repoDir, "..", "mermaid-to-excalidraw");
+  : path.join(monorepoRoot, "packages", "mermaid-to-excalidraw");
 const layoutRunner = path.join(layoutRepoDir, "scripts", "render-layout-gondolin.sh");
 const CREATE_VIEW = "prototype_excalidraw-core_diagrams_create-view";
 const SAVE_CHECKPOINT = "prototype_excalidraw-core_diagrams_save-checkpoint";
@@ -184,7 +187,7 @@ export default function (pi: ExtensionAPI) {
 
   function requireArtifacts() {
     for (const required of [hostHtml, appHtml, path.join(componentDir, "excalidraw-core.wasm")]) {
-      if (!fs.existsSync(required)) throw new Error(`Missing ${required}. Run prototype-wassette-pi/setup.sh first.`);
+      if (!fs.existsSync(required)) throw new Error(`Missing ${required}. Run ./pipeline c4-excalidraw setup first.`);
     }
   }
 
@@ -195,7 +198,7 @@ export default function (pi: ExtensionAPI) {
       path.join(componentDir, "excalidraw-policy.wasm"),
       layoutRunner,
     ]) {
-      if (!fs.existsSync(required)) throw new Error(`Missing ${required}. Run prototype-wassette-pi/setup.sh first.`);
+      if (!fs.existsSync(required)) throw new Error(`Missing ${required}. Run ./pipeline c4-excalidraw setup first.`);
     }
   }
 

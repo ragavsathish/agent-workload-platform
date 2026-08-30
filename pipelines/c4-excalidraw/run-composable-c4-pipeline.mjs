@@ -13,12 +13,12 @@ if (!inputPath || !outputPath) {
   process.exit(2);
 }
 
-const prototypeDir = path.dirname(fileURLToPath(import.meta.url));
-const repoDir = path.dirname(prototypeDir);
-const componentDir = path.join(prototypeDir, ".wassette-components");
+const pipelineDir = path.dirname(fileURLToPath(import.meta.url));
+const monorepoRoot = path.resolve(pipelineDir, "..", "..");
+const componentDir = path.join(pipelineDir, ".wassette-components");
 const layoutRepoDir = process.env.MERMAID_EXCALIDRAW_REPO
   ? path.resolve(process.env.MERMAID_EXCALIDRAW_REPO)
-  : path.resolve(repoDir, "..", "mermaid-to-excalidraw");
+  : path.join(monorepoRoot, "packages", "mermaid-to-excalidraw");
 const layoutRunner = path.join(layoutRepoDir, "scripts", "render-layout-gondolin.sh");
 const source = await fs.readFile(path.resolve(inputPath), "utf8");
 

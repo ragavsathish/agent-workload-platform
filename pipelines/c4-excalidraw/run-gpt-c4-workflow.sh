@@ -2,7 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-REPO_DIR=$(dirname -- "$SCRIPT_DIR")
+MONOREPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
+REPO_DIR="$MONOREPO_ROOT/apps/excalidraw-mcp"
 SOURCE_MMD=${1:-"$SCRIPT_DIR/examples/pi-wassette-excalidraw.mmd"}
 ARTIFACT_DIR=${2:-"$SCRIPT_DIR/artifacts"}
 MODEL=${PI_C4_MODEL:-openai-codex/gpt-5.6-terra}
@@ -31,8 +32,8 @@ EXCALIDRAW_STATE_OUT="$STATE_JSON" pi \
   --no-builtin-tools \
   --tools excalidraw_wassette_open \
   --skill "$C4_SKILL" \
-  --extension ./prototype-wassette-pi/pi-extension.ts \
+  --extension "$SCRIPT_DIR/pi-extension.ts" \
   -- \
   "@$SOURCE_MMD" \
   "@$REFERENCE_PNG" \
-  "@./prototype-wassette-pi/prompts/mmd-png-to-excalidraw.md"
+  "@$SCRIPT_DIR/prompts/mmd-png-to-excalidraw.md"

@@ -9,12 +9,12 @@ import { createServer } from "vite";
 
 const [inputPath, outputPath] = process.argv.slice(2);
 if (!inputPath || !outputPath) {
-  console.error("usage: node scripts/render-excalidraw.mjs INPUT.excalidraw OUTPUT.png");
+  console.error("usage: node scripts/render-layout-snapshot.mjs INPUT.mmd OUTPUT.json");
   process.exit(2);
 }
 
 const repoDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const scene = JSON.parse(await readFile(path.resolve(inputPath), "utf8"));
+const definition = await readFile(path.resolve(inputPath), "utf8");
 const server = await createServer({
   root: repoDir,
   logLevel: "error",
@@ -33,10 +33,21 @@ try {
     ...(executablePath ? { executablePath } : channel === "bundled" ? {} : { channel: channel || "chrome" }),
   });
   const page = await browser.newPage();
-  await page.goto(`http://127.0.0.1:${address.port}/scripts/converter.html`, { waitUntil: "networkidle" });
-  await page.waitForFunction(() => typeof window.excalidrawSceneToPng === "function");
-  const pngBase64 = await page.evaluate(async (input) => window.excalidrawSceneToPng(input), scene);
-  await writeFile(path.resolve(outputPath), Buffer.from(pngBase64, "base64"));
+  page.setDefaultTimeout(60_000);
+  await page.goto(`http://127.0.0.1:${address.port}/scripts/converter.html`, {
+    waitUntil: "networkidle",
+    timeout: 60_000,
+  });
+  await page.waitForFunction(
+    () => typeof window.mermaidToLayoutSnapshot === "function",
+    undefined,
+    { timeout: 60_000 },
+  );
+  const snapshot = await page.evaluate(
+    async (source) => window.mermaidToLayoutSnapshot(source),
+    definition,
+  );
+  await writeFile(path.resolve(outputPath), `${JSON.stringify(snapshot, null, 2)}\n`);
 } finally {
   await browser?.close();
   await server.close();

@@ -1,0 +1,19 @@
+{
+  "name": "@diagram-pipelines/c4-excalidraw",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:host": "vite build --config vite.config.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "0.4.2",
+    "@modelcontextprotocol/sdk": "1.30.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.11",
+    "typescript": "5.9.3",
+    "vite": "6.4.3",
+    "vite-plugin-singlefile": "2.3.0"
+  }
+}

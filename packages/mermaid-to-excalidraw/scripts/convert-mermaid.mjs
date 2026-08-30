@@ -42,11 +42,16 @@ try {
         : { channel: channel || "chrome" }),
   });
   const page = await browser.newPage();
+  page.setDefaultTimeout(60_000);
   await page.goto(
     `http://127.0.0.1:${address.port}/scripts/converter.html`,
-    { waitUntil: "networkidle" }
+    { waitUntil: "networkidle", timeout: 60_000 }
   );
-  await page.waitForFunction(() => typeof window.mermaidToExcalidraw === "function");
+  await page.waitForFunction(
+    () => typeof window.mermaidToExcalidraw === "function",
+    undefined,
+    { timeout: 60_000 },
+  );
 
   const result = await page.evaluate(
     async ({ source, includePreview }) =>
