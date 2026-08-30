@@ -179,15 +179,8 @@ interface types {
     }
 }
 
-/// Browserless layout port. Implementations receive a typed C4 graph and may
-/// not parse Mermaid or access the filesystem, network, process, or browser.
-interface graph-layout {
-    use types.{graph-layout-request, layout-snapshot, pipeline-error};
-
-    layout: func(request: graph-layout-request) -> result<layout-snapshot, pipeline-error>;
-}
-
-/// Preferred deep compiler interface. Layout is hidden behind graph-layout.
+/// Preferred deep compiler interface. Layout is an internal implementation
+/// module rather than a separately deployed capability.
 interface compiler {
     use types.{compile-request, compiled-scene, pipeline-error};
 
@@ -224,9 +217,9 @@ interface excalidraw-policy {
     ) -> result<approved-scene, pipeline-error>;
 }
 
-/// Target composition: a browserless layout component satisfies graph-layout.
-world c4-compiler {
-    import graph-layout;
+/// Production engine: compiler and layout share one JavaScript runtime while
+/// remaining separate implementation modules.
+world c4-engine {
     export compiler;
 }
 
@@ -234,10 +227,6 @@ world c4-compiler {
 /// prepare/render/finish fallback.
 world c4-compiler-core {
     export compiler-core;
-}
-
-world c4-layout-component {
-    export graph-layout;
 }
 
 world excalidraw-policy-component {

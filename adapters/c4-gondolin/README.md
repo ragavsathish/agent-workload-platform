@@ -1,8 +1,8 @@
 # Optional C4 Gondolin adapter
 
 This is the compatibility and visual-reference implementation. The normal C4
-pipeline uses the browserless `c4-layout.wasm` component and does not require
-this adapter, Docker, Chromium, or QEMU assets.
+pipeline uses the browserless layout module inside `c4-engine.wasm` and does
+not require this adapter, Docker, Chromium, or QEMU assets.
 
 This platform-owned adapter translates Mermaid C4 into an ordinary flowchart,
 passes that flowchart to the unmodified `../mermaid-to-excalidraw` submodule,

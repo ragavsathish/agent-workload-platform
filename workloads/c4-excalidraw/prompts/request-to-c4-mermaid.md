@@ -9,6 +9,10 @@ systems, containers, technologies, responsibilities, boundaries, and
 relationships stated or clearly implied by the request. Do not invent
 implementation details merely to fill space.
 
+For `C4Dynamic`, number relationship labels to preserve interaction order; the
+renderer produces a graph rather than a sequence diagram. Prefer `Rel` because
+directional `Rel_*` suffixes do not constrain Dagre routing.
+
 Output only Mermaid source, beginning with the C4 diagram type. Do not use a
 Markdown fence and do not add explanation before or after the diagram.
 

@@ -21,9 +21,16 @@ research note](../research/wasm-wit-typescript-best-practices.md).
   entities with a lifetime.
 - **Keep calls coarse-grained.** Validate byte and element limits before
   allocation, and avoid repeated JSON conversions across the same boundary.
-- **Compose pure modules at build time.** `wac-cli` 0.10.1 plugs the compiler's
-  `graph-layout` import into the Dagre layout export. Wassette receives one
-  single-call component instead of orchestrating internal compiler stages.
+- **Expose only reusable seams.** The C4 compiler and Dagre layout are internal
+  TypeScript modules compiled into one engine and one JavaScript runtime.
+  `wac-cli` 0.10.1 packages that engine with independently reusable policy and
+  checkpoint modules without recompiling the blocks.
+- **Use TypeScript guests, not Rust guests.** Cargo may install the pinned WAC
+  CLI, but no workload component is implemented or compiled in Rust.
+- **Accept one runtime per reusable JavaScript block.** ComponentizeJS embeds
+  StarlingMonkey in each independently componentized block. WAC preserves the
+  blocks and does not deduplicate their runtimes, so a composed suite is larger
+  than one merged component. Merge only modules that lack a real reuse seam.
 - **Keep browser execution optional.** Normal C4 compilation has no browser or
   OS imports. Gondolin and Playwright remain a separately built compatibility
   adapter selected explicitly with `C4_LAYOUT_BACKEND=gondolin`.
@@ -39,7 +46,9 @@ make c4-test
 That command validates WIT, regenerates and type-checks guests, componentizes
 and composes the Wasm modules, loads them into Wassette, runs the single-call
 compiler and checkpoint smoke tests, and tests the optional converter and
-Gondolin adapter. The separate fallback browser artifact build is:
+Gondolin adapter. The smoke matrix covers context, container, component,
+dynamic, deployment, determinism, and expected rejection cases. The separate
+fallback browser artifact build is:
 
 ```sh
 make c4-gondolin-build

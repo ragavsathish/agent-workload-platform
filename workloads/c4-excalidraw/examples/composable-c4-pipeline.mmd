@@ -7,9 +7,7 @@ Deployment_Node(client, "Client Machine", "User workstation", "Orchestrates diag
   Container(pi, "Pi Coordinator", "Process", "Applies the C4 skill and orchestrates model, Wassette, policy, checkpoint, and Excalidraw calls")
 
   Deployment_Node(wassette, "Wassette Runtime", "WebAssembly Component Runtime", "Runs capability-limited WIT modules") {
-    Container(compiler, "Composed C4 Pipeline", "c4-pipeline.wasm", "Parses C4, invokes typed graph layout, validates geometry, and emits an Excalidraw scene")
-    Container(layout, "Graph Layout", "c4-layout.wasm with Dagre", "Computes deterministic geometry without host capabilities")
-    Container(policy, "Excalidraw Policy", "excalidraw-policy.wasm", "Applies scene admission rules before browser display or persistence")
+    Container(suite, "C4 Wasm Suite", "c4-suite.wasm", "Packages the single-runtime C4 engine with reusable policy and checkpoint blocks")
   }
 
   ContainerDb(checkpoints, "Checkpoint Store", "Host memory or LeoFS", "Stores approved Excalidraw scene revisions")
@@ -26,10 +24,8 @@ Deployment_Node(ai_provider, "External AI Provider", "Remote model infrastructur
 
 Rel(author, pi, "Requests a C4 diagram", "Natural language")
 Rel(pi, model, "Generates C4 Mermaid with", "Model API")
-Rel(pi, compiler, "Invokes compilation", "MCP and WIT")
-Rel(compiler, layout, "Uses typed graph layout", "Static WIT composition")
+Rel(pi, suite, "Compiles, approves, and checkpoints", "MCP and WIT")
 Rel(pi, browser_layout, "May request legacy layout", "C4_LAYOUT_BACKEND=gondolin")
-Rel(compiler, policy, "Submits candidate scene", "scene-envelope")
-Rel(policy, checkpoints, "Stores approved revision", "Excalidraw JSON")
-Rel(policy, excalidraw, "Approves displayed and edited scenes", "Excalidraw JSON")
+Rel(suite, checkpoints, "Stores approved revision", "Excalidraw JSON")
+Rel(suite, excalidraw, "Approves displayed and edited scenes", "Excalidraw JSON")
 Rel(author, excalidraw, "Views and edits diagram", "Browser UI")

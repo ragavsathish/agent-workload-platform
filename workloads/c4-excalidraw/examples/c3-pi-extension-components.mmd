@@ -13,7 +13,7 @@ Container_Boundary(pi, "Pi Coordinator - pi-extension.ts") {
   Component(checkpoints, "Checkpoint Store", "In-memory map", "Retains scene revisions for the Pi session")
 }
 
-System_Ext(wassette, "Wassette Runtime", "Runs the statically composed C4 compiler/layout, policy, and checkpoint WebAssembly components")
+System_Ext(wassette, "Wassette Runtime", "Runs c4-suite.wasm: engine, reusable policy, and checkpoint blocks")
 System_Ext(gondolin, "Optional Gondolin QEMU VM", "Runs the Playwright and Chromium fallback worker")
 System_Ext(webapp, "Excalidraw MCP App", "Displays and edits the approved scene")
 

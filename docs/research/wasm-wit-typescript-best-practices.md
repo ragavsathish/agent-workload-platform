@@ -4,10 +4,10 @@ Research date: 2026-08-30. This document is detailed background research, not
 the primary operational guide. Start with the [project decisions](../decisions/wasm-wit-typescript.md)
 for the rules and commands that apply to this repository.
 
-Implementation note: the subsequent browserless migration replaced the
-compiler's `browser-layout` import with a typed `graph-layout` import, implemented
-by a synchronous Dagre component and statically composed with WAC. References
-below to `browser-layout` describe the earlier design and the retained Gondolin
+Implementation note: the production browserless design keeps the compiler and
+Dagre as internal modules in one JavaScript runtime. WAC composes only the
+independently reusable engine, scene-policy, and checkpoint blocks. References
+below to `browser-layout` describe the earlier design and retained Gondolin
 compatibility world.
 
 Sources are limited to the WebAssembly Component Model
@@ -133,9 +133,8 @@ WIT worlds provide capability security by making every external dependency an
 explicit import. A component can only call imports supplied by its host or by
 composition. [World imports as the sandbox boundary](https://component-model.bytecodealliance.org/design/worlds.html)
 
-- Keep `c4-compiler-core` and `excalidraw-policy-component` import-free and use
-  `--disable all`; keep the eventual `c4-compiler` limited to the single
-  `browser-layout` capability.
+- Keep `c4-engine`, `c4-compiler-core`, and `excalidraw-policy-component`
+  free of ambient host capabilities and use `--disable all`.
 - Audit the built component's WIT after every build. Source review alone is
   insufficient because ComponentizeJS engine features can introduce WASI
   imports.
@@ -187,9 +186,9 @@ Do not add WIT async solely because an implementation function is declared
   componentizer, host runtime, and deployment engine pass an end-to-end
   compatibility test. [Jco experimental async options](https://bytecodealliance.github.io/jco/transpiling.html#options)
 
-The current prepare/render/finish orchestration should therefore remain
-synchronous at the WIT boundary. Browser work can stay asynchronous in the host
-between `prepare` and `finish` without changing either component export.
+The default composed `compile` call remains synchronous at the WIT boundary.
+The optional browser fallback may perform asynchronous host work between the
+synchronous `prepare` and `finish` calls.
 
 ## TypeScript binding and build recommendations
 
@@ -238,7 +237,7 @@ flowchart LR
     types --> componentize[jco componentize]
     componentize --> audit[jco wit import/export audit]
     audit --> component[Component functional and negative tests]
-    component --> pipeline[Wassette and Gondolin pipeline test]
+    component --> pipeline[Wassette pipeline and optional Gondolin test]
 ```
 
 Recommended CI assertions:

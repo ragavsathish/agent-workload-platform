@@ -5,6 +5,9 @@ across local tools, capability-limited WebAssembly modules, isolated Gondolin
 micro-VMs, browsers, storage systems, and remote model infrastructure.
 
 C4-to-Excalidraw is the first workload, not the scope of the platform.
+Its browserless Wasm path is tested with context, container, component,
+dynamic, and deployment views. Wassette loads one composed `c4-suite.wasm`;
+WAC assembles that suite from immutable, independently reusable components.
 
 ![C1 system context for the Agent Workload Platform](docs/architecture/agent-workload-platform-c1.png)
 
@@ -14,7 +17,7 @@ _C1 system context rendered from the policy-approved Excalidraw scene._
 
 C4-to-Excalidraw is the first platform workload. Follow the [C4 workload
 README](workloads/c4-excalidraw/README.md) for setup, build, verification, and
-the real Pi dog-food run.
+the real Pi dog-food run, including supported syntax and rendering limits.
 
 The source-controlled architecture views are:
 

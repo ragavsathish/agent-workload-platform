@@ -170,19 +170,13 @@ export default function (pi: ExtensionAPI) {
   const checkpoints = new Map<string, unknown[]>();
 
   function requireArtifacts() {
-    for (const required of [hostHtml, appHtml, path.join(componentDir, "excalidraw-core.wasm")]) {
+    for (const required of [hostHtml, appHtml, path.join(componentDir, "c4-suite.wasm")]) {
       if (!fs.existsSync(required)) throw new Error(`Missing ${required}. Follow the install and build commands in workloads/c4-excalidraw/README.md.`);
     }
   }
 
   function requireC4Artifacts() {
     requireArtifacts();
-    for (const required of [
-      path.join(componentDir, "c4-pipeline.wasm"),
-      path.join(componentDir, "excalidraw-policy.wasm"),
-    ]) {
-      if (!fs.existsSync(required)) throw new Error(`Missing ${required}. Follow the install and build commands in workloads/c4-excalidraw/README.md.`);
-    }
     if (c4LayoutBackend === "gondolin" && !fs.existsSync(gondolinAssets)) {
       throw new Error(`Missing ${gondolinAssets}. Run make c4-gondolin-build before selecting the Gondolin fallback.`);
     }

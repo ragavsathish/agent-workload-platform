@@ -1,6 +1,7 @@
 # Runtimes
 
-Shared integration for agent and workload runtimes belongs here. The current
-platform uses Pi for coordination, Wassette for WebAssembly components, and
-Gondolin for isolated QEMU workloads; C4-specific orchestration remains inside
+Shared runtime integration belongs here. Pi coordinates workloads, Wassette
+runs composed WebAssembly suites, and Gondolin supplies optional isolated QEMU
+fallbacks. For the C4 workload, Wassette loads `c4-suite.wasm` while Pi invokes
+its typed tools. C4-specific orchestration stays in
 `workloads/c4-excalidraw`.
