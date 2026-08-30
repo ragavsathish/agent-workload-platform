@@ -7,14 +7,11 @@ import path from "node:path";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 
-const [inputPath, outputPath] = process.argv.slice(2);
-if (!inputPath || !outputPath) {
-  console.error("usage: node run-composable-c4-pipeline.mjs INPUT.mmd OUTPUT.excalidraw");
-  process.exit(2);
-}
-
 const pipelineDir = path.dirname(fileURLToPath(import.meta.url));
 const monorepoRoot = path.resolve(pipelineDir, "..", "..");
+const [inputArgument, outputArgument] = process.argv.slice(2);
+const inputPath = inputArgument ?? path.join(pipelineDir, "examples", "composable-c4-pipeline.mmd");
+const outputPath = outputArgument ?? path.join(monorepoRoot, "artifacts", "c4-excalidraw", "composable-c4-pipeline.excalidraw");
 const componentDir = path.join(pipelineDir, ".wassette-components");
 const layoutRepoDir = process.env.MERMAID_EXCALIDRAW_REPO
   ? path.resolve(process.env.MERMAID_EXCALIDRAW_REPO)
@@ -166,8 +163,14 @@ try {
   };
   await fs.mkdir(path.dirname(path.resolve(outputPath)), { recursive: true });
   await fs.writeFile(path.resolve(outputPath), `${JSON.stringify(scene, null, 2)}\n`);
+  let png;
+  if (process.env.RENDER_PNG !== "0") {
+    png = path.resolve(outputPath).replace(/\.excalidraw$/, ".png");
+    await run(process.execPath, [path.join(layoutRepoDir, "scripts", "render-excalidraw.mjs"), path.resolve(outputPath), png]);
+  }
   process.stdout.write(`${JSON.stringify({
     output: path.resolve(outputPath),
+    png,
     renderer: snapshot.renderer,
     nodes: snapshot.nodes.length,
     edges: snapshot.edges.length,

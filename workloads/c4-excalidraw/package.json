@@ -4,7 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:host": "vite build --config vite.config.ts"
+    "build": "npm run build:core && npm run build:components && npm run build:host",
+    "build:core": "npm --prefix core run build",
+    "build:components": "npm --prefix components run build",
+    "build:host": "vite build --config vite.config.ts",
+    "components:load": "mkdir -p .wassette-components && wassette component load file://$PWD/core/dist/excalidraw-core.wasm --component-dir $PWD/.wassette-components && wassette component load file://$PWD/components/dist/c4-compiler.wasm --component-dir $PWD/.wassette-components && wassette component load file://$PWD/components/dist/excalidraw-policy.wasm --component-dir $PWD/.wassette-components",
+    "gondolin:build": "npm --prefix ../../adapters/mermaid-to-excalidraw run gondolin:playwright:build",
+    "c4": "node run-composable-c4-pipeline.mjs",
+    "test": "sh contracts/c4-pipeline/validate.sh && npm run build && npm --prefix ../../adapters/mermaid-to-excalidraw run build && npm --prefix ../../adapters/mermaid-to-excalidraw test -- --run tests/c4.test.ts tests/cssUtils.test.ts tests/examples.test.ts tests/sequence.test.ts tests/state.test.ts tests/utils.test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/ext-apps": "0.4.2",

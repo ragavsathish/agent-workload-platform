@@ -6,12 +6,13 @@ micro-VMs, browsers, storage systems, and remote model infrastructure.
 
 C4-to-Excalidraw is the first workload, not the scope of the platform.
 
-## Run the current workload
+## Current package
 
 ```bash
-./workloads/c4-excalidraw/setup.sh
-./workloads/c4-excalidraw/check.sh
-./workloads/c4-excalidraw/run.sh
+cd workloads/c4-excalidraw
+npm run build
+npm test
+npm run c4
 ```
 
 ## Layout
@@ -33,9 +34,6 @@ workload until another workload genuinely reuses them. Shared implementations
 then move to `components/`, `adapters/`, `apps/`, or `runtimes/` according to
 their responsibility.
 
-See [workloads/README.md](workloads/README.md) for the minimal layout of a new
-workload. Imported source provenance is recorded in `PROVENANCE.md`.
-
-`setup` initializes the submodules required by its workload. A full checkout
-can also be prepared eagerly with `git clone --recurse-submodules` or
-`git submodule update --init --recursive`.
+There is no repository-specific dispatcher or lifecycle wrapper. Each package
+uses its native toolchain. See the C4 package README for dependency setup.
+Imported source provenance is recorded in `PROVENANCE.md`.

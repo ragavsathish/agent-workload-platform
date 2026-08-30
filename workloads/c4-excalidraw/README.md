@@ -19,18 +19,23 @@ The split is intentional:
 - `adapters/mermaid-to-excalidraw` supplies the narrow
   Gondolin/Playwright browser-layout adapter.
 
-## Build
+## Install and build
 
 ```bash
-./workloads/c4-excalidraw/setup.sh
+git submodule update --init --recursive -- apps/excalidraw-mcp
+pnpm --dir apps/excalidraw-mcp install --ignore-scripts --frozen-lockfile
+pnpm --dir apps/excalidraw-mcp run build
+yarn --cwd adapters/mermaid-to-excalidraw install --frozen-lockfile --ignore-scripts
+npm --prefix workloads/c4-excalidraw ci --ignore-scripts
+npm --prefix workloads/c4-excalidraw/core ci --ignore-scripts
+npm --prefix workloads/c4-excalidraw/components ci --ignore-scripts
+npm --prefix workloads/c4-excalidraw run build
+npm --prefix workloads/c4-excalidraw run components:load
+npm --prefix workloads/c4-excalidraw run gondolin:build
 ```
 
-The setup script installs pinned dependencies, builds this repository's
-`dist/mcp-app.html`, builds and loads all three Wasm components, bundles the
-thin host, builds the pinned Playwright OCI image, and converts that image to a
-Gondolin image. Set `MERMAID_EXCALIDRAW_REPO` if the converter clone is not next
-to this repository. Set `SKIP_GONDOLIN_BUILD=1` only when that tagged image is
-already present.
+These are standard toolchain commands: there is no platform setup wrapper.
+Run `npm test` from `workloads/c4-excalidraw` to build and verify the package.
 
 ## Run with Pi
 
@@ -58,7 +63,7 @@ To exercise the same Wasm/Gondolin/Wassette phases without asking a model to
 make the tool call, use the deterministic dogfood runner:
 
 ```bash
-./workloads/c4-excalidraw/run.sh \
+npm --prefix workloads/c4-excalidraw run c4 -- \
   workloads/c4-excalidraw/examples/composable-c4-pipeline.mmd \
   artifacts/c4-excalidraw/composable-c4-pipeline.excalidraw
 ```
