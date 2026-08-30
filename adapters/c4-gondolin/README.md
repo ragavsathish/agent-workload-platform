@@ -1,4 +1,8 @@
-# C4 Gondolin adapter
+# Optional C4 Gondolin adapter
+
+This is the compatibility and visual-reference implementation. The normal C4
+pipeline uses the browserless `c4-layout.wasm` component and does not require
+this adapter, Docker, Chromium, or QEMU assets.
 
 This platform-owned adapter translates Mermaid C4 into an ordinary flowchart,
 passes that flowchart to the unmodified `../mermaid-to-excalidraw` submodule,
@@ -12,13 +16,12 @@ The upstream submodule contains no platform patches. C4 preprocessing, browser
 timeouts, OCI construction, and Gondolin execution live here so upstream pin
 updates do not merge with platform implementation files.
 
-The [C4 workload README](../../workloads/c4-excalidraw/README.md) contains the
-repository setup and full pipeline. After following it, run the adapter tests
-from the repository root:
+To exercise the fallback from the repository root:
 
 ```sh
 pnpm --dir adapters/c4-gondolin test
 make c4-gondolin-build
+C4_LAYOUT_BACKEND=gondolin make c4
 ```
 
 `make c4-gondolin-build` builds the architecture-specific Playwright image and

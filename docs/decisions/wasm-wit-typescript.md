@@ -21,6 +21,12 @@ research note](../research/wasm-wit-typescript-best-practices.md).
   entities with a lifetime.
 - **Keep calls coarse-grained.** Validate byte and element limits before
   allocation, and avoid repeated JSON conversions across the same boundary.
+- **Compose pure modules at build time.** `wac-cli` 0.10.1 plugs the compiler's
+  `graph-layout` import into the Dagre layout export. Wassette receives one
+  single-call component instead of orchestrating internal compiler stages.
+- **Keep browser execution optional.** Normal C4 compilation has no browser or
+  OS imports. Gondolin and Playwright remain a separately built compatibility
+  adapter selected explicitly with `C4_LAYOUT_BACKEND=gondolin`.
 
 ## Required gates
 
@@ -30,10 +36,10 @@ For a component change, run the workload verification from the repository root:
 make c4-test
 ```
 
-That command validates WIT, regenerates and type-checks guests, componentizes the
-Wasm modules, loads them into Wassette, runs the checkpoint smoke test, and runs
-the converter and Gondolin adapter tests. The separate isolated browser artifact
-build is:
+That command validates WIT, regenerates and type-checks guests, componentizes
+and composes the Wasm modules, loads them into Wassette, runs the single-call
+compiler and checkpoint smoke tests, and tests the optional converter and
+Gondolin adapter. The separate fallback browser artifact build is:
 
 ```sh
 make c4-gondolin-build

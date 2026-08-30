@@ -9,14 +9,16 @@
     "build:core": "pnpm --dir core run build",
     "build:components": "pnpm --dir components run build",
     "build:host": "vite build --config vite.config.ts",
-    "components:load": "mkdir -p .wassette-components && wassette component load file://$PWD/core/dist/excalidraw-core.wasm --component-dir $PWD/.wassette-components && wassette component load file://$PWD/components/dist/c4-compiler.wasm --component-dir $PWD/.wassette-components && wassette component load file://$PWD/components/dist/excalidraw-policy.wasm --component-dir $PWD/.wassette-components",
+    "components:load": "mkdir -p .wassette-components && wassette component load file://$PWD/core/dist/excalidraw-core.wasm --component-dir $PWD/.wassette-components && wassette component load file://$PWD/components/dist/c4-pipeline.wasm --component-dir $PWD/.wassette-components && wassette component load file://$PWD/components/dist/c4-compiler.wasm --component-dir $PWD/.wassette-components && wassette component load file://$PWD/components/dist/excalidraw-policy.wasm --component-dir $PWD/.wassette-components",
     "test:components": "pnpm run components:load && node smoke-test.mjs",
-    "test": "sh contracts/c4-pipeline/validate.sh && pnpm run build && pnpm run test:components && pnpm --dir ../../adapters/mermaid-to-excalidraw run build && pnpm --dir ../../adapters/mermaid-to-excalidraw exec vitest --run tests/cssUtils.test.ts tests/examples.test.ts tests/sequence.test.ts tests/state.test.ts tests/utils.test.ts && pnpm --dir ../../adapters/c4-gondolin run build && pnpm --dir ../../adapters/c4-gondolin test"
+    "test": "sh contracts/c4-pipeline/validate.sh && pnpm --dir components test && pnpm run build && pnpm run test:components && pnpm --dir ../../adapters/mermaid-to-excalidraw run build && pnpm --dir ../../adapters/mermaid-to-excalidraw exec vitest --run tests/cssUtils.test.ts tests/examples.test.ts tests/sequence.test.ts tests/state.test.ts tests/utils.test.ts && pnpm --dir ../../adapters/c4-gondolin run build && pnpm --dir ../../adapters/c4-gondolin test"
   },
   "dependencies": {
-    "@earendil-works/gondolin": "0.12.0",
     "@modelcontextprotocol/ext-apps": "0.4.2",
     "@modelcontextprotocol/sdk": "1.30.0"
+  },
+  "optionalDependencies": {
+    "@earendil-works/gondolin": "0.12.0"
   },
   "devDependencies": {
     "@types/node": "22.19.11",

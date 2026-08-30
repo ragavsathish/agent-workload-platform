@@ -4,6 +4,12 @@ Research date: 2026-08-30. This document is detailed background research, not
 the primary operational guide. Start with the [project decisions](../decisions/wasm-wit-typescript.md)
 for the rules and commands that apply to this repository.
 
+Implementation note: the subsequent browserless migration replaced the
+compiler's `browser-layout` import with a typed `graph-layout` import, implemented
+by a synchronous Dagre component and statically composed with WAC. References
+below to `browser-layout` describe the earlier design and the retained Gondolin
+compatibility world.
+
 Sources are limited to the WebAssembly Component Model
 specification/documentation and Bytecode Alliance projects (Jco, ComponentizeJS,
 and Wasmtime). The research is specifically aimed at porting

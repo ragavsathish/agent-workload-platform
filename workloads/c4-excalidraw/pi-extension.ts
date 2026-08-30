@@ -8,7 +8,6 @@ import path from "node:path";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 import { Type } from "@earendil-works/pi-ai";
-import { RealFSProvider, VM } from "@earendil-works/gondolin";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 const pipelineDir = path.dirname(fileURLToPath(import.meta.url));
@@ -22,9 +21,11 @@ const appHtml = path.join(pipelineDir, "dist", "mcp-app.html");
 const CREATE_VIEW = "prototype_excalidraw-core_diagrams_create-view";
 const SAVE_CHECKPOINT = "prototype_excalidraw-core_diagrams_save-checkpoint";
 const READ_ME = "prototype_excalidraw-core_diagrams_read-me";
+const C4_COMPILE = "diagram_c4-pipeline_compiler_0_1_0_compile";
 const C4_PREPARE = "diagram_c4-pipeline_compiler-core_0_1_0_prepare";
 const C4_FINISH = "diagram_c4-pipeline_compiler-core_0_1_0_finish";
 const EXCALIDRAW_APPROVE = "diagram_c4-pipeline_excalidraw-policy_0_1_0_approve";
+const c4LayoutBackend = process.env.C4_LAYOUT_BACKEND === "gondolin" ? "gondolin" : "wasm";
 
 type JsonRpcResult = { content?: Array<{ type: string; text?: string }>; structuredContent?: any; isError?: boolean };
 type ViewState = { checkpointId: string; elements: unknown[]; warning: string };
@@ -177,15 +178,21 @@ export default function (pi: ExtensionAPI) {
   function requireC4Artifacts() {
     requireArtifacts();
     for (const required of [
-      path.join(componentDir, "c4-compiler.wasm"),
+      path.join(componentDir, "c4-pipeline.wasm"),
       path.join(componentDir, "excalidraw-policy.wasm"),
-      gondolinAssets,
     ]) {
       if (!fs.existsSync(required)) throw new Error(`Missing ${required}. Follow the install and build commands in workloads/c4-excalidraw/README.md.`);
+    }
+    if (c4LayoutBackend === "gondolin" && !fs.existsSync(gondolinAssets)) {
+      throw new Error(`Missing ${gondolinAssets}. Run make c4-gondolin-build before selecting the Gondolin fallback.`);
+    }
+    if (c4LayoutBackend === "gondolin" && !fs.existsSync(path.join(componentDir, "c4-compiler.wasm"))) {
+      throw new Error(`Missing ${path.join(componentDir, "c4-compiler.wasm")}. Rebuild and load the C4 components.`);
     }
   }
 
   async function renderLayoutInGondolin(mermaid: string, maximumOutputBytes: number) {
+    const { RealFSProvider, VM } = await import("@earendil-works/gondolin");
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-c4-layout-"));
     const inputPath = path.join(tempDir, "diagram.mmd");
     const outputPath = path.join(tempDir, "layout.json");
@@ -351,7 +358,7 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "excalidraw_c4_render",
     label: "Render C4 Mermaid in Excalidraw",
-    description: "Compile native Mermaid C4 syntax inside Wassette and render it with the cloned Excalidraw MCP App.",
+    description: "Compile and lay out native Mermaid C4 inside Wassette, then render it with the cloned Excalidraw MCP App.",
     promptSnippet: "Render a C4 Mermaid architecture diagram as an editable Excalidraw scene",
     promptGuidelines: [
       "For excalidraw_c4_render, first apply the C4 diagram skill to choose one coherent static level and generate native Mermaid C4Context, C4Container, or C4Component syntax.",
@@ -362,24 +369,34 @@ export default function (pi: ExtensionAPI) {
     }),
     async execute(_id, params) {
       requireC4Artifacts();
-      const preparedResult = await wassette.callTool(C4_PREPARE, {
-        request: {
-          source: params.mermaid,
-          options: {
-            direction: "automatic",
-            theme: "light",
-            "maximum-source-bytes": 1_048_576,
-            "maximum-elements": 500,
-          },
+      const request = {
+        source: params.mermaid,
+        options: {
+          direction: "automatic",
+          theme: "light",
+          "maximum-source-bytes": 1_048_576,
+          "maximum-elements": 500,
         },
-      });
-      const prepared = componentValue(preparedResult);
-      const renderRequest = prepared["render-request"];
-      const snapshot = await renderLayoutInGondolin(renderRequest.mermaid, renderRequest["maximum-output-bytes"]);
-      const compiledResult = await wassette.callTool(C4_FINISH, {
-        state: prepared.state,
-        layout: toWitLayout(snapshot),
-      });
+      };
+      let compiledResult: JsonRpcResult;
+      let renderer = "c4-layout-wasm/dagre";
+      if (c4LayoutBackend === "gondolin") {
+        const preparedResult = await wassette.callTool(C4_PREPARE, {
+          request,
+        });
+        const prepared = componentValue(preparedResult);
+        const renderRequest = prepared["render-request"];
+        const snapshot = toWitLayout(await renderLayoutInGondolin(renderRequest.mermaid, renderRequest["maximum-output-bytes"]));
+        renderer = snapshot.renderer;
+        compiledResult = await wassette.callTool(C4_FINISH, {
+          state: prepared.state,
+          layout: snapshot,
+        });
+      } else {
+        compiledResult = await wassette.callTool(C4_COMPILE, {
+          request,
+        });
+      }
       const compiled = componentValue(compiledResult);
       const approvedResult = await wassette.callTool(EXCALIDRAW_APPROVE, {
         scene: compiled.scene,
@@ -396,7 +413,9 @@ export default function (pi: ExtensionAPI) {
         fs.writeFileSync(path.resolve(process.env.EXCALIDRAW_PIPELINE_OUT), `${JSON.stringify({
           type: "excalidraw",
           version: 2,
-          source: "pi-wassette-gondolin-c4-pipeline",
+          source: c4LayoutBackend === "gondolin"
+            ? "pi-wassette-gondolin-c4-pipeline"
+            : "pi-wassette-c4-pipeline",
           elements: JSON.parse(elements),
           appState: { viewBackgroundColor: "#ffffff" },
           files: JSON.parse(approved.scene["files-json"]),
@@ -407,9 +426,9 @@ export default function (pi: ExtensionAPI) {
       return {
         content: [{
           type: "text",
-          text: `Rendered C4 Mermaid through Gondolin geometry, Wassette compilation and policy in Excalidraw at ${opened.url}\nCheckpoint: ${opened.checkpointId}\nElements: ${opened.elementCount}${warnings.length ? `\nWarnings: ${warnings.join("; ")}` : ""}`,
+          text: `Rendered C4 Mermaid through ${renderer}, Wassette compilation and policy in Excalidraw at ${opened.url}\nCheckpoint: ${opened.checkpointId}\nElements: ${opened.elementCount}${warnings.length ? `\nWarnings: ${warnings.join("; ")}` : ""}`,
         }],
-        details: { ...opened, renderer: snapshot.renderer, warnings },
+        details: { ...opened, renderer, warnings },
       };
     },
   });

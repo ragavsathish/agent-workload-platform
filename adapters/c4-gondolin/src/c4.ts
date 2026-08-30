@@ -27,7 +27,7 @@ const C4_HEADER = /^C4(?:Context|Container|Component|Dynamic|Deployment)$/;
 const NODE_DECLARATION =
   /^(Person(?:_Ext)?|System(?:_Ext)?|Container(?:Db|Queue)?(?:_Instance)?|Component)\s*\((.*)\)\s*$/u;
 const BOUNDARY_DECLARATION =
-  /^(Deployment_Node|Node(?:_[LR])?|(?:System|Container|Enterprise)_Boundary)\s*\((.*)\)\s*\{?\s*$/u;
+  /^(Deployment_Node|Node(?:_[LR])?|(?:System|Container|Enterprise)_Boundary)\s*\((.*)\)\s*\{\s*$/u;
 const RELATION_DECLARATION = /^Rel(?:_[RLUD])?\s*\((.*)\)\s*$/u;
 
 const splitArguments = (source: string): string[] => {
@@ -150,10 +150,11 @@ export const extractC4Title = (definition: string): string | undefined =>
 export const c4ToFlowchart = (definition: string): string => {
   const source = definition
     .replace(/^\s*```(?:mermaid)?\s*/iu, "")
-    .replace(/```\s*$/u, "");
+    .replace(/```\s*$/u, "")
+    .trim();
   const lines = source.split(/\r?\n/u).map((line) => line.trim());
-  const header = lines.find((line) => C4_HEADER.test(line));
-  if (!header) {
+  const header = lines[0] ?? "";
+  if (!C4_HEADER.test(header)) {
     throw new Error("Expected a Mermaid C4 diagram");
   }
 

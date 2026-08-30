@@ -5,6 +5,9 @@ import type {
   CompiledScene,
   ComputedStyle,
   ErrorCode,
+  GraphEdge,
+  GraphLayoutRequest,
+  GraphNode,
   LayoutEdge,
   LayoutNode,
   LayoutSnapshot,
@@ -42,6 +45,10 @@ const decoder = new TextDecoder();
 const STATE_VERSION = 1;
 const MAX_COORDINATE = 1_000_000;
 const MAX_STATE_BYTES = 8 * 1024 * 1024;
+const C4_HEADER = /^C4(?:Context|Container|Component|Dynamic|Deployment)$/u;
+const NODE_DECLARATION = /^(Person(?:_Ext)?|System(?:_Ext)?|Container(?:Db|Queue)?(?:_Instance)?|Component)\s*\((.*)\)\s*$/u;
+const BOUNDARY_DECLARATION = /^(Deployment_Node|Node(?:_[LR])?|(?:System|Container|Enterprise)_Boundary)\s*\((.*)\)\s*\{\s*$/u;
+const RELATION_DECLARATION = /^Rel(?:_[RLUD])?\s*\((.*)\)\s*$/u;
 
 function fail(code: ErrorCode, message: string, details?: string): never {
   const error: PipelineError = details === undefined ? { code, message } : { code, message, details };
@@ -66,6 +73,141 @@ function stripFence(source: string): string {
   return source.replace(/^\s*```(?:mermaid)?\s*/iu, "").replace(/```\s*$/u, "").trim();
 }
 
+function splitArguments(source: string): string[] {
+  const values: string[] = [];
+  let current = "";
+  let quoted = false;
+  let escaped = false;
+  for (const character of source) {
+    if (escaped) {
+      current += character;
+      escaped = false;
+    } else if (character === "\\") {
+      escaped = true;
+    } else if (character === '"') {
+      quoted = !quoted;
+    } else if (character === "," && !quoted) {
+      values.push(current.trim());
+      current = "";
+    } else {
+      current += character;
+    }
+  }
+  if (quoted) fail("invalid-source", "Unterminated quoted C4 argument");
+  values.push(current.trim());
+  return values.map((value) => value.replace(/^"|"$/gu, "").trim());
+}
+
+function nodeKind(type: string): GraphNode["kind"] {
+  if (type === "Person") return "person";
+  if (type === "Person_Ext") return "external-person";
+  if (type === "System") return "software-system";
+  if (type === "System_Ext") return "external-software-system";
+  if (type.startsWith("ContainerDb")) return "database";
+  if (type.startsWith("ContainerQueue")) return "queue";
+  if (type === "Component") return "component";
+  return "container";
+}
+
+function displayLabel(name: string, technology: string, description: string): string {
+  return [name, technology && `[${technology}]`, description].filter(Boolean).join("\n");
+}
+
+function parseLayoutRequest(source: string, options: CompileOptions): GraphLayoutRequest {
+  const lines = source.split(/\r?\n/u).map((line) => line.trim());
+  const header = lines[0] ?? "";
+  if (!C4_HEADER.test(header)) fail("invalid-source", "Expected native Mermaid C4 syntax");
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [];
+  const ids = new Set<string>();
+  const parents: string[] = [];
+  let title: string | undefined;
+
+  for (const line of lines.slice(1)) {
+    if (!line || line === "{" || line.startsWith("%%")) continue;
+    const titleMatch = /^title\s+(.+)$/iu.exec(line);
+    if (titleMatch?.[1]) {
+      title = titleMatch[1].trim();
+      continue;
+    }
+    if (line === "}") {
+      if (!parents.pop()) fail("invalid-source", "Unexpected closing C4 boundary");
+      continue;
+    }
+    const boundaryMatch = BOUNDARY_DECLARATION.exec(line);
+    if (boundaryMatch?.[1] && boundaryMatch[2]) {
+      const [id, name, technology = "", description = ""] = splitArguments(boundaryMatch[2]);
+      if (!id || !name) fail("invalid-source", `Invalid C4 boundary: ${line}`);
+      if (ids.has(id)) fail("invalid-source", `Duplicate C4 id: ${id}`);
+      ids.add(id);
+      nodes.push({
+        id,
+        parentId: parents.at(-1) ?? "",
+        kind: "boundary",
+        label: displayLabel(name, technology, description),
+      });
+      parents.push(id);
+      continue;
+    }
+    const nodeMatch = NODE_DECLARATION.exec(line);
+    if (nodeMatch?.[1] && nodeMatch[2]) {
+      const args = splitArguments(nodeMatch[2]);
+      const [id, name] = args;
+      const hasTechnology = nodeMatch[1].startsWith("Container") || nodeMatch[1] === "Component";
+      const technology = hasTechnology ? args[2] ?? "" : "";
+      const description = hasTechnology ? args[3] ?? "" : args[2] ?? "";
+      if (!id || !name) fail("invalid-source", `Invalid C4 declaration: ${line}`);
+      if (ids.has(id)) fail("invalid-source", `Duplicate C4 id: ${id}`);
+      ids.add(id);
+      nodes.push({
+        id,
+        parentId: parents.at(-1) ?? "",
+        kind: nodeKind(nodeMatch[1]),
+        label: displayLabel(name, technology, description),
+      });
+      continue;
+    }
+    const relationMatch = RELATION_DECLARATION.exec(line);
+    if (relationMatch?.[1]) {
+      const [sourceId, targetId, label = "", technology = ""] = splitArguments(relationMatch[1]);
+      if (!sourceId || !targetId) fail("invalid-source", `Invalid C4 relationship: ${line}`);
+      edges.push({
+        id: `relation-${edges.length + 1}`,
+        sourceId,
+        targetId,
+        label: [label, technology].filter(Boolean).join("\n"),
+      });
+      continue;
+    }
+    if (/^(?:Update|Lay_|SHOW_|HIDE_)/u.test(line)) continue;
+    fail("unsupported-syntax", `Unsupported Mermaid C4 line: ${line}`);
+  }
+  if (parents.length > 0) fail("invalid-source", "Unclosed C4 boundary");
+  for (const edge of edges) {
+    if (!ids.has(edge.sourceId) || !ids.has(edge.targetId)) {
+      fail("invalid-source", `Relationship references unknown C4 id: ${edge.sourceId} -> ${edge.targetId}`);
+    }
+  }
+  const outputElements = nodes.length * 2
+    + edges.length
+    + edges.filter((edge) => edge.label.length > 0).length
+    + (title ? 1 : 0);
+  if (outputElements > options.maximumElements) {
+    fail("input-limit-exceeded", `C4 graph generates ${outputElements} scene elements; limit is ${options.maximumElements}`);
+  }
+  const direction = options.direction === "automatic"
+    ? header === "C4Deployment" ? "top-to-bottom" : "left-to-right"
+    : options.direction;
+  return {
+    ...(title === undefined ? {} : { title }),
+    direction,
+    theme: options.theme,
+    maximumElements: options.maximumElements,
+    nodes,
+    edges,
+  };
+}
+
 function validateSource(request: CompileRequest): string {
   const { options } = request;
   validateLimit(options.maximumSourceBytes, "maximum-source-bytes");
@@ -74,7 +216,7 @@ function validateSource(request: CompileRequest): string {
   if (byteLength(source) > options.maximumSourceBytes) {
     fail("input-limit-exceeded", `C4 source exceeds ${options.maximumSourceBytes} bytes`);
   }
-  if (!/^C4(?:Context|Container|Component|Dynamic|Deployment)\b/mu.test(source)) {
+  if (!C4_HEADER.test(source.split(/\r?\n/u)[0]?.trim() ?? "")) {
     fail("invalid-source", "Expected native Mermaid C4 syntax");
   }
   return source;
@@ -82,6 +224,7 @@ function validateSource(request: CompileRequest): string {
 
 function prepare(request: CompileRequest): PreparedCompilation {
   const source = validateSource(request);
+  const layoutRequest = parseLayoutRequest(source, request.options);
   const state = encoder.encode(JSON.stringify({
     version: STATE_VERSION,
     source,
@@ -90,6 +233,7 @@ function prepare(request: CompileRequest): PreparedCompilation {
   if (state.length > MAX_STATE_BYTES) fail("input-limit-exceeded", "Compiler state is too large");
   return {
     state,
+    layoutRequest,
     renderRequest: {
       mermaid: source,
       configurationJson: JSON.stringify({

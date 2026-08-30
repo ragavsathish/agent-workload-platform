@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
@@ -36,7 +37,7 @@ function request(method, params) {
 
 function ok(result) {
   const value = result.structuredContent?.result;
-  if (value?.err) throw new Error(value.err);
+  if (value?.err) throw new Error(typeof value.err === "string" ? value.err : JSON.stringify(value.err));
   return value?.ok;
 }
 
@@ -82,7 +83,46 @@ try {
   })));
   if (validated[1]?.label?.text !== "Pi host") throw new Error("Validation round trip failed");
 
-  process.stdout.write(`${JSON.stringify({ checkpointId: created["checkpoint-id"], elementCount: validated.length, roundTrip: "ok" }, null, 2)}\n`);
+  const expectedExampleElements = {
+    "c1-system-context.mmd": 15,
+    "c2-container.mmd": 55,
+    "c3-pi-extension-components.mmd": 51,
+  };
+  const compiledExamples = {};
+  for (const example of ["c1-system-context.mmd", "c2-container.mmd", "c3-pi-extension-components.mmd"]) {
+    const source = await readFile(path.join(prototypeDir, "examples", example), "utf8");
+    const compile = () => request("tools/call", {
+      name: "diagram_c4-pipeline_compiler_0_1_0_compile",
+      arguments: {
+        request: {
+          source,
+          options: {
+            direction: "automatic",
+            theme: "light",
+            "maximum-source-bytes": 1_048_576,
+            "maximum-elements": 500,
+          },
+        },
+      },
+    });
+    const compiled = ok(await compile());
+    const repeated = ok(await compile());
+    if (compiled.scene["elements-json"] !== repeated.scene["elements-json"]) {
+      throw new Error(`${example} was not deterministic`);
+    }
+    const c4Elements = JSON.parse(compiled.scene["elements-json"]);
+    if (c4Elements.length !== expectedExampleElements[example]) {
+      throw new Error(`${example} returned ${c4Elements.length}; expected ${expectedExampleElements[example]}`);
+    }
+    const ids = new Set(c4Elements.map((element) => element.id));
+    if (ids.size !== c4Elements.length) throw new Error(`${example} returned duplicate element IDs`);
+    if (c4Elements.some((element) => ![element.x, element.y, element.width, element.height].every(Number.isFinite))) {
+      throw new Error(`${example} returned non-finite geometry`);
+    }
+    compiledExamples[example] = c4Elements.length;
+  }
+
+  process.stdout.write(`${JSON.stringify({ checkpointId: created["checkpoint-id"], elementCount: validated.length, roundTrip: "ok", c4Compiler: "composed-wasm", compiledExamples }, null, 2)}\n`);
 } finally {
   child.kill("SIGTERM");
 }

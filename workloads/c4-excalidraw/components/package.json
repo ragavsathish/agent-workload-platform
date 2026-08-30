@@ -4,13 +4,22 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "types": "jco guest-types ../contracts/c4-pipeline/wit --world-name c4-compiler-core -o generated/compiler && jco guest-types ../contracts/c4-pipeline/wit --world-name excalidraw-policy-component -o generated/policy",
+    "types": "jco guest-types ../contracts/c4-pipeline/wit --world-name c4-compiler -o generated/pipeline && jco guest-types ../contracts/c4-pipeline/wit --world-name c4-compiler-core -o generated/compiler && jco guest-types ../contracts/c4-pipeline/wit --world-name c4-layout-component -o generated/layout && jco guest-types ../contracts/c4-pipeline/wit --world-name excalidraw-policy-component -o generated/policy",
+    "test": "vitest --run",
+    "check:wac": "test \"$(wac --version)\" = \"wac-cli 0.10.1\"",
     "check": "pnpm run types && tsc --noEmit",
-    "build": "pnpm run check && mkdir -p dist/js && tsc --noEmit false --outDir dist/js --rootDir src && jco componentize dist/js/c4-compiler.js --wit ../contracts/c4-pipeline/wit --world-name c4-compiler-core --disable all -o dist/c4-compiler.wasm && jco componentize dist/js/excalidraw-policy.js --wit ../contracts/c4-pipeline/wit --world-name excalidraw-policy-component --disable all -o dist/excalidraw-policy.wasm && jco wit dist/c4-compiler.wasm > dist/c4-compiler.wit && jco wit dist/excalidraw-policy.wasm > dist/excalidraw-policy.wit"
+    "bundle:pipeline": "esbuild dist/js/c4-pipeline.js --bundle --platform=neutral --format=esm '--external:diagram:*' --outfile=dist/js/c4-pipeline.bundle.js",
+    "bundle:layout": "esbuild dist/js/c4-layout.js --bundle --platform=neutral --format=esm --outfile=dist/js/c4-layout.bundle.js",
+    "build": "pnpm run check:wac && pnpm run check && mkdir -p dist/js && tsc --noEmit false --outDir dist/js --rootDir src && pnpm run bundle:pipeline && pnpm run bundle:layout && jco componentize dist/js/c4-pipeline.bundle.js --wit ../contracts/c4-pipeline/wit --world-name c4-compiler --disable all -o dist/c4-pipeline-core.wasm && jco componentize dist/js/c4-compiler.js --wit ../contracts/c4-pipeline/wit --world-name c4-compiler-core --disable all -o dist/c4-compiler.wasm && jco componentize dist/js/c4-layout.bundle.js --wit ../contracts/c4-pipeline/wit --world-name c4-layout-component --disable all -o dist/c4-layout.wasm && jco componentize dist/js/excalidraw-policy.js --wit ../contracts/c4-pipeline/wit --world-name excalidraw-policy-component --disable all -o dist/excalidraw-policy.wasm && wac plug dist/c4-pipeline-core.wasm --plug dist/c4-layout.wasm -o dist/c4-pipeline.wasm && jco wit dist/c4-pipeline.wasm > dist/c4-pipeline.wit && jco wit dist/c4-compiler.wasm > dist/c4-compiler.wit && jco wit dist/c4-layout.wasm > dist/c4-layout.wit && jco wit dist/excalidraw-policy.wasm > dist/excalidraw-policy.wit"
   },
   "devDependencies": {
     "@bytecodealliance/componentize-js": "0.19.3",
     "@bytecodealliance/jco": "1.17.0",
-    "typescript": "5.9.3"
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  },
+  "dependencies": {
+    "@dagrejs/dagre": "3.1.1"
   }
 }

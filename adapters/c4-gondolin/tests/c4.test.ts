@@ -67,4 +67,17 @@ Container(api, "API", "HTTP", "Serves requests")
 Rel(api, missing, "Calls")`)
     ).toThrow("Relationship references unknown C4 id: api -> missing");
   });
+
+  it("requires the C4 header first and an opening brace on boundaries", () => {
+    expect(() =>
+      c4ToFlowchart(`title Too early
+C4Context
+Person(user, "User")`)
+    ).toThrow("Expected a Mermaid C4 diagram");
+    expect(() =>
+      c4ToFlowchart(`C4Container
+System_Boundary(platform, "Platform")
+Container(api, "API", "HTTP", "Serves")`)
+    ).toThrow("Unsupported Mermaid C4 line");
+  });
 });

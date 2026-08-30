@@ -22,14 +22,12 @@ const quotedValues = declarations.flatMap((line) =>
 );
 const title = lines.find((line) => /^title\s+/.test(line))?.replace(/^title\s+/, "");
 const expectedText = [...new Set([title, ...quotedValues].filter(Boolean))];
+const nodeDeclarations = declarations.filter((line) => !/^Rel(?:_[RLUD])?\s*\(/.test(line));
+const ellipseDeclarations = nodeDeclarations.filter((line) => /^(?:Person(?:_Ext)?|ContainerDb)\s*\(/.test(line));
 const expectedCounts = {
   arrow: declarations.filter((line) => /^Rel(?:_[RLUD])?\s*\(/.test(line)).length,
-  ellipse: 0,
-  rectangle: declarations.filter((line) =>
-    /^(?:Person(?:_Ext)?|System(?:_Ext)?|Container(?:Db|Queue)?|Component|Deployment_Node|Node(?:_[LR])?|(?:System|Container|Enterprise)_Boundary)\s*\(/.test(
-      line,
-    ),
-  ).length,
+  ellipse: ellipseDeclarations.length,
+  rectangle: nodeDeclarations.length - ellipseDeclarations.length,
 };
 const normalize = (value) =>
   value.replace(/[‐‑‒–—−]/g, "-").replace(/\s+/g, " ").trim().toLowerCase();

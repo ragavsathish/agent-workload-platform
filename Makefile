@@ -19,8 +19,6 @@ C4_GONDOLIN ?= npx --yes @earendil-works/gondolin@0.12.0
 .PHONY: c4 c4-build c4-test c4-gondolin-build
 
 c4-build:
-	pnpm --dir adapters/mermaid-to-excalidraw run build
-	pnpm --dir adapters/c4-gondolin run build
 	pnpm --dir $(C4_WORKLOAD) run build
 	pnpm --dir $(C4_WORKLOAD) run components:load
 

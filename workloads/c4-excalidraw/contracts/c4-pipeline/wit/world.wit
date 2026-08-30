@@ -1,6 +1,7 @@
 package diagram:c4-pipeline@0.1.0;
 
-/// Shared values crossing the compiler, browser-layout, and Excalidraw-policy seams.
+/// Shared values crossing the compiler, graph-layout, fallback renderer, and
+/// Excalidraw-policy seams.
 interface types {
     enum direction {
         automatic,
@@ -13,11 +14,23 @@ interface types {
         dark,
     }
 
+    enum c4-kind {
+        person,
+        external-person,
+        software-system,
+        external-software-system,
+        container,
+        component,
+        database,
+        queue,
+        boundary,
+    }
+
     enum error-code {
         invalid-source,
         unsupported-syntax,
         input-limit-exceeded,
-        browser-layout-failed,
+        layout-failed,
         invalid-layout,
         invalid-scene,
         policy-rejected,
@@ -93,6 +106,32 @@ interface types {
         maximum-output-bytes: u32,
     }
 
+    /// A C4 element prepared by the compiler. Parent IDs flatten C4 nesting so
+    /// the value crosses the Canonical ABI without recursive records.
+    record graph-node {
+        id: string,
+        parent-id: string,
+        kind: c4-kind,
+        label: string,
+    }
+
+    record graph-edge {
+        id: string,
+        source-id: string,
+        target-id: string,
+        label: string,
+    }
+
+    /// Browserless input for a deterministic C4 layout implementation.
+    record graph-layout-request {
+        title: option<string>,
+        direction: direction,
+        theme: theme,
+        maximum-elements: u32,
+        nodes: list<graph-node>,
+        edges: list<graph-edge>,
+    }
+
     record compile-options {
         direction: direction,
         theme: theme,
@@ -123,6 +162,7 @@ interface types {
     /// finish. Callers must not inspect or modify it.
     record prepared-compilation {
         state: list<u8>,
+        layout-request: graph-layout-request,
         render-request: browser-render-request,
     }
 
@@ -139,25 +179,24 @@ interface types {
     }
 }
 
-/// Port implemented by the Gondolin/Playwright adapter in production and by a
-/// deterministic in-memory adapter in compiler tests.
-interface browser-layout {
-    use types.{browser-render-request, layout-snapshot, pipeline-error};
+/// Browserless layout port. Implementations receive a typed C4 graph and may
+/// not parse Mermaid or access the filesystem, network, process, or browser.
+interface graph-layout {
+    use types.{graph-layout-request, layout-snapshot, pipeline-error};
 
-    render: func(request: browser-render-request) -> result<layout-snapshot, pipeline-error>;
+    layout: func(request: graph-layout-request) -> result<layout-snapshot, pipeline-error>;
 }
 
-/// Preferred deep compiler interface. Browser execution is hidden behind the
-/// imported browser-layout port.
+/// Preferred deep compiler interface. Layout is hidden behind graph-layout.
 interface compiler {
     use types.{compile-request, compiled-scene, pipeline-error};
 
     compile: func(request: compile-request) -> result<compiled-scene, pipeline-error>;
 }
 
-/// Compatibility interface for hosts that cannot yet satisfy custom component
-/// imports. The host calls prepare, invokes the Gondolin adapter, then passes
-/// the unchanged state and returned snapshot to finish.
+/// Compatibility interface for the optional Gondolin fallback. The host calls
+/// prepare, invokes the adapter, then passes the unchanged state and returned
+/// snapshot to finish.
 interface compiler-core {
     use types.{
         compile-request,
@@ -185,17 +224,20 @@ interface excalidraw-policy {
     ) -> result<approved-scene, pipeline-error>;
 }
 
-/// Target composition: Wassette supplies browser-layout with a host adapter
-/// that delegates only DOM/SVG measurement to the Gondolin VM.
+/// Target composition: a browserless layout component satisfies graph-layout.
 world c4-compiler {
-    import browser-layout;
+    import graph-layout;
     export compiler;
 }
 
-/// Current-Wassette composition: Pi explicitly orchestrates prepare/render/
-/// finish without weakening the eventual compiler interface.
+/// Compatibility world used only when Pi explicitly selects the Gondolin
+/// prepare/render/finish fallback.
 world c4-compiler-core {
     export compiler-core;
+}
+
+world c4-layout-component {
+    export graph-layout;
 }
 
 world excalidraw-policy-component {
