@@ -3,7 +3,6 @@
   "distro": "alpine",
   "env": {
     "NODE_ENV": "production",
-    "MERMAID_EXCALIDRAW_BROWSER_CHANNEL": "bundled",
     "PLAYWRIGHT_BROWSERS_PATH": "/ms-playwright"
   },
   "alpine": {
@@ -16,7 +15,7 @@
     "krunfwVersion": "v5.2.1"
   },
   "oci": {
-    "image": "mermaid-excalidraw-layout:playwright-1.58.2-amd64",
+    "image": "c4-gondolin-browser:playwright-mcp-0.0.79-amd64",
     "runtime": "docker",
     "platform": "linux/amd64",
     "pullPolicy": "never"

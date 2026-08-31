@@ -15,14 +15,18 @@ C4Deployment
     ContainerDb(checkpoints, "Checkpoint Store", "Host memory or LeoFS", "Stores approved Excalidraw scene revisions")
   }
 
-  Deployment_Node(vm, "Gondolin QEMU Micro-VM", "Playwright OCI root filesystem", "Isolates browser-dependent layout") {
-    Container(layout, "Browser Layout Adapter", "Mermaid, Playwright, Chromium", "Renders an SVG DOM and returns a typed layout snapshot")
+  Deployment_Node(vm, "Gondolin QEMU Micro-VM", "Pinned Playwright MCP OCI root filesystem", "Isolates browser-dependent layout") {
+    Container(playwright_mcp, "Playwright MCP Server", "Official @playwright/mcp", "Exposes upstream browser tools over stdio")
+    Container(converter, "C4 Converter Sidecar", "Node.js and Mermaid", "Returns a typed layout snapshot")
+    Container(chromium, "Chromium", "Headless browser process", "Executes the converter page")
   }
 
   Rel(author, pi, "Requests a C4 diagram", "Natural language or Mermaid C4")
   Rel(pi, compiler, "Prepares and finishes compilation", "WIT calls")
-  Rel(pi, layout, "Requests browser layout", "Mermaid source over Gondolin control channel")
-  Rel(layout, pi, "Returns computed geometry", "Typed layout-snapshot JSON")
+  Rel(pi, playwright_mcp, "Navigates to C4 converter", "MCP browser_navigate over Gondolin stdio")
+  Rel(playwright_mcp, chromium, "Automates", "Chrome DevTools Protocol")
+  Rel(chromium, converter, "Loads source and submits geometry", "Loopback HTTP")
+  Rel(converter, pi, "Returns computed geometry", "Typed layout-snapshot JSON through mounted result")
   Rel(pi, policy, "Submits candidate scene", "Excalidraw scene-envelope")
   Rel(policy, checkpoints, "Stores approved revision", "Excalidraw JSON")
   Rel(policy, excalidraw, "Supplies approved scene", "Excalidraw JSON")

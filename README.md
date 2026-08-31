@@ -34,6 +34,8 @@ The source-controlled architecture views are:
   - `c4-gondolin` — platform-owned C4/browser adapter.
 - `components/` — reusable WIT/WebAssembly modules.
 - `runtimes/` — Pi, Wassette, and Gondolin runtime integration.
+  - `gondolin-browser` — Pi extension that exposes the official Playwright MCP
+    tools from an isolated VM without copying their schemas.
 
 Workload-specific contracts, prompts, examples, and modules remain inside the
 workload until another workload genuinely reuses them. Shared implementations

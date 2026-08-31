@@ -2,6 +2,7 @@ packages:
   - apps/excalidraw-mcp
   - adapters/mermaid-to-excalidraw
   - adapters/c4-gondolin
+  - runtimes/gondolin-browser
   - workloads/c4-excalidraw
   - workloads/c4-excalidraw/core
   - workloads/c4-excalidraw/components

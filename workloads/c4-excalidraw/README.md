@@ -29,7 +29,10 @@ Responsibilities are separated as follows:
   policy module, then defines their WAC suite composition.
 - `core/` builds the checkpoint component used by the Excalidraw application.
 - `contracts/c4-pipeline/` contains the WIT interfaces shared across boundaries.
-- `../../adapters/c4-gondolin/` contains the optional isolated browser fallback.
+- `../../runtimes/gondolin-browser/` forwards the official Playwright MCP tools
+  through Gondolin without copying their schemas.
+- `../../adapters/c4-gondolin/` adds only the C4 converter used by the optional
+  isolated browser fallback.
 - `../../adapters/mermaid-to-excalidraw/` and `../../apps/excalidraw-mcp/` are
   unchanged upstream submodules.
 
@@ -94,6 +97,7 @@ To let Pi create and render a diagram interactively:
 
 ```bash
 pi \
+  --no-extensions \
   --skill ~/.codex/skills/c4-diagrams \
   --extension ./workloads/c4-excalidraw/pi-extension.ts
 ```
@@ -114,7 +118,9 @@ make c4 \
 tool; the compiler and policy components produce the output.
 
 The default path is browserless. To exercise the isolated Chromium fallback,
-build its optional artifact and select it explicitly:
+build its optional artifact and select it explicitly. Pi calls the official
+`browser_navigate` MCP tool; the C4 adapter contributes the converter page and
+typed `layout-snapshot`, not another browser API.
 
 ```bash
 make c4-gondolin-build

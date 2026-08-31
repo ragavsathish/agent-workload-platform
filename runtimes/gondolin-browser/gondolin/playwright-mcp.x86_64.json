@@ -1,5 +1,5 @@
 {
-  "arch": "aarch64",
+  "arch": "x86_64",
   "distro": "alpine",
   "env": {
     "NODE_ENV": "production",
@@ -9,19 +9,17 @@
     "version": "3.23.0",
     "kernelPackage": "linux-virt",
     "kernelImage": "vmlinuz-virt",
-    "initramfsPackages": [
-      "linux-virt"
-    ],
+    "initramfsPackages": ["linux-virt"],
     "krunfwVersion": "v5.2.1"
   },
   "oci": {
-    "image": "c4-gondolin-browser:playwright-mcp-0.0.79-arm64",
+    "image": "mcr.microsoft.com/playwright/mcp:v0.0.79@sha256:add8756264bc95962597d2e5095b66317acb1d89a7c8b64f264e7d2dee140bc9",
     "runtime": "docker",
-    "platform": "linux/arm64",
-    "pullPolicy": "never"
+    "platform": "linux/amd64",
+    "pullPolicy": "if-not-present"
   },
   "rootfs": {
-    "label": "mermaid-layout"
+    "label": "playwright-mcp"
   },
   "runtimeDefaults": {
     "rootfsMode": "cow"

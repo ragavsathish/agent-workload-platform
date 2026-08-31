@@ -96,3 +96,19 @@ window.mermaidToLayoutSnapshot = async (definition: string) => {
     warnings: [],
   };
 };
+
+if (new URLSearchParams(window.location.search).get("autorun") === "1") {
+  void (async () => {
+    const definition = await fetch("/input").then((response) => {
+      if (!response.ok) throw new Error(`Unable to read C4 input: ${response.status}`);
+      return response.text();
+    });
+    const snapshot = await window.mermaidToLayoutSnapshot(definition);
+    const response = await fetch("/result", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(snapshot),
+    });
+    if (!response.ok) throw new Error(`Unable to save layout snapshot: ${response.status}`);
+  })();
+}

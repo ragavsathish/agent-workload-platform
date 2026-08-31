@@ -137,7 +137,7 @@ try {
   const expectedExampleElements = {
     "c1-system-context.mmd": 15,
     "c2-container.mmd": 37,
-    "c3-pi-extension-components.mmd": 51,
+    "c3-pi-extension-components.mmd": 55,
   };
   const compiledExamples = {};
   for (const example of ["c1-system-context.mmd", "c2-container.mmd", "c3-pi-extension-components.mmd"]) {

@@ -186,7 +186,7 @@ export default function (pi: ExtensionAPI) {
   }
 
   async function renderLayoutInGondolin(mermaid: string, maximumOutputBytes: number) {
-    const { RealFSProvider, VM } = await import("@earendil-works/gondolin");
+    const { GondolinPlaywrightMcp } = await import("../../runtimes/gondolin-browser/client.ts");
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-c4-layout-"));
     const inputPath = path.join(tempDir, "diagram.mmd");
     const outputPath = path.join(tempDir, "layout.json");
@@ -194,28 +194,41 @@ export default function (pi: ExtensionAPI) {
       fs.writeFileSync(inputPath, mermaid);
       let lastError: unknown;
       for (let attempt = 1; attempt <= 2; attempt++) {
+        let browser: InstanceType<typeof GondolinPlaywrightMcp> | undefined;
         try {
           if (!gondolinArch) throw new Error(`Unsupported host architecture: ${process.arch}`);
-          const vm = await VM.create({
-            sandbox: { imagePath: gondolinAssets },
-            vfs: { mounts: { "/work": new RealFSProvider(tempDir) } },
+          fs.rmSync(outputPath, { force: true });
+          browser = new GondolinPlaywrightMcp({
+            imagePath: gondolinAssets,
+            mounts: { "/work": tempDir },
+            allowedHosts: [],
+            sessionLabel: "pi-c4-playwright-mcp",
+            sidecars: [{
+              command: [
+                "/usr/local/bin/node",
+                "/app/adapters/c4-gondolin/scripts/converter-server.mjs",
+              ],
+              readyText: "C4_CONVERTER_READY",
+            }],
           });
-          try {
-            const result = await vm.exec([
-              "/usr/bin/node",
-              "/app/adapters/c4-gondolin/scripts/render-layout-snapshot.mjs",
-              "/work/diagram.mmd",
-              "/work/layout.json",
-            ]);
-            if (!result.ok) throw new Error(`Gondolin layout failed (${result.exitCode}): ${result.stderr}`);
-          } finally {
-            await vm.close();
+          await browser.start();
+          const result = await browser.callTool("browser_navigate", {
+            url: `http://127.0.0.1:4173/converter.html?autorun=1&attempt=${attempt}`,
+          });
+          if (result.isError) {
+            throw new Error(result.content.map((entry) => "text" in entry ? entry.text : JSON.stringify(entry)).join("\n"));
+          }
+          const deadline = Date.now() + 60_000;
+          while (!fs.existsSync(outputPath)) {
+            if (Date.now() >= deadline) throw new Error("Playwright MCP did not produce a C4 layout snapshot within 60 seconds");
+            await new Promise((resolve) => setTimeout(resolve, 100));
           }
           lastError = undefined;
           break;
         } catch (error) {
           lastError = error;
-          if (attempt === 1) fs.rmSync(outputPath, { force: true });
+        } finally {
+          await browser?.close();
         }
       }
       if (lastError) throw lastError;

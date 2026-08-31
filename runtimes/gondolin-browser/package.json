@@ -1,0 +1,21 @@
+{
+  "name": "@agent-workload-platform/gondolin-browser",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --noEmit",
+    "test:smoke": "pnpm run build && node smoke-test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0"
+  },
+  "optionalDependencies": {
+    "@earendil-works/gondolin": "0.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.11",
+    "typescript": "5.9.3"
+  }
+}

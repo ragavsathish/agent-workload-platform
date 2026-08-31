@@ -6,6 +6,7 @@ The platform was assembled from these repositories on 2026-08-30:
 |---|---|---|---|
 | `apps/excalidraw-mcp` | <https://github.com/excalidraw/excalidraw-mcp> | `157aa23ceb1976008aadc89eb05e3444060f09d6` | Pinned Git submodule; no platform patches |
 | `adapters/mermaid-to-excalidraw` | <https://github.com/excalidraw/mermaid-to-excalidraw> | `7849b487be67cf2d439c713c847839d2494d59b6` | Pinned Git submodule; no platform patches |
+| `runtimes/gondolin-browser` | <https://github.com/microsoft/playwright-mcp> | OCI `v0.0.79`, index digest `sha256:18c0a9c934004fe9580cc79f1e8e6e6cde7c667348b215335e8a23fd3e509804` | Pinned upstream browser MCP image; platform-owned Gondolin transport |
 | `adapters/c4-gondolin` | Extracted from local `mermaid-to-excalidraw` commit `e7ce159` plus platform reliability changes | Continued in this monorepo | Platform-owned adapter |
 | `workloads/c4-excalidraw` | Extracted from local `excalidraw-mcp` commit `d7c1664` | Continued in this monorepo | Platform-owned workload |
 

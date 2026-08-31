@@ -14,8 +14,10 @@ Deployment_Node(client, "Client Machine", "User workstation", "Orchestrates diag
   Container(excalidraw, "Excalidraw Web App", "Browser application", "Displays and edits approved architecture diagrams")
 }
 
-Deployment_Node(gondolin, "Optional Gondolin QEMU Micro-VM", "Playwright OCI root filesystem", "Isolates the explicitly selected legacy browser fallback") {
-  Container(browser_layout, "Browser Layout Adapter", "Node.js, Mermaid, Playwright, Chromium", "Returns typed geometry only on the fallback path")
+Deployment_Node(gondolin, "Optional Gondolin QEMU Micro-VM", "Pinned Playwright MCP OCI root filesystem", "Isolates the explicitly selected browser fallback") {
+  Container(playwright_mcp, "Playwright MCP Server", "Official @playwright/mcp", "Exposes upstream browser tools over stdio")
+  Container(c4_converter, "C4 Converter Sidecar", "Node.js and Mermaid", "Converts one mounted C4 source into a typed layout snapshot")
+  Container(chromium, "Chromium", "Headless browser process", "Executes the converter page")
 }
 
 Deployment_Node(ai_provider, "External AI Provider", "Remote model infrastructure", "Hosts the selected architecture model") {
@@ -25,7 +27,9 @@ Deployment_Node(ai_provider, "External AI Provider", "Remote model infrastructur
 Rel(author, pi, "Requests a C4 diagram", "Natural language")
 Rel(pi, model, "Generates C4 Mermaid with", "Model API")
 Rel(pi, suite, "Compiles, approves, and checkpoints", "MCP and WIT")
-Rel(pi, browser_layout, "May request legacy layout", "C4_LAYOUT_BACKEND=gondolin")
+Rel(pi, playwright_mcp, "May navigate the converter", "MCP browser_navigate; C4_LAYOUT_BACKEND=gondolin")
+Rel(playwright_mcp, chromium, "Automates", "Chrome DevTools Protocol")
+Rel(chromium, c4_converter, "Loads converter and submits layout", "Loopback HTTP")
 Rel(suite, checkpoints, "Stores approved revision", "Excalidraw JSON")
 Rel(suite, excalidraw, "Approves displayed and edited scenes", "Excalidraw JSON")
 Rel(author, excalidraw, "Views and edits diagram", "Browser UI")

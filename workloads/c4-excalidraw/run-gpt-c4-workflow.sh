@@ -29,6 +29,7 @@ cd "$REPO_DIR"
 EXCALIDRAW_STATE_OUT="$STATE_JSON" pi \
   --model "$MODEL" \
   --thinking medium \
+  --no-extensions \
   --no-builtin-tools \
   --tools excalidraw_wassette_open \
   --skill "$C4_SKILL" \

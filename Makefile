@@ -11,10 +11,11 @@ C4_GONDOLIN_ARCH := aarch64
 C4_GONDOLIN_PROFILE := arm64
 endif
 C4_GONDOLIN_SERVICE := playwright-layout-$(C4_GONDOLIN_PROFILE)
-C4_PLAYWRIGHT_VERSION := 1.58.2
 C4_GONDOLIN_ASSETS := artifacts/c4-gondolin/$(C4_GONDOLIN_ARCH)
 C4_GONDOLIN_CONFIG := adapters/c4-gondolin/gondolin/playwright-layout.$(C4_GONDOLIN_ARCH).json
 C4_GONDOLIN ?= npx --yes @earendil-works/gondolin@0.12.0
+GONDOLIN_BROWSER_ASSETS := artifacts/gondolin-browser/$(C4_GONDOLIN_ARCH)
+GONDOLIN_BROWSER_CONFIG := runtimes/gondolin-browser/gondolin/playwright-mcp.$(C4_GONDOLIN_ARCH).json
 C4_OCI_REPOSITORY ?= ghcr.io/ragavsathish/agent-workload-platform/c4-suite
 C4_OCI_VERSION ?= $(shell node -p "require('./$(C4_WORKLOAD)/components/package.json').version")
 C4_OCI_REVISION := $(shell git rev-parse HEAD)
@@ -24,7 +25,7 @@ C4_OCI_SBOM := artifacts/c4-excalidraw/oci/c4-suite.spdx.json
 C4_OCI_ARTIFACT_TYPE := application/vnd.agent-workload-platform.wasm.component.v1
 C4_OCI_SOURCE := https://github.com/ragavsathish/agent-workload-platform
 
-.PHONY: c4 c4-build c4-test c4-gondolin-build c4-oci-build c4-oci-publish c4-oci-verify
+.PHONY: c4 c4-build c4-test c4-gondolin-build gondolin-browser-build c4-oci-build c4-oci-publish c4-oci-verify
 
 c4-build:
 	pnpm --dir $(C4_WORKLOAD) run build
@@ -37,6 +38,10 @@ c4-gondolin-build:
 	docker compose --profile $(C4_GONDOLIN_PROFILE) -f adapters/c4-gondolin/compose.yaml build $(C4_GONDOLIN_SERVICE)
 	mkdir -p $(C4_GONDOLIN_ASSETS)
 	$(C4_GONDOLIN) build --config $(C4_GONDOLIN_CONFIG) --output $(C4_GONDOLIN_ASSETS)
+
+gondolin-browser-build:
+	mkdir -p $(GONDOLIN_BROWSER_ASSETS)
+	$(C4_GONDOLIN) build --config $(GONDOLIN_BROWSER_CONFIG) --output $(GONDOLIN_BROWSER_ASSETS)
 
 c4-oci-build:
 	pnpm --dir $(C4_WORKLOAD) run build:wasm

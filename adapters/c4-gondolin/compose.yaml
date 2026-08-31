@@ -1,7 +1,7 @@
 services:
   playwright-layout-amd64:
     profiles: [amd64]
-    image: mermaid-excalidraw-layout:playwright-1.58.2-amd64
+    image: c4-gondolin-browser:playwright-mcp-0.0.79-amd64
     platform: linux/amd64
     build:
       context: ../..
@@ -9,7 +9,7 @@ services:
 
   playwright-layout-arm64:
     profiles: [arm64]
-    image: mermaid-excalidraw-layout:playwright-1.58.2-arm64
+    image: c4-gondolin-browser:playwright-mcp-0.0.79-arm64
     platform: linux/arm64
     build:
       context: ../..

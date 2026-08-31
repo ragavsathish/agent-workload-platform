@@ -9,19 +9,17 @@
     "version": "3.23.0",
     "kernelPackage": "linux-virt",
     "kernelImage": "vmlinuz-virt",
-    "initramfsPackages": [
-      "linux-virt"
-    ],
+    "initramfsPackages": ["linux-virt"],
     "krunfwVersion": "v5.2.1"
   },
   "oci": {
-    "image": "c4-gondolin-browser:playwright-mcp-0.0.79-arm64",
+    "image": "mcr.microsoft.com/playwright/mcp:v0.0.79@sha256:2f69a7a48fb9e5eea360f8f160192b11241e6e7d124389c103164f39e6fd2f8d",
     "runtime": "docker",
     "platform": "linux/arm64",
-    "pullPolicy": "never"
+    "pullPolicy": "if-not-present"
   },
   "rootfs": {
-    "label": "mermaid-layout"
+    "label": "playwright-mcp"
   },
   "runtimeDefaults": {
     "rootfsMode": "cow"

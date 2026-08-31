@@ -32,8 +32,10 @@ research note](../research/wasm-wit-typescript-best-practices.md).
   blocks and does not deduplicate their runtimes, so a composed suite is larger
   than one merged component. Merge only modules that lack a real reuse seam.
 - **Keep browser execution optional.** Normal C4 compilation has no browser or
-  OS imports. Gondolin and Playwright remain a separately built compatibility
-  adapter selected explicitly with `C4_LAYOUT_BACKEND=gondolin`.
+  OS imports. The fallback runs the pinned official Playwright MCP image inside
+  Gondolin and is selected explicitly with `C4_LAYOUT_BACKEND=gondolin`. Pi
+  discovers upstream tool schemas with `tools/list`; the platform defines no
+  duplicate browser API.
 
 ## Required gates
 
