@@ -6,6 +6,7 @@ packages:
   - workloads/c4-excalidraw
   - workloads/c4-excalidraw/core
   - workloads/c4-excalidraw/components
+  - workloads/sqlite-persistence
 
 allowBuilds:
   '@modelcontextprotocol/ext-apps': true

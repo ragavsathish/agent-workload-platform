@@ -5,5 +5,7 @@
 **/artifacts/
 workloads/c4-excalidraw/components/generated/
 workloads/c4-excalidraw/core/generated/
+workloads/sqlite-persistence/.cache/
+workloads/sqlite-persistence/generated/
 .DS_Store
 .pnpm-store/v11/

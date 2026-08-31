@@ -9,6 +9,12 @@ Its browserless Wasm path is tested with context, container, component,
 dynamic, and deployment views. Wassette loads one composed `c4-suite.wasm`;
 WAC assembles that suite from immutable, independently reusable components.
 
+The [SQLite-backed Memory Server](workloads/sqlite-persistence/README.md)
+reuses Wassette's nine-tool knowledge-graph contract while replacing volatile
+arrays with SQLite and one narrowly scoped WASI filesystem capability. The
+Gondolin browser extension exposes Playwright and memory together so Pi can
+recall earlier research and retain durable browser findings across sessions.
+
 ![C1 system context for the Agent Workload Platform](docs/architecture/agent-workload-platform-c1.png)
 
 _C1 system context rendered from the policy-approved Excalidraw scene._
@@ -35,7 +41,8 @@ The source-controlled architecture views are:
 - `components/` — reusable WIT/WebAssembly modules.
 - `runtimes/` — Pi, Wassette, and Gondolin runtime integration.
   - `gondolin-browser` — Pi extension that exposes the official Playwright MCP
-    tools from an isolated VM without copying their schemas.
+    tools from an isolated VM alongside persistent Wassette memory, without
+    copying either server's schemas.
 
 Workload-specific contracts, prompts, examples, and modules remain inside the
 workload until another workload genuinely reuses them. Shared implementations
@@ -47,3 +54,8 @@ workspace installs and runs every JavaScript package. Upstream lockfiles remain
 inside untouched Git submodules for provenance but are not used by the platform
 workflow. See the C4 package README for dependency setup. Imported source
 provenance is recorded in `PROVENANCE.md`.
+
+## Research
+
+- [Available Wasm components and ecosystem compatibility](docs/research/available-wasm-components-ecosystem.md)
+- [WIT and TypeScript component practices](docs/research/wasm-wit-typescript-best-practices.md)

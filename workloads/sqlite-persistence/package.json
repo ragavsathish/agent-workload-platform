@@ -1,0 +1,16 @@
+{
+  "name": "memory-sqlite-wassette",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "make -C ../.. memory-sqlite-build",
+    "test": "vitest --run tests"
+  },
+  "devDependencies": {
+    "@bytecodealliance/jco": "1.17.0",
+    "@types/node": "24.10.13",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  }
+}
