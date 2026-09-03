@@ -14,6 +14,8 @@ reuses Wassette's nine-tool knowledge-graph contract while replacing volatile
 arrays with SQLite and one narrowly scoped WASI filesystem capability. The
 Gondolin browser extension exposes Playwright and memory together so Pi can
 recall earlier research and retain durable browser findings across sessions.
+When `GITHUB_TOKEN` is present, it also loads the published GitHub Wassette
+component by pinned OCI digest—without rebuilding it.
 
 ![C1 system context for the Agent Workload Platform](docs/architecture/agent-workload-platform-c1.png)
 
@@ -41,8 +43,8 @@ The source-controlled architecture views are:
 - `components/` — reusable WIT/WebAssembly modules.
 - `runtimes/` — Pi, Wassette, and Gondolin runtime integration.
   - `gondolin-browser` — Pi extension that exposes the official Playwright MCP
-    tools from an isolated VM alongside persistent Wassette memory, without
-    copying either server's schemas.
+    tools from an isolated VM alongside persistent memory and optional GitHub
+    tools in Wassette, without copying their schemas.
 
 Workload-specific contracts, prompts, examples, and modules remain inside the
 workload until another workload genuinely reuses them. Shared implementations

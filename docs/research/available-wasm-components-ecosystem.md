@@ -1,7 +1,8 @@
 # Available WebAssembly components: ecosystem and Wassette compatibility
 
-_Research date: 2026-08-31. Sources are specifications, project documentation,
-official repositories, registries, and CNCF project pages._
+_Research date: 2026-08-31; registry checked again 2026-09-01. Sources are
+specifications, project documentation, official repositories, registries, and
+CNCF project pages._
 
 ## Executive conclusion
 
@@ -82,15 +83,19 @@ every candidate still needs to be tested against the pinned binary.
 
 ### Wassette's curated registry
 
-The live registry currently contains **12** loadable entries:
+The live registry currently contains **11** loadable entries:
 
 - JavaScript: `oci://ghcr.io/microsoft/github-js:latest`,
   `memory-js:latest`, `get-weather-js:latest`,
   `get-open-meteo-weather-js:latest`, and `time-server-js:latest`;
 - Python: `oci://ghcr.io/microsoft/eval-py:latest`;
 - Go: `oci://ghcr.io/microsoft/gomodule-go:latest`; and
-- Rust: `arxiv-rs`, `fetch-rs`, `filesystem-rs`, `brave-search-rs`, and
-  `context7-rs`, all under `ghcr.io/microsoft/*:latest`.
+- Rust: `arxiv-rs`, `fetch-rs`, `filesystem-rs`, and `brave-search-rs`, all
+  under `ghcr.io/microsoft/*:latest`.
+
+`context7-rs` remains an official source example but is not currently listed in
+the public registry, so it should not be described as a directly published
+catalog entry.
 
 The registry is a small, curated static catalog, not a general component search
 index. The [CLI reference](https://github.com/microsoft/wassette/blob/main/docs/reference/cli.md)
