@@ -9,11 +9,9 @@ Its browserless Wasm path is tested with context, container, component,
 dynamic, and deployment views. Wassette loads one composed `c4-suite.wasm`;
 WAC assembles that suite from immutable, independently reusable components.
 
-The [SQLite-backed Memory Server](workloads/sqlite-persistence/README.md)
-reuses Wassette's nine-tool knowledge-graph contract while replacing volatile
-arrays with SQLite and one narrowly scoped WASI filesystem capability. The
-Gondolin browser extension exposes Playwright and memory together so Pi can
-recall earlier research and retain durable browser findings across sessions.
+The Gondolin browser extension runs the maintained MCP Memory Server beside
+Playwright so Pi can recall earlier research and retain durable browser
+findings across sessions without a platform-owned persistence implementation.
 When `GITHUB_TOKEN` is present, it also loads the published GitHub Wassette
 component by pinned OCI digest—without rebuilding it.
 

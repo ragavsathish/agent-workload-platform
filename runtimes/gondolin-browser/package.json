@@ -6,10 +6,12 @@
   "scripts": {
     "build": "tsc",
     "check": "tsc --noEmit",
+    "test:memory": "pnpm run build && node memory-smoke-test.mjs",
     "test:smoke": "pnpm run build && node smoke-test.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.30.0"
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "@modelcontextprotocol/server-memory": "2026.8.31"
   },
   "optionalDependencies": {
     "@earendil-works/gondolin": "0.12.0"
