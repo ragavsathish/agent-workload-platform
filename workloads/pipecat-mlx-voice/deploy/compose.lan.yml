@@ -1,0 +1,44 @@
+# Opt-in HTTPS exposure on one explicitly detected private Wi-Fi address.
+services:
+  tailscale:
+    ports:
+      - "${LAN_BIND_IP:?LAN_BIND_IP is required}:${LAN_HTTPS_PORT:-8443}:8443"
+
+  voice-edge:
+    command: ["-t", "websocket", "--host", "0.0.0.0", "--port", "7860"]
+    environment:
+      PIPECAT_ALLOWED_ORIGINS: ${LAN_ORIGIN:?LAN_ORIGIN is required}
+
+  lan-proxy:
+    image: local/pipecat-lan-proxy:compose
+    pull_policy: never
+    build:
+      context: ..
+      dockerfile: lan-proxy/Containerfile
+    restart: unless-stopped
+    depends_on:
+      voice-edge:
+        condition: service_healthy
+    environment:
+      LAN_BIND_IP: ${LAN_BIND_IP:?LAN_BIND_IP is required}
+      LAN_HTTPS_PORT: ${LAN_HTTPS_PORT:-8443}
+      LAN_BASIC_AUTH_HASH: ${LAN_BASIC_AUTH_HASH:?LAN_BASIC_AUTH_HASH is required}
+      LAN_IDENTITY: ${LAN_IDENTITY:?LAN_IDENTITY is required}
+    network_mode: service:tailscale
+    volumes:
+      - lan-caddy-data:/data
+      - lan-caddy-config:/config
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=32m"]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.5
+    logging:
+      driver: none
+
+volumes:
+  lan-caddy-data:
+  lan-caddy-config:

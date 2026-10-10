@@ -26,12 +26,14 @@ from pipecat.services.openai.tts import OpenAITTSService
 from pipecat.transports.base_transport import BaseTransport
 from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPIWebsocketTransport
 from pipecat.workers.runner import WorkerRunner
+from telemetry import configure_telemetry
 
 # Voice content must never reach stdout/stderr. Docker also uses the `none` log driver, but removing
 # Loguru's shared handler prevents Pipecat from formatting transcripts or LLM context at all.
 logger.remove()
 
 load_dotenv(override=True)
+telemetry = configure_telemetry("pipecat-voice-edge")
 
 
 def required_env(name: str) -> str:
@@ -104,17 +106,19 @@ async def run_bot(transport: BaseTransport, identity: str):
     )
 
     async def gateway_request(method: str, path: str, **kwargs) -> dict[str, object]:
-        response = await http_client.request(method, path, **kwargs)
-        if response.is_error:
-            try:
-                detail = response.json().get("detail", "request failed")
-            except ValueError:
-                detail = "request failed"
-            raise RuntimeError(f"agent gateway rejected the request: {detail}")
-        payload = response.json()
-        if not isinstance(payload, dict):
-            raise RuntimeError("agent gateway returned an invalid response")
-        return payload
+        operation = f"gateway.{method.lower()}"
+        with telemetry.observe(operation):
+            response = await http_client.request(method, path, **kwargs)
+            if response.is_error:
+                try:
+                    detail = response.json().get("detail", "request failed")
+                except ValueError:
+                    detail = "request failed"
+                raise RuntimeError(f"agent gateway rejected the request: {detail}")
+            payload = response.json()
+            if not isinstance(payload, dict):
+                raise RuntimeError("agent gateway returned an invalid response")
+            return payload
 
     async def propose_agent_task(params: FunctionCallParams) -> None:
         try:
@@ -265,27 +269,28 @@ async def run_bot(transport: BaseTransport, identity: str):
 
 
 async def bot(runner_args: RunnerArguments):
-    match runner_args:
-        case WebSocketRunnerArguments():
-            try:
-                identity = resolve_identity(runner_args)
-            except PermissionError as exc:
-                logger.warning("Rejected edge connection: {}", exc)
-                await runner_args.websocket.close(code=1008, reason=str(exc))
+    with telemetry.observe("voice.session"):
+        match runner_args:
+            case WebSocketRunnerArguments():
+                try:
+                    identity = resolve_identity(runner_args)
+                except PermissionError as exc:
+                    logger.warning("Rejected edge connection: {}", exc)
+                    await runner_args.websocket.close(code=1008, reason=str(exc))
+                    return
+                transport = FastAPIWebsocketTransport(
+                    websocket=runner_args.websocket,
+                    params=FastAPIWebsocketParams(
+                        audio_in_enabled=True,
+                        audio_out_enabled=True,
+                        add_wav_header=False,
+                        serializer=ProtobufFrameSerializer(),
+                    ),
+                )
+            case _:
+                logger.error("Unsupported runner arguments: {}", type(runner_args))
                 return
-            transport = FastAPIWebsocketTransport(
-                websocket=runner_args.websocket,
-                params=FastAPIWebsocketParams(
-                    audio_in_enabled=True,
-                    audio_out_enabled=True,
-                    add_wav_header=False,
-                    serializer=ProtobufFrameSerializer(),
-                ),
-            )
-        case _:
-            logger.error("Unsupported runner arguments: {}", type(runner_args))
-            return
-    await run_bot(transport, identity)
+        await run_bot(transport, identity)
 
 
 if __name__ == "__main__":

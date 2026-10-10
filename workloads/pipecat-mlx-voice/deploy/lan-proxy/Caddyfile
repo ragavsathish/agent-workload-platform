@@ -1,0 +1,16 @@
+{
+	admin off
+	auto_https disable_redirects
+	default_sni {$LAN_BIND_IP}
+	skip_install_trust
+}
+
+https://{$LAN_BIND_IP}:{$LAN_HTTPS_PORT} {
+	tls internal
+	basic_auth {
+		lan {$LAN_BASIC_AUTH_HASH}
+	}
+	reverse_proxy 127.0.0.1:7860 {
+		header_up tailscale-user-login {$LAN_IDENTITY}
+	}
+}

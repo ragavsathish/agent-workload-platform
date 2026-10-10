@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from orchestrator.config import Settings
 from orchestrator.service import ProposalError, TaskService
+from telemetry import configure_telemetry
 
 load_dotenv(os.getenv("AGENT_GATEWAY_ENV_FILE", ".env"), override=True)
 
@@ -40,6 +41,7 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None,
 )
+telemetry = configure_telemetry("pipecat-agent-gateway")
 
 
 class IdentityRequest(BaseModel):
@@ -93,16 +95,17 @@ async def health(_: None = Depends(authenticate)) -> dict[str, str]:
 
 @app.post("/v1/tasks", status_code=201)
 async def propose(body: ProposalRequest, _: None = Depends(authenticate)):
-    try:
-        result = await asyncio.to_thread(
-            service().propose,
-            identity=normalized_identity(body.identity),
-            instruction=body.instruction,
-            workspace=body.workspace,
-        )
-        return voice_view(result)
-    except (ProposalError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    with telemetry.observe("task.propose"):
+        try:
+            result = await asyncio.to_thread(
+                service().propose,
+                identity=normalized_identity(body.identity),
+                instruction=body.instruction,
+                workspace=body.workspace,
+            )
+            return voice_view(result)
+        except (ProposalError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/v1/tasks/{proposal_id}")
@@ -111,15 +114,16 @@ async def get_task(
     identity: str = Query(min_length=3, max_length=320),
     _: None = Depends(authenticate),
 ):
-    try:
-        result = await asyncio.to_thread(
-            service().get,
-            identity=normalized_identity(identity),
-            proposal_id=proposal_id,
-        )
-        return voice_view(result)
-    except ProposalError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    with telemetry.observe("task.get"):
+        try:
+            result = await asyncio.to_thread(
+                service().get,
+                identity=normalized_identity(identity),
+                proposal_id=proposal_id,
+            )
+            return voice_view(result)
+        except ProposalError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.post("/v1/tasks/{proposal_id}/approve")
@@ -128,22 +132,25 @@ async def approve(
     body: IdentityRequest,
     _: None = Depends(authenticate),
 ):
-    identity = normalized_identity(body.identity)
-    try:
-        tasks = service()
-        pending = await asyncio.to_thread(tasks.get, identity=identity, proposal_id=proposal_id)
-        token = pending.get("approval_token")
-        if not isinstance(token, str):
-            raise ProposalError("proposal is not available for approval")
-        result = await asyncio.to_thread(
-            tasks.approve,
-            identity=identity,
-            proposal_id=proposal_id,
-            token=token,
-        )
-        return voice_view(result)
-    except ProposalError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    with telemetry.observe("task.approve"):
+        identity = normalized_identity(body.identity)
+        try:
+            tasks = service()
+            pending = await asyncio.to_thread(
+                tasks.get, identity=identity, proposal_id=proposal_id
+            )
+            token = pending.get("approval_token")
+            if not isinstance(token, str):
+                raise ProposalError("proposal is not available for approval")
+            result = await asyncio.to_thread(
+                tasks.approve,
+                identity=identity,
+                proposal_id=proposal_id,
+                token=token,
+            )
+            return voice_view(result)
+        except ProposalError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/v1/tasks/{proposal_id}/cancel")
@@ -152,15 +159,16 @@ async def cancel(
     body: IdentityRequest,
     _: None = Depends(authenticate),
 ):
-    try:
-        result = await asyncio.to_thread(
-            service().cancel,
-            identity=normalized_identity(body.identity),
-            proposal_id=proposal_id,
-        )
-        return voice_view(result)
-    except ProposalError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    with telemetry.observe("task.cancel"):
+        try:
+            result = await asyncio.to_thread(
+                service().cancel,
+                identity=normalized_identity(body.identity),
+                proposal_id=proposal_id,
+            )
+            return voice_view(result)
+        except ProposalError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 if __name__ == "__main__":

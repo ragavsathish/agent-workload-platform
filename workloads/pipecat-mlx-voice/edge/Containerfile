@@ -17,6 +17,7 @@ WORKDIR /app
 COPY edge/pyproject.toml edge/uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY edge/bot.py ./
+COPY server/telemetry.py ./
 COPY client/dist ./client-dist
 
 USER 65532:65532

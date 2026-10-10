@@ -10,6 +10,8 @@ dependencies = [
     "httpx>=0.28,<1",
     "misaki[en]>=0.9,<1",
     "mlx-audio[tts]>=0.5.4,<0.6",
+    "opentelemetry-exporter-otlp-proto-http>=1.38,<2",
+    "opentelemetry-sdk>=1.38,<2",
     "pipecat-ai[mlx-whisper,runner,silero,websocket,whisper]>=1.12,<2",
     "python-multipart>=0.0.20,<1",
 ]

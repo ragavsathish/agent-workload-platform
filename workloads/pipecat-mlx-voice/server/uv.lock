@@ -2521,6 +2521,8 @@ dependencies = [
     { name = "httpx" },
     { name = "misaki", extra = ["en"] },
     { name = "mlx-audio", extra = ["tts"] },
+    { name = "opentelemetry-exporter-otlp-proto-http" },
+    { name = "opentelemetry-sdk" },
     { name = "pipecat-ai", extra = ["mlx-whisper", "runner", "websocket", "whisper"] },
     { name = "python-multipart" },
 ]
@@ -2540,6 +2542,8 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28,<1" },
     { name = "misaki", extras = ["en"], specifier = ">=0.9,<1" },
     { name = "mlx-audio", extras = ["tts"], specifier = ">=0.5.4,<0.6" },
+    { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.38,<2" },
+    { name = "opentelemetry-sdk", specifier = ">=1.38,<2" },
     { name = "pipecat-ai", extras = ["mlx-whisper", "runner", "silero", "websocket", "whisper"], specifier = ">=1.12,<2" },
     { name = "python-multipart", specifier = ">=0.0.20,<1" },
 ]

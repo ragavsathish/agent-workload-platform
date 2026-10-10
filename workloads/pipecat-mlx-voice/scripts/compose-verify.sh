@@ -8,7 +8,7 @@ pass() { printf 'PASS  %s\n' "$*"; }
 warn() { printf 'WARN  %s\n' "$*"; }
 fail() { printf 'FAIL  %s\n' "$*"; failures=$((failures + 1)); }
 
-for service in s3mock postgres agent-gateway tailscale voice-edge; do
+for service in s3mock postgres otel-lgtm agent-gateway tailscale voice-edge; do
   cid="$("${compose[@]}" ps -q "$service")"
   if [[ -n "$cid" && "$(docker inspect -f '{{.State.Running}}' "$cid")" == true ]]; then
     pass "$service is running"
@@ -25,9 +25,19 @@ for service in s3mock agent-gateway tailscale voice-edge; do
   docker inspect -f '{{range .Mounts}}{{println .Destination}}{{end}}' "$cid" | grep -Fxq /var/run/docker.sock && fail "$service has the Docker socket" || pass "$service has no Docker socket"
 done
 
-for service in agent-gateway voice-edge; do
+otel_cid="$("${compose[@]}" ps -q otel-lgtm)"
+[[ "$(docker inspect -f '{{json .HostConfig.CapDrop}}' "$otel_cid")" == '["ALL"]' ]] && pass "otel-lgtm drops all capabilities" || fail "otel-lgtm does not drop all capabilities"
+docker inspect -f '{{json .HostConfig.SecurityOpt}}' "$otel_cid" | grep -q 'no-new-privileges' && pass "otel-lgtm forbids privilege escalation" || fail "otel-lgtm permits privilege escalation"
+docker inspect -f '{{range .Mounts}}{{println .Destination}}{{end}}' "$otel_cid" | grep -Fxq /var/run/docker.sock && fail "otel-lgtm has the Docker socket" || pass "otel-lgtm has no Docker socket"
+
+for service in otel-lgtm agent-gateway voice-edge; do
   cid="$("${compose[@]}" ps -q "$service")"
   [[ "$(docker inspect -f '{{.HostConfig.LogConfig.Type}}' "$cid")" == none ]] && pass "$service retains no Docker logs" || fail "$service Docker logging is enabled"
+done
+
+for service in agent-gateway voice-edge; do
+  cid="$("${compose[@]}" ps -q "$service")"
+  docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$cid" | grep -Fxq 'OTEL_LOGS_EXPORTER=none' && pass "$service exports no OpenTelemetry logs" || fail "$service OpenTelemetry log export is not disabled"
 done
 
 published="$("${compose[@]}" ps --format json | sed -n 's/.*"Publishers":\[\([^]]*\)\].*/\1/p')"
@@ -41,12 +51,35 @@ if docker inspect -f '{{json .NetworkSettings.Ports}}' "$("${compose[@]}" ps -q 
 else
   fail "S3Mock loopback publication is missing"
 fi
+otel_ports="$(docker inspect -f '{{json .NetworkSettings.Ports}}' "$otel_cid")"
+if [[ "$otel_ports" == *'"3000/tcp":[{"HostIp":"127.0.0.1"'* && "$otel_ports" == *'"4318/tcp":[{"HostIp":"127.0.0.1"'* ]]; then
+  pass "Grafana and OTLP/HTTP are published only on host loopback"
+else
+  fail "observability loopback publications are missing"
+fi
+[[ "$otel_ports" != *'4317/tcp":[* && "$otel_ports" != *'9090/tcp":[* && "$otel_ports" != *'3100/tcp":[* ]] && pass "collector backends publish no extra host ports" || fail "collector backend ports are exposed"
+[[ "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3300/api/user || true)" == 401 ]] && pass "Grafana requires authentication" || fail "Grafana authentication check failed"
 if docker inspect -f '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}' "$("${compose[@]}" ps -q s3mock)" | grep -q '/Documents'; then
   fail "S3Mock binds a Documents path"
 else
   pass "S3Mock uses no Documents bind mount"
 fi
-[[ -z "$(docker port "$("${compose[@]}" ps -q tailscale)" 2>/dev/null)" ]] && pass "voice/Tailscale namespace publishes no Docker port" || fail "voice/Tailscale publishes a Docker port"
+tailscale_cid="$("${compose[@]}" ps -q tailscale)"
+voice_ports="$(docker inspect -f '{{json .NetworkSettings.Ports}}' "$tailscale_cid")"
+lan_cid="$(docker ps -q --filter label=com.docker.compose.project=pipecat-mlx-voice --filter label=com.docker.compose.service=lan-proxy)"
+if [[ -n "$lan_cid" ]]; then
+  lan_binding="$(docker inspect -f '{{(index (index .NetworkSettings.Ports "8443/tcp") 0).HostIp}}' "$tailscale_cid")"
+  if [[ "$lan_binding" =~ ^10\.|^192\.168\.|^172\.(1[6-9]|2[0-9]|3[01])\. ]]; then
+    pass "voice LAN HTTPS binds one private address"
+  else
+    fail "voice LAN HTTPS is not restricted to a private address"
+  fi
+  [[ "$voice_ports" != *'"0.0.0.0"'* && "$voice_ports" != *'"::"'* ]] && pass "voice LAN HTTPS has no wildcard publication" || fail "voice LAN HTTPS has a wildcard publication"
+  [[ "$(docker inspect -f '{{.HostConfig.LogConfig.Type}}' "$lan_cid")" == none ]] && pass "LAN proxy retains no Docker logs" || fail "LAN proxy Docker logging is enabled"
+  docker inspect -f '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}' "$lan_cid" | grep -q '/Documents' && fail "LAN proxy binds a Documents path" || pass "LAN proxy has no Documents bind mount"
+else
+  [[ -z "$(docker port "$tailscale_cid" 2>/dev/null)" ]] && pass "voice/Tailscale namespace publishes no Docker port" || fail "voice/Tailscale publishes a Docker port"
+fi
 
 [[ "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:9443/health || true)" == 401 ]] && pass "host inference broker rejects unauthenticated traffic" || fail "host inference broker capability check failed"
 broker_ready=0

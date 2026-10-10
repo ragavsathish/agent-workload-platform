@@ -18,6 +18,9 @@ SVG render.
 - Separate bearer capabilities expose only bounded inference and propose/status/approve/cancel.
 - Voice edge and gateway containers use Docker's `none` log driver; Pipecat's shared Loguru handler
   is removed so transcripts, LLM context, and audio-adjacent payloads are never formatted as logs.
+- OpenTelemetry exports only manually defined, low-cardinality operation counts, durations, and
+  traces. It has no log exporter and records no audio, text, identity, workspace, proposal ID,
+  exception message, URL parameter, request body, or response body.
 - Database credentials, Pi/provider authentication, sessions, and writable workspaces never enter the voice
   container.
 - The Pi worker runs on macOS and delegates tools to Gondolin micro-VMs and permission-scoped
@@ -47,11 +50,23 @@ make warm-models
 `make login` performs interactive Tailscale authentication when needed, binds the exact login and
 MagicDNS origin, enables Serve on HTTPS 443, and prints the browser URL.
 
+For an explicitly LAN-visible iPhone test instead, run `make lan-iphone-setup`. The guided setup
+binds Caddy HTTPS only to the detected private Wi-Fi address, exports its public CA certificate for
+installation on the iPhone, and walks through iOS full trust and microphone verification. Stop that
+listener with `make lan-down`. LAN mode is less isolated than tailnet mode: any device on that Wi-Fi
+can reach the HTTPS handshake, although task identity and capabilities are still enforced by the
+voice stack and Caddy requires a generated password. Do not use it on public or untrusted Wi-Fi.
+
 ## Operate
 
 ```bash
 make status       # Compose services, tailnet state, native service state
 make verify       # isolation, capabilities, ingress, broker, and gateway checks
+make grafana-password # print the local Grafana credential after make up
+make lan-up       # HTTPS voice UI on this Mac's private Wi-Fi address
+make lan-iphone-setup # guided iPhone CA trust and microphone setup
+make lan-password # reveal the generated LAN-only browser password
+make lan-down     # remove LAN listener and restore tailnet-only binding
 make recreate     # immutable container recreation plus verification
 make cycle-test   # three stop/recreate/schema cycles plus final recovery
 make benchmark-mlx # warm CPU, RSS, tokens/s, and realtime-factor benchmark
@@ -65,7 +80,7 @@ make check        # tests, lint, type checks, build, Compose and plist validatio
 Postgres and S3Mock are published only on host loopback so the native Pi worker can consume the
 queue and immutable workspace bundles. The native inference broker listens on `127.0.0.1:9443`; Docker Desktop makes that protected
 capability available through the private `inference-broker` host-gateway alias. No service listens
-on the Mac LAN interface.
+on the Mac LAN interface unless the operator explicitly enables the narrow HTTPS LAN mode.
 
 S3Mock stores committed Git bundles and result patches in a Docker named volume; it never
 bind-mounts `~/Documents`. Each task verifies the bundle digest, expands it beneath
@@ -77,6 +92,19 @@ Raw audio and synthesized speech exist only in memory while streaming. Transcrip
 in-memory conversation context for the active call and are discarded with it. Postgres stores only
 an explicitly proposed task instruction; native launch services write stdout and stderr to
 `/dev/null`. The synthetic black-box runner reports event counts, never transcript text.
+
+## Local observability
+
+The pinned `grafana/otel-lgtm` development bundle provides Grafana, Prometheus, Tempo, and an OTLP
+collector. Open <http://127.0.0.1:3300>, use user `admin`, and obtain the generated local password
+with `make grafana-password`. The provisioned **Pipecat Voice Overview** dashboard shows operation
+rates, p95 durations, errors, and recent traces for the voice edge, gateway, and native MLX
+inference broker.
+
+Grafana and OTLP/HTTP bind only to Mac loopback. OTLP/gRPC, Prometheus, Tempo, and Loki ports are not
+published. Application and bundle Docker logs remain disabled, and applications do not send the
+OpenTelemetry logs signal. Telemetry is stored in the `otel-lgtm-data` Docker volume; Prometheus
+retention is seven days. This all-in-one bundle is for private local monitoring, not production.
 
 The black-box runner synthesizes speech with Kokoro, streams it through the same authenticated
 WebSocket used by the browser, transcribes it with MLX Whisper, and exercises the LLM/tool path.

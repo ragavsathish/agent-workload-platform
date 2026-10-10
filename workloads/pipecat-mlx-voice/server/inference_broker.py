@@ -26,11 +26,13 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from mlx_tts import synthesize_pcm
+from telemetry import configure_telemetry
 
 # The broker handles raw voice data. Do not emit library or application logs from this process.
 logger.remove()
 
 load_dotenv(os.getenv("INFERENCE_BROKER_ENV_FILE", ".env"), override=True)
+telemetry = configure_telemetry("pipecat-mlx-inference")
 
 MAX_AUDIO_BYTES = int(os.getenv("BROKER_MAX_AUDIO_BYTES", "4194304"))
 MAX_CHAT_BYTES = int(os.getenv("BROKER_MAX_CHAT_BYTES", "131072"))
@@ -105,48 +107,50 @@ async def transcribe(
     file: Annotated[UploadFile, File()],
     _: None = Depends(authenticate),
 ) -> dict[str, str]:
-    content = await file.read(MAX_AUDIO_BYTES + 1)
-    if len(content) > MAX_AUDIO_BYTES:
-        raise HTTPException(status_code=413, detail="audio payload too large")
-    audio = _decode_wav(content)
-    async with _inference_slot:
-        result = cast(
-            dict[str, Any],
-            await asyncio.to_thread(
-            mlx_whisper.transcribe,
-            audio,
-            path_or_hf_repo=os.environ["MLX_STT_MODEL"],
-            temperature=0.0,
-            language=os.getenv("STT_LANGUAGE", "en"),
-            ),
-        )
-    text = " ".join(
-        str(segment.get("text", "")).strip()
-        for segment in result.get("segments", [])
-        if segment.get("no_speech_prob", 0.0) < 0.6
-        and segment.get("compression_ratio") != 0.5555555555555556
-    ).strip()
-    return {"text": text}
+    with telemetry.observe("inference.stt"):
+        content = await file.read(MAX_AUDIO_BYTES + 1)
+        if len(content) > MAX_AUDIO_BYTES:
+            raise HTTPException(status_code=413, detail="audio payload too large")
+        audio = _decode_wav(content)
+        async with _inference_slot:
+            result = cast(
+                dict[str, Any],
+                await asyncio.to_thread(
+                    mlx_whisper.transcribe,
+                    audio,
+                    path_or_hf_repo=os.environ["MLX_STT_MODEL"],
+                    temperature=0.0,
+                    language=os.getenv("STT_LANGUAGE", "en"),
+                ),
+            )
+        text = " ".join(
+            str(segment.get("text", "")).strip()
+            for segment in result.get("segments", [])
+            if segment.get("no_speech_prob", 0.0) < 0.6
+            and segment.get("compression_ratio") != 0.5555555555555556
+        ).strip()
+        return {"text": text}
 
 
 @app.post("/v1/audio/speech")
 async def speech(body: SpeechRequest, _: None = Depends(authenticate)) -> Response:
-    if body.response_format != "pcm":
-        raise HTTPException(status_code=400, detail="only PCM output is supported")
-    async with _inference_slot:
-        pcm, sample_rate = await asyncio.to_thread(
-            synthesize_pcm,
-            text=body.input,
-            model_name=os.environ["MLX_TTS_MODEL"],
-            voice=os.environ["MLX_TTS_VOICE"],
-            speed=body.speed or float(os.getenv("MLX_TTS_SPEED", "1.0")),
-            lang_code=os.getenv("MLX_TTS_LANGUAGE_CODE", "a"),
-            streaming_interval=float(os.getenv("MLX_TTS_STREAMING_INTERVAL", "0.5")),
-        )
-    if sample_rate != 24000:
-        logger.error("Refusing unexpected TTS sample rate: {}", sample_rate)
-        raise HTTPException(status_code=502, detail="unexpected TTS sample rate")
-    return Response(content=pcm, media_type="application/octet-stream")
+    with telemetry.observe("inference.tts"):
+        if body.response_format != "pcm":
+            raise HTTPException(status_code=400, detail="only PCM output is supported")
+        async with _inference_slot:
+            pcm, sample_rate = await asyncio.to_thread(
+                synthesize_pcm,
+                text=body.input,
+                model_name=os.environ["MLX_TTS_MODEL"],
+                voice=os.environ["MLX_TTS_VOICE"],
+                speed=body.speed or float(os.getenv("MLX_TTS_SPEED", "1.0")),
+                lang_code=os.getenv("MLX_TTS_LANGUAGE_CODE", "a"),
+                streaming_interval=float(os.getenv("MLX_TTS_STREAMING_INTERVAL", "0.5")),
+            )
+        if sample_rate != 24000:
+            logger.error("Refusing unexpected TTS sample rate: {}", sample_rate)
+            raise HTTPException(status_code=502, detail="unexpected TTS sample rate")
+        return Response(content=pcm, media_type="application/octet-stream")
 
 
 def _validate_chat(payload: dict[str, Any]) -> None:
@@ -184,38 +188,39 @@ def _validate_chat(payload: dict[str, Any]) -> None:
 
 @app.post("/v1/chat/completions", response_model=None)
 async def chat(request: Request, _: None = Depends(authenticate)) -> StreamingResponse | Response:
-    body = await request.body()
-    if len(body) > MAX_CHAT_BYTES:
-        raise HTTPException(status_code=413, detail="chat payload too large")
-    try:
-        payload = json.loads(body)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="invalid JSON") from exc
-    if not isinstance(payload, dict):
-        raise HTTPException(status_code=400, detail="invalid request")
-    _validate_chat(payload)
-
-    client: httpx.AsyncClient = request.app.state.http
-    upstream = client.build_request(
-        "POST",
-        f"{OLLAMA_BASE_URL}/chat/completions",
-        json=payload,
-        headers={"Authorization": "Bearer ollama"},
-    )
-    response = await client.send(upstream, stream=True)
-    if response.status_code != 200:
-        content = await response.aread()
-        await response.aclose()
-        return Response(content=content[:8192], status_code=response.status_code)
-
-    async def chunks():
+    with telemetry.observe("inference.llm"):
+        body = await request.body()
+        if len(body) > MAX_CHAT_BYTES:
+            raise HTTPException(status_code=413, detail="chat payload too large")
         try:
-            async for chunk in response.aiter_bytes():
-                yield chunk
-        finally:
-            await response.aclose()
+            payload = json.loads(body)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="invalid JSON") from exc
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=400, detail="invalid request")
+        _validate_chat(payload)
 
-    return StreamingResponse(chunks(), media_type=response.headers.get("content-type"))
+        client: httpx.AsyncClient = request.app.state.http
+        upstream = client.build_request(
+            "POST",
+            f"{OLLAMA_BASE_URL}/chat/completions",
+            json=payload,
+            headers={"Authorization": "Bearer ollama"},
+        )
+        response = await client.send(upstream, stream=True)
+        if response.status_code != 200:
+            content = await response.aread()
+            await response.aclose()
+            return Response(content=content[:8192], status_code=response.status_code)
+
+        async def chunks():
+            try:
+                async for chunk in response.aiter_bytes():
+                    yield chunk
+            finally:
+                await response.aclose()
+
+        return StreamingResponse(chunks(), media_type=response.headers.get("content-type"))
 
 
 if __name__ == "__main__":

@@ -34,3 +34,4 @@ expected_workspace="$(sed -n 's/^VOICE_DEFAULT_WORKSPACE=//p' "$repo_dir/server/
 expected_prefix="s3://agent-artifacts/workspaces/$expected_workspace/sources/"
 [[ "$workspace" == "$expected_prefix"*.bundle ]] || { echo "FAIL persisted immutable workspace mismatch" >&2; exit 1; }
 echo "PASS synthetic voice created one pending, identity-bound Postgres proposal"
+"$repo_dir/scripts/otel-smoke-test.sh"

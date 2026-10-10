@@ -16,6 +16,7 @@ WORKDIR /app
 COPY gateway/pyproject.toml gateway/uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY server/agent_gateway.py ./
+COPY server/telemetry.py ./
 COPY server/orchestrator ./orchestrator
 
 USER 65532:65532

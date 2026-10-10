@@ -11,6 +11,7 @@ install -m 700 "$repo_dir/scripts/host-broker.sh" "$repo_dir/scripts/host-worker
 install -m 600 \
   "$repo_dir/server/inference_broker.py" \
   "$repo_dir/server/mlx_tts.py" \
+  "$repo_dir/server/telemetry.py" \
   "$repo_dir/server/pyproject.toml" \
   "$repo_dir/server/uv.lock" \
   "$runtime_dir/server/"

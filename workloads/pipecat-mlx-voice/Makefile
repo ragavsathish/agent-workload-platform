@@ -1,4 +1,4 @@
-.PHONY: setup build up down recreate verify cycle-test login status warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e host-preflight install-host-services db-init broker worker pull-model check
+.PHONY: setup build up down recreate verify cycle-test login lan-up lan-down lan-iphone-setup lan-password status grafana-password warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e host-preflight install-host-services db-init broker worker pull-model check
 
 setup:
 	cd server && uv sync --python 3.13
@@ -30,8 +30,27 @@ cycle-test:
 login:
 	./scripts/compose-login.sh
 
+lan-up:
+	./scripts/lan-up.sh
+
+lan-down:
+	./scripts/lan-down.sh
+
+lan-iphone-setup:
+	./scripts/lan-iphone-setup.sh
+
+lan-password:
+	@test -s deploy/secrets/lan-password || { echo "Run make lan-up first" >&2; exit 1; }
+	@printf 'LAN user: lan\nLAN password: '
+	@cat deploy/secrets/lan-password
+
 status:
 	./scripts/compose-status.sh
+
+grafana-password:
+	@test -s deploy/secrets/grafana-admin-password || { echo "Run make up first" >&2; exit 1; }
+	@printf 'Grafana user: admin\nGrafana password: '
+	@cat deploy/secrets/grafana-admin-password
 
 warm-models:
 	./scripts/edge-warm-models.sh
@@ -77,5 +96,6 @@ check:
 	cd client && npm run lint
 	cd client && npm run build
 	docker compose --env-file server/.env -f deploy/compose.yml config --quiet
+	LAN_BIND_IP=192.168.1.10 LAN_ORIGIN=https://192.168.1.10:8443 LAN_BASIC_AUTH_HASH=dummy LAN_IDENTITY=user@example.com docker compose --env-file server/.env -f deploy/compose.yml -f deploy/compose.lan.yml config --quiet
 	for script in scripts/*.sh; do bash -n "$$script"; done
 	for plist in deploy/launchd/*.plist; do plutil -lint "$$plist"; done
