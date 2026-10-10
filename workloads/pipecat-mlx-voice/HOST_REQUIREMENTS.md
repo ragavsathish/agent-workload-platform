@@ -48,7 +48,6 @@ S3Mock artifacts use another named volume inside Docker Desktop and never bind-m
 | Address | Owner | Purpose |
 |---|---|---|
 | tailnet HTTPS 443 | Tailscale userspace container | browser UI and WebSocket audio |
-| private Wi-Fi IP `:8443` | opt-in Caddy LAN proxy | HTTPS browser UI and WebSocket audio |
 | `127.0.0.1:54329` | Docker Postgres | native Pi worker queue access |
 | `127.0.0.1:9090` | Docker S3Mock | native worker immutable inputs and task result artifacts |
 | `127.0.0.1:3300` | Docker Grafana | authenticated local metrics and traces UI |
@@ -68,13 +67,9 @@ Telemetry deliberately excludes logs and all user-controlled values. Its named v
 only operation metrics and sanitized traces and can be removed separately if local telemetry must
 be erased.
 
-LAN mode is opt-in and binds only the detected RFC1918 Wi-Fi address, never `0.0.0.0`. Caddy keeps
-its local CA private key in a Docker named volume and emits no access log; only the public root
-certificate is copied to ignored `deploy/lan-client/` for AirDrop. A generated HTTP Basic password
-guards both the page and WebSocket; after authentication Caddy injects the single allowlisted local
-identity. iOS must install the profile and
-enable full trust before Safari treats the page as a secure microphone context. `make lan-down`
-removes the listener and restores the voice process to its tailnet-only loopback binding.
+The phone must run Tailscale and join the same tailnet. Tailscale Serve terminates trusted HTTPS
+and supplies the authenticated tailnet identity; there is no fallback listener on the local Wi-Fi
+interface.
 
 ## Repeatability and updates
 

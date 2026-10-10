@@ -50,23 +50,12 @@ make warm-models
 `make login` performs interactive Tailscale authentication when needed, binds the exact login and
 MagicDNS origin, enables Serve on HTTPS 443, and prints the browser URL.
 
-For an explicitly LAN-visible iPhone test instead, run `make lan-iphone-setup`. The guided setup
-binds Caddy HTTPS only to the detected private Wi-Fi address, exports its public CA certificate for
-installation on the iPhone, and walks through iOS full trust and microphone verification. Stop that
-listener with `make lan-down`. LAN mode is less isolated than tailnet mode: any device on that Wi-Fi
-can reach the HTTPS handshake, although task identity and capabilities are still enforced by the
-voice stack and Caddy requires a generated password. Do not use it on public or untrusted Wi-Fi.
-
 ## Operate
 
 ```bash
 make status       # Compose services, tailnet state, native service state
 make verify       # isolation, capabilities, ingress, broker, and gateway checks
 make grafana-password # print the local Grafana credential after make up
-make lan-up       # HTTPS voice UI on this Mac's private Wi-Fi address
-make lan-iphone-setup # guided iPhone CA trust and microphone setup
-make lan-password # reveal the generated LAN-only browser password
-make lan-down     # remove LAN listener and restore tailnet-only binding
 make recreate     # immutable container recreation plus verification
 make cycle-test   # three stop/recreate/schema cycles plus final recovery
 make benchmark-mlx # warm CPU, RSS, tokens/s, and realtime-factor benchmark
@@ -80,7 +69,7 @@ make check        # tests, lint, type checks, build, Compose and plist validatio
 Postgres and S3Mock are published only on host loopback so the native Pi worker can consume the
 queue and immutable workspace bundles. The native inference broker listens on `127.0.0.1:9443`; Docker Desktop makes that protected
 capability available through the private `inference-broker` host-gateway alias. No service listens
-on the Mac LAN interface unless the operator explicitly enables the narrow HTTPS LAN mode.
+on the Mac LAN interface; browser access is available only through Tailscale Serve.
 
 S3Mock stores committed Git bundles and result patches in a Docker named volume; it never
 bind-mounts `~/Documents`. Each task verifies the bundle digest, expands it beneath

@@ -66,20 +66,7 @@ else
 fi
 tailscale_cid="$("${compose[@]}" ps -q tailscale)"
 voice_ports="$(docker inspect -f '{{json .NetworkSettings.Ports}}' "$tailscale_cid")"
-lan_cid="$(docker ps -q --filter label=com.docker.compose.project=pipecat-mlx-voice --filter label=com.docker.compose.service=lan-proxy)"
-if [[ -n "$lan_cid" ]]; then
-  lan_binding="$(docker inspect -f '{{(index (index .NetworkSettings.Ports "8443/tcp") 0).HostIp}}' "$tailscale_cid")"
-  if [[ "$lan_binding" =~ ^10\.|^192\.168\.|^172\.(1[6-9]|2[0-9]|3[01])\. ]]; then
-    pass "voice LAN HTTPS binds one private address"
-  else
-    fail "voice LAN HTTPS is not restricted to a private address"
-  fi
-  [[ "$voice_ports" != *'"0.0.0.0"'* && "$voice_ports" != *'"::"'* ]] && pass "voice LAN HTTPS has no wildcard publication" || fail "voice LAN HTTPS has a wildcard publication"
-  [[ "$(docker inspect -f '{{.HostConfig.LogConfig.Type}}' "$lan_cid")" == none ]] && pass "LAN proxy retains no Docker logs" || fail "LAN proxy Docker logging is enabled"
-  docker inspect -f '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}' "$lan_cid" | grep -q '/Documents' && fail "LAN proxy binds a Documents path" || pass "LAN proxy has no Documents bind mount"
-else
-  [[ -z "$(docker port "$tailscale_cid" 2>/dev/null)" ]] && pass "voice/Tailscale namespace publishes no Docker port" || fail "voice/Tailscale publishes a Docker port"
-fi
+[[ -z "$(docker port "$tailscale_cid" 2>/dev/null)" && "$voice_ports" != *'"0.0.0.0"'* && "$voice_ports" != *'"::"'* ]] && pass "voice/Tailscale namespace publishes no Docker port" || fail "voice/Tailscale publishes a Docker port"
 
 [[ "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:9443/health || true)" == 401 ]] && pass "host inference broker rejects unauthenticated traffic" || fail "host inference broker capability check failed"
 broker_ready=0
