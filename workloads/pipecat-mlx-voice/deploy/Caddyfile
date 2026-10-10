@@ -1,0 +1,12 @@
+{
+	admin off
+	auto_https off
+	servers {
+		protocols h1
+	}
+}
+
+:8443 {
+	tls /certs/tailnet.crt /certs/tailnet.key
+	reverse_proxy 127.0.0.1:7860
+}

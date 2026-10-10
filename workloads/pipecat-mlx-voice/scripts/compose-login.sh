@@ -22,8 +22,13 @@ done
 [[ "$state" == Running ]] || { echo "Tailscale did not reach Running state within 10 minutes" >&2; exit 1; }
 
 url="$(uv run --project "$root/server" python "$root/deploy/finalize_edge.py" "$root/edge/.env" "$status_file" "$root/server/.env")"
+dns_name="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' < "$status_file")"
 uv run --project "$root/server" python "$root/deploy/prepare_compose.py" "$root"
 "${compose[@]}" up -d --wait --force-recreate agent-gateway voice-edge
 "${compose[@]}" exec -T tailscale tailscale --socket=/tmp/tailscaled.sock serve reset
-"${compose[@]}" exec -T tailscale tailscale --socket=/tmp/tailscaled.sock serve --bg --tls-terminated-tcp=443 tcp://127.0.0.1:7860
+"${compose[@]}" exec -T tailscale tailscale --socket=/tmp/tailscaled.sock cert \
+  --cert-file /certs/tailnet.crt --key-file /certs/tailnet.key "$dns_name"
+"${compose[@]}" exec -T tailscale chmod 0640 /certs/tailnet.crt /certs/tailnet.key
+"${compose[@]}" up -d --wait --build --force-recreate tls-edge
+"${compose[@]}" exec -T tailscale tailscale --socket=/tmp/tailscaled.sock serve --bg --tcp=443 tcp://127.0.0.1:8443
 echo "Voice UI: $url"

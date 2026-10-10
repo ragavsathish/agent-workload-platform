@@ -12,9 +12,9 @@ SVG render.
 
 ## Trust model
 
-- Tailscale Serve provides private, TLS-terminated TCP ingress; Funnel and public Docker ports are
-  not enabled. This preserves Safari's HTTP/1.1 WebSocket upgrade instead of using Serve's HTTP/2
-  reverse proxy.
+- Tailscale Serve provides private raw-TCP ingress to a capability-free Caddy sidecar that
+  terminates the tailnet certificate and advertises HTTP/1.1 only. Funnel and public Docker ports
+  are not enabled. This bypasses Serve's incompatible HTTP/2 WebSocket reverse proxy.
 - Browser sessions require an exact HTTPS origin and a signed, one-use token in the WebSocket path.
   The current deployment is deliberately single-user: login pins exactly one owner identity during
   setup, while tailnet ACLs authenticate which devices can reach the listener.
@@ -53,7 +53,8 @@ make warm-models
 ```
 
 `make login` performs interactive Tailscale authentication when needed, binds the exact login and
-MagicDNS origin, enables tailnet-only TLS-terminated TCP on HTTPS 443, and prints the browser URL.
+MagicDNS origin, issues the tailnet certificate, enables tailnet-only raw TCP on HTTPS 443, and
+prints the browser URL.
 
 ## Operate
 

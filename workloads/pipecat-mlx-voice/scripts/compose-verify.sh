@@ -8,7 +8,17 @@ pass() { printf 'PASS  %s\n' "$*"; }
 warn() { printf 'WARN  %s\n' "$*"; }
 fail() { printf 'FAIL  %s\n' "$*"; failures=$((failures + 1)); }
 
-for service in s3mock postgres otel-lgtm agent-gateway tailscale voice-edge; do
+services=(s3mock postgres otel-lgtm agent-gateway tailscale voice-edge)
+secure_services=(s3mock agent-gateway tailscale voice-edge)
+no_log_services=(otel-lgtm agent-gateway voice-edge)
+tls_edge_cid="$("${compose[@]}" ps -q tls-edge)"
+if [[ -n "$tls_edge_cid" ]]; then
+  services+=(tls-edge)
+  secure_services+=(tls-edge)
+  no_log_services+=(tls-edge)
+fi
+
+for service in "${services[@]}"; do
   cid="$("${compose[@]}" ps -q "$service")"
   if [[ -n "$cid" && "$(docker inspect -f '{{.State.Running}}' "$cid")" == true ]]; then
     pass "$service is running"
@@ -17,7 +27,7 @@ for service in s3mock postgres otel-lgtm agent-gateway tailscale voice-edge; do
   fi
 done
 
-for service in s3mock agent-gateway tailscale voice-edge; do
+for service in "${secure_services[@]}"; do
   cid="$("${compose[@]}" ps -q "$service")"
   [[ "$(docker inspect -f '{{.HostConfig.ReadonlyRootfs}}' "$cid")" == true ]] && pass "$service root filesystem is read-only" || fail "$service root filesystem is writable"
   [[ "$(docker inspect -f '{{json .HostConfig.CapDrop}}' "$cid")" == '["ALL"]' ]] && pass "$service drops all capabilities" || fail "$service does not drop all capabilities"
@@ -30,7 +40,7 @@ otel_cid="$("${compose[@]}" ps -q otel-lgtm)"
 docker inspect -f '{{json .HostConfig.SecurityOpt}}' "$otel_cid" | grep -q 'no-new-privileges' && pass "otel-lgtm forbids privilege escalation" || fail "otel-lgtm permits privilege escalation"
 docker inspect -f '{{range .Mounts}}{{println .Destination}}{{end}}' "$otel_cid" | grep -Fxq /var/run/docker.sock && fail "otel-lgtm has the Docker socket" || pass "otel-lgtm has no Docker socket"
 
-for service in otel-lgtm agent-gateway voice-edge; do
+for service in "${no_log_services[@]}"; do
   cid="$("${compose[@]}" ps -q "$service")"
   [[ "$(docker inspect -f '{{.HostConfig.LogConfig.Type}}' "$cid")" == none ]] && pass "$service retains no Docker logs" || fail "$service Docker logging is enabled"
 done
@@ -127,6 +137,54 @@ then
   pass "voice WebSocket uses a path token compatible with Tailscale TCP ingress"
 else
   fail "voice WebSocket path-token ingress is not enforced"
+fi
+
+if [[ -n "$tls_edge_cid" ]]; then
+  if "${compose[@]}" exec -T voice-edge /app/.venv/bin/python - <<'PY'
+import asyncio
+import os
+import ssl
+
+import httpx
+import websockets
+
+
+async def probe() -> None:
+    origin = os.environ["PIPECAT_ALLOWED_ORIGINS"]
+    async with httpx.AsyncClient(verify=False) as client:
+        response = await client.post(
+            "https://127.0.0.1:8443/start",
+            headers={"origin": origin},
+            json={"transport": "websocket"},
+        )
+        response.raise_for_status()
+        token = response.json()["token"]
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    async with websockets.connect(
+        f"wss://127.0.0.1:8443/ws-client/{token}",
+        origin=origin,
+        ssl=context,
+        open_timeout=5,
+    ) as socket:
+        await asyncio.sleep(0.2)
+        assert socket.close_code is None
+
+
+asyncio.run(probe())
+PY
+  then
+    pass "raw tailnet TCP TLS proxy preserves the WebSocket upgrade"
+  else
+    fail "TLS proxy WebSocket path is broken"
+  fi
+  serve_status="$("${compose[@]}" exec -T tailscale tailscale --socket=/tmp/tailscaled.sock serve status 2>/dev/null || true)"
+  if [[ "$serve_status" == *'tcp://127.0.0.1:8443'* && "$serve_status" != *'TLS-terminated TCP'* ]]; then
+    pass "Tailscale uses raw TCP passthrough to the HTTP/1.1 TLS proxy"
+  else
+    fail "Tailscale is not using raw TCP passthrough"
+  fi
 fi
 
 [[ "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:9443/health || true)" == 401 ]] && pass "host inference broker rejects unauthenticated traffic" || fail "host inference broker capability check failed"

@@ -22,7 +22,7 @@ def main() -> None:
     replacements = {
         "EDGE_ALLOWED_USERS": login,
         "PIPECAT_ALLOWED_ORIGINS": f"https://{dns_name}",
-        # The TLS-terminated TCP ingress avoids Tailscale Serve's HTTP/2
+        # Raw Tailscale TCP plus the HTTP/1.1 TLS sidecar avoids Serve's HTTP/2
         # WebSocket proxy bug. Tokens travel in Pipecat's supported URL path.
         "PIPECAT_WEBSOCKET_AUTH": "token",
         "EDGE_SINGLE_USER_TCP_INGRESS": "true",

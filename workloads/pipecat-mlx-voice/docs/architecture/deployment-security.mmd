@@ -13,11 +13,13 @@ flowchart TB
             direction TB
             subgraph COMPOSE["Compose · voice services"]
                 direction TB
-                INGRESS["Container<br/><b>Tailnet Ingress</b><br/>TLS-terminated TCP · tailnet only"]
+                INGRESS["Container<br/><b>Tailnet Ingress</b><br/>Tailscale raw TCP · tailnet only"]
+                TLSEDGE["Container<br/><b>TLS Edge</b><br/>Caddy · TLS · HTTP/1.1 only"]
                 EDGE["Container<br/><b>Voice Edge</b><br/>exact origin · one-use path token"]
                 GATEWAY["Container<br/><b>Agent Gateway</b><br/>four identity-scoped task routes"]
                 DB[("Container database<br/><b>Postgres + Absurd</b><br/>durable proposals · tasks · checkpoints")]
-                INGRESS -->|"HTTP/1.1 + WebSocket · shared loopback"| EDGE
+                INGRESS -->|"encrypted raw TCP · shared namespace"| TLSEDGE
+                TLSEDGE -->|"HTTP/1.1 + WebSocket · shared loopback"| EDGE
                 EDGE -->|"gateway bearer · control network"| GATEWAY
                 GATEWAY -->|"internal data network"| DB
             end
@@ -49,5 +51,5 @@ flowchart TB
     class USER person;
     class CONTROL external;
     class BROWSER,BROKER,WORKER,GONDOLIN,WASSETTE container;
-    class INGRESS,EDGE,GATEWAY security;
+    class INGRESS,TLSEDGE,EDGE,GATEWAY security;
     class DB data;

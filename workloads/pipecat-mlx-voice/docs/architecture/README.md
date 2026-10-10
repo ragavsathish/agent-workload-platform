@@ -16,6 +16,7 @@ The deployment view is also an [editable Excalidraw scene](deployment-security.e
 |---|---|
 | Browser Client | `client/src/`; production assets copied into the edge image |
 | Tailnet Ingress | `deploy/compose.yml`; `scripts/compose-login.sh` |
+| TLS Edge | `deploy/Caddyfile`; `deploy/caddy/Containerfile`; Compose `tls-edge` service |
 | Voice Edge | `edge/bot.py`; `edge/Containerfile` |
 | Inference Broker | `server/inference_broker.py`; broker LaunchAgent |
 | Agent Gateway | `server/agent_gateway.py`; `gateway/Containerfile` |
@@ -32,8 +33,9 @@ credential. Separate secrets authorize bounded inference and four task lifecycle
 
 Tailscale authenticates devices and provides the private network path. The single-user voice edge
 then validates the exact MagicDNS origin and a signed, one-use WebSocket path token before binding
-the session to the owner login pinned by setup. TLS-terminated TCP preserves Safari's HTTP/1.1
-upgrade and does not rely on a proxy-injected identity header.
+the session to the owner login pinned by setup. Raw tailnet TCP passes TLS to a minimal Caddy
+sidecar that advertises HTTP/1.1 only, preserving Safari's WebSocket upgrade without relying on a
+proxy-injected identity header.
 
 This shared Docker VM is a pragmatic host boundary, not the stronger independent libkrun VM used by
 the previous design. The highest-risk work remains outside the voice stack: Pi invokes file,
