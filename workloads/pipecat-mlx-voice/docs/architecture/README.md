@@ -17,6 +17,12 @@ The Mermaid sources are authoritative:
   to the phone, Mac, and libkrun micro-VM and records the enforced isolation
   properties.
 
+The deployment view is also available as an
+[editable Excalidraw scene](deployment-security.excalidraw),
+[SVG](deployment-security.svg), and [PNG](deployment-security.png). These are
+generated representations; update the Mermaid model first and regenerate all
+three together.
+
 ## Model-to-code traceability
 
 | C4 element | Evidence in this workload |

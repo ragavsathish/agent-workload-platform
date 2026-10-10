@@ -16,6 +16,11 @@ security boundaries:
 The Mermaid sources are authoritative and trace each runtime element back to
 the configuration or code that implements it.
 
+[![Pipecat MLX Voice deployment and security boundaries](docs/architecture/deployment-security.png)](docs/architecture/deployment-security.excalidraw)
+
+[Open the editable Excalidraw scene](docs/architecture/deployment-security.excalidraw)
+or the [scalable SVG render](docs/architecture/deployment-security.svg).
+
 ```text
 iPhone browser
   │ HTTPS + verified identity (tailnet only)
