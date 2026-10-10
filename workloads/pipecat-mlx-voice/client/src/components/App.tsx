@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react';
 
 import type { PipecatBaseChildProps } from '@pipecat-ai/voice-ui-kit';
 import {
+  Button,
   ConnectButton,
   ConversationPanel,
   EventsPanel,
   UserAudioControl,
+  usePipecatConnectionState,
 } from '@pipecat-ai/voice-ui-kit';
 
+import { unlockBotAudio } from '../audio-unlock';
 import type { TransportType } from '../config';
 import { TaskPanel } from './TaskPanel';
 import { TransportSelect } from './TransportSelect';
@@ -19,6 +22,7 @@ interface AppProps extends PipecatBaseChildProps {
 }
 
 export const App = ({
+  client,
   handleConnect,
   handleDisconnect,
   transportType,
@@ -26,6 +30,16 @@ export const App = ({
   availableTransports,
 }: AppProps) => {
   const [tasksEnabled, setTasksEnabled] = useState(false);
+  const [soundStatus, setSoundStatus] = useState<
+    'idle' | 'running' | 'blocked'
+  >('idle');
+  const { isConnected } = usePipecatConnectionState();
+
+  const handleEnableSound = async () => {
+    if (!client) return;
+    const result = await unlockBotAudio(client);
+    setSoundStatus(result === 'running' ? 'running' : 'blocked');
+  };
 
   useEffect(() => {
     let active = true;
@@ -59,6 +73,18 @@ export const App = ({
           )}
           <div className="flex items-center gap-4">
             <UserAudioControl size="lg" />
+            {isConnected && (
+              <Button
+                size="lg"
+                variant={soundStatus === 'running' ? 'outline' : 'default'}
+                onClick={() => void handleEnableSound()}>
+                {soundStatus === 'running'
+                  ? 'Sound enabled'
+                  : soundStatus === 'blocked'
+                    ? 'Retry sound'
+                    : 'Enable sound'}
+              </Button>
+            )}
             <ConnectButton
               size="lg"
               onConnect={handleConnect}

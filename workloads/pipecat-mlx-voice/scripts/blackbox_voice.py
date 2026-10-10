@@ -109,6 +109,10 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         token = start.json()["token"]
 
     events: list[str] = []
+    bot_audio_bytes = 0
+    bot_audio_frames = 0
+    bot_audio_nonzero_samples = 0
+    bot_audio_peak = 0
     intro_finished = asyncio.Event()
     response_finished = asyncio.Event()
     sent_audio = False
@@ -130,12 +134,25 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         )
 
         async def receive() -> None:
-            nonlocal sent_audio
+            nonlocal bot_audio_bytes, bot_audio_frames
+            nonlocal bot_audio_nonzero_samples, bot_audio_peak, sent_audio
             async for raw in socket:
                 if not isinstance(raw, bytes):
                     continue
                 frame = frame_protos.Frame.FromString(raw)
-                if frame.WhichOneof("frame") != "message":
+                frame_kind = frame.WhichOneof("frame")
+                if frame_kind == "audio":
+                    samples = np.frombuffer(frame.audio.audio, dtype=np.int16)
+                    bot_audio_bytes += len(frame.audio.audio)
+                    bot_audio_frames += 1
+                    bot_audio_nonzero_samples += int(np.count_nonzero(samples))
+                    if samples.size:
+                        bot_audio_peak = max(
+                            bot_audio_peak,
+                            int(np.max(np.abs(samples.astype(np.int32)))),
+                        )
+                    continue
+                if frame_kind != "message":
                     continue
                 payload = json.loads(frame.message.data)
                 event_type = str(payload.get("type", ""))
@@ -167,9 +184,18 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
             receiver.cancel()
             await asyncio.gather(receiver, return_exceptions=True)
 
+    if bot_audio_nonzero_samples == 0:
+        raise RuntimeError("Pipecat returned no non-silent bot audio")
+
     return {
         "utterance_count": len(args.utterances),
         "pcm_bytes_16khz": [len(pcm) for _, pcm in utterance_audio],
+        "bot_audio": {
+            "bytes": bot_audio_bytes,
+            "frames": bot_audio_frames,
+            "nonzero_samples": bot_audio_nonzero_samples,
+            "peak": bot_audio_peak,
+        },
         "event_counts": dict(Counter(events)),
     }
 
