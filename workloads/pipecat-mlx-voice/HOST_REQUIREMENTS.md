@@ -20,6 +20,17 @@ Create `server/.env` from the example. Generate distinct random values for
 `POSTGRES_PASSWORD`. Configure the exact allowed Ollama model, MLX models, workspace roots, Pi
 binary, Pi model credentials, Gondolin extension, and Wassette permissions.
 
+Set `VOICE_DEFAULT_WORKSPACE` to one exact project below `ORCHESTRATOR_WORKSPACE_ROOTS`; spoken
+commands can then say “the default workspace” without asking speech recognition to reconstruct a
+filesystem path. Refresh Pi's provider subscription/login before enabling approvals. A stale login
+is recorded as a durable failed task rather than falling back to an unapproved provider.
+
+macOS protects `~/Documents`, `~/Desktop`, and similar locations from background LaunchAgents. If
+an allowed workspace is under one of those folders, grant Full Disk Access/Files and Folders access
+to the native worker chain (`host-worker.sh`, `uv`, Python, Node, and Pi), or place agent workspaces
+under an unprotected dedicated directory. Without that grant, a background Pi process can stall
+while resolving its working directory; the queue timeout remains the final containment.
+
 `make up` derives root-only Compose secret files under ignored `deploy/secrets/`; no secret is baked
 into an image. It also installs two LaunchAgents in `~/Library/Application Support/PipecatEdge`:
 
@@ -39,9 +50,10 @@ broker and gateway bearer tokens. Tailscale state and Postgres data use named Do
 | `127.0.0.1:11434` | Ollama | local exact-model inference |
 
 The agent gateway is reachable only on Compose's private networks. The voice/Tailscale network
-namespace publishes no Docker port. Docker Desktop may reach host loopback through
-`host.docker.internal`; the random broker capability and exact route/model limits are therefore
-part of the security boundary.
+namespace publishes no Docker port. Docker Desktop may reach host loopback through its host
+gateway. Compose assigns the dedicated `inference-broker` alias because Tailscale can also
+synthesize an IPv6 answer for `host.docker.internal`; the random broker capability and exact
+route/model limits are therefore part of the security boundary.
 
 ## Repeatability and updates
 

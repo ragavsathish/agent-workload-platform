@@ -1,6 +1,7 @@
 """Pipecat TTS service backed by MLX Audio on Apple Silicon."""
 
 import asyncio
+import sys
 import threading
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
@@ -16,6 +17,29 @@ from pipecat.services.settings import TTSSettings
 from pipecat.services.tts_service import TTSService
 from pipecat.utils.tracing.service_decorators import traced_tts
 from pipecat.utils.types import NOT_GIVEN, NotGiven, assert_given, require_given
+
+
+def _disable_broken_macos_espeak_fallback() -> None:
+    """Keep Kokoro alive when espeakng-loader ships unusable macOS data paths.
+
+    Misaki only uses espeak for out-of-dictionary English words.  The packaged
+    macOS library can call exit(0) while initializing its fallback, which kills
+    an executor thread and leaves the broker request pending forever.  Raising
+    a normal exception lets Kokoro use Misaki's primary English G2P safely.
+    """
+    if sys.platform != "darwin":
+        return
+
+    import misaki.espeak
+
+    class UnavailableEspeakFallback:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            raise RuntimeError("espeak fallback is disabled on macOS")
+
+    misaki.espeak.EspeakFallback = UnavailableEspeakFallback
+
+
+_disable_broken_macos_espeak_fallback()
 
 
 @lru_cache(maxsize=2)

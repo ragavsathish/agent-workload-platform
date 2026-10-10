@@ -13,8 +13,8 @@ import sys
 import urllib.request
 import wave
 
-BASE_URL = "http://host.docker.internal:9443"
-TOKEN = open("/run/secrets/broker-token", encoding="utf-8").read()
+BASE_URL = "http://inference-broker:9443"
+TOKEN = open("/run/secrets/broker-token", encoding="utf-8").read().strip()
 
 
 def request(path: str, body: bytes, content_type: str, timeout: int = 300):

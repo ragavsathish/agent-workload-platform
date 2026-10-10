@@ -52,13 +52,22 @@ make status       # Compose services, tailnet state, native service state
 make verify       # isolation, capabilities, ingress, broker, and gateway checks
 make recreate     # immutable container recreation plus verification
 make cycle-test   # three stop/recreate/schema cycles plus final recovery
+make blackbox-voice UTTERANCE="Propose a task in the default workspace to inspect it"
+make blackbox-e2e # synthetic voice through Pipecat plus a Postgres assertion
 make down         # stop Compose services; preserve Postgres and Tailscale volumes
 make check        # tests, lint, type checks, build, Compose and plist validation
 ```
 
 Only Postgres is published by Docker, on `127.0.0.1:54329`, so the native Pi worker can consume the
 queue. The native inference broker listens on `127.0.0.1:9443`; Docker Desktop makes that protected
-capability available as `host.docker.internal`. No service listens on the Mac LAN interface.
+capability available through the private `inference-broker` host-gateway alias. No service listens
+on the Mac LAN interface.
+
+The black-box runner synthesizes speech with Kokoro, streams it through the same authenticated
+WebSocket used by the browser, transcribes it with MLX Whisper, and exercises the LLM/tool path.
+Before Tailscale login it uses `deploy/compose.local-test.yml` as a non-listening network anchor;
+set `BLACKBOX_USE_TAILSCALE=true` to test an authenticated tunnel namespace. See
+[TESTING.md](TESTING.md) for assertions and failure interpretation.
 
 See [HOST_REQUIREMENTS.md](HOST_REQUIREMENTS.md) for the host contract and
 [docs/architecture](docs/architecture/README.md) for responsibility and threat-boundary details.

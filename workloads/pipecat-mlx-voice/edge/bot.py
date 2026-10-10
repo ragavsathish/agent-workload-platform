@@ -60,6 +60,7 @@ async def run_bot(transport: BaseTransport, identity: str):
     gateway_url = required_env("AGENT_GATEWAY_BASE_URL").rstrip("/")
     gateway_token = required_env("AGENT_GATEWAY_TOKEN")
     model = required_env("OLLAMA_MODEL")
+    default_workspace = required_env("VOICE_DEFAULT_WORKSPACE")
 
     stt = OpenAISTTService(
         api_key=broker_token,
@@ -79,7 +80,9 @@ async def run_bot(transport: BaseTransport, identity: str):
                 "allowed only in a later user turn when the user explicitly asks to approve that "
                 "pending task. Never approve in the same turn as proposal creation and never infer "
                 "approval from unrelated speech. Pi performs approved work "
-                "through Gondolin and Wassette MCP; do not claim the voice VM has host access."
+                "through Gondolin and Wassette MCP; do not claim the voice VM has host access. "
+                f"The configured default workspace is exactly {default_workspace}. When the user "
+                "says the default or current workspace, use that exact path without rewriting it."
             ),
         ),
     )
@@ -239,7 +242,9 @@ async def run_bot(transport: BaseTransport, identity: str):
         context.add_message(
             {
                 "role": "developer",
-                "content": f"Briefly introduce yourself to the authenticated user {identity}.",
+                "content": (
+                    f"The authenticated user is {identity}. Say exactly: Voice interface ready."
+                ),
             }
         )
         await worker.queue_frames([LLMRunFrame()])

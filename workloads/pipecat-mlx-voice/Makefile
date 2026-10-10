@@ -1,4 +1,4 @@
-.PHONY: setup build up down recreate verify cycle-test login status warm-models host-preflight install-host-services db-init broker worker pull-model check
+.PHONY: setup build up down recreate verify cycle-test login status warm-models blackbox-voice blackbox-e2e host-preflight install-host-services db-init broker worker pull-model check
 
 setup:
 	cd server && uv sync --python 3.13
@@ -35,6 +35,12 @@ status:
 
 warm-models:
 	./scripts/edge-warm-models.sh
+
+blackbox-voice:
+	./scripts/blackbox-voice.sh "$(UTTERANCE)"
+
+blackbox-e2e:
+	./scripts/blackbox-e2e.sh
 
 host-preflight:
 	./scripts/host-preflight.sh

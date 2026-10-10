@@ -101,6 +101,7 @@ def create_worker(settings: Settings) -> Absurd:
         default_cancellation={"max_duration": settings.task_timeout_seconds + 60},
     )
     def agent_run(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
+        task_id = str(ctx.task_id)
         workspace = ctx.step(
             "prepare-workspace",
             lambda: str(resolve_workspace(str(params["workspace"]), settings.workspace_roots)),
@@ -116,13 +117,13 @@ def create_worker(settings: Settings) -> Absurd:
         if intent.done:
             return {
                 "state": "needs_manual_reconciliation",
-                "session_id": ctx.task_id,
+                "session_id": task_id,
                 "message": "Pi started previously but did not checkpoint a result; not rerun.",
             }
-        ctx.complete_step(intent, {"started": True, "session_id": ctx.task_id})
+        ctx.complete_step(intent, {"started": True, "session_id": task_id})
         result = run_pi(
             settings,
-            task_id=ctx.task_id,
+            task_id=task_id,
             instruction=str(params["instruction"]),
             workspace=Path(workspace),
         )

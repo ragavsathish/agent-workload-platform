@@ -42,7 +42,10 @@ services:
       ABSURD_QUEUE: ${ABSURD_QUEUE:-agents}
       WORKER_TASK_TIMEOUT_SECONDS: ${WORKER_TASK_TIMEOUT_SECONDS:-1800}
     secrets: [agent-gateway-token, database-url, approval-secret]
-    networks: [control, data]
+    networks:
+      control:
+        ipv4_address: 172.30.90.3
+      data:
     read_only: true
     tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=64m"]
     cap_drop: [ALL]
@@ -62,7 +65,14 @@ services:
       TS_HOSTNAME: pipecat-edge
       TS_ACCEPT_DNS: "false"
     volumes: [tailscale-state:/var/lib/tailscale]
-    networks: [control]
+    # Voice shares this service's network namespace; pin its two capability
+    # endpoints here because the userspace netstack can disrupt glibc DNS.
+    extra_hosts:
+      - "inference-broker:host-gateway"
+      - "agent-gateway:172.30.90.3"
+    networks:
+      control:
+        ipv4_address: 172.30.90.2
     read_only: true
     tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=64m"]
     cap_drop: [ALL]
@@ -86,8 +96,9 @@ services:
     network_mode: service:tailscale
     env_file: [../edge/.env]
     environment:
-      INFERENCE_BROKER_BASE_URL: http://host.docker.internal:9443/v1
+      INFERENCE_BROKER_BASE_URL: http://inference-broker:9443/v1
       AGENT_GATEWAY_BASE_URL: http://agent-gateway:9444/v1
+      VOICE_DEFAULT_WORKSPACE: ${VOICE_DEFAULT_WORKSPACE:?set VOICE_DEFAULT_WORKSPACE in server/.env}
     secrets: [broker-token, agent-gateway-token]
     read_only: true
     tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=256m"]
@@ -104,6 +115,9 @@ volumes:
 
 networks:
   control:
+    ipam:
+      config:
+        - subnet: 172.30.90.0/24
   data:
     internal: true
   host-access:

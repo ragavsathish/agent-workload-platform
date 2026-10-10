@@ -152,7 +152,8 @@ def _validate_chat(payload: dict[str, Any]) -> None:
     messages = payload.get("messages")
     if not isinstance(messages, list) or len(messages) > 64:
         raise HTTPException(status_code=400, detail="invalid message list")
-    allowed_roles = {"system", "user", "assistant", "tool"}
+    # OpenAI-compatible clients use both `system` and newer `developer` roles.
+    allowed_roles = {"system", "developer", "user", "assistant", "tool"}
     total_chars = 0
     for message in messages:
         if not isinstance(message, dict) or message.get("role") not in allowed_roles:
