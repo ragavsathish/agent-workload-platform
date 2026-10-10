@@ -82,7 +82,8 @@ async def run_bot(transport: BaseTransport, identity: str):
                 "approval from unrelated speech. Pi performs approved work "
                 "through Gondolin and Wassette MCP; do not claim the voice VM has host access. "
                 f"The configured default workspace is exactly {default_workspace}. When the user "
-                "says the default or current workspace, use that exact path without rewriting it."
+                "says the default or current workspace, use that exact logical name without "
+                "rewriting it."
             ),
         ),
     )
@@ -179,7 +180,7 @@ async def run_bot(transport: BaseTransport, identity: str):
                 },
                 "workspace": {
                     "type": "string",
-                    "description": "Absolute path to the intended host project workspace.",
+                    "description": "Allowlisted logical name of the intended project workspace.",
                 },
             },
             required=["instruction", "workspace"],

@@ -6,7 +6,7 @@ identity="${BLACKBOX_IDENTITY:-you@example.com}"
 compose=(docker compose --env-file "$repo_dir/server/.env" -f "$repo_dir/deploy/compose.yml" -f "$repo_dir/deploy/compose.local-test.yml")
 
 ORCHESTRATOR_ALLOWED_USERS="$identity" \
-  "${compose[@]}" up -d --wait --build tailscale postgres agent-gateway voice-edge >/dev/null
+  "${compose[@]}" up -d --wait --build tailscale s3mock postgres agent-gateway voice-edge >/dev/null
 
 before="$("${compose[@]}" exec -T postgres psql -U voice_agents -d voice_agents -Atc \
   "SELECT count(*) FROM voice_task_proposals")"
@@ -31,5 +31,6 @@ IFS='|' read -r actual_identity status workspace <<<"$latest"
 expected_workspace="$(sed -n 's/^VOICE_DEFAULT_WORKSPACE=//p' "$repo_dir/server/.env" | tail -1)"
 [[ "$actual_identity" == "$identity" ]] || { echo "FAIL persisted identity mismatch" >&2; exit 1; }
 [[ "$status" == "pending" ]] || { echo "FAIL proposal should remain pending" >&2; exit 1; }
-[[ "$workspace" == "$expected_workspace" ]] || { echo "FAIL persisted workspace mismatch" >&2; exit 1; }
+expected_prefix="s3://agent-artifacts/workspaces/$expected_workspace/sources/"
+[[ "$workspace" == "$expected_prefix"*.bundle ]] || { echo "FAIL persisted immutable workspace mismatch" >&2; exit 1; }
 echo "PASS synthetic voice created one pending, identity-bound Postgres proposal"

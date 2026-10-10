@@ -34,16 +34,12 @@ if [[ -f "$host_env" ]]; then
   [[ ${#agent_token} -ge 32 && "$agent_token" != replace-with-* ]] && pass "agent gateway capability is configured" || fail "AGENT_GATEWAY_TOKEN must be a generated value of at least 32 characters"
   postgres_password="$(sed -n 's/^POSTGRES_PASSWORD=//p' "$host_env" | tail -1)"
   [[ ${#postgres_password} -ge 16 && "$postgres_password" != replace-with-* ]] && pass "Postgres password is configured" || fail "POSTGRES_PASSWORD must be a generated value of at least 16 characters"
-  for key in OLLAMA_MODEL MLX_STT_MODEL MLX_TTS_MODEL VOICE_DEFAULT_WORKSPACE; do
+  for key in OLLAMA_MODEL MLX_STT_MODEL MLX_TTS_MODEL VOICE_DEFAULT_WORKSPACE ORCHESTRATOR_ALLOWED_WORKSPACES ARTIFACT_ENDPOINT_URL ARTIFACT_BUCKET; do
     grep -Eq "^${key}=.+" "$host_env" && pass "$key is configured" || fail "$key is missing from server/.env"
   done
   default_workspace="$(sed -n 's/^VOICE_DEFAULT_WORKSPACE=//p' "$host_env" | tail -1)"
-  [[ -d "$default_workspace" ]] && pass "default voice workspace exists" || fail "VOICE_DEFAULT_WORKSPACE must be an existing directory"
-  case "$default_workspace" in
-    "$HOME/Documents"/*|"$HOME/Desktop"/*|"$HOME/Downloads"/*)
-      warn "default workspace is macOS privacy-protected; grant the native worker chain folder access"
-      ;;
-  esac
+  allowed_workspaces="$(sed -n 's/^ORCHESTRATOR_ALLOWED_WORKSPACES=//p' "$host_env" | tail -1)"
+  [[ ",$allowed_workspaces," == *",$default_workspace,"* ]] && pass "default logical workspace is allowlisted" || fail "VOICE_DEFAULT_WORKSPACE must be in ORCHESTRATOR_ALLOWED_WORKSPACES"
 else
   fail "server/.env is missing; run make setup"
 fi

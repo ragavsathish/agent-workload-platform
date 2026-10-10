@@ -8,7 +8,7 @@ pass() { printf 'PASS  %s\n' "$*"; }
 warn() { printf 'WARN  %s\n' "$*"; }
 fail() { printf 'FAIL  %s\n' "$*"; failures=$((failures + 1)); }
 
-for service in postgres agent-gateway tailscale voice-edge; do
+for service in s3mock postgres agent-gateway tailscale voice-edge; do
   cid="$("${compose[@]}" ps -q "$service")"
   if [[ -n "$cid" && "$(docker inspect -f '{{.State.Running}}' "$cid")" == true ]]; then
     pass "$service is running"
@@ -17,7 +17,7 @@ for service in postgres agent-gateway tailscale voice-edge; do
   fi
 done
 
-for service in agent-gateway tailscale voice-edge; do
+for service in s3mock agent-gateway tailscale voice-edge; do
   cid="$("${compose[@]}" ps -q "$service")"
   [[ "$(docker inspect -f '{{.HostConfig.ReadonlyRootfs}}' "$cid")" == true ]] && pass "$service root filesystem is read-only" || fail "$service root filesystem is writable"
   [[ "$(docker inspect -f '{{json .HostConfig.CapDrop}}' "$cid")" == '["ALL"]' ]] && pass "$service drops all capabilities" || fail "$service does not drop all capabilities"
@@ -30,6 +30,16 @@ if docker inspect -f '{{json .NetworkSettings.Ports}}' "$("${compose[@]}" ps -q 
   pass "Postgres is published only on host loopback"
 else
   fail "Postgres loopback publication is missing"
+fi
+if docker inspect -f '{{json .NetworkSettings.Ports}}' "$("${compose[@]}" ps -q s3mock)" | grep -q '127.0.0.1'; then
+  pass "S3Mock is published only on host loopback"
+else
+  fail "S3Mock loopback publication is missing"
+fi
+if docker inspect -f '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}' "$("${compose[@]}" ps -q s3mock)" | grep -q '/Documents'; then
+  fail "S3Mock binds a Documents path"
+else
+  pass "S3Mock uses no Documents bind mount"
 fi
 [[ -z "$(docker port "$("${compose[@]}" ps -q tailscale)" 2>/dev/null)" ]] && pass "voice/Tailscale namespace publishes no Docker port" || fail "voice/Tailscale publishes a Docker port"
 
@@ -52,6 +62,11 @@ for _ in {1..5}; do
   sleep 1
 done
 [[ "$gateway_ready" == 1 ]] && pass "voice edge reaches the capability-protected gateway" || fail "voice edge cannot reach the agent gateway"
+if "${compose[@]}" exec -T agent-gateway /app/.venv/bin/python -c 'import os,boto3; from botocore.client import Config; c=boto3.client("s3",endpoint_url=os.environ["ARTIFACT_ENDPOINT_URL"],aws_access_key_id=os.environ["ARTIFACT_ACCESS_KEY"],aws_secret_access_key=os.environ["ARTIFACT_SECRET_KEY"],region_name="us-east-1",config=Config(s3={"addressing_style":"path"},response_checksum_validation="when_required")); c.head_bucket(Bucket=os.environ["ARTIFACT_BUCKET"])' >/dev/null 2>&1; then
+  pass "gateway reaches the private artifact bucket"
+else
+  fail "gateway cannot reach the private artifact bucket"
+fi
 
 for label in com.sathish.pipecat-broker com.sathish.pipecat-worker; do
   launchctl print "gui/$UID/$label" >/dev/null 2>&1 && pass "$label is loaded" || fail "$label is not loaded"

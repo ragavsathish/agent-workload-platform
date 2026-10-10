@@ -13,6 +13,7 @@ import psycopg
 from absurd_sdk import Absurd, TaskResultSnapshot
 from psycopg.rows import dict_row
 
+from .artifacts import ArtifactStore
 from .config import Settings
 from .security import ApprovalError, mint_approval, plan_hash, verify_approval
 from .workspaces import resolve_workspace, validate_workspace_boundary
@@ -26,16 +27,31 @@ class TaskService:
     def __init__(self, settings: Settings):
         settings.require_api()
         self.settings = settings
+        self.artifacts = (
+            ArtifactStore(
+                endpoint_url=settings.artifact_endpoint_url,
+                bucket=settings.artifact_bucket,
+                access_key=settings.artifact_access_key,
+                secret_key=settings.artifact_secret_key,
+            )
+            if settings.artifact_workspaces
+            else None
+        )
 
     def _plan(self, instruction: str, workspace: str) -> dict[str, str]:
         cleaned = instruction.strip()
         if not cleaned:
             raise ProposalError("instruction cannot be empty")
-        resolved = (
-            validate_workspace_boundary(workspace, self.settings.workspace_roots)
-            if self.settings.defer_workspace_validation
-            else resolve_workspace(workspace, self.settings.workspace_roots)
-        )
+        if self.artifacts:
+            resolved = self.artifacts.resolve_workspace(
+                workspace, self.settings.allowed_workspaces
+            )
+        else:
+            resolved = (
+                validate_workspace_boundary(workspace, self.settings.workspace_roots)
+                if self.settings.defer_workspace_validation
+                else resolve_workspace(workspace, self.settings.workspace_roots)
+            )
         return {"instruction": cleaned, "workspace": str(resolved)}
 
     def propose(self, *, identity: str, instruction: str, workspace: str) -> dict[str, Any]:

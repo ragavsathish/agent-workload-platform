@@ -13,7 +13,7 @@ uv run --project server python deploy/prepare_edge_env.py edge/.env
 uv run --project server python deploy/prepare_compose.py "$root"
 
 "${compose[@]}" build
-"${compose[@]}" up -d --wait postgres
+"${compose[@]}" up -d --wait postgres s3mock
 "$root/scripts/db-init.sh"
 "$root/scripts/install-launch-agents.sh"
 "${compose[@]}" up -d --wait

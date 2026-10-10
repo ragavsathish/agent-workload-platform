@@ -1,4 +1,4 @@
-.PHONY: setup build up down recreate verify cycle-test login status warm-models benchmark-mlx blackbox-voice blackbox-e2e host-preflight install-host-services db-init broker worker pull-model check
+.PHONY: setup build up down recreate verify cycle-test login status warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e host-preflight install-host-services db-init broker worker pull-model check
 
 setup:
 	cd server && uv sync --python 3.13
@@ -38,6 +38,9 @@ warm-models:
 
 benchmark-mlx:
 	./scripts/benchmark-mlx.sh
+
+publish-workspace:
+	./scripts/publish-workspace.sh "$(WORKSPACE_ID)" "$(REPOSITORY)"
 
 blackbox-voice:
 	./scripts/blackbox-voice.sh "$(UTTERANCE)"

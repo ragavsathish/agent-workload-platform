@@ -134,7 +134,7 @@ async def run_bot(transport: BaseTransport, identity: str):
             },
             "workspace": {
                 "type": "string",
-                "description": "Absolute path to the intended project workspace.",
+                "description": "Allowlisted logical name of the intended project workspace.",
             },
         },
         required=["instruction", "workspace"],

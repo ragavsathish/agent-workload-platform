@@ -11,6 +11,7 @@ from typing import Any, cast
 from absurd_sdk import Absurd, TaskContext
 from dotenv import load_dotenv
 
+from .artifacts import ArtifactStore
 from .config import Settings
 from .workspaces import resolve_workspace
 
@@ -54,6 +55,9 @@ def validate_worker(settings: Settings) -> None:
     if not settings.gondolin_extension and not settings.allow_unsandboxed:
         raise RuntimeError("secure worker requires PI_GONDOLIN_EXTENSION")
     settings.pi_session_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if settings.artifact_workspaces:
+        settings.worker_scratch_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(settings.worker_scratch_root, 0o700)
 
 
 def run_pi(
@@ -93,6 +97,16 @@ def run_pi(
 def create_worker(settings: Settings) -> Absurd:
     validate_worker(settings)
     absurd = Absurd(settings.database_url, queue_name=settings.queue, default_max_attempts=1)
+    artifacts = (
+        ArtifactStore(
+            endpoint_url=settings.artifact_endpoint_url,
+            bucket=settings.artifact_bucket,
+            access_key=settings.artifact_access_key,
+            secret_key=settings.artifact_secret_key,
+        )
+        if settings.artifact_workspaces
+        else None
+    )
 
     @absurd.register_task(
         "agent-run",
@@ -102,10 +116,6 @@ def create_worker(settings: Settings) -> Absurd:
     )
     def agent_run(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
         task_id = str(ctx.task_id)
-        workspace = ctx.step(
-            "prepare-workspace",
-            lambda: str(resolve_workspace(str(params["workspace"]), settings.workspace_roots)),
-        )
         run_handle = ctx.begin_step("run-pi")
         if run_handle.done:
             return cast(dict[str, Any], run_handle.state)
@@ -121,12 +131,35 @@ def create_worker(settings: Settings) -> Absurd:
                 "message": "Pi started previously but did not checkpoint a result; not rerun.",
             }
         ctx.complete_step(intent, {"started": True, "session_id": task_id})
-        result = run_pi(
-            settings,
-            task_id=task_id,
-            instruction=str(params["instruction"]),
-            workspace=Path(workspace),
-        )
+        if artifacts:
+            with artifacts.materialize_workspace(
+                str(params["workspace"]), settings.worker_scratch_root
+            ) as workspace:
+                result = run_pi(
+                    settings,
+                    task_id=task_id,
+                    instruction=str(params["instruction"]),
+                    workspace=workspace,
+                )
+                result["artifacts"] = artifacts.capture_result(
+                    task_id=task_id,
+                    workspace=workspace,
+                    execution=result,
+                    max_bytes=settings.max_artifact_bytes,
+                )
+        else:
+            workspace = ctx.step(
+                "prepare-workspace",
+                lambda: str(
+                    resolve_workspace(str(params["workspace"]), settings.workspace_roots)
+                ),
+            )
+            result = run_pi(
+                settings,
+                task_id=task_id,
+                instruction=str(params["instruction"]),
+                workspace=Path(workspace),
+            )
         return ctx.complete_step(run_handle, result)
 
     return absurd

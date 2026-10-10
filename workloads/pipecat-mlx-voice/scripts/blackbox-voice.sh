@@ -11,7 +11,7 @@ fi
 
 if [[ "${BLACKBOX_SKIP_UP:-false}" != "true" ]]; then
   ORCHESTRATOR_ALLOWED_USERS="${BLACKBOX_IDENTITY:-you@example.com}" \
-    "${compose[@]}" up -d --wait --build tailscale agent-gateway voice-edge >/dev/null
+    "${compose[@]}" up -d --wait --build tailscale s3mock agent-gateway voice-edge >/dev/null
 fi
 "${compose[@]}" \
   exec -T voice-edge /app/.venv/bin/python - "$@" < "$repo_dir/scripts/blackbox_voice.py"

@@ -16,7 +16,7 @@ SVG render.
 - The voice edge is non-root, read-only, capability-free, resource-bounded, and has no host mount or
   Docker socket.
 - Separate bearer capabilities expose only bounded inference and propose/status/approve/cancel.
-- Database credentials, Pi/provider authentication, sessions, and workspaces never enter the voice
+- Database credentials, Pi/provider authentication, sessions, and writable workspaces never enter the voice
   container.
 - The Pi worker runs on macOS and delegates tools to Gondolin micro-VMs and permission-scoped
   Wassette components.
@@ -53,16 +53,23 @@ make verify       # isolation, capabilities, ingress, broker, and gateway checks
 make recreate     # immutable container recreation plus verification
 make cycle-test   # three stop/recreate/schema cycles plus final recovery
 make benchmark-mlx # warm CPU, RSS, tokens/s, and realtime-factor benchmark
+make publish-workspace WORKSPACE_ID=agent-workload-platform REPOSITORY=/path/to/repository
 make blackbox-voice UTTERANCE="Propose a task in the default workspace to inspect it"
 make blackbox-e2e # synthetic voice through Pipecat plus a Postgres assertion
 make down         # stop Compose services; preserve Postgres and Tailscale volumes
 make check        # tests, lint, type checks, build, Compose and plist validation
 ```
 
-Only Postgres is published by Docker, on `127.0.0.1:54329`, so the native Pi worker can consume the
-queue. The native inference broker listens on `127.0.0.1:9443`; Docker Desktop makes that protected
+Postgres and S3Mock are published only on host loopback so the native Pi worker can consume the
+queue and immutable workspace bundles. The native inference broker listens on `127.0.0.1:9443`; Docker Desktop makes that protected
 capability available through the private `inference-broker` host-gateway alias. No service listens
 on the Mac LAN interface.
+
+S3Mock stores committed Git bundles and result patches in a Docker named volume; it never
+bind-mounts `~/Documents`. Each task verifies the bundle digest, expands it beneath
+`~/.local/share/agent-workload-platform/workspaces`, uploads its patch/status/result, and deletes
+the scratch directory. The mock validates the local artifact contract, not production IAM or
+durability; swap its endpoint for a real S3-compatible service before relying on those guarantees.
 
 The black-box runner synthesizes speech with Kokoro, streams it through the same authenticated
 WebSocket used by the browser, transcribes it with MLX Whisper, and exercises the LLM/tool path.

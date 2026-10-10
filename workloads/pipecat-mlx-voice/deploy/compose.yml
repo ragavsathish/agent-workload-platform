@@ -1,6 +1,44 @@
 name: pipecat-mlx-voice
 
 services:
+  s3mock-init:
+    image: adobe/s3mock:5.0.0@sha256:c461c8f4234bd63540d2f3a3cabce69d814c78dc890a5af08727525a028e23da
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["chown 65532:65532 /s3mockroot"]
+    volumes: [s3mock-data:/s3mockroot]
+    network_mode: none
+    cap_drop: [ALL]
+    cap_add: [CHOWN]
+    security_opt: [no-new-privileges:true]
+    restart: "no"
+
+  s3mock:
+    image: adobe/s3mock:5.0.0@sha256:c461c8f4234bd63540d2f3a3cabce69d814c78dc890a5af08727525a028e23da
+    restart: unless-stopped
+    depends_on:
+      s3mock-init:
+        condition: service_completed_successfully
+    environment:
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: ${ARTIFACT_BUCKET:-agent-artifacts}
+      COM_ADOBE_TESTING_S3MOCK_STORE_ROOT: /s3mockroot
+      COM_ADOBE_TESTING_S3MOCK_STORE_RETAIN_FILES_ON_EXIT: "true"
+    ports: ["127.0.0.1:9090:9090"]
+    volumes: [s3mock-data:/s3mockroot]
+    networks: [data, host-access]
+    user: "65532:65532"
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=64m,uid=65532,gid=65532"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9090/"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
   postgres:
     image: postgres@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
     restart: unless-stopped
@@ -29,6 +67,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      s3mock:
+        condition: service_healthy
     environment:
       AGENT_GATEWAY_HOST: 0.0.0.0
       AGENT_GATEWAY_PORT: "9444"
@@ -37,10 +77,15 @@ services:
       ORCHESTRATOR_APPROVAL_SECRET_FILE: /run/secrets/approval-secret
       ORCHESTRATOR_APPROVAL_TTL_SECONDS: ${ORCHESTRATOR_APPROVAL_TTL_SECONDS:-300}
       ORCHESTRATOR_ALLOWED_USERS: ${ORCHESTRATOR_ALLOWED_USERS:-}
-      ORCHESTRATOR_WORKSPACE_ROOTS: ${ORCHESTRATOR_WORKSPACE_ROOTS:?set ORCHESTRATOR_WORKSPACE_ROOTS in server/.env}
+      ORCHESTRATOR_WORKSPACE_ROOTS: ${ORCHESTRATOR_WORKSPACE_ROOTS:-}
       ORCHESTRATOR_DEFER_WORKSPACE_VALIDATION: "true"
       ABSURD_QUEUE: ${ABSURD_QUEUE:-agents}
       WORKER_TASK_TIMEOUT_SECONDS: ${WORKER_TASK_TIMEOUT_SECONDS:-1800}
+      ARTIFACT_ENDPOINT_URL: http://s3mock:9090
+      ARTIFACT_BUCKET: ${ARTIFACT_BUCKET:-agent-artifacts}
+      ARTIFACT_ACCESS_KEY: ${ARTIFACT_ACCESS_KEY:-local-test}
+      ARTIFACT_SECRET_KEY: ${ARTIFACT_SECRET_KEY:-local-test}
+      ORCHESTRATOR_ALLOWED_WORKSPACES: ${ORCHESTRATOR_ALLOWED_WORKSPACES:?set ORCHESTRATOR_ALLOWED_WORKSPACES in server/.env}
     secrets: [agent-gateway-token, database-url, approval-secret]
     networks:
       control:
@@ -110,6 +155,7 @@ services:
     cpus: 2
 
 volumes:
+  s3mock-data:
   postgres-data:
   tailscale-state:
 

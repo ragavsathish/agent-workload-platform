@@ -21,6 +21,17 @@ The default local mode uses `deploy/compose.local-test.yml`. It keeps the shared
 stable when Tailscale has not yet been authenticated, but opens no listener and provides no tunnel.
 After `make login`, set `BLACKBOX_USE_TAILSCALE=true` to retain the real sidecar while testing.
 
+Before the first voice task, publish the exact committed source snapshot:
+
+```bash
+make publish-workspace \
+  WORKSPACE_ID=agent-workload-platform \
+  REPOSITORY=/path/to/agent-workload-platform
+```
+
+The proposal stores the resulting content-addressed S3 URI, not a host filesystem path.
+Verification also asserts that S3Mock is loopback-only and has no Documents bind mount.
+
 Verify durable results without displaying capabilities:
 
 ```bash
@@ -44,6 +55,6 @@ Expected security properties:
 
 The test is deliberately exploratory: inspect transcript segmentation and the exact plan persisted
 by the LLM, and vary silence, clipping, identity, origin, workspace, and approval phrasing. A
-successful transport test does not imply a successful agent run; Pi provider login and macOS
-background-folder permissions are separate host prerequisites documented in
+successful transport test does not imply a successful agent run; Pi provider login remains a
+separate host prerequisite documented in
 [HOST_REQUIREMENTS.md](HOST_REQUIREMENTS.md).
