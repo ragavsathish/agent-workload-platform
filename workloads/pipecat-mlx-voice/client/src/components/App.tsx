@@ -19,7 +19,6 @@ interface AppProps extends PipecatBaseChildProps {
 }
 
 export const App = ({
-  client,
   handleConnect,
   handleDisconnect,
   transportType,
@@ -27,10 +26,6 @@ export const App = ({
   availableTransports,
 }: AppProps) => {
   const [tasksEnabled, setTasksEnabled] = useState(false);
-
-  useEffect(() => {
-    client?.initDevices();
-  }, [client]);
 
   useEffect(() => {
     let active = true;
