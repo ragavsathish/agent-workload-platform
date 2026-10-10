@@ -15,6 +15,7 @@ import uuid
 import wave
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -79,6 +80,7 @@ def find_pid(marker: str) -> int:
 
 
 def authorized_request(
+    base_url: str,
     token: str,
     path: str,
     body: bytes,
@@ -86,7 +88,7 @@ def authorized_request(
     timeout: int = 300,
 ) -> bytes:
     request = urllib.request.Request(
-        f"http://127.0.0.1:9443{path}",
+        f"{base_url.rstrip('/')}{path}",
         data=body,
         headers={"Authorization": f"Bearer {token}", "Content-Type": content_type},
     )
@@ -94,8 +96,11 @@ def authorized_request(
         return response.read()
 
 
-def json_request(token: str, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+def json_request(
+    base_url: str, token: str, path: str, payload: dict[str, Any]
+) -> dict[str, Any]:
     result = authorized_request(
+        base_url,
         token,
         path,
         json.dumps(payload).encode(),
@@ -103,7 +108,7 @@ def json_request(token: str, path: str, payload: dict[str, Any]) -> dict[str, An
     )
     parsed = json.loads(result)
     if not isinstance(parsed, dict):
-        raise RuntimeError("broker returned a non-object response")
+        raise TypeError("broker returned a non-object response")
     return parsed
 
 
@@ -141,7 +146,7 @@ def sample_operation(
             / (current.observed_at - previous.observed_at)
             * 100
         )
-        for previous, current in zip(samples, samples[1:], strict=False)
+        for previous, current in pairwise(samples)
         if current.observed_at > previous.observed_at
     )
     return BenchmarkResult(
@@ -191,6 +196,8 @@ def summarize(results: list[BenchmarkResult]) -> None:
     )
     for stage in ("llm", "tts", "stt"):
         rows = [result for result in results if result.stage == stage]
+        if not rows:
+            continue
         unit = rows[0].unit
         print(
             f"{stage:5}  {statistics.median(r.wall_seconds for r in rows):11.2f}  "
@@ -206,9 +213,20 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--iterations", type=int, default=3)
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--base-url", default="http://127.0.0.1:9443")
+    parser.add_argument("--broker-marker", default="/python3 inference_broker.py")
+    parser.add_argument("--label", default="python")
+    parser.add_argument("--stt-wav", type=Path)
+    parser.add_argument(
+        "--skip-stt",
+        action="store_true",
+        help="benchmark LLM and TTS only; use when no enrolled owner recording is available",
+    )
     args = parser.parse_args()
     if args.iterations < 1:
         raise SystemExit("--iterations must be positive")
+    if args.skip_stt and args.stt_wav:
+        raise SystemExit("--skip-stt and --stt-wav are mutually exclusive")
 
     env_file = Path(__file__).resolve().parents[1] / "server" / ".env"
     values = {}
@@ -218,14 +236,14 @@ def main() -> None:
             values[key] = value
     token = values["INFERENCE_BROKER_TOKEN"]
     model = values["OLLAMA_MODEL"]
-    broker_pid = find_pid("/python3 inference_broker.py")
-    ollama_pid = find_pid("ollama runner --mlx-engine")
+    broker_pid = find_pid(args.broker_marker)
 
     speech_text = (
         "This is a local Apple Silicon benchmark of the private voice assistant. "
         "It measures speech generation and transcription while keeping all audio on this Mac."
     )
     seed_pcm = authorized_request(
+        args.base_url,
         token,
         "/v1/audio/speech",
         json.dumps(
@@ -238,10 +256,27 @@ def main() -> None:
         ).encode(),
         "application/json",
     )
-    wav, audio_seconds = pcm_24k_to_wav_16k(seed_pcm)
-    form, form_type = multipart_wav(wav)
-    authorized_request(token, "/v1/audio/transcriptions", form, form_type)
+    wav: bytes | None = None
+    audio_seconds: float | None = None
+    if not args.skip_stt:
+        if args.stt_wav:
+            owner_wav = args.stt_wav.read_bytes()
+            wav = owner_wav
+            with wave.open(io.BytesIO(owner_wav), "rb") as source:
+                if (
+                    source.getnchannels() != 1
+                    or source.getsampwidth() != 2
+                    or source.getframerate() != 16_000
+                ):
+                    raise RuntimeError("--stt-wav must be mono PCM16 at 16 kHz")
+                audio_seconds = source.getnframes() / source.getframerate()
+        else:
+            wav, audio_seconds = pcm_24k_to_wav_16k(seed_pcm)
+        assert wav is not None
+        form, form_type = multipart_wav(wav)
+        authorized_request(args.base_url, token, "/v1/audio/transcriptions", form, form_type)
     json_request(
+        args.base_url,
         token,
         "/v1/chat/completions",
         {
@@ -251,11 +286,13 @@ def main() -> None:
             "max_tokens": 32,
         },
     )
+    ollama_pid = find_pid("ollama runner --mlx-engine")
 
     results: list[BenchmarkResult] = []
     for iteration in range(1, args.iterations + 1):
         def llm() -> tuple[float, str]:
             response = json_request(
+                args.base_url,
                 token,
                 "/v1/chat/completions",
                 {
@@ -285,8 +322,9 @@ def main() -> None:
 
         generated: list[bytes] = []
 
-        def tts() -> tuple[float, str]:
+        def tts(output: list[bytes] = generated) -> tuple[float, str]:
             pcm = authorized_request(
+                args.base_url,
                 token,
                 "/v1/audio/speech",
                 json.dumps(
@@ -299,7 +337,7 @@ def main() -> None:
                 ).encode(),
                 "application/json",
             )
-            generated.append(pcm)
+            output.append(pcm)
             return len(pcm) / 2 / 24_000, "audio-seconds"
 
         results.append(
@@ -307,36 +345,57 @@ def main() -> None:
                 stage="tts", iteration=iteration, pid=broker_pid, operation=tts
             )
         )
-        current_wav, current_seconds = pcm_24k_to_wav_16k(generated[0])
-        current_form, current_type = multipart_wav(current_wav)
+        if not args.skip_stt:
+            if args.stt_wav:
+                assert wav is not None and audio_seconds is not None
+                current_wav, current_seconds = wav, audio_seconds
+            else:
+                current_wav, current_seconds = pcm_24k_to_wav_16k(generated[0])
+            current_form, current_type = multipart_wav(current_wav)
 
-        def stt() -> tuple[float, str]:
-            authorized_request(
-                token, "/v1/audio/transcriptions", current_form, current_type
-            )
-            return current_seconds, "audio-seconds"
+            def stt(
+                form: bytes = current_form,
+                content_type: str = current_type,
+                seconds: float = current_seconds,
+            ) -> tuple[float, str]:
+                authorized_request(
+                    args.base_url,
+                    token,
+                    "/v1/audio/transcriptions",
+                    form,
+                    content_type,
+                )
+                return seconds, "audio-seconds"
 
-        results.append(
-            sample_operation(
-                stage="stt", iteration=iteration, pid=broker_pid, operation=stt
+            results.append(
+                sample_operation(
+                    stage="stt", iteration=iteration, pid=broker_pid, operation=stt
+                )
             )
-        )
 
     metadata = {
         "model": model,
+        "label": args.label,
+        "base_url": args.base_url,
         "iterations": args.iterations,
         "logical_cpus": os.cpu_count(),
         "broker_pid": broker_pid,
         "ollama_pid": ollama_pid,
         "input_audio_seconds": audio_seconds,
+        "stt_skipped": args.skip_stt,
         "results": [asdict(result) for result in results],
     }
     if args.json:
         print(json.dumps(metadata, indent=2))
     else:
-        print(
-            f"model={model} iterations={args.iterations} logical_cpus={os.cpu_count()} "
+        input_summary = (
             f"input_audio={audio_seconds:.2f}s"
+            if audio_seconds is not None
+            else "input_audio=skipped"
+        )
+        print(
+            f"label={args.label} model={model} iterations={args.iterations} logical_cpus={os.cpu_count()} "
+            f"{input_summary}"
         )
         summarize(results)
 
