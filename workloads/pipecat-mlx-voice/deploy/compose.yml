@@ -98,6 +98,8 @@ services:
     pids_limit: 128
     mem_limit: 512m
     cpus: 1
+    logging:
+      driver: none
 
   tailscale:
     image: docker.io/tailscale/tailscale@sha256:c507f3a2a6ab1cabd8d809b98edeb41edbd5c3fb6ad9632ffd098b4c7d0b4065
@@ -153,6 +155,8 @@ services:
     pids_limit: 256
     mem_limit: 2g
     cpus: 2
+    logging:
+      driver: none
 
 volumes:
   s3mock-data:

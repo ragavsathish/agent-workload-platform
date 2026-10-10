@@ -27,6 +27,9 @@ from pydantic import BaseModel, Field
 
 from mlx_tts import synthesize_pcm
 
+# The broker handles raw voice data. Do not emit library or application logs from this process.
+logger.remove()
+
 load_dotenv(os.getenv("INFERENCE_BROKER_ENV_FILE", ".env"), override=True)
 
 MAX_AUDIO_BYTES = int(os.getenv("BROKER_MAX_AUDIO_BYTES", "4194304"))

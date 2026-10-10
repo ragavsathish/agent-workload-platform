@@ -25,6 +25,11 @@ for service in s3mock agent-gateway tailscale voice-edge; do
   docker inspect -f '{{range .Mounts}}{{println .Destination}}{{end}}' "$cid" | grep -Fxq /var/run/docker.sock && fail "$service has the Docker socket" || pass "$service has no Docker socket"
 done
 
+for service in agent-gateway voice-edge; do
+  cid="$("${compose[@]}" ps -q "$service")"
+  [[ "$(docker inspect -f '{{.HostConfig.LogConfig.Type}}' "$cid")" == none ]] && pass "$service retains no Docker logs" || fail "$service Docker logging is enabled"
+done
+
 published="$("${compose[@]}" ps --format json | sed -n 's/.*"Publishers":\[\([^]]*\)\].*/\1/p')"
 if docker inspect -f '{{json .NetworkSettings.Ports}}' "$("${compose[@]}" ps -q postgres)" | grep -q '127.0.0.1'; then
   pass "Postgres is published only on host loopback"

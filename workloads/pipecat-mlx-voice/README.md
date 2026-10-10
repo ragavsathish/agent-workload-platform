@@ -16,6 +16,8 @@ SVG render.
 - The voice edge is non-root, read-only, capability-free, resource-bounded, and has no host mount or
   Docker socket.
 - Separate bearer capabilities expose only bounded inference and propose/status/approve/cancel.
+- Voice edge and gateway containers use Docker's `none` log driver; Pipecat's shared Loguru handler
+  is removed so transcripts, LLM context, and audio-adjacent payloads are never formatted as logs.
 - Database credentials, Pi/provider authentication, sessions, and writable workspaces never enter the voice
   container.
 - The Pi worker runs on macOS and delegates tools to Gondolin micro-VMs and permission-scoped
@@ -70,6 +72,11 @@ bind-mounts `~/Documents`. Each task verifies the bundle digest, expands it bene
 `~/.local/share/agent-workload-platform/workspaces`, uploads its patch/status/result, and deletes
 the scratch directory. The mock validates the local artifact contract, not production IAM or
 durability; swap its endpoint for a real S3-compatible service before relying on those guarantees.
+
+Raw audio and synthesized speech exist only in memory while streaming. Transcripts remain in the
+in-memory conversation context for the active call and are discarded with it. Postgres stores only
+an explicitly proposed task instruction; native launch services write stdout and stderr to
+`/dev/null`. The synthetic black-box runner reports event counts, never transcript text.
 
 The black-box runner synthesizes speech with Kokoro, streams it through the same authenticated
 WebSocket used by the browser, transcribes it with MLX Whisper, and exercises the LLM/tool path.

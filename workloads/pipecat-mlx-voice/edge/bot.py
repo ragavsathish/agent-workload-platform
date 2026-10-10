@@ -27,6 +27,10 @@ from pipecat.transports.base_transport import BaseTransport
 from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPIWebsocketTransport
 from pipecat.workers.runner import WorkerRunner
 
+# Voice content must never reach stdout/stderr. Docker also uses the `none` log driver, but removing
+# Loguru's shared handler prevents Pipecat from formatting transcripts or LLM context at all.
+logger.remove()
+
 load_dotenv(override=True)
 
 

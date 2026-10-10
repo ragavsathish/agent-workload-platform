@@ -31,6 +31,9 @@ make publish-workspace \
 
 The proposal stores the resulting content-addressed S3 URI, not a host filesystem path.
 Verification also asserts that S3Mock is loopback-only and has no Documents bind mount.
+The runner intentionally prints only audio byte counts and event counts; it never prints recognized
+or synthesized text. Compose verification fails if Docker logging is enabled for the voice edge or
+gateway.
 
 Verify durable results without displaying capabilities:
 

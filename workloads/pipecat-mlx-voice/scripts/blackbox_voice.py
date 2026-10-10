@@ -18,6 +18,12 @@ from typing import Any
 import httpx
 import numpy as np
 import websockets
+from loguru import logger
+
+# Pipecat logs its version while being imported. Remove Loguru's default sink
+# first so even the black-box harness cannot emit library logs or voice content.
+logger.remove()
+
 from pipecat.serializers.protobuf import frame_protos
 
 
@@ -97,8 +103,6 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         token = start.json()["token"]
 
     events: list[str] = []
-    transcriptions: list[str] = []
-    assistant_text: list[str] = []
     intro_finished = asyncio.Event()
     response_finished = asyncio.Event()
     sent_audio = False
@@ -132,14 +136,6 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                 event_type = str(payload.get("type", ""))
                 events.append(event_type)
                 data = payload.get("data")
-                if event_type == "user-transcription" and isinstance(data, dict):
-                    text = data.get("text")
-                    if isinstance(text, str) and text:
-                        transcriptions.append(text)
-                if event_type == "bot-transcription" and isinstance(data, dict):
-                    text = data.get("text")
-                    if isinstance(text, str) and text:
-                        assistant_text.append(text)
                 if event_type == "error":
                     raise RuntimeError(f"Pipecat error: {data}")
                 if event_type == "bot-stopped-speaking":
@@ -167,10 +163,8 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
             await asyncio.gather(receiver, return_exceptions=True)
 
     return {
-        "utterances": args.utterances,
+        "utterance_count": len(args.utterances),
         "pcm_bytes_16khz": [len(pcm) for _, pcm in utterance_audio],
-        "transcriptions": transcriptions,
-        "assistant_text": assistant_text,
         "event_counts": dict(Counter(events)),
     }
 
