@@ -57,8 +57,8 @@ S3Mock artifacts use another named volume inside Docker Desktop and never bind-m
 
 | Address | Owner | Purpose |
 |---|---|---|
-| tailnet HTTPS 443 | Tailscale userspace container, raw TCP | private browser ingress to Caddy |
-| shared loopback `127.0.0.1:8443` | Caddy TLS sidecar, HTTP/1.1 only | browser UI and WebSocket audio |
+| tailnet HTTPS 443 | Tailscale Serve | trusted HTTPS and private browser ingress |
+| shared loopback `127.0.0.1:7860` | Pipecat voice edge | browser UI and WebSocket audio behind Serve |
 | `127.0.0.1:54329` | Docker Postgres | native Pi worker queue access |
 | `127.0.0.1:9090` | Docker S3Mock | native worker immutable inputs and task result artifacts |
 | `127.0.0.1:3300` | Docker Grafana | authenticated local metrics and traces UI |
@@ -78,13 +78,12 @@ Telemetry deliberately excludes logs and all user-controlled values. Its named v
 only operation metrics and sanitized traces and can be removed separately if local telemetry must
 be erased.
 
-The phone must run Tailscale and join the same tailnet. Tailscale passes encrypted TCP through to a
-non-root, capability-free Caddy sidecar. Caddy owns the tailnet certificate, advertises HTTP/1.1
-only, and forwards to Pipecat over shared loopback, so Safari never enters Serve's incompatible
-HTTP/2 reverse proxy. The application requires the exact MagicDNS origin and a signed, one-use
-WebSocket path token. This is a single-user deployment: `make login` pins exactly one owner login,
-and tailnet ACLs authenticate the devices allowed to reach it. There is no fallback listener on the
-local Wi-Fi interface.
+The phone must run Tailscale and join the same tailnet. Tailscale Serve terminates trusted HTTPS,
+adds the authenticated tailnet identity, and forwards HTTP and WebSocket traffic directly to
+Pipecat over shared loopback. The application requires the exact MagicDNS origin and a signed,
+one-use WebSocket path token. This is a single-user deployment: `make login` pins exactly one owner
+login, and tailnet ACLs authenticate the devices allowed to reach it. There is no fallback listener
+on the local Wi-Fi interface.
 
 ## Repeatability and updates
 

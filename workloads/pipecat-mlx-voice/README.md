@@ -5,16 +5,13 @@ runs the browser-facing voice edge, Tailscale ingress, narrow task gateway, and 
 Ollama, Pi, Gondolin, and Wassette remain native on macOS where Apple acceleration and VM-backed
 tool isolation are available.
 
-[![Deployment and security boundaries](docs/architecture/deployment-security.png)](docs/architecture/deployment-security.excalidraw)
-
-The [C4 architecture views](docs/architecture/README.md) include the editable Excalidraw scene and
-SVG render.
+The [C4 architecture views](docs/architecture/README.md) include the deployment and security
+boundaries as authoritative Mermaid sources.
 
 ## Trust model
 
-- Tailscale Serve provides private raw-TCP ingress to a capability-free Caddy sidecar that
-  terminates the tailnet certificate and advertises HTTP/1.1 only. Funnel and public Docker ports
-  are not enabled. This bypasses Serve's incompatible HTTP/2 WebSocket reverse proxy.
+- Tailscale Serve terminates trusted tailnet HTTPS and proxies HTTP and WebSocket traffic directly
+  to Pipecat over shared loopback. Funnel and public Docker ports are not enabled.
 - Browser sessions require an exact HTTPS origin and a signed, one-use token in the WebSocket path.
   The current deployment is deliberately single-user: login pins exactly one owner identity during
   setup, while tailnet ACLs authenticate which devices can reach the listener.
@@ -55,8 +52,7 @@ make warm-models
 ```
 
 `make login` performs interactive Tailscale authentication when needed, binds the exact login and
-MagicDNS origin, issues the tailnet certificate, enables tailnet-only raw TCP on HTTPS 443, and
-prints the browser URL.
+MagicDNS origin, enables the tailnet-only HTTPS proxy on port 443, and prints the browser URL.
 
 ## Operate
 
@@ -75,7 +71,9 @@ make check        # tests, lint, type checks, build, Compose and plist validatio
 ```
 
 Postgres and S3Mock are published only on host loopback so the native Pi worker can consume the
-queue and immutable workspace bundles. The native inference broker listens on `127.0.0.1:9443`; Docker Desktop makes that protected
+queue and immutable workspace bundles. The bearer-protected agent gateway is also published on
+host loopback so the optional Pi voice backend can use only its four task-lifecycle operations.
+The native inference broker listens on `127.0.0.1:9443`; Docker Desktop makes that protected
 capability available through the private `inference-broker` host-gateway alias. No service listens
 on the Mac LAN interface; browser access is available only through the tailnet listener.
 
@@ -109,6 +107,15 @@ WebSocket used by the browser, transcribes it with MLX Whisper, and exercises th
 Before Tailscale login it uses `deploy/compose.local-test.yml` as a non-listening network anchor;
 set `BLACKBOX_USE_TAILSCALE=true` to test an authenticated tunnel namespace. See
 [TESTING.md](TESTING.md) for assertions and failure interpretation.
+
+Set `VOICE_LLM_BACKEND=pi` in `edge/.env` to select the alternate
+`Whisper -> Pi agent -> restricted Pi task tools -> Kokoro` path. The default remains `ollama`.
+Pi voice uses a dedicated long-running Node service built on Pi's `createAgentSession()` SDK. The
+service keeps conversation state between turns, reconciles a restarted or reset Pipecat transcript,
+and exposes only the four task-lifecycle tools. It disables built-in shell/filesystem tools and all
+discovered extensions, skills, prompt templates, themes, and context files. Kokoro speaks the final
+text produced by Pi after any tool calls complete. `PI_VOICE_MODEL` selects the model; when blank,
+Pi uses its configured default.
 
 See [BENCHMARKS.md](BENCHMARKS.md) for the measured M4 Pro CPU, unified-memory, LLM throughput,
 and speech realtime factors, plus the reproducible benchmark command.

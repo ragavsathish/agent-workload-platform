@@ -120,6 +120,7 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
     async with websockets.connect(
         f"ws://127.0.0.1:7860/ws-client/{token}",
         origin=args.origin,
+        additional_headers={"tailscale-user-login": args.identity},
         max_size=4 * 1024 * 1024,
     ) as socket:
         await socket.send(

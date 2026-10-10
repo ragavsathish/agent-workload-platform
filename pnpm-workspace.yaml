@@ -8,10 +8,12 @@ packages:
   - workloads/c4-excalidraw/components
 
 allowBuilds:
+  '@google/genai': false
   '@modelcontextprotocol/ext-apps': true
   '@swc/core': true
   cpu-features: true
   esbuild: true
+  protobufjs: false
   ssh2: true
 
 overrides:

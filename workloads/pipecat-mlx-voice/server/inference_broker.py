@@ -11,6 +11,8 @@ import asyncio
 import json
 import os
 import secrets
+import time
+import uuid
 import wave
 from contextlib import asynccontextmanager
 from io import BytesIO
@@ -223,7 +225,137 @@ async def chat(request: Request, _: None = Depends(authenticate)) -> StreamingRe
         return StreamingResponse(chunks(), media_type=response.headers.get("content-type"))
 
 
+def _pi_service_url() -> str:
+    identities = [
+        value.strip().lower()
+        for value in os.getenv("ORCHESTRATOR_ALLOWED_USERS", "").split(",")
+        if value.strip()
+    ]
+    if len(identities) != 1:
+        raise HTTPException(status_code=503, detail="Pi voice requires exactly one allowed identity")
+    gateway_token = os.getenv("AGENT_GATEWAY_TOKEN", "")
+    if len(gateway_token) < 32:
+        raise HTTPException(status_code=503, detail="Pi voice is not configured")
+    return os.getenv("PI_VOICE_SERVICE_URL", "http://127.0.0.1:9446").rstrip("/")
+
+
+def _openai_completion(text: str, *, model: str, completion_id: str, created: int) -> dict:
+    return {
+        "id": completion_id,
+        "object": "chat.completion",
+        "created": created,
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": text},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+    }
+
+
+def _validate_pi_messages(messages: object) -> list[dict[str, Any]]:
+    if not isinstance(messages, list) or not messages or len(messages) > 64:
+        raise HTTPException(status_code=400, detail="invalid message list")
+    validated: list[dict[str, Any]] = []
+    total_chars = 0
+    for message in messages:
+        if not isinstance(message, dict) or message.get("role") not in {
+            "system",
+            "developer",
+            "user",
+            "assistant",
+        }:
+            raise HTTPException(status_code=400, detail="invalid Pi message")
+        content = message.get("content", "")
+        total_chars += len(content) if isinstance(content, str) else len(str(content))
+        validated.append(message)
+    if total_chars > 64_000:
+        raise HTTPException(status_code=413, detail="conversation is too large")
+    return validated
+
+
+@app.post("/v1/pi/chat/completions", response_model=None)
+async def pi_chat(request: Request, _: None = Depends(authenticate)) -> StreamingResponse | Response:
+    """Run one voice turn through native Pi with only task-lifecycle tools enabled."""
+
+    with telemetry.observe("inference.pi"):
+        body = await request.body()
+        if len(body) > MAX_CHAT_BYTES:
+            raise HTTPException(status_code=413, detail="chat payload too large")
+        try:
+            payload = json.loads(body)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="invalid JSON") from exc
+        if not isinstance(payload, dict) or payload.get("model") != "pi-agent":
+            raise HTTPException(status_code=400, detail="invalid Pi chat request")
+        messages = _validate_pi_messages(payload.get("messages"))
+        if payload.get("tools"):
+            raise HTTPException(status_code=400, detail="external tools are not accepted by Pi voice")
+        client: httpx.AsyncClient = request.app.state.http
+        try:
+            async with asyncio.timeout(float(os.getenv("PI_VOICE_TIMEOUT_SECONDS", "120")) + 5):
+                response = await client.post(
+                    f"{_pi_service_url()}/v1/turn",
+                    json={"messages": messages},
+                    headers={"Authorization": f"Bearer {BROKER_TOKEN}"},
+                )
+        except (TimeoutError, httpx.HTTPError) as exc:
+            raise HTTPException(status_code=502, detail="Pi voice service is unavailable") from exc
+        if response.status_code != 200:
+            raise HTTPException(status_code=502, detail="Pi voice turn failed")
+        try:
+            service_payload = response.json()
+            text = service_payload["text"]
+        except (ValueError, KeyError, TypeError) as exc:
+            raise HTTPException(status_code=502, detail="Pi voice returned an invalid response") from exc
+        if not isinstance(text, str) or not text.strip():
+            raise HTTPException(status_code=502, detail="Pi voice returned an empty response")
+
+        completion_id = f"chatcmpl-pi-{uuid.uuid4().hex}"
+        created = int(time.time())
+        if not payload.get("stream", False):
+            return Response(
+                content=json.dumps(
+                    _openai_completion(
+                        text, model="pi-agent", completion_id=completion_id, created=created
+                    )
+                ),
+                media_type="application/json",
+            )
+
+        async def chunks():
+            first = {
+                "id": completion_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": "pi-agent",
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {"role": "assistant", "content": text},
+                        "finish_reason": None,
+                    }
+                ],
+            }
+            last = {
+                "id": completion_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": "pi-agent",
+                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+            }
+            yield f"data: {json.dumps(first)}\n\n"
+            yield f"data: {json.dumps(last)}\n\n"
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(chunks(), media_type="text/event-stream")
+
+
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=9443, access_log=False)
+    # Keep the host broker on the standard loop for predictable MLX and child-process behavior.
+    uvicorn.run(app, host="127.0.0.1", port=9443, access_log=False, loop="asyncio")

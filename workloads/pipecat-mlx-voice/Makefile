@@ -72,6 +72,8 @@ pull-model:
 	ollama pull qwen3.5:9b-mlx
 
 check:
+	pnpm --dir ../.. --filter @agent-workload-platform/gondolin-browser check
+	pnpm --dir ../.. --filter @agent-workload-platform/gondolin-browser test:voice
 	cd server && uv sync --python 3.13
 	cd server && uv run ruff check .
 	cd server && uv run pyright

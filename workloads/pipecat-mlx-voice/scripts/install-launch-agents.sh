@@ -15,8 +15,13 @@ mkdir -p \
   "$runtime_dir/server/orchestrator" \
   "$runtime_dir/server/sql" \
   "$gondolin_runtime" \
-  "$gondolin_assets_runtime"
-install -m 700 "$repo_dir/scripts/host-broker.sh" "$repo_dir/scripts/host-worker.sh" "$runtime_dir/scripts/"
+  "$gondolin_assets_runtime" \
+  "$runtime_dir/voice-workspace"
+install -m 700 \
+  "$repo_dir/scripts/host-broker.sh" \
+  "$repo_dir/scripts/host-pi-voice.sh" \
+  "$repo_dir/scripts/host-worker.sh" \
+  "$runtime_dir/scripts/"
 install -m 600 \
   "$repo_dir/server/inference_broker.py" \
   "$repo_dir/server/mlx_tts.py" \
@@ -30,6 +35,7 @@ gondolin_deploy="$(mktemp -d "$runtime_dir/gondolin-agent.deploy.XXXXXX")"
 trap 'rm -rf "$gondolin_deploy"' EXIT
 # Produce a standalone dependency graph instead of copying pnpm links that
 # resolve back into the repository (and therefore into protected Documents).
+/opt/homebrew/bin/pnpm --dir "$repo_dir/../.." --filter @agent-workload-platform/gondolin-browser build
 /opt/homebrew/bin/pnpm \
   --dir "$repo_dir/../.." \
   --config.inject-workspace-packages=true \
@@ -40,8 +46,12 @@ rm -rf "$gondolin_deploy"
 trap - EXIT
 rsync -a --delete "$gondolin_assets_source/" "$gondolin_assets_runtime/"
 
-awk -F= '/^(INFERENCE_BROKER_TOKEN|BROKER_MAX_AUDIO_BYTES|BROKER_MAX_AUDIO_SECONDS|BROKER_MAX_CHAT_BYTES|BROKER_MAX_TTS_CHARS|OLLAMA_MODEL|OLLAMA_BASE_URL|MLX_STT_MODEL|STT_LANGUAGE|MLX_TTS_MODEL|MLX_TTS_VOICE|MLX_TTS_SPEED|MLX_TTS_LANGUAGE_CODE|MLX_TTS_STREAMING_INTERVAL)=/ {print}' \
+awk -F= '/^(INFERENCE_BROKER_TOKEN|BROKER_MAX_AUDIO_BYTES|BROKER_MAX_AUDIO_SECONDS|BROKER_MAX_CHAT_BYTES|BROKER_MAX_TTS_CHARS|OLLAMA_MODEL|OLLAMA_BASE_URL|MLX_STT_MODEL|STT_LANGUAGE|MLX_TTS_MODEL|MLX_TTS_VOICE|MLX_TTS_SPEED|MLX_TTS_LANGUAGE_CODE|MLX_TTS_STREAMING_INTERVAL|AGENT_GATEWAY_TOKEN|ORCHESTRATOR_ALLOWED_USERS|PI_BINARY|PI_MODEL|PI_VOICE_MODEL|PI_VOICE_THINKING|PI_VOICE_TIMEOUT_SECONDS)=/ {print}' \
   "$repo_dir/server/.env" > "$runtime_dir/server/broker.env"
+printf 'AGENT_GATEWAY_BASE_URL="http://127.0.0.1:9444/v1"\nPI_CODING_AGENT_DIR="%s"\nPI_VOICE_CWD="%s"\nPI_VOICE_SERVICE_URL="http://127.0.0.1:9446"\n' \
+  "$HOME/.pi/agent" \
+  "$runtime_dir/voice-workspace" \
+  >> "$runtime_dir/server/broker.env"
 chmod 600 "$runtime_dir/server/broker.env"
 awk -F= '/^(DATABASE_URL|ABSURD_QUEUE|ORCHESTRATOR_APPROVAL_SECRET|ORCHESTRATOR_APPROVAL_TTL_SECONDS|ORCHESTRATOR_ALLOWED_USERS|ORCHESTRATOR_WORKSPACE_ROOTS|ORCHESTRATOR_ALLOWED_WORKSPACES|ARTIFACT_ENDPOINT_URL|ARTIFACT_BUCKET|ARTIFACT_ACCESS_KEY|ARTIFACT_SECRET_KEY|WORKER_SCRATCH_ROOT|WORKER_MAX_ARTIFACT_BYTES|PI_BINARY|PI_MODEL|PI_THINKING|PI_SESSION_DIR|WORKER_ALLOW_UNSANDBOXED|WORKER_TASK_TIMEOUT_SECONDS|WORKER_MAX_OUTPUT_BYTES|GITHUB_TOKEN|WASSETTE_BIN|WASSETTE_COMPONENT_DIR|WASSETTE_GITHUB_COMPONENT|WASSETTE_GITHUB_WRITE|MEMORY_FILE_PATH)=/ {print}' \
   "$repo_dir/server/.env" > "$runtime_dir/server/worker.env"
@@ -58,14 +68,19 @@ for label in com.sathish.pipecat-agent-gateway com.sathish.pipecat-edge-machine 
   rm -f "$agents_dir/$label.plist"
 done
 
-for source in "$repo_dir/deploy/launchd/com.sathish.pipecat-broker.plist" "$repo_dir/deploy/launchd/com.sathish.pipecat-worker.plist"; do
+for source in \
+  "$repo_dir/deploy/launchd/com.sathish.pipecat-pi-voice.plist" \
+  "$repo_dir/deploy/launchd/com.sathish.pipecat-broker.plist" \
+  "$repo_dir/deploy/launchd/com.sathish.pipecat-worker.plist"; do
   target="$agents_dir/$(basename "$source")"
   label="$(/usr/libexec/PlistBuddy -c 'Print :Label' "$source")"
   launchctl bootout "$domain/$label" >/dev/null 2>&1 || true
   install -m 600 "$source" "$target"
   plutil -lint "$target" >/dev/null
   loaded=0
-  for _ in {1..5}; do
+  # A broker with a timed-out Pi child can take several seconds to release its
+  # loopback listener after bootout. Keep retrying the idempotent bootstrap.
+  for _ in {1..15}; do
     if launchctl bootstrap "$domain" "$target" >/dev/null 2>&1; then
       loaded=1
       break
@@ -77,8 +92,9 @@ done
 
 for _ in {1..30}; do
   if [[ "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:9443/health 2>/dev/null || true)" == 401 ]] \
+    && [[ "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:9446/health 2>/dev/null || true)" == 401 ]] \
     && launchctl print "$domain/com.sathish.pipecat-worker" >/dev/null 2>&1; then
-    echo "Native inference broker and Pi worker converged."
+    echo "Native inference broker, Pi voice service, and Pi worker converged."
     exit 0
   fi
   sleep 2

@@ -54,10 +54,6 @@ def resolve_identity(runner_args: WebSocketRunnerArguments) -> str:
         if value.strip()
     }
     if not identity:
-        if os.getenv("EDGE_SINGLE_USER_TCP_INGRESS", "false").lower() == "true":
-            if len(allowed) != 1:
-                raise PermissionError("single-user TCP ingress requires exactly one allowed user")
-            return next(iter(allowed))
         raise PermissionError("connect through the configured Tailscale ingress")
     if identity not in allowed:
         raise PermissionError("tailnet identity is not allowed")
@@ -69,7 +65,11 @@ async def run_bot(transport: BaseTransport, identity: str):
     broker_token = required_env("INFERENCE_BROKER_TOKEN")
     gateway_url = required_env("AGENT_GATEWAY_BASE_URL").rstrip("/")
     gateway_token = required_env("AGENT_GATEWAY_TOKEN")
-    model = required_env("OLLAMA_MODEL")
+    llm_backend = os.getenv("VOICE_LLM_BACKEND", "ollama").strip().lower()
+    if llm_backend not in {"ollama", "pi"}:
+        raise RuntimeError("VOICE_LLM_BACKEND must be either 'ollama' or 'pi'")
+    model = "pi-agent" if llm_backend == "pi" else required_env("OLLAMA_MODEL")
+    llm_base_url = f"{broker_url.rstrip('/')}/pi" if llm_backend == "pi" else broker_url
     default_workspace = required_env("VOICE_DEFAULT_WORKSPACE")
 
     stt = OpenAISTTService(
@@ -79,13 +79,21 @@ async def run_bot(transport: BaseTransport, identity: str):
     )
     llm = OpenAILLMService(
         api_key=broker_token,
-        base_url=broker_url,
+        base_url=llm_base_url,
         settings=OpenAILLMService.Settings(
             model=model,
             system_instruction=(
-                "You are a concise voice interface to Pi, a coding-agent coordinator. Responses "
-                "are spoken, so avoid visual formatting. You can propose, inspect, approve, and "
-                "cancel agent tasks with the available tools. Creating a proposal never runs it. "
+                "You are a precise voice control interface to Pi, a coding-agent coordinator. "
+                "Answer only what the user asked, using the shortest complete response. Lead with "
+                "the result or current status. Do not use greetings, filler, praise, repetition, "
+                "or unsupported speculation. Prefer concrete names, identifiers, states, and "
+                "numbers. Ask one short clarification only when missing information prevents a "
+                "correct action. Clearly distinguish requested, pending, completed, failed, and "
+                "cancelled actions. Never say an action succeeded until its tool result confirms "
+                "success. Report only the relevant facts returned by tools and do not embellish "
+                "them. Responses are spoken, so use plain sentences without visual formatting. "
+                "You can propose, inspect, approve, and cancel agent tasks with the available "
+                "tools. Creating a proposal never runs it. "
                 "After proposing, read back the exact instruction and workspace. Approval is "
                 "allowed only in a later user turn when the user explicitly asks to approve that "
                 "pending task. Never approve in the same turn as proposal creation and never infer "
@@ -181,7 +189,7 @@ async def run_bot(transport: BaseTransport, identity: str):
         "type": "string",
         "description": "The exact proposal ID returned by propose_agent_task.",
     }
-    tools: list[FunctionSchema | DirectFunction] = [
+    gateway_tools: list[FunctionSchema | DirectFunction] = [
         FunctionSchema(
             name="propose_agent_task",
             description="Create a pending Pi task proposal. This does not start work.",
@@ -223,7 +231,9 @@ async def run_bot(transport: BaseTransport, identity: str):
             handler=cancel_agent_task,
         ),
     ]
-    context = LLMContext(tools=tools)
+    # In Pi mode the native Pi process owns the same four tools through its
+    # restricted extension. Ollama mode keeps executing them in this edge.
+    context = LLMContext(tools=[] if llm_backend == "pi" else gateway_tools)
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer()),
