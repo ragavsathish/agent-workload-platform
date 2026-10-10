@@ -1,0 +1,29 @@
+[project]
+name = "pipecat-mlx-voice"
+version = "0.1.0"
+description = "Voice AI bot built with Pipecat"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "absurd-sdk>=0.5,<0.6",
+    "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
+    "httpx>=0.28,<1",
+    "misaki[en]>=0.9,<1",
+    "mlx-audio[tts]>=0.5.4,<0.6",
+    "pipecat-ai[mlx-whisper,runner,silero,websocket,whisper]>=1.12,<2",
+    "python-multipart>=0.0.20,<1",
+]
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.404,<2",
+    "pytest>=8.4,<9",
+    "ruff>=0.12.11,<1",
+]
+
+[tool.ruff]
+line-length = 100
+[tool.ruff.lint]
+select = ["I", "UP"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

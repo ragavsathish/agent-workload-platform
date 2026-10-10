@@ -1,0 +1,9 @@
+[Unit]
+Description=Dedicated Pipecat edge pod inside the Podman machine
+
+[Pod]
+PodName=pipecat-edge
+Network=host
+
+[Install]
+WantedBy=default.target

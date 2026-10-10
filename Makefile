@@ -24,7 +24,8 @@ C4_OCI_WASM := $(C4_WORKLOAD)/components/dist/c4-suite.wasm
 C4_OCI_SBOM := artifacts/c4-excalidraw/oci/c4-suite.spdx.json
 C4_OCI_ARTIFACT_TYPE := application/vnd.agent-workload-platform.wasm.component.v1
 C4_OCI_SOURCE := https://github.com/ragavsathish/agent-workload-platform
-.PHONY: c4 c4-build c4-test c4-gondolin-build gondolin-browser-build c4-oci-build c4-oci-publish c4-oci-verify
+PIPECAT_VOICE_WORKLOAD := workloads/pipecat-mlx-voice
+.PHONY: c4 c4-build c4-test c4-gondolin-build gondolin-browser-build c4-oci-build c4-oci-publish c4-oci-verify voice-setup voice-check voice-preflight voice-provision voice-install-services voice-verify voice-cycle-test voice-warm-models voice-status voice-login
 
 c4-build:
 	pnpm --dir $(C4_WORKLOAD) run build
@@ -109,3 +110,33 @@ c4:
 		-- \
 		"@$(abspath $(C4_INPUT))" \
 		"Call excalidraw_c4_render exactly once with the complete attached Mermaid source. Do not rewrite it or construct Excalidraw JSON yourself."
+
+voice-setup:
+	$(MAKE) -C "$(PIPECAT_VOICE_WORKLOAD)" setup
+
+voice-check:
+	$(MAKE) -C "$(PIPECAT_VOICE_WORKLOAD)" check
+
+voice-preflight:
+	$(MAKE) -C "$(PIPECAT_VOICE_WORKLOAD)" host-preflight
+
+voice-provision:
+	$(MAKE) -C "$(PIPECAT_VOICE_WORKLOAD)" edge-provision
+
+voice-install-services:
+	$(MAKE) -C "$(PIPECAT_VOICE_WORKLOAD)" edge-install-services
+
+voice-verify:
+	$(MAKE) -C "$(PIPECAT_VOICE_WORKLOAD)" edge-verify
+
+voice-cycle-test:
+	$(MAKE) -C "$(PIPECAT_VOICE_WORKLOAD)" edge-cycle-test
+
+voice-warm-models:
+	$(MAKE) -C "$(PIPECAT_VOICE_WORKLOAD)" edge-warm-models
+
+voice-status:
+	$(MAKE) -C "$(PIPECAT_VOICE_WORKLOAD)" edge-status
+
+voice-login:
+	$(MAKE) -C "$(PIPECAT_VOICE_WORKLOAD)" edge-login

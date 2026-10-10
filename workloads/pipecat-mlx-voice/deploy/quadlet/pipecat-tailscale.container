@@ -1,0 +1,27 @@
+[Unit]
+Description=Tailscale userspace ingress for the Pipecat edge
+Requires=pipecat-edge-pod.service
+After=pipecat-edge-pod.service pipecat-edge.service
+
+[Container]
+Image=__TAILSCALE_IMAGE__
+Pull=never
+ContainerName=pipecat-tailscale
+Pod=pipecat-edge.pod
+Environment=TS_USERSPACE=true
+Environment=TS_STATE_DIR=/var/lib/tailscale
+Environment=TS_HOSTNAME=pipecat-edge
+Environment=TS_ACCEPT_DNS=false
+Volume=pipecat-tailscale-state.volume:/var/lib/tailscale
+ReadOnly=true
+NoNewPrivileges=true
+DropCapability=ALL
+Tmpfs=/tmp:rw,noexec,nosuid,nodev
+PodmanArgs=--pids-limit=128 --memory=256m --cpus=1
+
+[Service]
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

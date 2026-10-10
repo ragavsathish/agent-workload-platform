@@ -25,6 +25,16 @@ C4-to-Excalidraw is the first platform workload. Follow the [C4 workload
 README](workloads/c4-excalidraw/README.md) for setup, build, verification, and
 the real Pi dog-food run, including supported syntax and rendering limits.
 
+## Pipecat MLX voice workload
+
+The [Pipecat MLX voice workload](workloads/pipecat-mlx-voice/README.md) provides
+a private browser voice assistant for Apple Silicon. MLX Whisper, Ollama, and
+Kokoro stay on macOS behind a narrow authenticated inference broker, while the
+browser-facing Pipecat application and tailnet ingress run as immutable,
+rootless Quadlet services inside a dedicated libkrun micro-VM. See its
+[host requirements](workloads/pipecat-mlx-voice/HOST_REQUIREMENTS.md) for the
+security boundary, exact prerequisites, and repeatable lifecycle checks.
+
 The source-controlled architecture views are:
 
 - [C1 system context](workloads/c4-excalidraw/examples/c1-system-context.mmd)
@@ -35,6 +45,8 @@ The source-controlled architecture views are:
 
 - `apps/` — reusable runnable applications, including the pinned `excalidraw-mcp` submodule.
 - `workloads/` — independently runnable agent workloads, including `c4-excalidraw`.
+  - `pipecat-mlx-voice` — tailnet-only browser voice with host MLX inference and
+    a digest-pinned Podman micro-VM edge.
 - `adapters/` — implementations at external seams:
   - `mermaid-to-excalidraw` — untouched upstream submodule.
   - `c4-gondolin` — platform-owned C4/browser adapter.
