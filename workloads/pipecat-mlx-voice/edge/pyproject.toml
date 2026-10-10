@@ -3,6 +3,7 @@ name = "pipecat-isolated-edge"
 version = "0.1.0"
 requires-python = ">=3.12,<3.14"
 dependencies = [
+    "httpx>=0.28,<1",
     "pipecat-ai[openai,runner,silero,websocket]>=1.12,<2",
 ]
 

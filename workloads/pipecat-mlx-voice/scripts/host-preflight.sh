@@ -10,14 +10,13 @@ fail() { printf 'FAIL  %s\n' "$*"; failures=$((failures + 1)); }
 
 [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]] && pass "Apple Silicon macOS host" || fail "Apple Silicon macOS is required"
 
-for command in podman krunkit uv node npm ollama ssh scp curl python3; do
+for command in docker uv node npm ollama curl python3; do
   command -v "$command" >/dev/null 2>&1 && pass "$command is installed" || fail "$command is missing"
 done
+[[ -x /opt/homebrew/opt/libpq/bin/psql ]] && pass "Homebrew libpq client is installed" || fail "libpq is required: brew install libpq"
 
-if command -v podman >/dev/null 2>&1; then
-  podman_major="$(podman --version | awk '{print $3}' | cut -d. -f1)"
-  [[ "$podman_major" =~ ^[0-9]+$ && "$podman_major" -ge 5 ]] && pass "Podman version is supported" || fail "Podman 5 or newer is required"
-fi
+docker info >/dev/null 2>&1 && pass "Docker Desktop is running" || fail "Docker Desktop must be running"
+docker compose version >/dev/null 2>&1 && pass "Docker Compose is installed" || fail "Docker Compose is required"
 
 memory_bytes="$(sysctl -n hw.memsize)"
 (( memory_bytes >= 8 * 1024 * 1024 * 1024 )) && pass "at least 8 GiB host RAM" || fail "at least 8 GiB host RAM is required"
@@ -30,7 +29,11 @@ free_kib="$(df -Pk "$repo_dir" | awk 'NR==2 {print $4}')"
 host_env="$repo_dir/server/.env"
 if [[ -f "$host_env" ]]; then
   token="$(sed -n 's/^INFERENCE_BROKER_TOKEN=//p' "$host_env" | tail -1)"
-  [[ ${#token} -ge 32 ]] && pass "inference broker capability is configured" || fail "INFERENCE_BROKER_TOKEN must be at least 32 characters"
+  [[ ${#token} -ge 32 && "$token" != replace-with-* ]] && pass "inference broker capability is configured" || fail "INFERENCE_BROKER_TOKEN must be a generated value of at least 32 characters"
+  agent_token="$(sed -n 's/^AGENT_GATEWAY_TOKEN=//p' "$host_env" | tail -1)"
+  [[ ${#agent_token} -ge 32 && "$agent_token" != replace-with-* ]] && pass "agent gateway capability is configured" || fail "AGENT_GATEWAY_TOKEN must be a generated value of at least 32 characters"
+  postgres_password="$(sed -n 's/^POSTGRES_PASSWORD=//p' "$host_env" | tail -1)"
+  [[ ${#postgres_password} -ge 16 && "$postgres_password" != replace-with-* ]] && pass "Postgres password is configured" || fail "POSTGRES_PASSWORD must be a generated value of at least 16 characters"
   for key in OLLAMA_MODEL MLX_STT_MODEL MLX_TTS_MODEL; do
     grep -Eq "^${key}=.+" "$host_env" && pass "$key is configured" || fail "$key is missing from server/.env"
   done

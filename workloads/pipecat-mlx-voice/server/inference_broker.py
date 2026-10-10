@@ -161,8 +161,21 @@ def _validate_chat(payload: dict[str, Any]) -> None:
         total_chars += len(content) if isinstance(content, str) else len(str(content))
     if total_chars > 64_000:
         raise HTTPException(status_code=413, detail="conversation is too large")
-    if payload.get("tools"):
-        raise HTTPException(status_code=400, detail="remote tool calls are disabled")
+    tools = payload.get("tools", [])
+    if not isinstance(tools, list) or len(tools) > 4:
+        raise HTTPException(status_code=400, detail="invalid tool list")
+    allowed_tools = {
+        "propose_agent_task",
+        "approve_agent_task",
+        "get_agent_task",
+        "cancel_agent_task",
+    }
+    for tool in tools:
+        if not isinstance(tool, dict) or tool.get("type") != "function":
+            raise HTTPException(status_code=400, detail="invalid tool declaration")
+        function = tool.get("function")
+        if not isinstance(function, dict) or function.get("name") not in allowed_tools:
+            raise HTTPException(status_code=400, detail="unapproved tool declaration")
 
 
 @app.post("/v1/chat/completions", response_model=None)

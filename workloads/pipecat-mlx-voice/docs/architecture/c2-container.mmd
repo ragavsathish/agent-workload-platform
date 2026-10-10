@@ -1,23 +1,35 @@
 C4Container
-title Pipecat MLX Voice - Container View
+title Agent Workload Platform - Voice Interface Containers
 
-Person(user, "Tailnet User", "Uses an approved Tailscale identity on an iPhone or browser device")
+Person(user, "Tailnet User", "Talks to Pi and explicitly approves pending work")
 
-System_Boundary(voice, "Pipecat MLX Voice") {
-  Container(browser, "Browser Client", "React and Pipecat RTVI", "Captures microphone audio, renders status, and plays synthesized speech")
-  Container(ingress, "Tailnet Ingress", "Tailscale userspace networking and Serve", "Terminates private HTTPS, supplies verified identity headers, and proxies only to the voice edge")
-  Container(edge, "Voice Edge", "Pipecat and FastAPI in a rootless Podman container", "Validates the exact tailnet identity and runs the VAD, STT, LLM, and TTS pipeline without tools")
-  Container(tunnel, "Inference Tunnel", "OpenSSH under a macOS LaunchAgent", "Publishes only the Mac loopback broker port onto VM loopback through a host-initiated reverse forward")
-  Container(broker, "Inference Broker", "FastAPI, MLX Whisper, and MLX Kokoro", "Authenticates a bearer capability and exposes bounded transcription, speech, and exact-model chat routes")
+System_Boundary(platform, "Agent Workload Platform with Voice") {
+  Container(browser, "Browser Client", "React and Pipecat RTVI", "Captures audio, shows task state, and plays speech")
+  Container(ingress, "Tailnet Ingress", "Tailscale userspace networking and Serve", "Terminates private HTTPS and supplies verified identity")
+  Container(edge, "Voice Edge", "Pipecat and FastAPI", "Runs dialogue and four narrow task lifecycle tools without host credentials")
+  Container(broker, "Inference Broker", "FastAPI, MLX Whisper, MLX Kokoro", "Exposes bounded STT, TTS, and exact-model chat")
+  Container(gateway, "Agent Gateway", "FastAPI", "Scopes propose, status, voice approval, and cancel to one tailnet identity")
+  ContainerDb(queue, "Durable Task Store", "Postgres and Absurd", "Stores proposals, plan hashes, tasks, checkpoints, and results")
+  Container(worker, "Pi Worker", "Native macOS process", "Runs one durable Pi session per approved task")
+  Container(gondolin, "Gondolin Tool Runtime", "Micro-VM MCP server", "Isolates browser and workspace tools")
+  Container(wassette, "Wassette MCP Runtime", "Permission-scoped WebAssembly", "Provides bounded integration tools")
+  ContainerDb(sessions, "Pi Sessions", "Host filesystem", "Stores durable per-task histories")
 }
 
 System_Ext(tailscale, "Tailscale Control Plane", "Authenticates devices and distributes tailnet configuration")
-System_Ext(ollama, "Ollama", "Runs the exact chat model allowed by the broker")
+System_Ext(ollama, "Ollama", "Runs the exact local dialogue model")
+System_Ext(models, "Model Providers", "Serve Pi's selected agent model")
 
-Rel(user, browser, "Talks through", "Microphone and speaker")
-Rel(browser, ingress, "Loads the client and streams audio", "Tailnet HTTPS and WebSocket")
-Rel(ingress, tailscale, "Obtains identity and network configuration from", "Tailscale control protocol")
-Rel(ingress, edge, "Forwards authenticated browser traffic with identity", "VM loopback HTTP and WebSocket")
-Rel(edge, tunnel, "Calls the bounded inference capability through", "Bearer-authenticated HTTP on VM loopback")
-Rel(tunnel, broker, "Forwards only port 9443 to", "Host-initiated reverse SSH")
-Rel(broker, ollama, "Requests exact-model chat completions from", "Mac loopback HTTP")
+Rel(user, browser, "Talks, listens, and approves through")
+Rel(browser, ingress, "Loads UI and streams audio", "Tailnet HTTPS and WebSocket")
+Rel(ingress, tailscale, "Obtains identity and network configuration from")
+Rel(ingress, edge, "Forwards authenticated browser traffic", "Shared network namespace")
+Rel(edge, broker, "Requests bounded inference", "Bearer-authenticated HTTP")
+Rel(edge, gateway, "Proposes, reads, approves, and cancels tasks", "Bearer-authenticated HTTP")
+Rel(broker, ollama, "Requests exact-model completions", "Mac loopback HTTP")
+Rel(gateway, queue, "Applies identity-bound task transitions", "Private SQL")
+Rel(worker, queue, "Consumes approved work and checkpoints results")
+Rel(worker, models, "Requests agent completions")
+Rel(worker, gondolin, "Invokes isolated tools", "Pi extension and MCP")
+Rel(worker, wassette, "Invokes permission-scoped integrations", "Pi extension and MCP")
+Rel(worker, sessions, "Writes task history")

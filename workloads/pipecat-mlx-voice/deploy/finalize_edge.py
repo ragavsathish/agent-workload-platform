@@ -22,19 +22,29 @@ def main() -> None:
     replacements = {
         "EDGE_ALLOWED_USERS": login,
         "PIPECAT_ALLOWED_ORIGINS": f"https://{dns_name}",
+        "AGENT_GATEWAY_TOKEN_FILE": "/run/secrets/agent-gateway-token",
+        "AGENT_GATEWAY_BASE_URL": "http://agent-gateway:9444/v1",
     }
-    lines = env_path.read_text(encoding="utf-8").splitlines()
-    seen: set[str] = set()
-    output: list[str] = []
-    for line in lines:
-        key = line.split("=", 1)[0]
-        if key in replacements:
-            output.append(f"{key}={replacements[key]}")
-            seen.add(key)
-        else:
-            output.append(line)
-    output.extend(f"{key}={value}" for key, value in replacements.items() if key not in seen)
-    env_path.write_text("\n".join(output) + "\n", encoding="utf-8")
+
+    def update(path: Path, values: dict[str, str]) -> None:
+        lines = path.read_text(encoding="utf-8").splitlines()
+        seen: set[str] = set()
+        output: list[str] = []
+        for line in lines:
+            key = line.split("=", 1)[0]
+            if key in values:
+                output.append(f"{key}={values[key]}")
+                seen.add(key)
+            else:
+                output.append(line)
+        output.extend(f"{key}={value}" for key, value in values.items() if key not in seen)
+        path.write_text("\n".join(output) + "\n", encoding="utf-8")
+
+    update(env_path, replacements)
+    for host_env_name in sys.argv[3:]:
+        host_env = Path(host_env_name)
+        if host_env.is_file():
+            update(host_env, {"ORCHESTRATOR_ALLOWED_USERS": login})
     print(f"https://{dns_name}")
 
 

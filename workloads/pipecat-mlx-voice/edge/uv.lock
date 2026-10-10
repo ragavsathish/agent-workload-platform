@@ -1244,6 +1244,7 @@ name = "pipecat-isolated-edge"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "httpx" },
     { name = "pipecat-ai", extra = ["runner", "websocket"] },
 ]
 
@@ -1254,7 +1255,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pipecat-ai", extras = ["openai", "runner", "silero", "websocket"], specifier = ">=1.12,<2" }]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.28,<1" },
+    { name = "pipecat-ai", extras = ["openai", "runner", "silero", "websocket"], specifier = ">=1.12,<2" },
+]
 
 [package.metadata.requires-dev]
 dev = [

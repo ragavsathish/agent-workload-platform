@@ -15,7 +15,7 @@ from psycopg.rows import dict_row
 
 from .config import Settings
 from .security import ApprovalError, mint_approval, plan_hash, verify_approval
-from .workspaces import resolve_workspace
+from .workspaces import resolve_workspace, validate_workspace_boundary
 
 
 class ProposalError(ValueError):
@@ -31,7 +31,11 @@ class TaskService:
         cleaned = instruction.strip()
         if not cleaned:
             raise ProposalError("instruction cannot be empty")
-        resolved = resolve_workspace(workspace, self.settings.workspace_roots)
+        resolved = (
+            validate_workspace_boundary(workspace, self.settings.workspace_roots)
+            if self.settings.defer_workspace_validation
+            else resolve_workspace(workspace, self.settings.workspace_roots)
+        )
         return {"instruction": cleaned, "workspace": str(resolved)}
 
     def propose(self, *, identity: str, instruction: str, workspace: str) -> dict[str, Any]:

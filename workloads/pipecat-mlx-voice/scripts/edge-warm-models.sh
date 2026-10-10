@@ -5,7 +5,7 @@ repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ollama_model="$(sed -n 's/^OLLAMA_MODEL=//p' "$repo_dir/server/.env" | tail -1)"
 [[ -n "$ollama_model" ]] || { echo "OLLAMA_MODEL is missing from server/.env" >&2; exit 1; }
 
-podman exec -i pipecat-edge-app python - "$ollama_model" <<'PY'
+docker compose --env-file "$repo_dir/server/.env" -f "$repo_dir/deploy/compose.yml" exec -T voice-edge python - "$ollama_model" <<'PY'
 import io
 import json
 import struct
@@ -13,7 +13,7 @@ import sys
 import urllib.request
 import wave
 
-BASE_URL = "http://127.0.0.1:9443"
+BASE_URL = "http://host.docker.internal:9443"
 TOKEN = open("/run/secrets/broker-token", encoding="utf-8").read()
 
 

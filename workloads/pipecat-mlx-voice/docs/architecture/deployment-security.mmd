@@ -1,30 +1,53 @@
-C4Deployment
-title Pipecat MLX Voice - Deployment and Security Boundaries
+flowchart TB
+    %% C4 deployment view: private voice ingress and isolated agent tools.
+    USER(["Person<br/><b>Tailnet User</b><br/>talks, listens, explicitly approves"])
+    CONTROL["External system<br/><b>Tailscale Control Plane</b><br/>device and identity authority"]
 
-Person(user, "Tailnet User", "Uses an approved identity")
-System_Ext(tailscale_control, "Tailscale Control Plane", "Authenticates tailnet devices")
-System_Ext(ollama, "Ollama", "Runs the approved chat model")
+    subgraph DEVICE["User device"]
+        BROWSER["Container<br/><b>Browser Client</b><br/>Safari · React · microphone · speaker"]
+    end
 
-Deployment_Node(phone, "User Device") {
-  Container(browser, "Browser Client", "Safari and React", "Captures and plays audio")
-}
+    subgraph MAC["Apple Silicon Mac"]
+        direction LR
+        subgraph DOCKER["Docker Desktop Linux VM"]
+            direction TB
+            subgraph COMPOSE["Compose · voice services"]
+                direction TB
+                INGRESS["Container<br/><b>Tailnet Ingress</b><br/>Tailscale userspace · private HTTPS"]
+                EDGE["Container<br/><b>Voice Edge</b><br/>Pipecat · UID 65532 · read-only"]
+                GATEWAY["Container<br/><b>Agent Gateway</b><br/>four identity-scoped task routes"]
+                DB[("Container database<br/><b>Postgres + Absurd</b><br/>durable proposals · tasks · checkpoints")]
+                INGRESS -->|"verified identity + WebSocket"| EDGE
+                EDGE -->|"gateway bearer · control network"| GATEWAY
+                GATEWAY -->|"internal data network"| DB
+            end
+        end
 
-Deployment_Node(mac, "Apple Silicon Mac") {
-  Container(broker, "Inference Broker", "FastAPI on 127.0.0.1:9443", "Bounded STT, TTS, and chat API")
-  Container(tunnel, "Inference Tunnel", "OpenSSH LaunchAgent", "Host-initiated reverse port forward")
+        subgraph NATIVE["Native macOS services"]
+            direction TB
+            BROKER["Container<br/><b>Inference Broker</b><br/>MLX Whisper · Ollama · MLX Kokoro"]
+            WORKER["Container<br/><b>Pi Worker</b><br/>one durable Pi session per task"]
+            GONDOLIN["Container<br/><b>Gondolin</b><br/>tool micro-VMs"]
+            WASSETTE["Container<br/><b>Wassette</b><br/>permission-scoped MCP components"]
+            WORKER -->|"isolated browser + workspace tools"| GONDOLIN
+            WORKER -->|"scoped integration tools"| WASSETTE
+        end
 
-  Deployment_Node(vm, "pipecat-edge libkrun Micro-VM") {
-    Deployment_Node(user_systemd, "Rootless systemd and Quadlet") {
-      Container(ingress, "Tailnet Ingress", "Tailscale userspace", "Private HTTPS without TUN or NET_ADMIN")
-      Container(edge, "Voice Edge", "Pipecat as UID 65532", "Read-only and capability-free")
-    }
-  }
-}
+        EDGE -->|"broker bearer · host.docker.internal:9443"| BROKER
+        DB <-->|"loopback 127.0.0.1:54329"| WORKER
+    end
 
-Rel(user, browser, "Talks through", "Microphone and speaker")
-Rel(browser, ingress, "Streams audio", "Tailnet HTTPS and WebSocket")
-Rel(ingress, tailscale_control, "Obtains verified identity from", "Tailscale control protocol")
-Rel(ingress, edge, "Proxies identity and voice traffic", "VM network namespace")
-Rel(edge, tunnel, "Calls the scoped inference API", "VM loopback port 9443")
-Rel(tunnel, broker, "Forwards only broker port 9443", "Reverse SSH")
-Rel(broker, ollama, "Requests exact-model chat", "Mac loopback port 11434")
+    USER -->|"microphone + speaker"| BROWSER
+    BROWSER -->|"tailnet HTTPS + WebSocket"| INGRESS
+    INGRESS -.->|"control protocol"| CONTROL
+
+    classDef person fill:#084c8d,color:#fff,stroke:#05345f,stroke-width:2px;
+    classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
+    classDef container fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
+    classDef security fill:#dcfce7,color:#14532d,stroke:#16a34a,stroke-width:2px;
+    classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
+    class USER person;
+    class CONTROL external;
+    class BROWSER,BROKER,WORKER,GONDOLIN,WASSETTE container;
+    class INGRESS,EDGE,GATEWAY security;
+    class DB data;

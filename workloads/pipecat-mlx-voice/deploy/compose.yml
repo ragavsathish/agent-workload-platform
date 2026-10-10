@@ -1,20 +1,121 @@
+name: pipecat-mlx-voice
+
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
     restart: unless-stopped
     environment:
       POSTGRES_DB: voice_agents
       POSTGRES_USER: voice_agents
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in server/.env}
-    ports:
-      - "127.0.0.1:54329:5432"
-    volumes:
-      - voice-agent-postgres:/var/lib/postgresql/data
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-password
+    secrets: [postgres-password]
+    ports: ["127.0.0.1:54329:5432"]
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    networks: [data, host-access]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U voice_agents -d voice_agents"]
       interval: 5s
       timeout: 3s
       retries: 20
+    security_opt: [no-new-privileges:true]
+
+  agent-gateway:
+    image: local/pipecat-agent-gateway:compose
+    pull_policy: never
+    build:
+      context: ..
+      dockerfile: gateway/Containerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AGENT_GATEWAY_HOST: 0.0.0.0
+      AGENT_GATEWAY_PORT: "9444"
+      AGENT_GATEWAY_TOKEN_FILE: /run/secrets/agent-gateway-token
+      DATABASE_URL_FILE: /run/secrets/database-url
+      ORCHESTRATOR_APPROVAL_SECRET_FILE: /run/secrets/approval-secret
+      ORCHESTRATOR_APPROVAL_TTL_SECONDS: ${ORCHESTRATOR_APPROVAL_TTL_SECONDS:-300}
+      ORCHESTRATOR_ALLOWED_USERS: ${ORCHESTRATOR_ALLOWED_USERS:-}
+      ORCHESTRATOR_WORKSPACE_ROOTS: ${ORCHESTRATOR_WORKSPACE_ROOTS:?set ORCHESTRATOR_WORKSPACE_ROOTS in server/.env}
+      ORCHESTRATOR_DEFER_WORKSPACE_VALIDATION: "true"
+      ABSURD_QUEUE: ${ABSURD_QUEUE:-agents}
+      WORKER_TASK_TIMEOUT_SECONDS: ${WORKER_TASK_TIMEOUT_SECONDS:-1800}
+    secrets: [agent-gateway-token, database-url, approval-secret]
+    networks: [control, data]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=64m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1
+
+  tailscale:
+    image: docker.io/tailscale/tailscale@sha256:c507f3a2a6ab1cabd8d809b98edeb41edbd5c3fb6ad9632ffd098b4c7d0b4065
+    restart: unless-stopped
+    hostname: pipecat-edge
+    environment:
+      TS_USERSPACE: "true"
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SOCKET: /tmp/tailscaled.sock
+      TS_HOSTNAME: pipecat-edge
+      TS_ACCEPT_DNS: "false"
+    volumes: [tailscale-state:/var/lib/tailscale]
+    networks: [control]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=64m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 1
+
+  voice-edge:
+    image: local/pipecat-edge:compose
+    pull_policy: never
+    build:
+      context: ..
+      dockerfile: edge/Containerfile
+    restart: unless-stopped
+    depends_on:
+      agent-gateway:
+        condition: service_healthy
+      tailscale:
+        condition: service_started
+    network_mode: service:tailscale
+    env_file: [../edge/.env]
+    environment:
+      INFERENCE_BROKER_BASE_URL: http://host.docker.internal:9443/v1
+      AGENT_GATEWAY_BASE_URL: http://agent-gateway:9444/v1
+    secrets: [broker-token, agent-gateway-token]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=256m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    user: "65532:65532"
+    pids_limit: 256
+    mem_limit: 2g
+    cpus: 2
 
 volumes:
-  voice-agent-postgres:
+  postgres-data:
+  tailscale-state:
+
+networks:
+  control:
+  data:
+    internal: true
+  host-access:
+
+secrets:
+  broker-token:
+    file: ./secrets/broker-token
+  agent-gateway-token:
+    file: ./secrets/agent-gateway-token
+  postgres-password:
+    file: ./secrets/postgres-password
+  database-url:
+    file: ./secrets/database-url
+  approval-secret:
+    file: ./secrets/approval-secret

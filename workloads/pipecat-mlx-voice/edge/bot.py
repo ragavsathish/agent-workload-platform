@@ -3,8 +3,11 @@
 import os
 from pathlib import Path
 
+import httpx
 from dotenv import load_dotenv
 from loguru import logger
+from pipecat.adapters.schemas.direct_function import DirectFunction
+from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.frames.frames import LLMRunFrame
 from pipecat.pipeline.pipeline import Pipeline
@@ -16,6 +19,7 @@ from pipecat.processors.aggregators.llm_response_universal import (
 )
 from pipecat.runner.types import RunnerArguments, WebSocketRunnerArguments
 from pipecat.serializers.protobuf import ProtobufFrameSerializer
+from pipecat.services.llm_service import FunctionCallParams
 from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.services.openai.stt import OpenAISTTService
 from pipecat.services.openai.tts import OpenAITTSService
@@ -53,6 +57,8 @@ def resolve_identity(runner_args: WebSocketRunnerArguments) -> str:
 async def run_bot(transport: BaseTransport, identity: str):
     broker_url = required_env("INFERENCE_BROKER_BASE_URL")
     broker_token = required_env("INFERENCE_BROKER_TOKEN")
+    gateway_url = required_env("AGENT_GATEWAY_BASE_URL").rstrip("/")
+    gateway_token = required_env("AGENT_GATEWAY_TOKEN")
     model = required_env("OLLAMA_MODEL")
 
     stt = OpenAISTTService(
@@ -66,8 +72,14 @@ async def run_bot(transport: BaseTransport, identity: str):
         settings=OpenAILLMService.Settings(
             model=model,
             system_instruction=(
-                "You are a concise voice assistant. You have no tools and cannot start agent "
-                "tasks from this isolated endpoint. Do not claim otherwise."
+                "You are a concise voice interface to Pi, a coding-agent coordinator. Responses "
+                "are spoken, so avoid visual formatting. You can propose, inspect, approve, and "
+                "cancel agent tasks with the available tools. Creating a proposal never runs it. "
+                "After proposing, read back the exact instruction and workspace. Approval is "
+                "allowed only in a later user turn when the user explicitly asks to approve that "
+                "pending task. Never approve in the same turn as proposal creation and never infer "
+                "approval from unrelated speech. Pi performs approved work "
+                "through Gondolin and Wassette MCP; do not claim the voice VM has host access."
             ),
         ),
     )
@@ -77,7 +89,125 @@ async def run_bot(transport: BaseTransport, identity: str):
         settings=OpenAITTSService.Settings(model="kokoro", voice="alloy", speed=1.0),
     )
 
-    context = LLMContext()
+    http_client = httpx.AsyncClient(
+        base_url=gateway_url,
+        headers={"Authorization": f"Bearer {gateway_token}"},
+        timeout=httpx.Timeout(30.0, connect=5.0),
+    )
+
+    async def gateway_request(method: str, path: str, **kwargs) -> dict[str, object]:
+        response = await http_client.request(method, path, **kwargs)
+        if response.is_error:
+            try:
+                detail = response.json().get("detail", "request failed")
+            except ValueError:
+                detail = "request failed"
+            raise RuntimeError(f"agent gateway rejected the request: {detail}")
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise RuntimeError("agent gateway returned an invalid response")
+        return payload
+
+    async def propose_agent_task(params: FunctionCallParams) -> None:
+        try:
+            result = await gateway_request(
+                "POST",
+                "/tasks",
+                json={
+                    "identity": identity,
+                    "instruction": str(params.arguments["instruction"]),
+                    "workspace": str(params.arguments["workspace"]),
+                },
+            )
+            await params.result_callback(result)
+        except Exception as exc:
+            logger.exception("Unable to propose agent task")
+            await params.result_callback({"error": str(exc)})
+
+    async def get_agent_task(params: FunctionCallParams) -> None:
+        try:
+            proposal_id = str(params.arguments["proposal_id"])
+            result = await gateway_request(
+                "GET", f"/tasks/{proposal_id}", params={"identity": identity}
+            )
+            await params.result_callback(result)
+        except Exception as exc:
+            logger.exception("Unable to inspect agent task")
+            await params.result_callback({"error": str(exc)})
+
+    async def approve_agent_task(params: FunctionCallParams) -> None:
+        try:
+            proposal_id = str(params.arguments["proposal_id"])
+            result = await gateway_request(
+                "POST",
+                f"/tasks/{proposal_id}/approve",
+                json={"identity": identity},
+            )
+            await params.result_callback(result)
+        except Exception as exc:
+            logger.exception("Unable to approve agent task")
+            await params.result_callback({"error": str(exc)})
+
+    async def cancel_agent_task(params: FunctionCallParams) -> None:
+        try:
+            proposal_id = str(params.arguments["proposal_id"])
+            result = await gateway_request(
+                "POST",
+                f"/tasks/{proposal_id}/cancel",
+                json={"identity": identity},
+            )
+            await params.result_callback(result)
+        except Exception as exc:
+            logger.exception("Unable to cancel agent task")
+            await params.result_callback({"error": str(exc)})
+
+    proposal_id_property = {
+        "type": "string",
+        "description": "The exact proposal ID returned by propose_agent_task.",
+    }
+    tools: list[FunctionSchema | DirectFunction] = [
+        FunctionSchema(
+            name="propose_agent_task",
+            description="Create a pending Pi task proposal. This does not start work.",
+            properties={
+                "instruction": {
+                    "type": "string",
+                    "description": "The complete and specific instruction for Pi.",
+                },
+                "workspace": {
+                    "type": "string",
+                    "description": "Absolute path to the intended host project workspace.",
+                },
+            },
+            required=["instruction", "workspace"],
+            handler=propose_agent_task,
+        ),
+        FunctionSchema(
+            name="get_agent_task",
+            description="Read the status and bounded result of one owned Pi task proposal.",
+            properties={"proposal_id": proposal_id_property},
+            required=["proposal_id"],
+            handler=get_agent_task,
+        ),
+        FunctionSchema(
+            name="approve_agent_task",
+            description=(
+                "Approve one pending proposal only after the user explicitly asks to approve "
+                "that task in a later turn."
+            ),
+            properties={"proposal_id": proposal_id_property},
+            required=["proposal_id"],
+            handler=approve_agent_task,
+        ),
+        FunctionSchema(
+            name="cancel_agent_task",
+            description="Cancel one pending or running task owned by this tailnet identity.",
+            properties={"proposal_id": proposal_id_property},
+            required=["proposal_id"],
+            handler=cancel_agent_task,
+        ),
+    ]
+    context = LLMContext(tools=tools)
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer()),
@@ -116,6 +246,7 @@ async def run_bot(transport: BaseTransport, identity: str):
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
+        await http_client.aclose()
         await worker.cancel()
 
     runner = WorkerRunner(handle_sigint=False)
@@ -169,6 +300,10 @@ if __name__ == "__main__":
 
     @app.get("/api/features")
     async def features():
-        return {"tasks": False, "isolation": "podman-machine"}
+        return {
+            "tasks": True,
+            "approval": "voice-yolo",
+            "isolation": "docker-desktop-compose",
+        }
 
     main()

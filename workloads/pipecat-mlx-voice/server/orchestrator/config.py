@@ -15,6 +15,14 @@ def _csv(name: str) -> tuple[str, ...]:
     return tuple(value.strip() for value in os.getenv(name, "").split(",") if value.strip())
 
 
+def _value(name: str, default: str = "") -> str:
+    value = os.getenv(name, default)
+    file_name = os.getenv(f"{name}_FILE")
+    if file_name:
+        return Path(file_name).read_text(encoding="utf-8").strip()
+    return value
+
+
 @dataclass(frozen=True)
 class Settings:
     database_url: str
@@ -32,27 +40,29 @@ class Settings:
     allow_unsandboxed: bool
     task_timeout_seconds: int
     max_output_bytes: int
+    defer_workspace_validation: bool = False
 
     @classmethod
     def from_env(cls) -> Settings:
         roots = _csv("ORCHESTRATOR_WORKSPACE_ROOTS")
-        extension = os.getenv("PI_GONDOLIN_EXTENSION")
+        extension = _value("PI_GONDOLIN_EXTENSION")
         return cls(
-            database_url=os.getenv("DATABASE_URL", ""),
-            approval_secret=os.getenv("ORCHESTRATOR_APPROVAL_SECRET", ""),
+            database_url=_value("DATABASE_URL"),
+            approval_secret=_value("ORCHESTRATOR_APPROVAL_SECRET"),
             allowed_users=_csv("ORCHESTRATOR_ALLOWED_USERS"),
             workspace_roots=tuple(Path(root).expanduser().resolve() for root in roots),
             allow_local_dev=_bool_env("ORCHESTRATOR_ALLOW_LOCAL_DEV"),
             approval_ttl_seconds=int(os.getenv("ORCHESTRATOR_APPROVAL_TTL_SECONDS", "300")),
-            queue=os.getenv("ABSURD_QUEUE", "agents"),
-            pi_binary=os.getenv("PI_BINARY", "/opt/homebrew/bin/pi"),
-            pi_model=os.getenv("PI_MODEL") or None,
-            pi_thinking=os.getenv("PI_THINKING", "medium"),
-            pi_session_dir=Path(os.getenv("PI_SESSION_DIR", "~/.pi/agent/sessions")).expanduser(),
+            queue=_value("ABSURD_QUEUE", "agents"),
+            pi_binary=_value("PI_BINARY", "/opt/homebrew/bin/pi"),
+            pi_model=_value("PI_MODEL") or None,
+            pi_thinking=_value("PI_THINKING", "medium"),
+            pi_session_dir=Path(_value("PI_SESSION_DIR", "~/.pi/agent/sessions")).expanduser(),
             gondolin_extension=Path(extension).expanduser().resolve() if extension else None,
             allow_unsandboxed=_bool_env("WORKER_ALLOW_UNSANDBOXED"),
             task_timeout_seconds=int(os.getenv("WORKER_TASK_TIMEOUT_SECONDS", "1800")),
             max_output_bytes=int(os.getenv("WORKER_MAX_OUTPUT_BYTES", "1048576")),
+            defer_workspace_validation=_bool_env("ORCHESTRATOR_DEFER_WORKSPACE_VALIDATION"),
         )
 
     def require_api(self) -> None:
