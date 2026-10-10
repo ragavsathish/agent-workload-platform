@@ -3,6 +3,19 @@
 A private browser voice assistant for Apple Silicon. MLX Whisper, Ollama, and MLX Kokoro stay on
 macOS; the browser-facing code runs in a dedicated rootless Podman micro-VM.
 
+## Architecture
+
+The source-controlled [C4 architecture views](docs/architecture/README.md)
+define the system scope, runtime responsibilities, deployment topology, and
+security boundaries:
+
+- [C1 system context](docs/architecture/c1-system-context.mmd)
+- [C2 container view](docs/architecture/c2-container.mmd)
+- [Deployment and security view](docs/architecture/deployment-security.mmd)
+
+The Mermaid sources are authoritative and trace each runtime element back to
+the configuration or code that implements it.
+
 ```text
 iPhone browser
   │ HTTPS + verified identity (tailnet only)

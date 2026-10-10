@@ -1,0 +1,15 @@
+C4Context
+title Pipecat MLX Voice - System Context
+
+Person(user, "Tailnet User", "Talks to the private voice assistant from an approved browser identity")
+
+System(voice, "Pipecat MLX Voice", "Streams browser audio through an isolated voice edge and performs local Apple Silicon inference")
+
+System_Ext(tailscale, "Tailscale Control Plane", "Authenticates devices and distributes tailnet identity and network configuration")
+System_Ext(ollama, "Ollama", "Runs the one locally approved chat model on the Mac")
+System_Ext(registries, "OCI and Model Registries", "Supply digest-pinned images and explicitly selected model artifacts during provisioning")
+
+Rel(user, voice, "Speaks with and hears the assistant", "Tailnet HTTPS and WebSocket audio")
+Rel(voice, tailscale, "Authenticates devices and obtains tailnet configuration from", "Tailscale control protocol")
+Rel(voice, ollama, "Requests chat completions from", "Loopback OpenAI-compatible HTTP")
+Rel(voice, registries, "Downloads reviewed deployment and model inputs from", "Outbound HTTPS during provisioning")

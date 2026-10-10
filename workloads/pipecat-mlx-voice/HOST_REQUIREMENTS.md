@@ -4,6 +4,11 @@ The public-facing workload is an immutable, rootless Podman appliance inside a d
 micro-VM. macOS retains only the hardware-accelerated inference services and initiates a narrow
 reverse SSH connection into that VM.
 
+See the [deployment and security C4 view](docs/architecture/deployment-security.mmd)
+for the runtime placement and trust boundaries, and the
+[architecture notes](docs/architecture/README.md) for model-to-code
+traceability and explicit exclusions.
+
 ## Required host
 
 - Apple Silicon Mac running macOS 14 or newer

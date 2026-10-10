@@ -1,0 +1,30 @@
+C4Deployment
+title Pipecat MLX Voice - Deployment and Security Boundaries
+
+Person(user, "Tailnet User", "Uses an approved identity")
+System_Ext(tailscale_control, "Tailscale Control Plane", "Authenticates devices and distributes tailnet configuration")
+System_Ext(ollama, "Ollama", "Runs the approved local chat model")
+
+Deployment_Node(phone, "User Device", "iPhone or browser device", "Authenticated member of the approved tailnet") {
+  Container(browser, "Browser Client", "Safari and React", "Captures and plays voice audio")
+}
+
+Deployment_Node(mac, "Apple Silicon Mac", "macOS 14 or newer", "Owns GPU inference, credentials, and the VM lifecycle") {
+  Container(broker, "Inference Broker", "FastAPI on 127.0.0.1:9443", "Exposes only authenticated and bounded STT, TTS, chat, and health routes")
+  Container(tunnel, "Inference Tunnel", "OpenSSH LaunchAgent", "Initiates one reverse port forward into the VM; provides no guest-to-host SSH route")
+
+  Deployment_Node(vm, "pipecat-edge Micro-VM", "Podman machine with libkrun", "Has no macOS filesystem share or host container-engine socket") {
+    Deployment_Node(user_systemd, "Rootless User Services", "systemd and Quadlet", "Runs digest-pinned images with Pull=never") {
+      Container(ingress, "Tailnet Ingress", "Tailscale userspace container", "Uses no TUN device, NET_ADMIN capability, privileged mode, or published LAN port")
+      Container(edge, "Voice Edge", "Pipecat container as UID 65532", "Uses a read-only root, zero capabilities, NoNewPrivileges, and bounded CPU, memory, and PIDs")
+    }
+  }
+}
+
+Rel(user, browser, "Talks through", "Microphone and speaker")
+Rel(browser, ingress, "Loads the UI and streams audio", "WireGuard-protected tailnet HTTPS and WebSocket")
+Rel(ingress, tailscale_control, "Obtains verified identity and network configuration from", "Tailscale control protocol")
+Rel(ingress, edge, "Proxies approved identity and voice traffic", "Shared VM network namespace")
+Rel(edge, tunnel, "Calls the bearer-scoped inference endpoint through", "127.0.0.1:9443 in the VM")
+Rel(tunnel, broker, "Forwards only the broker port to", "Host-initiated reverse SSH")
+Rel(broker, ollama, "Requests exact-model chat completions from", "127.0.0.1:11434")

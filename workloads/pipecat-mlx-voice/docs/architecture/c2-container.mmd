@@ -1,0 +1,23 @@
+C4Container
+title Pipecat MLX Voice - Container View
+
+Person(user, "Tailnet User", "Uses an approved Tailscale identity on an iPhone or browser device")
+
+System_Boundary(voice, "Pipecat MLX Voice") {
+  Container(browser, "Browser Client", "React and Pipecat RTVI", "Captures microphone audio, renders status, and plays synthesized speech")
+  Container(ingress, "Tailnet Ingress", "Tailscale userspace networking and Serve", "Terminates private HTTPS, supplies verified identity headers, and proxies only to the voice edge")
+  Container(edge, "Voice Edge", "Pipecat and FastAPI in a rootless Podman container", "Validates the exact tailnet identity and runs the VAD, STT, LLM, and TTS pipeline without tools")
+  Container(tunnel, "Inference Tunnel", "OpenSSH under a macOS LaunchAgent", "Publishes only the Mac loopback broker port onto VM loopback through a host-initiated reverse forward")
+  Container(broker, "Inference Broker", "FastAPI, MLX Whisper, and MLX Kokoro", "Authenticates a bearer capability and exposes bounded transcription, speech, and exact-model chat routes")
+}
+
+System_Ext(tailscale, "Tailscale Control Plane", "Authenticates devices and distributes tailnet configuration")
+System_Ext(ollama, "Ollama", "Runs the exact chat model allowed by the broker")
+
+Rel(user, browser, "Talks through", "Microphone and speaker")
+Rel(browser, ingress, "Loads the client and streams audio", "Tailnet HTTPS and WebSocket")
+Rel(ingress, tailscale, "Obtains identity and network configuration from", "Tailscale control protocol")
+Rel(ingress, edge, "Forwards authenticated browser traffic with identity", "VM loopback HTTP and WebSocket")
+Rel(edge, tunnel, "Calls the bounded inference capability through", "Bearer-authenticated HTTP on VM loopback")
+Rel(tunnel, broker, "Forwards only port 9443 to", "Host-initiated reverse SSH")
+Rel(broker, ollama, "Requests exact-model chat completions from", "Mac loopback HTTP")
