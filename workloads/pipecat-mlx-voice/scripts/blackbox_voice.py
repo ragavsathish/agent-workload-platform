@@ -30,9 +30,15 @@ from pipecat.serializers.protobuf import frame_protos
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("utterances", nargs="+")
-    parser.add_argument("--identity", default="you@example.com")
     parser.add_argument(
-        "--origin", default="https://pipecat-edge.example-tailnet.ts.net"
+        "--identity",
+        default=os.getenv("EDGE_ALLOWED_USERS", "you@example.com").split(",", 1)[0],
+    )
+    parser.add_argument(
+        "--origin",
+        default=os.getenv(
+            "PIPECAT_ALLOWED_ORIGINS", "https://pipecat-edge.example-tailnet.ts.net"
+        ).split(",", 1)[0],
     )
     parser.add_argument("--timeout", type=float, default=120.0)
     return parser.parse_args()
@@ -108,9 +114,8 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
     sent_audio = False
 
     async with websockets.connect(
-        f"ws://127.0.0.1:7860/ws-client?token={token}",
+        f"ws://127.0.0.1:7860/ws-client/{token}",
         origin=args.origin,
-        additional_headers={"tailscale-user-login": args.identity},
         max_size=4 * 1024 * 1024,
     ) as socket:
         await socket.send(

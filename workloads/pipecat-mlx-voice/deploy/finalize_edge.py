@@ -22,6 +22,10 @@ def main() -> None:
     replacements = {
         "EDGE_ALLOWED_USERS": login,
         "PIPECAT_ALLOWED_ORIGINS": f"https://{dns_name}",
+        # The TLS-terminated TCP ingress avoids Tailscale Serve's HTTP/2
+        # WebSocket proxy bug. Tokens travel in Pipecat's supported URL path.
+        "PIPECAT_WEBSOCKET_AUTH": "token",
+        "EDGE_SINGLE_USER_TCP_INGRESS": "true",
         "AGENT_GATEWAY_TOKEN_FILE": "/run/secrets/agent-gateway-token",
         "AGENT_GATEWAY_BASE_URL": "http://agent-gateway:9444/v1",
     }

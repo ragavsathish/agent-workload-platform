@@ -1,7 +1,7 @@
 flowchart TB
     %% C4 deployment view: private voice ingress and isolated agent tools.
     USER(["Person<br/><b>Tailnet User</b><br/>talks, listens, explicitly approves"])
-    CONTROL["External system<br/><b>Tailscale Control Plane</b><br/>device and identity authority"]
+    CONTROL["External system<br/><b>Tailscale Control Plane</b><br/>device and network authority"]
 
     subgraph DEVICE["User device"]
         BROWSER["Container<br/><b>Browser Client</b><br/>Safari · React · microphone · speaker"]
@@ -13,11 +13,11 @@ flowchart TB
             direction TB
             subgraph COMPOSE["Compose · voice services"]
                 direction TB
-                INGRESS["Container<br/><b>Tailnet Ingress</b><br/>Tailscale userspace · private HTTPS"]
-                EDGE["Container<br/><b>Voice Edge</b><br/>Pipecat · UID 65532 · read-only"]
+                INGRESS["Container<br/><b>Tailnet Ingress</b><br/>TLS-terminated TCP · tailnet only"]
+                EDGE["Container<br/><b>Voice Edge</b><br/>exact origin · one-use path token"]
                 GATEWAY["Container<br/><b>Agent Gateway</b><br/>four identity-scoped task routes"]
                 DB[("Container database<br/><b>Postgres + Absurd</b><br/>durable proposals · tasks · checkpoints")]
-                INGRESS -->|"verified identity + WebSocket"| EDGE
+                INGRESS -->|"HTTP/1.1 + WebSocket · shared loopback"| EDGE
                 EDGE -->|"gateway bearer · control network"| GATEWAY
                 GATEWAY -->|"internal data network"| DB
             end

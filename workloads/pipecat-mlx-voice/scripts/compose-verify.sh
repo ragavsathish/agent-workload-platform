@@ -68,6 +68,67 @@ tailscale_cid="$("${compose[@]}" ps -q tailscale)"
 voice_ports="$(docker inspect -f '{{json .NetworkSettings.Ports}}' "$tailscale_cid")"
 [[ -z "$(docker port "$tailscale_cid" 2>/dev/null)" && "$voice_ports" != *'"0.0.0.0"'* && "$voice_ports" != *'"::"'* ]] && pass "voice/Tailscale namespace publishes no Docker port" || fail "voice/Tailscale publishes a Docker port"
 
+if "${compose[@]}" exec -T voice-edge /app/.venv/bin/python - <<'PY'
+import asyncio
+import json
+import os
+import urllib.request
+
+import websockets
+
+
+async def probe() -> None:
+    assert os.environ["PIPECAT_WEBSOCKET_AUTH"] == "token"
+    origin = os.environ["PIPECAT_ALLOWED_ORIGINS"]
+    request = urllib.request.Request(
+        "http://127.0.0.1:7860/start",
+        data=b'{"transport":"websocket"}',
+        headers={"Content-Type": "application/json", "Origin": origin},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=5) as response:
+        token = json.load(response)["token"]
+    async with websockets.connect(
+        f"ws://127.0.0.1:7860/ws-client/{token}",
+        origin=origin,
+        open_timeout=5,
+    ) as socket:
+        await asyncio.sleep(0.2)
+        assert socket.close_code is None
+    try:
+        async with websockets.connect(
+            "ws://127.0.0.1:7860/ws-client",
+            origin=origin,
+            open_timeout=5,
+        ):
+            pass
+    except websockets.InvalidStatus as exc:
+        assert exc.response.status_code == 403
+    else:
+        raise AssertionError("missing WebSocket token was accepted")
+    with urllib.request.urlopen(request, timeout=5) as response:
+        hostile_origin_token = json.load(response)["token"]
+    try:
+        async with websockets.connect(
+            f"ws://127.0.0.1:7860/ws-client/{hostile_origin_token}",
+            origin="https://attacker.invalid",
+            open_timeout=5,
+        ):
+            pass
+    except websockets.InvalidStatus as exc:
+        assert exc.response.status_code == 403
+    else:
+        raise AssertionError("hostile WebSocket origin was accepted")
+
+
+asyncio.run(probe())
+PY
+then
+  pass "voice WebSocket uses a path token compatible with Tailscale TCP ingress"
+else
+  fail "voice WebSocket path-token ingress is not enforced"
+fi
+
 [[ "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:9443/health || true)" == 401 ]] && pass "host inference broker rejects unauthenticated traffic" || fail "host inference broker capability check failed"
 broker_ready=0
 gateway_ready=0

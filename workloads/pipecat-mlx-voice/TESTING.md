@@ -3,7 +3,8 @@
 The black-box runner uses no microphone shortcut and no direct STT injection. It asks the native
 Kokoro broker to synthesize an utterance, resamples the PCM to browser input format, obtains a
 one-use Pipecat session token, and streams 20 ms protobuf audio frames over the browser-facing
-WebSocket. The resulting MLX Whisper transcript drives Ollama and the real gateway.
+WebSocket. The token is carried in the URL path so the test matches the Safari/Tailscale ingress.
+The resulting MLX Whisper transcript drives Ollama and the real gateway.
 
 ```bash
 make warm-models

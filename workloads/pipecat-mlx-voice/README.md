@@ -12,7 +12,12 @@ SVG render.
 
 ## Trust model
 
-- Tailscale Serve is private tailnet ingress; Funnel and public Docker ports are not enabled.
+- Tailscale Serve provides private, TLS-terminated TCP ingress; Funnel and public Docker ports are
+  not enabled. This preserves Safari's HTTP/1.1 WebSocket upgrade instead of using Serve's HTTP/2
+  reverse proxy.
+- Browser sessions require an exact HTTPS origin and a signed, one-use token in the WebSocket path.
+  The current deployment is deliberately single-user: login pins exactly one owner identity during
+  setup, while tailnet ACLs authenticate which devices can reach the listener.
 - The voice edge is non-root, read-only, capability-free, resource-bounded, and has no host mount or
   Docker socket.
 - Separate bearer capabilities expose only bounded inference and propose/status/approve/cancel.
@@ -48,7 +53,7 @@ make warm-models
 ```
 
 `make login` performs interactive Tailscale authentication when needed, binds the exact login and
-MagicDNS origin, enables Serve on HTTPS 443, and prints the browser URL.
+MagicDNS origin, enables tailnet-only TLS-terminated TCP on HTTPS 443, and prints the browser URL.
 
 ## Operate
 
@@ -69,7 +74,7 @@ make check        # tests, lint, type checks, build, Compose and plist validatio
 Postgres and S3Mock are published only on host loopback so the native Pi worker can consume the
 queue and immutable workspace bundles. The native inference broker listens on `127.0.0.1:9443`; Docker Desktop makes that protected
 capability available through the private `inference-broker` host-gateway alias. No service listens
-on the Mac LAN interface; browser access is available only through Tailscale Serve.
+on the Mac LAN interface; browser access is available only through the tailnet listener.
 
 S3Mock stores committed Git bundles and result patches in a Docker named volume; it never
 bind-mounts `~/Documents`. Each task verifies the bundle digest, expands it beneath

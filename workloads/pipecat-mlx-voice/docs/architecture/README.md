@@ -30,6 +30,11 @@ non-root users with read-only roots, all Linux capabilities dropped, privilege e
 resource limits, and no Docker socket. The edge has no database, Pi, provider, session, or workspace
 credential. Separate secrets authorize bounded inference and four task lifecycle operations.
 
+Tailscale authenticates devices and provides the private network path. The single-user voice edge
+then validates the exact MagicDNS origin and a signed, one-use WebSocket path token before binding
+the session to the owner login pinned by setup. TLS-terminated TCP preserves Safari's HTTP/1.1
+upgrade and does not rely on a proxy-injected identity header.
+
 This shared Docker VM is a pragmatic host boundary, not the stronger independent libkrun VM used by
 the previous design. The highest-risk work remains outside the voice stack: Pi invokes file,
 browser, and integration tools through Gondolin micro-VMs and Wassette components.

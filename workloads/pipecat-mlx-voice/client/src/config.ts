@@ -61,8 +61,8 @@ const websocketConfig: APIRequest = {
 };
 
 /**
- * Append the connection token (if any) to the WebSocket URL returned by the
- * server before the transport connects.
+ * Append the connection token (if any) as a path segment to the WebSocket URL
+ * returned by the server. Tailscale's HTTP proxy can strip query strings.
  */
 const websocketResponseTransformer = (
   response: TransportConnectionParams
@@ -73,7 +73,7 @@ const websocketResponseTransformer = (
   publicUrl.host = window.location.host;
   return {
     wsUrl: token
-      ? `${publicUrl.toString()}?token=${encodeURIComponent(token)}`
+      ? `${publicUrl.toString().replace(/\/$/, '')}/${encodeURIComponent(token)}`
       : publicUrl.toString(),
   };
 };

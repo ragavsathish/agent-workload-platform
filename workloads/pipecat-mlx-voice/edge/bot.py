@@ -54,7 +54,11 @@ def resolve_identity(runner_args: WebSocketRunnerArguments) -> str:
         if value.strip()
     }
     if not identity:
-        raise PermissionError("connect through Tailscale Serve")
+        if os.getenv("EDGE_SINGLE_USER_TCP_INGRESS", "false").lower() == "true":
+            if len(allowed) != 1:
+                raise PermissionError("single-user TCP ingress requires exactly one allowed user")
+            return next(iter(allowed))
+        raise PermissionError("connect through the configured Tailscale ingress")
     if identity not in allowed:
         raise PermissionError("tailnet identity is not allowed")
     return identity
