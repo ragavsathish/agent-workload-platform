@@ -7,7 +7,7 @@
 - 20 GiB free disk minimum; 40 GiB recommended for images, telemetry, and model caches
 - Docker Desktop with Docker Compose
 - uv with Python 3.13, Node.js/npm, Ollama, curl, and Homebrew `libpq`
-- Pi plus the repository's built Gondolin browser extension and any approved Wassette components
+- Pi plus the repository's built Gondolin agent extension and any approved Wassette components
 - A Tailscale account shared with the browser device
 
 Kubernetes, k3s, Lima, Podman, Quadlet, systemd, SSH forwarding, and Tailscale Funnel are not used.
@@ -33,11 +33,21 @@ The worker does not require Documents, Desktop, or Downloads access. Scratch wor
 task. Publishing a repository is an explicit interactive action; only that invoking terminal needs
 access when the source happens to be under a macOS privacy-protected folder.
 
+`make install-host-services` copies the compiled Gondolin extension, its production dependencies,
+and the pinned VM image into `~/Library/Application Support/PipecatEdge/gondolin-agent`. The
+LaunchAgent never loads executable code or VM assets from `~/Documents`, so it does not need Full
+Disk Access or Documents-folder permission.
+
 `make up` derives root-only Compose secret files under ignored `deploy/secrets/`; no secret is baked
 into an image. It also installs two LaunchAgents in `~/Library/Application Support/PipecatEdge`:
 
 - inference broker: local MLX Whisper, Ollama, and Kokoro capability on `127.0.0.1:9443`;
 - Pi worker: consumes approved tasks from Postgres and invokes Gondolin/Wassette.
+
+The worker disables Pi's host-side built-in tools. Its explicit
+`gondolin_bash` tool runs commands inside the micro-VM with only the immutable
+task workspace mounted at `/workspace`. Results about disks, processes, or the
+operating system therefore describe that isolated workload, not macOS.
 
 The Compose gateway receives the database and approval secrets. The voice edge receives only the
 broker and gateway bearer tokens. Tailscale state and Postgres data use named Docker volumes.

@@ -48,6 +48,17 @@ export type GondolinBrowserOptions = {
   sessionLabel?: string;
 };
 
+export type GondolinExecOptions = {
+  cwd?: string;
+  timeoutMs?: number;
+};
+
+export type GondolinExecResult = {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+};
+
 class GondolinStdioTransport implements Transport {
   private readonly readBuffer = new ReadBuffer({ maxBufferSize: 16 * 1024 * 1024 });
   private process?: ExecProcess;
@@ -146,6 +157,7 @@ async function waitForSidecar(guestProcess: ExecProcess, sidecar: GuestSidecar):
 
 export class GondolinPlaywrightMcp {
   private vm?: VM;
+  private vmPromise?: Promise<VM>;
   private transport?: GondolinStdioTransport;
   private client?: Client;
   private sidecarProcesses: ExecProcess[] = [];
@@ -153,26 +165,43 @@ export class GondolinPlaywrightMcp {
 
   constructor(private readonly options: GondolinBrowserOptions) {}
 
+  private async ensureVm(): Promise<VM> {
+    if (this.vm) return this.vm;
+    if (this.vmPromise) return this.vmPromise;
+    const creation = (async () => {
+      if (!fs.existsSync(this.options.imagePath)) {
+        throw new Error(`Missing Gondolin browser assets: ${this.options.imagePath}`);
+      }
+      const { httpHooks, env } = createHttpHooks({
+        allowedHosts: this.options.allowedHosts ?? [],
+      });
+      const mounts = Object.fromEntries(
+        Object.entries({ "/output": this.outputDirectory, ...this.options.mounts })
+          .map(([guestPath, hostPath]) => [guestPath, new RealFSProvider(hostPath)]),
+      );
+      const vm = await VM.create({
+        sandbox: { imagePath: this.options.imagePath },
+        httpHooks,
+        env,
+        vfs: { mounts },
+        memory: "2G",
+        cpus: 2,
+        sessionLabel: this.options.sessionLabel ?? "pi-playwright-mcp",
+      });
+      this.vm = vm;
+      return vm;
+    })();
+    this.vmPromise = creation;
+    try {
+      return await creation;
+    } finally {
+      if (this.vmPromise === creation) this.vmPromise = undefined;
+    }
+  }
+
   async start(): Promise<void> {
     if (this.client) return;
-    if (!fs.existsSync(this.options.imagePath)) {
-      throw new Error(`Missing Gondolin browser assets: ${this.options.imagePath}`);
-    }
-    const { httpHooks, env } = createHttpHooks({ allowedHosts: this.options.allowedHosts });
-    const mounts = Object.fromEntries(
-      Object.entries({ "/output": this.outputDirectory, ...this.options.mounts })
-        .map(([guestPath, hostPath]) => [guestPath, new RealFSProvider(hostPath)]),
-    );
-    const vm = await VM.create({
-      sandbox: { imagePath: this.options.imagePath },
-      httpHooks,
-      env,
-      vfs: { mounts },
-      memory: "2G",
-      cpus: 2,
-      sessionLabel: this.options.sessionLabel ?? "pi-playwright-mcp",
-    });
-    this.vm = vm;
+    const vm = await this.ensureVm();
     try {
       for (const sidecar of this.options.sidecars ?? []) {
         const process = vm.exec(sidecar.command, { stdin: true, stdout: "pipe", stderr: "pipe" });
@@ -200,12 +229,33 @@ export class GondolinPlaywrightMcp {
     return this.client!.callTool({ name, arguments: args });
   }
 
+  async exec(command: string, options: GondolinExecOptions = {}): Promise<GondolinExecResult> {
+    const vm = await this.ensureVm();
+    const timeoutMs = Math.min(Math.max(options.timeoutMs ?? 30_000, 1_000), 120_000);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const result = await vm.exec(command, {
+        cwd: options.cwd ?? "/workspace",
+        signal: controller.signal,
+      });
+      return {
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   async close(): Promise<void> {
     const client = this.client;
-    const vm = this.vm;
+    const vm = this.vm ?? await this.vmPromise?.catch(() => undefined);
     this.client = undefined;
     this.transport = undefined;
     this.vm = undefined;
+    this.vmPromise = undefined;
     try {
       await client?.close();
     } finally {

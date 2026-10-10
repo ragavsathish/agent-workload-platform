@@ -22,12 +22,7 @@ def build_pi_command(settings: Settings, *, task_id: str, instruction: str) -> l
         "--mode",
         "json",
         "--print",
-        "--session-id",
-        task_id,
-        "--session-dir",
-        str(settings.pi_session_dir),
-        "--name",
-        f"voice-{task_id[:8]}",
+        "--no-session",
         "--thinking",
         settings.pi_thinking,
         "--no-extensions",
@@ -54,7 +49,6 @@ def validate_worker(settings: Settings) -> None:
         raise RuntimeError(f"Gondolin extension not found: {settings.gondolin_extension}")
     if not settings.gondolin_extension and not settings.allow_unsandboxed:
         raise RuntimeError("secure worker requires PI_GONDOLIN_EXTENSION")
-    settings.pi_session_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     if settings.artifact_workspaces:
         settings.worker_scratch_root.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.chmod(settings.worker_scratch_root, 0o700)

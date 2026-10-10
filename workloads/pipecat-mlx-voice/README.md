@@ -28,8 +28,10 @@ SVG render.
   exception message, URL parameter, request body, or response body.
 - Database credentials, Pi/provider authentication, sessions, and writable workspaces never enter the voice
   container.
-- The Pi worker runs on macOS and delegates tools to Gondolin micro-VMs and permission-scoped
-  Wassette components.
+- The Pi worker runs on macOS with built-in host tools disabled. Its explicit
+  `gondolin_bash` tool runs inside a Gondolin micro-VM with only the immutable
+  task workspace mounted at `/workspace`; browser and permission-scoped
+  Wassette tools are additional capabilities.
 - Approval is deliberately **YOLO voice approval** for now: Pipecat reads the exact pending plan and
   a later explicit spoken approval releases it. The durable gateway binds approval to the identity,
   proposal, plan hash, and expiry. This is convenient, not phishing-resistant; Face ID/WebAuthn can
@@ -85,8 +87,9 @@ durability; swap its endpoint for a real S3-compatible service before relying on
 
 Raw audio and synthesized speech exist only in memory while streaming. Transcripts remain in the
 in-memory conversation context for the active call and are discarded with it. Postgres stores only
-an explicitly proposed task instruction; native launch services write stdout and stderr to
-`/dev/null`. The synthetic black-box runner reports event counts, never transcript text.
+an explicitly proposed task instruction. Queue workers run Pi with `--no-session`, and native
+launch services write stdout and stderr to `/dev/null`, so agent conversations are not retained as
+Pi session JSONL. The synthetic black-box runner reports event counts, never transcript text.
 
 ## Local observability
 
