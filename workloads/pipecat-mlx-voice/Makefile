@@ -80,6 +80,7 @@ check:
 	cd server && uv run pyright ../scripts/benchmark_mlx.py
 	cd edge && uv sync --python 3.13 && uv run ruff check . && uv run pyright
 	cd client && npm run lint
+	cd client && npm test
 	cd client && npm run build
 	docker compose --env-file server/.env -f deploy/compose.yml config --quiet
 	for script in scripts/*.sh; do bash -n "$$script"; done

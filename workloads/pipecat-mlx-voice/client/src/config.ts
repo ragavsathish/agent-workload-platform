@@ -5,6 +5,8 @@
 
 import type { APIRequest, TransportConnectionParams } from '@pipecat-ai/client-js';
 
+import { publicWebSocketUrl } from './websocket-url';
+
 export type TransportType = 'daily' | 'smallwebrtc' | 'websocket';
 
 export const AVAILABLE_TRANSPORTS: TransportType[] = [
@@ -68,13 +70,8 @@ const websocketResponseTransformer = (
   response: TransportConnectionParams
 ): TransportConnectionParams => {
   const { wsUrl, token } = response as { wsUrl: string; token?: string };
-  const publicUrl = new URL(wsUrl, window.location.href);
-  publicUrl.protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  publicUrl.host = window.location.host;
   return {
-    wsUrl: token
-      ? `${publicUrl.toString().replace(/\/$/, '')}/${encodeURIComponent(token)}`
-      : publicUrl.toString(),
+    wsUrl: publicWebSocketUrl(wsUrl, token, window.location),
   };
 };
 
