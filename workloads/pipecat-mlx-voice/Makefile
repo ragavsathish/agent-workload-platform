@@ -1,4 +1,4 @@
-.PHONY: setup build up down recreate verify cycle-test login status warm-models blackbox-voice blackbox-e2e host-preflight install-host-services db-init broker worker pull-model check
+.PHONY: setup build up down recreate verify cycle-test login status warm-models benchmark-mlx blackbox-voice blackbox-e2e host-preflight install-host-services db-init broker worker pull-model check
 
 setup:
 	cd server && uv sync --python 3.13
@@ -36,6 +36,9 @@ status:
 warm-models:
 	./scripts/edge-warm-models.sh
 
+benchmark-mlx:
+	./scripts/benchmark-mlx.sh
+
 blackbox-voice:
 	./scripts/blackbox-voice.sh "$(UTTERANCE)"
 
@@ -65,6 +68,8 @@ check:
 	cd server && uv run ruff check .
 	cd server && uv run pyright
 	cd server && uv run pytest
+	cd server && uv run ruff check ../scripts/benchmark_mlx.py
+	cd server && uv run pyright ../scripts/benchmark_mlx.py
 	cd edge && uv sync --python 3.13 && uv run ruff check . && uv run pyright
 	cd client && npm run lint
 	cd client && npm run build

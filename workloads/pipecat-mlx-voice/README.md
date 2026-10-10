@@ -52,6 +52,7 @@ make status       # Compose services, tailnet state, native service state
 make verify       # isolation, capabilities, ingress, broker, and gateway checks
 make recreate     # immutable container recreation plus verification
 make cycle-test   # three stop/recreate/schema cycles plus final recovery
+make benchmark-mlx # warm CPU, RSS, tokens/s, and realtime-factor benchmark
 make blackbox-voice UTTERANCE="Propose a task in the default workspace to inspect it"
 make blackbox-e2e # synthetic voice through Pipecat plus a Postgres assertion
 make down         # stop Compose services; preserve Postgres and Tailscale volumes
@@ -68,6 +69,9 @@ WebSocket used by the browser, transcribes it with MLX Whisper, and exercises th
 Before Tailscale login it uses `deploy/compose.local-test.yml` as a non-listening network anchor;
 set `BLACKBOX_USE_TAILSCALE=true` to test an authenticated tunnel namespace. See
 [TESTING.md](TESTING.md) for assertions and failure interpretation.
+
+See [BENCHMARKS.md](BENCHMARKS.md) for the measured M4 Pro CPU, unified-memory, LLM throughput,
+and speech realtime factors, plus the reproducible benchmark command.
 
 See [HOST_REQUIREMENTS.md](HOST_REQUIREMENTS.md) for the host contract and
 [docs/architecture](docs/architecture/README.md) for responsibility and threat-boundary details.
