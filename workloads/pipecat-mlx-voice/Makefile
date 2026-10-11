@@ -1,4 +1,4 @@
-.PHONY: setup build up down recreate verify cycle-test login status grafana-password warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e host-preflight install-host-services db-init broker worker pull-model check
+.PHONY: setup build up down recreate verify cycle-test login status grafana-password warm-models benchmark-mlx provision-speaker-model begin-speaker-enrollment enroll-speaker verify-speaker publish-workspace blackbox-voice blackbox-e2e host-preflight install-host-services db-init broker worker pull-model check
 
 setup:
 	cd server && uv sync --python 3.13
@@ -44,6 +44,20 @@ warm-models:
 benchmark-mlx:
 	./scripts/benchmark-mlx.sh
 
+provision-speaker-model:
+	./scripts/provision-speaker-model.sh
+
+begin-speaker-enrollment:
+	@cd server && uv run python speaker_verification.py begin
+
+enroll-speaker:
+	@test -n "$(ENROLLMENT_WAVS)" || { echo 'Set ENROLLMENT_WAVS to at least three quoted WAV paths' >&2; exit 2; }
+	cd server && uv run python speaker_verification.py enroll $(ENROLLMENT_WAVS)
+
+verify-speaker:
+	@test -n "$(TEST_WAV)" || { echo 'Set TEST_WAV to one quoted WAV path' >&2; exit 2; }
+	cd server && uv run python speaker_verification.py verify "$(TEST_WAV)"
+
 publish-workspace:
 	./scripts/publish-workspace.sh "$(WORKSPACE_ID)" "$(REPOSITORY)"
 
@@ -72,6 +86,8 @@ pull-model:
 	ollama pull qwen3.5:9b-mlx
 
 check:
+	pnpm --dir ../.. --filter @agent-workload-platform/gondolin-browser check
+	pnpm --dir ../.. --filter @agent-workload-platform/gondolin-browser test:voice
 	cd server && uv sync --python 3.13
 	cd server && uv run ruff check .
 	cd server && uv run pyright

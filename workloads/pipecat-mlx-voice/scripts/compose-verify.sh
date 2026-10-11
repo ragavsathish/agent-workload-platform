@@ -11,12 +11,6 @@ fail() { printf 'FAIL  %s\n' "$*"; failures=$((failures + 1)); }
 services=(s3mock postgres otel-lgtm agent-gateway tailscale voice-edge)
 secure_services=(s3mock agent-gateway tailscale voice-edge)
 no_log_services=(otel-lgtm agent-gateway voice-edge)
-tls_edge_cid="$("${compose[@]}" ps -q tls-edge)"
-if [[ -n "$tls_edge_cid" ]]; then
-  services+=(tls-edge)
-  secure_services+=(tls-edge)
-  no_log_services+=(tls-edge)
-fi
 
 for service in "${services[@]}"; do
   cid="$("${compose[@]}" ps -q "$service")"
@@ -61,6 +55,12 @@ if docker inspect -f '{{json .NetworkSettings.Ports}}' "$("${compose[@]}" ps -q 
 else
   fail "S3Mock loopback publication is missing"
 fi
+gateway_ports="$(docker inspect -f '{{json .NetworkSettings.Ports}}' "$("${compose[@]}" ps -q agent-gateway)")"
+if [[ "$gateway_ports" == *'"9444/tcp":[{"HostIp":"127.0.0.1"'* ]]; then
+  pass "agent gateway is published only on host loopback for native Pi voice"
+else
+  fail "agent gateway loopback publication is missing"
+fi
 otel_ports="$(docker inspect -f '{{json .NetworkSettings.Ports}}' "$otel_cid")"
 if [[ "$otel_ports" == *'"3000/tcp":[{"HostIp":"127.0.0.1"'* && "$otel_ports" == *'"4318/tcp":[{"HostIp":"127.0.0.1"'* ]]; then
   pass "Grafana and OTLP/HTTP are published only on host loopback"
@@ -101,6 +101,7 @@ async def probe() -> None:
     async with websockets.connect(
         f"ws://127.0.0.1:7860/ws-client/{token}",
         origin=origin,
+        additional_headers={"tailscale-user-login": os.environ["EDGE_ALLOWED_USERS"]},
         open_timeout=5,
     ) as socket:
         await asyncio.sleep(0.2)
@@ -109,6 +110,7 @@ async def probe() -> None:
         async with websockets.connect(
             "ws://127.0.0.1:7860/ws-client",
             origin=origin,
+            additional_headers={"tailscale-user-login": os.environ["EDGE_ALLOWED_USERS"]},
             open_timeout=5,
         ):
             pass
@@ -122,6 +124,7 @@ async def probe() -> None:
         async with websockets.connect(
             f"ws://127.0.0.1:7860/ws-client/{hostile_origin_token}",
             origin="https://attacker.invalid",
+            additional_headers={"tailscale-user-login": os.environ["EDGE_ALLOWED_USERS"]},
             open_timeout=5,
         ):
             pass
@@ -134,60 +137,21 @@ async def probe() -> None:
 asyncio.run(probe())
 PY
 then
-  pass "voice WebSocket uses a path token compatible with Tailscale TCP ingress"
+  pass "voice WebSocket requires a one-use path token and exact origin"
 else
   fail "voice WebSocket path-token ingress is not enforced"
 fi
 
-if [[ -n "$tls_edge_cid" ]]; then
-  if "${compose[@]}" exec -T voice-edge /app/.venv/bin/python - <<'PY'
-import asyncio
-import os
-import ssl
-
-import httpx
-import websockets
-
-
-async def probe() -> None:
-    origin = os.environ["PIPECAT_ALLOWED_ORIGINS"]
-    async with httpx.AsyncClient(verify=False) as client:
-        response = await client.post(
-            "https://127.0.0.1:8443/start",
-            headers={"origin": origin},
-            json={"transport": "websocket"},
-        )
-        response.raise_for_status()
-        token = response.json()["token"]
-    context = ssl.create_default_context()
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
-    async with websockets.connect(
-        f"wss://127.0.0.1:8443/ws-client/{token}",
-        origin=origin,
-        ssl=context,
-        open_timeout=5,
-    ) as socket:
-        await asyncio.sleep(0.2)
-        assert socket.close_code is None
-
-
-asyncio.run(probe())
-PY
-  then
-    pass "raw tailnet TCP TLS proxy preserves the WebSocket upgrade"
-  else
-    fail "TLS proxy WebSocket path is broken"
-  fi
-  serve_status="$("${compose[@]}" exec -T tailscale tailscale --socket=/tmp/tailscaled.sock serve status 2>/dev/null || true)"
-  if [[ "$serve_status" == *'tcp://127.0.0.1:8443'* && "$serve_status" != *'TLS-terminated TCP'* ]]; then
-    pass "Tailscale uses raw TCP passthrough to the HTTP/1.1 TLS proxy"
-  else
-    fail "Tailscale is not using raw TCP passthrough"
-  fi
+serve_status="$("${compose[@]}" exec -T tailscale tailscale --socket=/tmp/tailscaled.sock serve status 2>/dev/null || true)"
+if [[ "$serve_status" == *'https://'* && "$serve_status" == *'http://127.0.0.1:7860'* ]]; then
+  pass "Tailscale Serve terminates HTTPS and proxies directly to Pipecat"
+else
+  fail "Tailscale Serve HTTPS proxy is not configured"
 fi
 
 [[ "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:9443/health || true)" == 401 ]] && pass "host inference broker rejects unauthenticated traffic" || fail "host inference broker capability check failed"
+[[ "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:9446/health || true)" == 401 ]] && pass "Pi voice service rejects unauthenticated traffic" || fail "Pi voice service capability check failed"
+[[ "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:9444/health || true)" == 401 ]] && pass "loopback agent gateway rejects unauthenticated traffic" || fail "loopback agent gateway capability check failed"
 broker_ready=0
 gateway_ready=0
 for _ in {1..5}; do
@@ -212,7 +176,7 @@ else
   fail "gateway cannot reach the private artifact bucket"
 fi
 
-for label in com.sathish.pipecat-broker com.sathish.pipecat-worker; do
+for label in com.sathish.pipecat-broker com.sathish.pipecat-pi-voice com.sathish.pipecat-worker; do
   launchctl print "gui/$UID/$label" >/dev/null 2>&1 && pass "$label is loaded" || fail "$label is not loaded"
 done
 

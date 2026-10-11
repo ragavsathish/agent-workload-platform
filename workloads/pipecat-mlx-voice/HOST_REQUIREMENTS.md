@@ -7,7 +7,7 @@
 - 20 GiB free disk minimum; 40 GiB recommended for images, telemetry, and model caches
 - Docker Desktop with Docker Compose
 - uv with Python 3.13, Node.js/npm, Ollama, curl, and Homebrew `libpq`
-- Pi plus the repository's built Gondolin browser extension and any approved Wassette components
+- Pi plus the repository's built Gondolin agent extension and any approved Wassette components
 - A Tailscale account shared with the browser device
 
 Kubernetes, k3s, Lima, Podman, Quadlet, systemd, SSH forwarding, and Tailscale Funnel are not used.
@@ -33,11 +33,21 @@ The worker does not require Documents, Desktop, or Downloads access. Scratch wor
 task. Publishing a repository is an explicit interactive action; only that invoking terminal needs
 access when the source happens to be under a macOS privacy-protected folder.
 
+`make install-host-services` copies the compiled Gondolin extension, its production dependencies,
+and the pinned VM image into `~/Library/Application Support/PipecatEdge/gondolin-agent`. The
+LaunchAgent never loads executable code or VM assets from `~/Documents`, so it does not need Full
+Disk Access or Documents-folder permission.
+
 `make up` derives root-only Compose secret files under ignored `deploy/secrets/`; no secret is baked
 into an image. It also installs two LaunchAgents in `~/Library/Application Support/PipecatEdge`:
 
 - inference broker: local MLX Whisper, Ollama, and Kokoro capability on `127.0.0.1:9443`;
 - Pi worker: consumes approved tasks from Postgres and invokes Gondolin/Wassette.
+
+The worker disables Pi's host-side built-in tools. Its explicit
+`gondolin_bash` tool runs commands inside the micro-VM with only the immutable
+task workspace mounted at `/workspace`. Results about disks, processes, or the
+operating system therefore describe that isolated workload, not macOS.
 
 The Compose gateway receives the database and approval secrets. The voice edge receives only the
 broker and gateway bearer tokens. Tailscale state and Postgres data use named Docker volumes.
@@ -47,8 +57,8 @@ S3Mock artifacts use another named volume inside Docker Desktop and never bind-m
 
 | Address | Owner | Purpose |
 |---|---|---|
-| tailnet HTTPS 443 | Tailscale userspace container, raw TCP | private browser ingress to Caddy |
-| shared loopback `127.0.0.1:8443` | Caddy TLS sidecar, HTTP/1.1 only | browser UI and WebSocket audio |
+| tailnet HTTPS 443 | Tailscale Serve | trusted HTTPS and private browser ingress |
+| shared loopback `127.0.0.1:7860` | Pipecat voice edge | browser UI and WebSocket audio behind Serve |
 | `127.0.0.1:54329` | Docker Postgres | native Pi worker queue access |
 | `127.0.0.1:9090` | Docker S3Mock | native worker immutable inputs and task result artifacts |
 | `127.0.0.1:3300` | Docker Grafana | authenticated local metrics and traces UI |
@@ -68,13 +78,12 @@ Telemetry deliberately excludes logs and all user-controlled values. Its named v
 only operation metrics and sanitized traces and can be removed separately if local telemetry must
 be erased.
 
-The phone must run Tailscale and join the same tailnet. Tailscale passes encrypted TCP through to a
-non-root, capability-free Caddy sidecar. Caddy owns the tailnet certificate, advertises HTTP/1.1
-only, and forwards to Pipecat over shared loopback, so Safari never enters Serve's incompatible
-HTTP/2 reverse proxy. The application requires the exact MagicDNS origin and a signed, one-use
-WebSocket path token. This is a single-user deployment: `make login` pins exactly one owner login,
-and tailnet ACLs authenticate the devices allowed to reach it. There is no fallback listener on the
-local Wi-Fi interface.
+The phone must run Tailscale and join the same tailnet. Tailscale Serve terminates trusted HTTPS,
+adds the authenticated tailnet identity, and forwards HTTP and WebSocket traffic directly to
+Pipecat over shared loopback. The application requires the exact MagicDNS origin and a signed,
+one-use WebSocket path token. This is a single-user deployment: `make login` pins exactly one owner
+login, and tailnet ACLs authenticate the devices allowed to reach it. There is no fallback listener
+on the local Wi-Fi interface.
 
 ## Repeatability and updates
 

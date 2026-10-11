@@ -5,16 +5,13 @@ runs the browser-facing voice edge, Tailscale ingress, narrow task gateway, and 
 Ollama, Pi, Gondolin, and Wassette remain native on macOS where Apple acceleration and VM-backed
 tool isolation are available.
 
-[![Deployment and security boundaries](docs/architecture/deployment-security.png)](docs/architecture/deployment-security.excalidraw)
-
-The [C4 architecture views](docs/architecture/README.md) include the editable Excalidraw scene and
-SVG render.
+The [C4 architecture views](docs/architecture/README.md) include the deployment and security
+boundaries as authoritative Mermaid sources.
 
 ## Trust model
 
-- Tailscale Serve provides private raw-TCP ingress to a capability-free Caddy sidecar that
-  terminates the tailnet certificate and advertises HTTP/1.1 only. Funnel and public Docker ports
-  are not enabled. This bypasses Serve's incompatible HTTP/2 WebSocket reverse proxy.
+- Tailscale Serve terminates trusted tailnet HTTPS and proxies HTTP and WebSocket traffic directly
+  to Pipecat over shared loopback. Funnel and public Docker ports are not enabled.
 - Browser sessions require an exact HTTPS origin and a signed, one-use token in the WebSocket path.
   The current deployment is deliberately single-user: login pins exactly one owner identity during
   setup, while tailnet ACLs authenticate which devices can reach the listener.
@@ -28,8 +25,10 @@ SVG render.
   exception message, URL parameter, request body, or response body.
 - Database credentials, Pi/provider authentication, sessions, and writable workspaces never enter the voice
   container.
-- The Pi worker runs on macOS and delegates tools to Gondolin micro-VMs and permission-scoped
-  Wassette components.
+- The Pi worker runs on macOS with built-in host tools disabled. Its explicit
+  `gondolin_bash` tool runs inside a Gondolin micro-VM with only the immutable
+  task workspace mounted at `/workspace`; browser and permission-scoped
+  Wassette tools are additional capabilities.
 - Approval is deliberately **YOLO voice approval** for now: Pipecat reads the exact pending plan and
   a later explicit spoken approval releases it. The durable gateway binds approval to the identity,
   proposal, plan hash, and expiry. This is convenient, not phishing-resistant; Face ID/WebAuthn can
@@ -53,8 +52,7 @@ make warm-models
 ```
 
 `make login` performs interactive Tailscale authentication when needed, binds the exact login and
-MagicDNS origin, issues the tailnet certificate, enables tailnet-only raw TCP on HTTPS 443, and
-prints the browser URL.
+MagicDNS origin, enables the tailnet-only HTTPS proxy on port 443, and prints the browser URL.
 
 ## Operate
 
@@ -73,7 +71,9 @@ make check        # tests, lint, type checks, build, Compose and plist validatio
 ```
 
 Postgres and S3Mock are published only on host loopback so the native Pi worker can consume the
-queue and immutable workspace bundles. The native inference broker listens on `127.0.0.1:9443`; Docker Desktop makes that protected
+queue and immutable workspace bundles. The bearer-protected agent gateway is also published on
+host loopback so the optional Pi voice backend can use only its four task-lifecycle operations.
+The native inference broker listens on `127.0.0.1:9443`; Docker Desktop makes that protected
 capability available through the private `inference-broker` host-gateway alias. No service listens
 on the Mac LAN interface; browser access is available only through the tailnet listener.
 
@@ -85,8 +85,19 @@ durability; swap its endpoint for a real S3-compatible service before relying on
 
 Raw audio and synthesized speech exist only in memory while streaming. Transcripts remain in the
 in-memory conversation context for the active call and are discarded with it. Postgres stores only
-an explicitly proposed task instruction; native launch services write stdout and stderr to
-`/dev/null`. The synthetic black-box runner reports event counts, never transcript text.
+an explicitly proposed task instruction. Queue workers run Pi with `--no-session`, and native
+launch services write stdout and stderr to `/dev/null`, so agent conversations are not retained as
+Pi session JSONL. The synthetic black-box runner reports event counts, never transcript text.
+
+Owner-speaker verification is an optional gate after Pipecat completes a speech turn and before
+MLX Whisper transcribes it; it does not replace VAD or turn detection. Run
+`make provision-speaker-model`, connect the browser, and run `make begin-speaker-enrollment` on the
+host. Paste the ten-minute, single-use token into the browser and speak three separate phrases.
+The next three completed Pipecat turns are used only for enrollment and are not transcribed. The
+broker stores only a mode-0600 averaged embedding. After enrollment, set
+`SPEAKER_VERIFICATION_ENABLED=true` and reinstall the host services; rejected audio then produces
+an empty transcription. File-based enrollment remains available with
+`make enroll-speaker ENROLLMENT_WAVS='one.wav two.wav three.wav'`.
 
 ## Local observability
 
@@ -106,6 +117,15 @@ WebSocket used by the browser, transcribes it with MLX Whisper, and exercises th
 Before Tailscale login it uses `deploy/compose.local-test.yml` as a non-listening network anchor;
 set `BLACKBOX_USE_TAILSCALE=true` to test an authenticated tunnel namespace. See
 [TESTING.md](TESTING.md) for assertions and failure interpretation.
+
+Set `VOICE_LLM_BACKEND=pi` in `edge/.env` to select the alternate
+`Whisper -> Pi agent -> restricted Pi task tools -> Kokoro` path. The default remains `ollama`.
+Pi voice uses a dedicated long-running Node service built on Pi's `createAgentSession()` SDK. The
+service keeps conversation state between turns, reconciles a restarted or reset Pipecat transcript,
+and exposes only the four task-lifecycle tools. It disables built-in shell/filesystem tools and all
+discovered extensions, skills, prompt templates, themes, and context files. Kokoro speaks the final
+text produced by Pi after any tool calls complete. `PI_VOICE_MODEL` selects the model; when blank,
+Pi uses its configured default.
 
 See [BENCHMARKS.md](BENCHMARKS.md) for the measured M4 Pro CPU, unified-memory, LLM throughput,
 and speech realtime factors, plus the reproducible benchmark command.

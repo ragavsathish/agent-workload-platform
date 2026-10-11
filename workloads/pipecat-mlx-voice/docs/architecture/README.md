@@ -7,16 +7,13 @@ The Mermaid C4 sources are authoritative:
 - [Deployment/security](deployment-security.mmd) maps them to the browser, macOS, Docker Desktop VM,
   and Compose networks.
 
-The deployment view is also an [editable Excalidraw scene](deployment-security.excalidraw),
-[SVG](deployment-security.svg), and [PNG](deployment-security.png).
-
 ## Model-to-code traceability
 
 | C4 element | Repository evidence |
 |---|---|
 | Browser Client | `client/src/`; production assets copied into the edge image |
 | Tailnet Ingress | `deploy/compose.yml`; `scripts/compose-login.sh` |
-| TLS Edge | `deploy/Caddyfile`; `deploy/caddy/Containerfile`; Compose `tls-edge` service |
+| Tailnet HTTPS ingress | Compose `tailscale` service; `scripts/compose-login.sh` |
 | Voice Edge | `edge/bot.py`; `edge/Containerfile` |
 | Inference Broker | `server/inference_broker.py`; broker LaunchAgent |
 | Agent Gateway | `server/agent_gateway.py`; `gateway/Containerfile` |
@@ -31,11 +28,9 @@ non-root users with read-only roots, all Linux capabilities dropped, privilege e
 resource limits, and no Docker socket. The edge has no database, Pi, provider, session, or workspace
 credential. Separate secrets authorize bounded inference and four task lifecycle operations.
 
-Tailscale authenticates devices and provides the private network path. The single-user voice edge
-then validates the exact MagicDNS origin and a signed, one-use WebSocket path token before binding
-the session to the owner login pinned by setup. Raw tailnet TCP passes TLS to a minimal Caddy
-sidecar that advertises HTTP/1.1 only, preserving Safari's WebSocket upgrade without relying on a
-proxy-injected identity header.
+Tailscale authenticates devices, terminates trusted HTTPS, and provides the private network path.
+The single-user voice edge validates the injected tailnet identity, exact MagicDNS origin, and a
+signed, one-use WebSocket path token before binding the session to the owner login pinned by setup.
 
 This shared Docker VM is a pragmatic host boundary, not the stronger independent libkrun VM used by
 the previous design. The highest-risk work remains outside the voice stack: Pi invokes file,

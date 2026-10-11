@@ -133,6 +133,9 @@ services:
       OTEL_LOGS_EXPORTER: none
       OTEL_METRIC_EXPORT_INTERVAL: "5000"
     secrets: [agent-gateway-token, database-url, approval-secret]
+    # Native Pi voice RPC receives only this bearer-protected, loopback-bound
+    # task lifecycle capability. It is never exposed on the Mac LAN.
+    ports: ["127.0.0.1:9444:9444"]
     networks:
       control:
         ipv4_address: 172.30.90.3
@@ -152,18 +155,20 @@ services:
     restart: unless-stopped
     hostname: pipecat-edge
     environment:
-      TS_USERSPACE: "true"
+      TS_USERSPACE: "false"
       TS_STATE_DIR: /var/lib/tailscale
       TS_SOCKET: /tmp/tailscaled.sock
       TS_HOSTNAME: pipecat-edge
       TS_ACCEPT_DNS: "false"
       TS_AUTH_ONCE: "true"
       TS_BOOT_TIMEOUT: "10m"
+      TS_DEBUG_FIREWALL_MODE: nftables
     volumes:
       - tailscale-state:/var/lib/tailscale
-      - tailnet-certs:/certs
-    # Voice shares this service's network namespace; pin its two capability
-    # endpoints here because the userspace netstack can disrupt glibc DNS.
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    # Voice shares this service's network namespace. Pin its capability
+    # endpoints so host and internal control-plane routing remain explicit.
     extra_hosts:
       - "inference-broker:host-gateway"
       - "agent-gateway:172.30.90.3"
@@ -172,48 +177,15 @@ services:
       control:
         ipv4_address: 172.30.90.2
     read_only: true
-    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=64m"]
+    tmpfs:
+      - "/tmp:rw,noexec,nosuid,nodev,size=64m"
+      - "/run:rw,noexec,nosuid,nodev,size=16m"
     cap_drop: [ALL]
+    cap_add: [NET_ADMIN]
     security_opt: [no-new-privileges:true]
     pids_limit: 128
     mem_limit: 256m
     cpus: 1
-
-  tls-edge:
-    image: local/pipecat-tls-edge:compose
-    pull_policy: never
-    build:
-      context: ..
-      dockerfile: deploy/caddy/Containerfile
-    profiles: [tunnel]
-    restart: unless-stopped
-    depends_on:
-      tailscale:
-        condition: service_started
-      voice-edge:
-        condition: service_healthy
-    network_mode: service:tailscale
-    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - tailnet-certs:/certs:ro
-    read_only: true
-    tmpfs:
-      - /config:rw,noexec,nosuid,nodev,size=8m,uid=65532,gid=0
-      - /data:rw,noexec,nosuid,nodev,size=8m,uid=65532,gid=0
-    cap_drop: [ALL]
-    security_opt: [no-new-privileges:true]
-    user: "65532:0"
-    pids_limit: 256
-    mem_limit: 128m
-    cpus: 0.5
-    logging:
-      driver: none
-    healthcheck:
-      test: ["CMD", "wget", "--no-check-certificate", "-q", "-O", "/dev/null", "https://127.0.0.1:8443/status"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
 
   voice-edge:
     image: local/pipecat-edge:compose
@@ -253,7 +225,6 @@ volumes:
   s3mock-data:
   postgres-data:
   tailscale-state:
-  tailnet-certs:
 
 networks:
   control:

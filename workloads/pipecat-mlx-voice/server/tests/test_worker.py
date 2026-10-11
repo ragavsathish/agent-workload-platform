@@ -31,6 +31,9 @@ def test_command_uses_only_explicit_gondolin_tools(tmp_path: Path) -> None:
         settings(tmp_path, sandboxed=True), task_id="abc", instruction="work"
     )
     assert "--no-builtin-tools" in command
+    assert "--no-session" in command
+    assert "--session-id" not in command
+    assert "--session-dir" not in command
     assert "--extension" in command
     assert command[-2:] == ["--", "work"]
 

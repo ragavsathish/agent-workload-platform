@@ -11,6 +11,8 @@ import asyncio
 import json
 import os
 import secrets
+import time
+import uuid
 import wave
 from contextlib import asynccontextmanager
 from io import BytesIO
@@ -26,6 +28,11 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from mlx_tts import synthesize_pcm
+from speaker_verification import (
+    BrowserEnrollmentCoordinator,
+    SpeakerVerificationSettings,
+    SpeakerVerifier,
+)
 from telemetry import configure_telemetry
 
 # The broker handles raw voice data. Do not emit library or application logs from this process.
@@ -48,6 +55,9 @@ if not OLLAMA_MODEL:
     raise RuntimeError("OLLAMA_MODEL is required")
 
 _inference_slot = asyncio.Semaphore(1)
+_speaker_settings = SpeakerVerificationSettings.from_environment()
+_speaker_verifier = SpeakerVerifier.load(_speaker_settings) if _speaker_settings.enabled else None
+_speaker_enrollment = BrowserEnrollmentCoordinator(_speaker_settings)
 
 
 async def authenticate(authorization: Annotated[str | None, Header()] = None) -> None:
@@ -81,6 +91,10 @@ class SpeechRequest(BaseModel):
     speed: float | None = Field(default=None, ge=0.5, le=2.0)
 
 
+class EnrollmentClaimRequest(BaseModel):
+    token: str = Field(min_length=16, max_length=128)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.http = httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=5.0))
@@ -102,6 +116,28 @@ async def health(_: None = Depends(authenticate)) -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.post("/v1/speaker/enrollment/claim")
+async def claim_speaker_enrollment(
+    body: EnrollmentClaimRequest, _: None = Depends(authenticate)
+) -> dict[str, str]:
+    try:
+        session = await asyncio.to_thread(_speaker_enrollment.claim, body.token)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=403, detail="invalid or expired enrollment") from exc
+    return {"session": session}
+
+
+@app.get("/v1/speaker/enrollment/status")
+async def speaker_enrollment_status(
+    session: Annotated[str, Header(alias="X-Speaker-Enrollment-Session")],
+    _: None = Depends(authenticate),
+) -> dict[str, Any]:
+    try:
+        return _speaker_enrollment.status(session)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=403, detail="invalid enrollment session") from exc
+
+
 @app.post("/v1/audio/transcriptions")
 async def transcribe(
     file: Annotated[UploadFile, File()],
@@ -113,6 +149,13 @@ async def transcribe(
             raise HTTPException(status_code=413, detail="audio payload too large")
         audio = _decode_wav(content)
         async with _inference_slot:
+            enrollment = await asyncio.to_thread(_speaker_enrollment.capture, audio)
+            if enrollment.handled:
+                return {"text": ""}
+            if _speaker_verifier is not None:
+                verification = await asyncio.to_thread(_speaker_verifier.verify, audio)
+                if not verification.accepted:
+                    return {"text": ""}
             result = cast(
                 dict[str, Any],
                 await asyncio.to_thread(
@@ -223,7 +266,158 @@ async def chat(request: Request, _: None = Depends(authenticate)) -> StreamingRe
         return StreamingResponse(chunks(), media_type=response.headers.get("content-type"))
 
 
+def _pi_service_url() -> str:
+    identities = [
+        value.strip().lower()
+        for value in os.getenv("ORCHESTRATOR_ALLOWED_USERS", "").split(",")
+        if value.strip()
+    ]
+    if len(identities) != 1:
+        raise HTTPException(status_code=503, detail="Pi voice requires exactly one allowed identity")
+    gateway_token = os.getenv("AGENT_GATEWAY_TOKEN", "")
+    if len(gateway_token) < 32:
+        raise HTTPException(status_code=503, detail="Pi voice is not configured")
+    return os.getenv("PI_VOICE_SERVICE_URL", "http://127.0.0.1:9446").rstrip("/")
+
+
+def _openai_completion(text: str, *, model: str, completion_id: str, created: int) -> dict:
+    return {
+        "id": completion_id,
+        "object": "chat.completion",
+        "created": created,
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": text},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+    }
+
+
+def _validate_pi_messages(messages: object) -> list[dict[str, Any]]:
+    if not isinstance(messages, list) or not messages or len(messages) > 64:
+        raise HTTPException(status_code=400, detail="invalid message list")
+    validated: list[dict[str, Any]] = []
+    total_chars = 0
+    for message in messages:
+        if not isinstance(message, dict) or message.get("role") not in {
+            "system",
+            "developer",
+            "user",
+            "assistant",
+        }:
+            raise HTTPException(status_code=400, detail="invalid Pi message")
+        content = message.get("content", "")
+        total_chars += len(content) if isinstance(content, str) else len(str(content))
+        validated.append(message)
+    if total_chars > 64_000:
+        raise HTTPException(status_code=413, detail="conversation is too large")
+    return validated
+
+
+@app.post("/v1/pi/chat/completions", response_model=None)
+async def pi_chat(request: Request, _: None = Depends(authenticate)) -> StreamingResponse | Response:
+    """Run one voice turn through native Pi with only task-lifecycle tools enabled."""
+
+    with telemetry.observe("inference.pi"):
+        body = await request.body()
+        if len(body) > MAX_CHAT_BYTES:
+            raise HTTPException(status_code=413, detail="chat payload too large")
+        try:
+            payload = json.loads(body)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="invalid JSON") from exc
+        if not isinstance(payload, dict) or payload.get("model") != "pi-agent":
+            raise HTTPException(status_code=400, detail="invalid Pi chat request")
+        messages = _validate_pi_messages(payload.get("messages"))
+        if payload.get("tools"):
+            raise HTTPException(status_code=400, detail="external tools are not accepted by Pi voice")
+        client: httpx.AsyncClient = request.app.state.http
+        try:
+            async with asyncio.timeout(float(os.getenv("PI_VOICE_TIMEOUT_SECONDS", "120")) + 5):
+                response = await client.post(
+                    f"{_pi_service_url()}/v1/turn",
+                    json={"messages": messages},
+                    headers={"Authorization": f"Bearer {BROKER_TOKEN}"},
+                )
+        except (TimeoutError, httpx.HTTPError) as exc:
+            raise HTTPException(status_code=502, detail="Pi voice service is unavailable") from exc
+        if response.status_code != 200:
+            raise HTTPException(status_code=502, detail="Pi voice turn failed")
+        try:
+            service_payload = response.json()
+            text = service_payload["text"]
+        except (ValueError, KeyError, TypeError) as exc:
+            raise HTTPException(status_code=502, detail="Pi voice returned an invalid response") from exc
+        if not isinstance(text, str) or not text.strip():
+            raise HTTPException(status_code=502, detail="Pi voice returned an empty response")
+
+        completion_id = f"chatcmpl-pi-{uuid.uuid4().hex}"
+        created = int(time.time())
+        if not payload.get("stream", False):
+            return Response(
+                content=json.dumps(
+                    _openai_completion(
+                        text, model="pi-agent", completion_id=completion_id, created=created
+                    )
+                ),
+                media_type="application/json",
+            )
+
+        async def chunks():
+            first = {
+                "id": completion_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": "pi-agent",
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {"role": "assistant", "content": text},
+                        "finish_reason": None,
+                    }
+                ],
+            }
+            last = {
+                "id": completion_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": "pi-agent",
+                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+            }
+            yield f"data: {json.dumps(first)}\n\n"
+            yield f"data: {json.dumps(last)}\n\n"
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(chunks(), media_type="text/event-stream")
+
+
+@app.get("/v1/pi/transcript", response_model=None)
+async def pi_transcript(request: Request, _: None = Depends(authenticate)) -> Response:
+    """Return Pi's bounded, display-safe transcript projection."""
+
+    client: httpx.AsyncClient = request.app.state.http
+    try:
+        response = await client.get(
+            f"{_pi_service_url()}/v1/transcript",
+            headers={"Authorization": f"Bearer {BROKER_TOKEN}"},
+        )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="Pi transcript is unavailable") from exc
+    if response.status_code != 200 or len(response.content) > 1_000_000:
+        raise HTTPException(status_code=502, detail="Pi transcript is unavailable")
+    return Response(
+        content=response.content,
+        media_type="application/json",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=9443, access_log=False)
+    # Keep the host broker on the standard loop for predictable MLX and child-process behavior.
+    uvicorn.run(app, host="127.0.0.1", port=9443, access_log=False, loop="asyncio")

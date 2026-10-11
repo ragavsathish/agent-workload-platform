@@ -93,7 +93,7 @@ export const TaskPanel = () => {
       <header>
         <p className="eyebrow">PI AGENT</p>
         <h2>Review & dispatch</h2>
-        <p>Voice can draft. Only this panel can approve.</p>
+        <p>Voice can submit work directly. Review, approve drafts, or cancel here.</p>
       </header>
 
       <form onSubmit={propose} className="task-form">
