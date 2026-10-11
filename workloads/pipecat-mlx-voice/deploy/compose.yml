@@ -155,17 +155,20 @@ services:
     restart: unless-stopped
     hostname: pipecat-edge
     environment:
-      TS_USERSPACE: "true"
+      TS_USERSPACE: "false"
       TS_STATE_DIR: /var/lib/tailscale
       TS_SOCKET: /tmp/tailscaled.sock
       TS_HOSTNAME: pipecat-edge
       TS_ACCEPT_DNS: "false"
       TS_AUTH_ONCE: "true"
       TS_BOOT_TIMEOUT: "10m"
+      TS_DEBUG_FIREWALL_MODE: nftables
     volumes:
       - tailscale-state:/var/lib/tailscale
-    # Voice shares this service's network namespace; pin its two capability
-    # endpoints here because the userspace netstack can disrupt glibc DNS.
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    # Voice shares this service's network namespace. Pin its capability
+    # endpoints so host and internal control-plane routing remain explicit.
     extra_hosts:
       - "inference-broker:host-gateway"
       - "agent-gateway:172.30.90.3"
@@ -174,8 +177,11 @@ services:
       control:
         ipv4_address: 172.30.90.2
     read_only: true
-    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=64m"]
+    tmpfs:
+      - "/tmp:rw,noexec,nosuid,nodev,size=64m"
+      - "/run:rw,noexec,nosuid,nodev,size=16m"
     cap_drop: [ALL]
+    cap_add: [NET_ADMIN]
     security_opt: [no-new-privileges:true]
     pids_limit: 128
     mem_limit: 256m

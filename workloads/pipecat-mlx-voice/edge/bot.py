@@ -5,6 +5,7 @@ from pathlib import Path
 
 import httpx
 from dotenv import load_dotenv
+from fastapi import HTTPException, Request
 from loguru import logger
 from pipecat.adapters.schemas.direct_function import DirectFunction
 from pipecat.adapters.schemas.function_schema import FunctionSchema
@@ -17,14 +18,16 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
-from pipecat.runner.types import RunnerArguments, WebSocketRunnerArguments
-from pipecat.serializers.protobuf import ProtobufFrameSerializer
+from pipecat.runner.types import (
+    RunnerArguments,
+    SmallWebRTCRunnerArguments,
+)
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.services.openai.stt import OpenAISTTService
 from pipecat.services.openai.tts import OpenAITTSService
-from pipecat.transports.base_transport import BaseTransport
-from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPIWebsocketTransport
+from pipecat.transports.base_transport import BaseTransport, TransportParams
+from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 from pipecat.workers.runner import WorkerRunner
 from telemetry import configure_telemetry
 
@@ -46,18 +49,64 @@ def required_env(name: str) -> str:
     return value
 
 
-def resolve_identity(runner_args: WebSocketRunnerArguments) -> str:
-    identity = runner_args.websocket.headers.get("tailscale-user-login", "").strip().lower()
-    allowed = {
+def allowed_identities() -> set[str]:
+    return {
         value.strip().lower()
         for value in required_env("EDGE_ALLOWED_USERS").split(",")
         if value.strip()
     }
+
+
+def resolve_webrtc_identity() -> str:
+    """Resolve the identity after the HTTP signaling middleware authenticates it.
+
+    Pipecat's SmallWebRTC runner arguments do not carry the signaling request headers.
+    Fail closed unless this edge is configured for exactly one user, avoiding an
+    untrusted identity supplied by the browser in request data.
+    """
+    allowed = allowed_identities()
+    if len(allowed) != 1:
+        raise PermissionError("SmallWebRTC requires exactly one configured edge user")
+    return next(iter(allowed))
+
+
+def validate_identity(identity: str) -> str:
+    allowed = allowed_identities()
     if not identity:
         raise PermissionError("connect through the configured Tailscale ingress")
     if identity not in allowed:
         raise PermissionError("tailnet identity is not allowed")
     return identity
+
+
+def validate_http_identity(request: Request) -> str:
+    try:
+        return validate_identity(
+            request.headers.get("tailscale-user-login", "").strip().lower()
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+
+async def broker_enrollment_request(
+    method: str, path: str, *, json: dict[str, str] | None = None, session: str | None = None
+) -> dict[str, object]:
+    headers = {"Authorization": f"Bearer {required_env('INFERENCE_BROKER_TOKEN')}"}
+    if session:
+        headers["X-Speaker-Enrollment-Session"] = session
+    async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
+        response = await client.request(
+            method,
+            f"{required_env('INFERENCE_BROKER_BASE_URL').rstrip('/')}{path}",
+            headers=headers,
+            json=json,
+        )
+    if response.is_error:
+        raise HTTPException(status_code=response.status_code, detail="enrollment request rejected")
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=502, detail="invalid enrollment response")
+    return payload
 
 
 async def run_bot(transport: BaseTransport, identity: str):
@@ -285,20 +334,18 @@ async def run_bot(transport: BaseTransport, identity: str):
 async def bot(runner_args: RunnerArguments):
     with telemetry.observe("voice.session"):
         match runner_args:
-            case WebSocketRunnerArguments():
+            case SmallWebRTCRunnerArguments():
                 try:
-                    identity = resolve_identity(runner_args)
+                    identity = resolve_webrtc_identity()
                 except PermissionError as exc:
-                    logger.warning("Rejected edge connection: {}", exc)
-                    await runner_args.websocket.close(code=1008, reason=str(exc))
+                    logger.warning("Rejected WebRTC edge connection: {}", exc)
+                    await runner_args.webrtc_connection.disconnect()
                     return
-                transport = FastAPIWebsocketTransport(
-                    websocket=runner_args.websocket,
-                    params=FastAPIWebsocketParams(
+                transport = SmallWebRTCTransport(
+                    webrtc_connection=runner_args.webrtc_connection,
+                    params=TransportParams(
                         audio_in_enabled=True,
                         audio_out_enabled=True,
-                        add_wav_header=False,
-                        serializer=ProtobufFrameSerializer(),
                     ),
                 )
             case _:
@@ -311,6 +358,16 @@ if __name__ == "__main__":
     from fastapi.responses import FileResponse, JSONResponse
     from fastapi.staticfiles import StaticFiles
     from pipecat.runner.run import app, main
+
+    @app.middleware("http")
+    async def authenticate_signaling(request: Request, call_next):
+        path = request.url.path
+        if path == "/start" or path == "/api/offer" or path.startswith("/sessions/"):
+            try:
+                validate_http_identity(request)
+            except HTTPException as exc:
+                return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+        return await call_next(request)
 
     client_dist = Path(__file__).resolve().parent / "client-dist"
     if (client_dist / "assets").is_dir():
@@ -331,8 +388,30 @@ if __name__ == "__main__":
     async def features():
         return {
             "tasks": True,
+            "speakerEnrollment": True,
             "approval": "voice-yolo",
             "isolation": "docker-desktop-compose",
         }
+
+    @app.post("/api/speaker-enrollment/claim")
+    async def claim_speaker_enrollment(request: Request):
+        validate_http_identity(request)
+        body = await request.json()
+        token = body.get("token") if isinstance(body, dict) else None
+        if not isinstance(token, str) or not 16 <= len(token) <= 128:
+            raise HTTPException(status_code=400, detail="invalid enrollment token")
+        return await broker_enrollment_request(
+            "POST", "/speaker/enrollment/claim", json={"token": token}
+        )
+
+    @app.get("/api/speaker-enrollment/status")
+    async def get_speaker_enrollment_status(request: Request):
+        validate_http_identity(request)
+        session = request.headers.get("x-speaker-enrollment-session", "")
+        if not 16 <= len(session) <= 128:
+            raise HTTPException(status_code=400, detail="invalid enrollment session")
+        return await broker_enrollment_request(
+            "GET", "/speaker/enrollment/status", session=session
+        )
 
     main()
