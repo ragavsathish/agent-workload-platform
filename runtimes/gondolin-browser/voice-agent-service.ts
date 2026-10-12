@@ -485,10 +485,6 @@ class VoiceAgent {
       model,
       thinkingLevel: this.settings.thinking,
       tools: [
-        "read",
-        "write",
-        "edit",
-        "bash",
         "propose_agent_task",
         "submit_agent_task",
         "get_agent_task",
