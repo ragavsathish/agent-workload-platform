@@ -1,17 +1,20 @@
 # Architecture
 
-The Mermaid C4 sources are authoritative:
+[`workspace.dsl`](workspace.dsl) is the authoritative C4 model. It defines the system context,
+containers, Pipecat components, local deployment, and the two important runtime flows. Do not edit
+generated Mermaid, SVG, or PNG files by hand.
 
-They are rendered with Mermaid CLI (`mmdc`). The deployment PNG is a checked-in preview; the `.mmd`
-files remain the editable source. The context, container, and component views use the same grouped
-flowchart style so the primary path stays local and arrows do not cross the whole canvas.
+Run `make architecture` from the workload directory to validate the DSL and regenerate previews
+under `docs/architecture/generated/`. Structurizr produces the Mermaid views from the DSL; Mermaid
+CLI then produces PNG/SVG previews. The generated directory is ignored because it is reproducible.
 
-- [C1 context](c1-system-context.mmd) defines the user, platform, and external systems.
-- [C2 containers](c2-container.mmd) assigns voice, task, queue, Pi, Gondolin, and Wassette duties.
-- [C3 Pipecat pipeline](c3-pipecat-pipeline.mmd) isolates the five off-the-shelf Pipecat building
-  blocks from the application-specific policy and UI processors.
-- [Deployment/security](deployment-security.mmd) maps them to the browser, macOS, Docker Desktop VM,
-  and Compose networks.
+The views are intentionally small and answer different questions:
+
+- Context: who uses the platform and which external systems matter.
+- Containers: where voice, durable tasks, host-only Pi/MLX, and tool isolation live.
+- Pipecat components: which five off-the-shelf Pipecat components run inside Voice Edge.
+- Deployment: what runs in Docker Desktop versus the native macOS host.
+- Dynamic views: one voice turn and one approved task execution.
 
 ## What Pipecat provides
 

@@ -149,6 +149,7 @@ activemq-data/
 
 # Environments
 .env
+docs/architecture/generated/mermaid/
 .envrc
 .venv
 deploy/keys/

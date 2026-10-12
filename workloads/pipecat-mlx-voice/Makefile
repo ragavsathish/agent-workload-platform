@@ -1,4 +1,4 @@
-.PHONY: setup build up down recreate verify cycle-test login status grafana-password warm-models benchmark-mlx provision-speaker-model begin-speaker-enrollment enroll-speaker verify-speaker publish-workspace blackbox-voice blackbox-e2e host-preflight install-host-services db-init broker worker pull-model check
+.PHONY: setup build up down recreate verify cycle-test login status architecture grafana-password warm-models benchmark-mlx provision-speaker-model begin-speaker-enrollment enroll-speaker verify-speaker publish-workspace blackbox-voice blackbox-e2e host-preflight install-host-services db-init broker worker pull-model check
 
 setup:
 	cd server && uv sync --python 3.13
@@ -32,6 +32,9 @@ login:
 
 status:
 	./scripts/compose-status.sh
+
+architecture:
+	./scripts/render-architecture.sh
 
 grafana-password:
 	@test -s deploy/secrets/grafana-admin-password || { echo "Run make up first" >&2; exit 1; }
