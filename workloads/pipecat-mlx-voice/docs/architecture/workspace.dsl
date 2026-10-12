@@ -64,8 +64,8 @@ workspace {
             observability = container "Observability" "Receives low-cardinality metrics and traces from the voice services." "Grafana OTEL-LGTM · OTLP/HTTP" {
                 tags "Observability"
             }
-            piVoice = container "Native Pi Voice (historical/incomplete)" "Historical Pi voice RPC implementation maintained its own transcript, but the current checkout is missing its source dependencies and dist/voice-agent-service.js artifact." "Native Node.js · Pi" {
-                tags "HostOnly", "Gap"
+            piVoice = container "Native Pi Voice" "Runs the persistent Pi voice RPC service, maintains the owner-visible transcript, and invokes Gondolin tools." "Native Node.js · Pi" {
+                tags "HostOnly"
             }
             worker = container "Pi Worker" "Consumes approved work and runs one durable Pi session per task." "Native Python · Pi" {
                 tags "HostOnly"
@@ -92,6 +92,7 @@ workspace {
         edge -> gateway "Proposes, reads, approves, and cancels tasks" "Bearer-authenticated HTTP"
         edge -> observability "Exports metrics and traces" "OTLP/HTTP"
         broker -> ollama "Requests local chat completions" "Loopback OpenAI-compatible HTTP"
+        broker -> piVoice "Routes Pi voice turns and transcript requests" "Loopback HTTP"
         broker -> observability "Exports metrics and traces" "OTLP/HTTP"
         gateway -> taskStore "Applies identity-bound task transitions" "Private SQL"
         gateway -> artifacts "Stores and retrieves immutable task artifacts" "S3-compatible HTTP"
@@ -160,8 +161,10 @@ workspace {
             1: user -> browser "Speaks and listens"
             2: browser -> ingress "Streams authenticated WebRTC audio"
             3: ingress -> edge "Forwards the session"
-            4: edge -> broker "Transcribes audio and runs chat/TTS"
-            5: edge -> browser "Returns speech and Mermaid event"
+            4: edge -> broker "Transcribes audio and routes chat/TTS"
+            5: broker -> piVoice "Sends the normalized turn to Pi"
+            6: piVoice -> broker "Returns Pi response and transcript state"
+            7: edge -> browser "Returns speech and Mermaid event"
             autoLayout lr
         }
 
@@ -220,11 +223,6 @@ workspace {
             element "HostOnly" {
                 background #ede9fe
                 color #4c1d95
-            }
-            element "Gap" {
-                background #fef3c7
-                color #78350f
-                border dashed
             }
             element "Sandbox" {
                 background #fee2e2

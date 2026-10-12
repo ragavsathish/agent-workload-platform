@@ -186,7 +186,7 @@ async def run_bot(transport: BaseTransport, identity: str):
     broker_token = required_env("INFERENCE_BROKER_TOKEN")
     gateway_url = required_env("AGENT_GATEWAY_BASE_URL").rstrip("/")
     gateway_token = required_env("AGENT_GATEWAY_TOKEN")
-    llm_backend = os.getenv("VOICE_LLM_BACKEND", "ollama").strip().lower()
+    llm_backend = os.getenv("VOICE_LLM_BACKEND", "pi").strip().lower()
     if llm_backend not in {"ollama", "pi"}:
         raise RuntimeError("VOICE_LLM_BACKEND must be either 'ollama' or 'pi'")
     model = "pi-agent" if llm_backend == "pi" else required_env("OLLAMA_MODEL")

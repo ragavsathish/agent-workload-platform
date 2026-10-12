@@ -51,7 +51,7 @@ sandbox.
 | Agent Gateway | `server/agent_gateway.py`; `gateway/Containerfile` |
 | Observability | `server/telemetry.py`; Compose `otel-lgtm` service |
 | Durable Task Store | `server/orchestrator/`; `server/sql/`; Compose Postgres service |
-| Native Pi Voice | Historical `runtimes/gondolin-browser/voice-agent-service.ts` in `cf284d1`; current artifact/dependencies are missing (see audit) |
+| Native Pi Voice | `runtimes/gondolin-browser/voice-agent-service.ts`; `runtimes/gondolin-browser/gondolin-workspace.ts`; native LaunchAgent |
 | Pi Worker | `server/orchestrator/worker.py`; worker LaunchAgent |
 | Host service supervisor | `scripts/host-services.sh`; `deploy/launchd/com.sathish.pipecat-host-services.plist` |
 | Gondolin and Wassette | `runtimes/gondolin-browser/pi-extension.ts` and its MCP clients |

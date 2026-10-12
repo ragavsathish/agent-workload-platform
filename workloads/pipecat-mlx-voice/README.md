@@ -124,8 +124,8 @@ Before Tailscale login it uses `deploy/compose.local-test.yml` as a non-listenin
 set `BLACKBOX_USE_TAILSCALE=true` to test an authenticated tunnel namespace. See
 [TESTING.md](TESTING.md) for assertions and failure interpretation.
 
-Set `VOICE_LLM_BACKEND=pi` in `edge/.env` to select the alternate
-`Whisper -> Pi agent -> restricted Pi task tools -> Kokoro` path. The default remains `ollama`.
+`VOICE_LLM_BACKEND=pi` selects the `Whisper -> Pi agent -> restricted Pi task tools -> Kokoro`
+path and is now the default. Set it to `ollama` only when intentionally bypassing Pi.
 Pi voice uses a dedicated long-running Node service built on Pi's `createAgentSession()` SDK. The
 service keeps conversation state between turns, reconciles a restarted or reset Pipecat transcript,
 and exposes only the four task-lifecycle tools. It disables built-in shell/filesystem tools and all
