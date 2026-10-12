@@ -61,16 +61,19 @@ workspace {
             artifacts = container "Artifact Store" "Stores immutable workspace bundles and task result patches." "S3Mock · Docker volume" {
                 tags "Database"
             }
-            piVoice = container "Native Pi Voice" "Runs the persistent Pi voice RPC service with the Gondolin extension." "Native Node.js · Pi" {
-                tags "HostOnly"
+            observability = container "Observability" "Receives low-cardinality metrics and traces from the voice services." "Grafana OTEL-LGTM · OTLP/HTTP" {
+                tags "Observability"
+            }
+            piVoice = container "Native Pi Voice (planned)" "LaunchAgent target for the persistent Pi voice RPC service; the expected dist/voice-agent-service.js artifact is currently missing." "Native Node.js · Pi" {
+                tags "HostOnly", "Gap"
             }
             worker = container "Pi Worker" "Consumes approved work and runs one durable Pi session per task." "Native Python · Pi" {
                 tags "HostOnly"
             }
-            gondolin = container "Gondolin Tool Runtime" "Runs browser and workspace tools inside isolated micro-VMs." "Gondolin micro-VM MCP" {
+            gondolin = container "Gondolin Tool Runtime" "Invoked by the Pi extension; runs browser and workspace tools inside isolated micro-VMs. It is not a standalone daemon." "Gondolin micro-VM MCP" {
                 tags "Sandbox"
             }
-            wassette = container "Wassette Runtime" "Provides permission-scoped integration components." "Wasm MCP runtime" {
+            wassette = container "Wassette Runtime" "Invoked by the Pi extension; provides permission-scoped integration components. It is not a standalone daemon." "Wasm MCP runtime" {
                 tags "Sandbox"
             }
         }
@@ -87,9 +90,12 @@ workspace {
         edge -> browser "Returns speech and Mermaid visual events" "WebRTC"
         edge -> broker "Requests bounded STT, chat, and TTS inference" "Bearer-authenticated HTTP"
         edge -> gateway "Proposes, reads, approves, and cancels tasks" "Bearer-authenticated HTTP"
+        edge -> observability "Exports metrics and traces" "OTLP/HTTP"
         broker -> ollama "Requests local chat completions" "Loopback OpenAI-compatible HTTP"
+        broker -> observability "Exports metrics and traces" "OTLP/HTTP"
         gateway -> taskStore "Applies identity-bound task transitions" "Private SQL"
         gateway -> artifacts "Stores and retrieves immutable task artifacts" "S3-compatible HTTP"
+        gateway -> observability "Exports metrics and traces" "OTLP/HTTP"
         worker -> taskStore "Consumes approved work and checkpoints results" "Absurd/Postgres"
         worker -> artifacts "Materializes inputs and uploads result patches" "S3-compatible HTTP"
         worker -> modelProviders "Requests Pi agent completions" "Provider API"
@@ -106,8 +112,9 @@ workspace {
                     containerInstance gateway
                     containerInstance taskStore
                     containerInstance artifacts
+                    containerInstance observability
                 }
-                host = deploymentNode "Native macOS services" "Host-only MLX and Pi capabilities" "macOS + one LaunchAgent supervisor" {
+                host = deploymentNode "Native macOS services" "Host-only MLX and Pi capabilities; Gondolin and Wassette run as child runtimes, not services" "macOS + one LaunchAgent supervisor" {
                     containerInstance broker
                     containerInstance piVoice
                     containerInstance worker
@@ -197,6 +204,10 @@ workspace {
                 color #78350f
                 shape Cylinder
             }
+            element "Observability" {
+                background #e0e7ff
+                color #312e81
+            }
             element "Pipecat" {
                 background #dbeafe
                 color #0f172a
@@ -209,6 +220,11 @@ workspace {
             element "HostOnly" {
                 background #ede9fe
                 color #4c1d95
+            }
+            element "Gap" {
+                background #fef3c7
+                color #78350f
+                border dashed
             }
             element "Sandbox" {
                 background #fee2e2

@@ -6,7 +6,8 @@ generated Mermaid, SVG, or PNG files by hand.
 
 Run `make architecture` from the workload directory to validate the DSL and regenerate previews
 under `docs/architecture/generated/`. Structurizr produces the Mermaid views from the DSL; Mermaid
-CLI then produces PNG/SVG previews. The generated directory is ignored because it is reproducible.
+CLI then produces the committed PNG/SVG previews. Mermaid intermediates remain ignored because they
+are reproducible. See [IMPLEMENTATION-GAPS.md](IMPLEMENTATION-GAPS.md) for diagram-to-code mismatches.
 
 The views are intentionally small and answer different questions:
 
@@ -48,7 +49,9 @@ sandbox.
 | Voice Edge | `edge/bot.py`; `edge/Containerfile` |
 | Inference Broker | `server/inference_broker.py`; broker LaunchAgent |
 | Agent Gateway | `server/agent_gateway.py`; `gateway/Containerfile` |
+| Observability | `server/telemetry.py`; Compose `otel-lgtm` service |
 | Durable Task Store | `server/orchestrator/`; `server/sql/`; Compose Postgres service |
+| Native Pi Voice | `scripts/host-pi-voice.sh`; expected `dist/voice-agent-service.js` (currently missing; see audit) |
 | Pi Worker | `server/orchestrator/worker.py`; worker LaunchAgent |
 | Host service supervisor | `scripts/host-services.sh`; `deploy/launchd/com.sathish.pipecat-host-services.plist` |
 | Gondolin and Wassette | `runtimes/gondolin-browser/pi-extension.ts` and its MCP clients |

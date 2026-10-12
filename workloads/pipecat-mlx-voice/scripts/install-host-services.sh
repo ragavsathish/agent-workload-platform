@@ -61,6 +61,11 @@ trap 'rm -rf "$gondolin_deploy"' EXIT
 rsync -a --delete "$gondolin_deploy/" "$gondolin_runtime/"
 rm -rf "$gondolin_deploy"
 trap - EXIT
+[[ -f "$gondolin_runtime/dist/voice-agent-service.js" ]] || {
+  echo "Missing native Pi voice artifact: $gondolin_runtime/dist/voice-agent-service.js" >&2
+  echo "Add runtimes/gondolin-browser/voice-agent-service.ts or remove the Pi voice LaunchAgent." >&2
+  exit 1
+}
 rsync -a --delete "$gondolin_assets_source/" "$gondolin_assets_runtime/"
 rsync -a --delete --exclude='.git/' "$skills_dir/" "$skills_runtime/"
 

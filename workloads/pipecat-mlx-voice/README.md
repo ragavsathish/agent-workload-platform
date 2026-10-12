@@ -5,8 +5,9 @@ runs the browser-facing voice edge, Tailscale ingress, narrow task gateway, and 
 Ollama, Pi, Gondolin, and Wassette remain native on macOS where Apple acceleration and VM-backed
 tool isolation are available.
 
-The [C4 architecture views](docs/architecture/README.md) include the deployment and security
-boundaries as authoritative Mermaid sources.
+The [C4 architecture views](docs/architecture/README.md) are generated from the authoritative
+Structurizr DSL; the repository also records known implementation gaps in
+[`docs/architecture/IMPLEMENTATION-GAPS.md`](docs/architecture/IMPLEMENTATION-GAPS.md).
 
 ## Trust model
 
