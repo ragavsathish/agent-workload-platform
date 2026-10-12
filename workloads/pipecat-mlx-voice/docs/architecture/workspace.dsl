@@ -64,7 +64,7 @@ workspace {
             observability = container "Observability" "Receives low-cardinality metrics and traces from the voice services." "Grafana OTEL-LGTM · OTLP/HTTP" {
                 tags "Observability"
             }
-            piVoice = container "Native Pi Voice (planned)" "LaunchAgent target for the persistent Pi voice RPC service; the expected dist/voice-agent-service.js artifact is currently missing." "Native Node.js · Pi" {
+            piVoice = container "Native Pi Voice (historical/incomplete)" "Historical Pi voice RPC implementation maintained its own transcript, but the current checkout is missing its source dependencies and dist/voice-agent-service.js artifact." "Native Node.js · Pi" {
                 tags "HostOnly", "Gap"
             }
             worker = container "Pi Worker" "Consumes approved work and runs one durable Pi session per task." "Native Python · Pi" {

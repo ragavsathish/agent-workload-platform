@@ -8,7 +8,7 @@ implemented.
 
 | Element | Evidence | Impact | Required resolution |
 |---|---|---|---|
-| Native Pi Voice | `scripts/host-pi-voice.sh` executes `dist/voice-agent-service.js`; `scripts/install-host-services.sh` builds and deploys `runtimes/gondolin-browser`, but that runtime contains no `voice-agent-service.ts` or generated equivalent. | The host supervisor cannot start the Pi voice RPC service on a fresh checkout. `make up` can converge the broker and worker checks only if an external artifact happens to provide that file. | Add the service source and its dependencies to `runtimes/gondolin-browser`, or remove the service from the deployment until it is implemented. Add a build assertion for the expected output. |
+| Native Pi Voice | `scripts/host-pi-voice.sh` executes `dist/voice-agent-service.js`. The source existed in historical commit `cf284d1` and implemented Pi transcript state plus `/v1/transcript`, but it is absent from the current runtime snapshot after `38619b3`; its historical source also referenced missing `gondolin-workspace.ts` and undeclared Pi/typebox dependencies. | The host supervisor cannot start the Pi voice RPC service on a fresh checkout. The current browser transcript therefore comes from the Pipecat context, not Pi's transcript projection. | Restore and complete the historical service (including its workspace adapter and declared dependencies), or remove the Pi voice LaunchAgent and Pi transcript UI. The install script now fails explicitly when the expected artifact is missing. |
 
 ## Corrected model gaps
 
