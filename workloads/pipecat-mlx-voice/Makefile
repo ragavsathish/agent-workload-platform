@@ -1,4 +1,4 @@
-.PHONY: setup build up down recreate verify cycle-test login status architecture grafana-password warm-models benchmark-mlx provision-speaker-model begin-speaker-enrollment enroll-speaker verify-speaker publish-workspace blackbox-voice blackbox-e2e host-preflight install-host-services db-init broker worker pull-model check
+.PHONY: setup build up down recreate verify cycle-test login status architecture grafana-password warm-models benchmark-mlx provision-speaker-model begin-speaker-enrollment enroll-speaker verify-speaker publish-workspace blackbox-voice blackbox-e2e pi-e2e-smoke host-preflight install-host-services db-init broker worker pull-model check
 
 setup:
 	cd server && uv sync --python 3.13
@@ -69,6 +69,9 @@ blackbox-voice:
 
 blackbox-e2e:
 	./scripts/blackbox-e2e.sh
+
+pi-e2e-smoke:
+	./scripts/pi-e2e-smoke.sh
 
 host-preflight:
 	./scripts/host-preflight.sh

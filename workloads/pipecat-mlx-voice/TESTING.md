@@ -1,5 +1,16 @@
 # Voice black-box testing
 
+For a quick check of the already-running native Pi service, use the host smoke test:
+
+```bash
+make pi-e2e-smoke
+```
+
+It authenticates against the loopback broker, sends one real `pi-agent` completion, and reads the
+authenticated transcript projection. It does not start Compose, restart LaunchAgents, print response
+content, or exercise microphone/WebSocket audio. Use `make blackbox-e2e` below for the full synthetic
+audio path through Pipecat.
+
 The black-box runner uses no microphone shortcut and no direct STT injection. It asks the native
 Kokoro broker to synthesize an utterance, resamples the PCM to browser input format, obtains a
 one-use Pipecat session token, and streams 20 ms protobuf audio frames over the browser-facing
