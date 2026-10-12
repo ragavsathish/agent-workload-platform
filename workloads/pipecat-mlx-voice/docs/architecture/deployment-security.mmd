@@ -11,7 +11,7 @@ flowchart TB
         direction LR
         subgraph DOCKER["Docker Desktop Linux VM"]
             direction TB
-            subgraph COMPOSE["Compose · voice services"]
+            subgraph COMPOSE["Docker Compose · container services"]
                 direction TB
                 INGRESS["Container<br/><b>Tailnet Ingress</b><br/>Tailscale Serve · trusted HTTPS"]
                 EDGE["Container<br/><b>Voice Edge</b><br/>exact origin · one-use path token"]
@@ -23,14 +23,20 @@ flowchart TB
             end
         end
 
-        subgraph NATIVE["Native macOS services"]
+        subgraph NATIVE["Native macOS services · one LaunchAgent supervisor"]
             direction TB
-            BROKER["Container<br/><b>Inference Broker</b><br/>MLX Whisper · Ollama · MLX Kokoro"]
-            WORKER["Container<br/><b>Pi Worker</b><br/>one durable Pi session per task"]
-            GONDOLIN["Container<br/><b>Gondolin</b><br/>tool micro-VMs"]
-            WASSETTE["Container<br/><b>Wassette</b><br/>permission-scoped MCP components"]
+            SUPERVISOR["Host process<br/><b>Host Service Supervisor</b><br/>macOS LaunchAgent"]
+            BROKER["Host process<br/><b>Inference Broker</b><br/>MLX Whisper · Ollama · MLX Kokoro"]
+            PIVOICE["Host process<br/><b>Native Pi Voice</b><br/>Pi + Gondolin extension"]
+            WORKER["Host process<br/><b>Pi Worker</b><br/>one durable Pi session per task"]
+            GONDOLIN["Micro-VM<br/><b>Gondolin</b><br/>isolated browser + workspace tools"]
+            WASSETTE["Wasm runtime<br/><b>Wassette</b><br/>permission-scoped MCP components"]
+            SUPERVISOR --> BROKER
+            SUPERVISOR --> PIVOICE
+            SUPERVISOR --> WORKER
             WORKER -->|"isolated browser + workspace tools"| GONDOLIN
             WORKER -->|"scoped integration tools"| WASSETTE
+            PIVOICE -->|"Pi tool calls"| GONDOLIN
         end
 
         EDGE -->|"broker bearer · host.docker.internal:9443"| BROKER
@@ -49,5 +55,5 @@ flowchart TB
     class USER person;
     class CONTROL external;
     class BROWSER,BROKER,WORKER,GONDOLIN,WASSETTE container;
-    class INGRESS,TLSEDGE,EDGE,GATEWAY security;
+    class INGRESS,EDGE,GATEWAY security;
     class DB data;

@@ -1,0 +1,30 @@
+C4Component
+title Voice Edge - Pipecat pipeline components
+
+Container_Boundary(edge, "Voice Edge container · Pipecat pipeline") {
+  Component(transport, "SmallWebRTCTransport", "Pipecat transport", "Moves browser microphone and speaker frames over WebRTC")
+  Component(vad, "SileroVADAnalyzer", "Pipecat VAD", "Detects speech boundaries for the user aggregator")
+  Component(stt, "OpenAISTTService", "Pipecat service adapter", "Sends authenticated audio to the host MLX Whisper broker")
+  Component(context, "LLMContextAggregatorPair", "Pipecat processor", "Maintains the active turn context and VAD-aware messages")
+  Component(llm, "OpenAILLMService", "Pipecat service adapter", "Calls the broker's Ollama or Pi-compatible endpoint")
+  Component(visual, "VoiceVisualResponseProcessor", "Application component", "Splits model JSON into spoken text and Mermaid UI events")
+  Component(tts, "OpenAITTSService", "Pipecat service adapter", "Sends spoken text to the host MLX/Kokoro TTS broker")
+  Component(tools, "Task lifecycle functions", "Application functions", "Calls propose, status, approve, and cancel gateway routes")
+}
+
+System_Ext(browser, "Browser Client", "Captures audio, renders Mermaid events, and plays speech")
+Container_Ext(broker, "Inference Broker", "Host FastAPI service", "MLX Whisper, Ollama, and MLX/Kokoro TTS")
+Container_Ext(gateway, "Agent Gateway", "FastAPI container", "Identity-bound task lifecycle API")
+
+Rel(browser, transport, "Streams audio and receives audio/UI events")
+Rel(transport, vad, "Audio frames")
+Rel(vad, context, "Speech boundary signals")
+Rel(transport, stt, "Audio frames")
+Rel(stt, context, "Transcription frames")
+Rel(context, llm, "User turn")
+Rel(llm, tools, "Function calls")
+Rel(tools, gateway, "Bearer-authenticated task commands")
+Rel(llm, visual, "Streaming model response")
+Rel(visual, tts, "Spoken field only")
+Rel(visual, browser, "Mermaid event")
+Rel(tts, transport, "Audio frames")

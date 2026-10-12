@@ -4,8 +4,32 @@ The Mermaid C4 sources are authoritative:
 
 - [C1 context](c1-system-context.mmd) defines the user, platform, and external systems.
 - [C2 containers](c2-container.mmd) assigns voice, task, queue, Pi, Gondolin, and Wassette duties.
+- [C3 Pipecat pipeline](c3-pipecat-pipeline.mmd) isolates the five off-the-shelf Pipecat building
+  blocks from the application-specific policy and UI processors.
 - [Deployment/security](deployment-security.mmd) maps them to the browser, macOS, Docker Desktop VM,
   and Compose networks.
+
+## What Pipecat provides
+
+Pipecat is the open-source orchestration library inside the `voice-edge` container. It provides
+the frame pipeline, turn processing, transport adapters, and service adapters; it is not a second
+deployment tier and it does not own persistence or task execution. This deployment uses five
+Pipecat library components:
+
+| Pipecat component | Responsibility | Integration owned by this repository |
+|---|---|---|
+| `SmallWebRTCTransport` | Browser microphone/speaker transport | Tailscale origin and one-use session authentication |
+| `SileroVADAnalyzer` | Speech-boundary detection | Turn policy and speaker-verification gate in the broker |
+| `OpenAISTTService` | STT service adapter | MLX Whisper broker endpoint |
+| `OpenAILLMService` | OpenAI-compatible chat adapter | Ollama or Pi-compatible broker endpoint and task functions |
+| `OpenAITTSService` | TTS service adapter | MLX/Kokoro broker endpoint |
+
+The application-specific pieces are `VoiceVisualResponseProcessor` (JSON-to-spoken/Mermaid
+splitting), the four bounded task lifecycle functions, identity/origin validation, and telemetry.
+The broker owns model execution; the gateway owns durable task transitions; the worker owns Pi
+execution; Gondolin and Wassette own tool isolation. Keeping those responsibilities outside the
+Pipecat library prevents the diagram from implying that Pipecat is a queue, model server, or
+sandbox.
 
 ## Model-to-code traceability
 
@@ -19,6 +43,7 @@ The Mermaid C4 sources are authoritative:
 | Agent Gateway | `server/agent_gateway.py`; `gateway/Containerfile` |
 | Durable Task Store | `server/orchestrator/`; `server/sql/`; Compose Postgres service |
 | Pi Worker | `server/orchestrator/worker.py`; worker LaunchAgent |
+| Host service supervisor | `scripts/host-services.sh`; `deploy/launchd/com.sathish.pipecat-host-services.plist` |
 | Gondolin and Wassette | `runtimes/gondolin-browser/pi-extension.ts` and its MCP clients |
 
 ## Security perspective
