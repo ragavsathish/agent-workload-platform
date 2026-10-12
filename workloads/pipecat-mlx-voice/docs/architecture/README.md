@@ -2,6 +2,10 @@
 
 The Mermaid C4 sources are authoritative:
 
+They are rendered with Mermaid CLI (`mmdc`). The deployment PNG is a checked-in preview; the `.mmd`
+files remain the editable source. The context, container, and component views use the same grouped
+flowchart style so the primary path stays local and arrows do not cross the whole canvas.
+
 - [C1 context](c1-system-context.mmd) defines the user, platform, and external systems.
 - [C2 containers](c2-container.mmd) assigns voice, task, queue, Pi, Gondolin, and Wassette duties.
 - [C3 Pipecat pipeline](c3-pipecat-pipeline.mmd) isolates the five off-the-shelf Pipecat building

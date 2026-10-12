@@ -1,17 +1,23 @@
-C4Context
-title Agent Workload Platform - Private Voice Interface Context
+flowchart TB
+    U(["Tailnet User<br/><small>talks to Pi and approves work</small>"])
+    P["Agent Workload Platform with Voice<br/><small>private Pipecat voice interface · durable task coordination · sandboxed tools</small>"]
 
-Person(user, "Tailnet User", "Talks to Pi and explicitly approves proposed work from an authenticated browser")
+    subgraph E["External systems"]
+        T["Tailscale Control Plane<br/><small>device identity and tailnet configuration</small>"]
+        O["Ollama<br/><small>local conversational model</small>"]
+        M["Model Providers<br/><small>Pi's selected agent model</small>"]
+        G["GitHub<br/><small>optional repository API</small>"]
+    end
 
-System(platform, "Agent Workload Platform with Voice", "Provides an isolated Pipecat voice interface, durable Pi task coordination, and sandboxed MCP tools")
+    U -->|"tailnet HTTPS + voice"| P
+    P -->|"device authorization"| T
+    P -->|"local chat completion"| O
+    P -->|"agent completion"| M
+    P -->|"scoped repository access"| G
 
-System_Ext(tailscale, "Tailscale Control Plane", "Authenticates devices and distributes tailnet identity and network configuration")
-System_Ext(models, "Model Providers", "Serve the models selected by Pi using the host's subscription credentials")
-System_Ext(ollama, "Ollama", "Runs the one locally approved conversational model on the Mac")
-System_Ext(github, "GitHub", "Optional repository API reached only through a permission-scoped Wassette component")
-
-Rel(user, platform, "Converses, proposes work, approves by voice, and hears results", "Tailnet HTTPS and WebSocket audio")
-Rel(platform, tailscale, "Authenticates devices and obtains tailnet configuration from", "Tailscale control protocol")
-Rel(platform, ollama, "Requests voice-dialogue chat completions from", "Loopback OpenAI-compatible HTTP")
-Rel(platform, models, "Requests Pi agent completions from", "Provider API")
-Rel(platform, github, "Reads or changes repositories when explicitly authorized", "Wassette-scoped HTTPS")
+    classDef person fill:#084c8d,color:#fff,stroke:#05345f,stroke-width:2px;
+    classDef system fill:#1674c5,color:#fff,stroke:#0b4f8a,stroke-width:2px;
+    classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
+    class U person;
+    class P system;
+    class T,O,M,G external;

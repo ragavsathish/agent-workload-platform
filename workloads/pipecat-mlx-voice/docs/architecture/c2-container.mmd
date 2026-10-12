@@ -1,41 +1,45 @@
-C4Container
-title Agent Workload Platform - Voice Interface Containers
+flowchart TB
+    U(["Tailnet User"])
 
-Person(user, "Tailnet User", "Talks to Pi and explicitly approves pending work")
+    subgraph MAC["Apple Silicon Mac"]
+        subgraph D["Docker Desktop Linux VM · Compose"]
+            TS["Tailscale Ingress<br/><small>tailnet-only HTTPS + WebRTC</small>"]
+            E["Voice Edge<br/><small>Pipecat pipeline + identity checks</small>"]
+            A["Agent Gateway<br/><small>four bounded task routes</small>"]
+            Q[("Postgres + Absurd<br/><small>durable task store")]
+            S[("S3Mock volume<br/><small>immutable artifacts")]
+            TS -->|"authenticated traffic"| E
+            E -->|"gateway bearer"| A
+            A -->|"private SQL"| Q
+            A -->|"artifact HTTP"| S
+        end
 
-System_Boundary(platform, "Agent Workload Platform with Voice") {
-  Container(browser, "Browser Client", "React and Pipecat RTVI", "Captures audio, shows task state, and plays speech")
-  Container(ingress, "Tailnet Ingress", "Tailscale Serve", "Authenticates tailnet devices, terminates HTTPS, and proxies HTTP and WebSockets without a public or LAN port")
-  Container(edge, "Voice Edge", "Pipecat and FastAPI", "Validates exact origin and one-use path token, then runs dialogue and four narrow task tools")
-  Container(broker, "Inference Broker", "FastAPI, MLX Whisper, MLX Kokoro", "Exposes bounded STT, TTS, and exact-model chat")
-  Container(gateway, "Agent Gateway", "FastAPI", "Scopes propose, status, voice approval, and cancel to one tailnet identity")
-  ContainerDb(queue, "Durable Task Store", "Postgres and Absurd", "Stores proposals, plan hashes, tasks, checkpoints, and results")
-  ContainerDb(artifacts, "Artifact Store", "S3Mock and Docker volume", "Stores immutable workspace bundles and task result patches")
-  Container(worker, "Pi Worker", "Native macOS process", "Runs one durable Pi session per approved task")
-  Container(supervisor, "Host Service Supervisor", "macOS LaunchAgent", "Keeps the MLX broker, native Pi voice service, and worker running")
-  Container(gondolin, "Gondolin Tool Runtime", "Micro-VM MCP server", "Isolates browser and workspace tools")
-  Container(wassette, "Wassette MCP Runtime", "Permission-scoped WebAssembly", "Provides bounded integration tools")
-  ContainerDb(sessions, "Pi Sessions", "Host filesystem", "Stores durable per-task histories")
-}
+        subgraph H["Native macOS · one host supervisor"]
+            SUP["Host Service Supervisor<br/><small>macOS LaunchAgent</small>"]
+            B["Inference Broker<br/><small>MLX Whisper · Ollama · MLX/Kokoro</small>"]
+            V["Native Pi Voice<br/><small>Pi + Gondolin extension</small>"]
+            W["Pi Worker<br/><small>durable approved task execution</small>"]
+            G["Gondolin<br/><small>micro-VM tool isolation</small>"]
+            X["Wassette<br/><small>permission-scoped WebAssembly</small>"]
+            SUP -->|"supervises"| B
+            SUP -->|"supervises"| V
+            SUP -->|"supervises"| W
+            W -->|"isolated tools"| G
+            W -->|"scoped integrations"| X
+        end
 
-System_Ext(tailscale, "Tailscale Control Plane", "Authenticates devices and distributes tailnet configuration")
-System_Ext(ollama, "Ollama", "Runs the exact local dialogue model")
-System_Ext(models, "Model Providers", "Serve Pi's selected agent model")
+        E -->|"broker bearer · host gateway"| B
+        W -->|"queue + checkpoints"| Q
+        W -->|"workspace bundles + results"| S
+    end
 
-Rel(user, browser, "Talks, listens, and approves through")
-Rel(browser, ingress, "Loads UI and streams audio", "Tailnet HTTPS and WebSocket")
-Rel(ingress, tailscale, "Obtains device authorization and network configuration from")
-Rel(ingress, edge, "Forwards authenticated HTTP and WebSocket traffic", "Shared loopback")
-Rel(edge, broker, "Requests bounded inference", "Bearer-authenticated HTTP")
-Rel(edge, gateway, "Proposes, reads, approves, and cancels tasks", "Bearer-authenticated HTTP")
-Rel(broker, ollama, "Requests exact-model completions", "Mac loopback HTTP")
-Rel(gateway, queue, "Applies identity-bound task transitions", "Private SQL")
-Rel(gateway, artifacts, "Stores and retrieves immutable workspace bundles", "S3-compatible HTTP")
-Rel(worker, queue, "Consumes approved work and checkpoints results")
-Rel(worker, artifacts, "Materializes inputs and uploads result patches")
-Rel(worker, models, "Requests agent completions")
-Rel(worker, gondolin, "Invokes isolated tools", "Pi extension and MCP")
-Rel(worker, wassette, "Invokes permission-scoped integrations", "Pi extension and MCP")
-Rel(worker, sessions, "Writes task history")
-Rel(supervisor, broker, "Supervises host process")
-Rel(supervisor, worker, "Supervises host process")
+    U -->|"microphone · speaker · approval"| TS
+
+    classDef person fill:#084c8d,color:#fff,stroke:#05345f,stroke-width:2px;
+    classDef service fill:#dbeafe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
+    classDef security fill:#dcfce7,color:#14532d,stroke:#16a34a,stroke-width:2px;
+    classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
+    class U person;
+    class SUP,B,V,W,G,X service;
+    class TS,E,A security;
+    class Q,S data;

@@ -1,35 +1,23 @@
-flowchart LR
-    %% C4 component view: the Pipecat pipeline is inside the voice-edge container.
+flowchart TB
+    %% C4 component view: one readable turn path inside the voice-edge container.
     subgraph P["Voice Edge container · Pipecat pipeline"]
-        direction LR
-        T["SmallWebRTCTransport<br/><small>browser audio transport</small>"]
-        V["SileroVADAnalyzer<br/><small>speech boundaries</small>"]
-        S["OpenAISTTService<br/><small>STT adapter</small>"]
-        C["LLMContextAggregatorPair<br/><small>turn context</small>"]
-        L["OpenAILLMService<br/><small>chat adapter</small>"]
-        X["VoiceVisualResponseProcessor<br/><small>spoken + Mermaid split</small>"]
-        Q["Task lifecycle functions<br/><small>propose · status · approve · cancel</small>"]
-        A["OpenAITTSService<br/><small>TTS adapter</small>"]
-        T -->|audio frames| V -->|speech boundaries| C
-        T -->|audio frames| S -->|transcription frames| C
-        C -->|user turn| L -->|model response| X -->|spoken field| A -->|audio frames| T
-        L -. function calls .-> Q
+        direction TB
+        T["SmallWebRTCTransport<br/><small>Pipecat transport</small>"]
+        V["SileroVADAnalyzer<br/><small>Pipecat VAD</small>"]
+        S["OpenAISTTService<br/><small>Pipecat STT adapter → MLX Whisper</small>"]
+        C["LLMContextAggregatorPair<br/><small>Pipecat turn context</small>"]
+        L["OpenAILLMService<br/><small>Pipecat chat adapter → Ollama/Pi</small>"]
+        X["VoiceVisualResponseProcessor<br/><small>application: spoken + Mermaid split</small>"]
+        A["OpenAITTSService<br/><small>Pipecat TTS adapter → MLX/Kokoro</small>"]
+        Q["Task lifecycle functions<br/><small>application: propose · status · approve · cancel</small>"]
+
+        T -->|audio| V -->|speech boundary| C
+        T -->|audio| S -->|transcript| C
+        C -->|user turn| L -->|model JSON| X -->|spoken field| A
+        L -. function call .-> Q
     end
-
-    B["Browser Client"]
-    I["Inference Broker<br/><small>MLX Whisper · Ollama · MLX/Kokoro</small>"]
-    G["Agent Gateway<br/><small>identity-bound task API</small>"]
-
-    B -->|WebRTC audio + UI events| T
-    X -->|Mermaid event| B
-    S -. authenticated STT .-> I
-    L -. authenticated chat .-> I
-    A -. authenticated TTS .-> I
-    Q -. bearer task commands .-> G
 
     classDef pipecat fill:#dbeafe,stroke:#2563eb,color:#0f172a;
     classDef app fill:#dcfce7,stroke:#16a34a,color:#14532d;
-    classDef external fill:#f3f4f6,stroke:#6b7280,color:#111827;
     class T,V,S,C,L,A pipecat;
     class X,Q app;
-    class B,I,G external;
