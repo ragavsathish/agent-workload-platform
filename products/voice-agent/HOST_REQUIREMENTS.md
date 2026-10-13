@@ -15,7 +15,7 @@ Run `make host-preflight` for executable checks.
 
 ## Host configuration
 
-Create `server/.env` from the example. Generate distinct random values for
+Create `deploy/.env` from the example. Generate distinct random values for
 `INFERENCE_BROKER_TOKEN`, `AGENT_GATEWAY_TOKEN`, `ORCHESTRATOR_APPROVAL_SECRET`, and
 `POSTGRES_PASSWORD`. `make up` generates and preserves a separate Grafana admin password unless
 `GRAFANA_ADMIN_PASSWORD` is set. Configure the exact allowed Ollama model, MLX models, logical workspaces, Pi

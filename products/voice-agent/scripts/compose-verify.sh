@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-compose=(docker compose --env-file "$root/server/.env" -f "$root/deploy/compose.yml")
+compose=(docker compose --env-file "$root/deploy/.env" -f "$root/deploy/compose.yml")
 failures=0
 pass() { printf 'PASS  %s\n' "$*"; }
 warn() { printf 'WARN  %s\n' "$*"; }
@@ -10,7 +10,8 @@ fail() { printf 'FAIL  %s\n' "$*"; failures=$((failures + 1)); }
 
 services=(s3mock postgres otel-lgtm agent-gateway tailscale voice-edge)
 secure_services=(s3mock agent-gateway tailscale voice-edge)
-no_log_services=(otel-lgtm agent-gateway voice-edge)
+no_log_services=(otel-lgtm)
+bounded_log_services=(agent-gateway voice-edge)
 
 for service in "${services[@]}"; do
   cid="$("${compose[@]}" ps -q "$service")"
@@ -37,6 +38,13 @@ docker inspect -f '{{range .Mounts}}{{println .Destination}}{{end}}' "$otel_cid"
 for service in "${no_log_services[@]}"; do
   cid="$("${compose[@]}" ps -q "$service")"
   [[ "$(docker inspect -f '{{.HostConfig.LogConfig.Type}}' "$cid")" == none ]] && pass "$service retains no Docker logs" || fail "$service Docker logging is enabled"
+done
+
+for service in "${bounded_log_services[@]}"; do
+  cid="$("${compose[@]}" ps -q "$service")"
+  [[ "$(docker inspect -f '{{.HostConfig.LogConfig.Type}}' "$cid")" == local ]] && pass "$service retains bounded local stdout" || fail "$service does not use the local logging driver"
+  [[ "$(docker inspect -f '{{index .HostConfig.LogConfig.Config "max-size"}}' "$cid")" == 10m ]] && pass "$service stdout size is bounded" || fail "$service stdout size is not bounded"
+  [[ "$(docker inspect -f '{{index .HostConfig.LogConfig.Config "max-file"}}' "$cid")" == 3 ]] && pass "$service stdout rotation is bounded" || fail "$service stdout rotation is not bounded"
 done
 
 for service in agent-gateway voice-edge; do

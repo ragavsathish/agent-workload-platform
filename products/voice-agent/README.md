@@ -10,18 +10,16 @@ boundaries as authoritative Mermaid sources.
 
 ## Product structure
 
-This directory is the complete voice-agent product boundary:
+Deployable processes live in `apps/`. Code shared by multiple apps lives in `packages/`.
 
-- `client/` is the browser application.
-- `edge/` is the containerized Pipecat/WebRTC voice edge.
-- `gateway/` builds the containerized task-gateway service.
-- `services/pi-agent/` owns the persistent Pi voice session and its
-  Gondolin-isolated native tools.
-- `server/` contains the `speech` and `tasking` bounded contexts, including the
-  native inference broker, task gateway, durable worker, and shared telemetry.
-- `deploy/` owns Compose, macOS LaunchAgent, tailnet, secret-mount, and
-  observability configuration.
-- `scripts/` is the product lifecycle and verification surface.
+```text
+apps/       web, edge, pi-agent, broker, gateway, worker
+packages/   tasking, telemetry
+deploy/     Compose, macOS services, Tailscale, secrets, observability
+scripts/    setup, operation, and verification
+tests/      end-to-end probes
+docs/       product architecture
+```
 
 The product vocabulary is defined in [GLOSSARY.md](GLOSSARY.md). Repository-wide
 ownership and planned extractions are documented in
@@ -64,13 +62,18 @@ tools still execute through Gondolin rather than in the voice stack.
 ```bash
 cd products/voice-agent
 make setup
-# Fill server/.env using server/.env.example, including fresh random secrets.
+# Fill deploy/.env using deploy/.env.example, including fresh random secrets.
 make pull-model
 make host-preflight
-make up
+make start
 make login
 make warm-models
 ```
+
+`make start` deploys in the background. Use `make up` to deploy and then follow
+bounded container output together with the native broker, Pi voice, and worker
+stdout; `Ctrl-C` stops following output but leaves the services running. Use
+`make logs` to follow an already-running deployment.
 
 `make login` performs interactive Tailscale authentication when needed, binds the exact login and
 MagicDNS origin, enables the tailnet-only HTTPS proxy on port 443, and prints the browser URL.
@@ -105,6 +108,9 @@ name when the Mac itself is not connected as a Tailscale client.
 
 ```bash
 make status       # Compose services, tailnet state, native service state
+make start        # deploy, verify, and return after services become healthy
+make up           # deploy, verify, and follow service stdout
+make logs         # follow container and native-service stdout
 make verify       # isolation, capabilities, ingress, broker, and gateway checks
 make grafana-password # print the local Grafana credential after make up
 make recreate     # immutable container recreation plus verification
@@ -158,14 +164,16 @@ collector. From an authenticated tailnet device, open
 <https://pipecat-edge.tailf6d713.ts.net:8443>; Grafana trusts only the identity header injected by
 the Tailscale proxy and does not ask for another password. Direct Mac-loopback access at
 <http://127.0.0.1:3300> still requires user `admin`; obtain its generated password with
-`make grafana-password`. The provisioned **Pipecat Voice Overview** dashboard shows operation rates,
-p95 durations, errors, and recent traces for the voice edge, gateway, and native MLX inference
-broker.
+`make grafana-password`. The provisioned **Voice Product Health** dashboard follows the product
+journey from detected speech through transcript, Pi inference, and reply audio. It also shows turn
+outcomes, voice-filter pass rate, user-perceived and inference-stage latency, task activity,
+failures, and recent payload-free traces.
 
 Grafana and OTLP/HTTP bind only to Mac loopback. OTLP/gRPC, Prometheus, Tempo, and Loki ports are not
-published. Application and bundle Docker logs remain disabled, and applications do not send the
-OpenTelemetry logs signal. Telemetry is stored in the `otel-lgtm-data` Docker volume; Prometheus
-retention is seven days. This all-in-one bundle is for private local monitoring, not production.
+published. Gateway and edge stdout is retained only in bounded local Docker logs for `make logs`;
+applications do not send the OpenTelemetry logs signal. Telemetry is stored in the
+`otel-lgtm-data` Docker volume; Prometheus retention is seven days. This all-in-one bundle is for
+private local monitoring, not production.
 
 The black-box runner synthesizes speech with Kokoro, streams it through the same authenticated
 WebSocket used by the browser, transcribes it with MLX Whisper, and exercises the LLM/tool path.
@@ -173,7 +181,7 @@ Before Tailscale login it uses `deploy/compose.local-test.yml` as a non-listenin
 set `BLACKBOX_USE_TAILSCALE=true` to test an authenticated tunnel namespace. See
 [TESTING.md](TESTING.md) for assertions and failure interpretation.
 
-Set `VOICE_LLM_BACKEND=pi` in `edge/.env` to select the alternate
+Set `VOICE_LLM_BACKEND=pi` in `apps/edge/.env` to select the alternate
 `Whisper -> Pi agent -> restricted Pi task tools -> Kokoro` path. The default remains `ollama`.
 Pi voice uses a dedicated long-running Node service built on Pi's `createAgentSession()` SDK. The
 service keeps conversation state between turns, reconciles a restarted or reset Pipecat transcript,

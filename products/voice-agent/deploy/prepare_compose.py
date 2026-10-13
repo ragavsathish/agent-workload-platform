@@ -16,7 +16,7 @@ from dotenv import dotenv_values
 def required(values: dict[str, str | None], name: str, minimum: int = 1) -> str:
     value = values.get(name) or ""
     if len(value) < minimum or value.startswith("replace-with-"):
-        raise SystemExit(f"{name} must be configured in server/.env")
+        raise SystemExit(f"{name} must be configured in deploy/.env")
     return value
 
 
@@ -69,7 +69,7 @@ def materialize_voice_sample(source: Path, destination: Path) -> None:
 
 def main() -> None:
     root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
-    values = dotenv_values(root / "server/.env")
+    values = dotenv_values(root / "deploy/.env")
     broker = required(values, "INFERENCE_BROKER_TOKEN", 32)
     gateway = required(values, "AGENT_GATEWAY_TOKEN", 32)
     approval = required(values, "ORCHESTRATOR_APPROVAL_SECRET", 32)

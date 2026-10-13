@@ -36,35 +36,29 @@ because it uses Docker, macOS LaunchAgents, or Kubernetes.
 
 ## Voice Agent boundary
 
-The Voice Agent moved as one vertical slice before its internal services were
-rearranged. This keeps Compose build contexts, macOS installation, ignored
-secrets, local virtual environments, and existing verification commands
-working together. Its current internal directories are therefore transitional
-but explicitly owned:
+The Voice Agent follows one rule: deployable processes are apps; reusable code
+with multiple consumers is a package.
 
 ```text
 products/voice-agent/
-├── client/       browser application
-├── edge/         Pipecat/WebRTC voice edge
-├── gateway/      task-gateway container package
-├── services/
-│   └── pi-agent/ persistent Pi voice session and isolated tools
-├── server/       native inference, worker, and orchestration modules
-├── deploy/       Compose, macOS, tailnet, secrets, and observability
-├── scripts/      lifecycle and verification commands
-└── docs/         product architecture and research
+├── apps/
+│   ├── web/
+│   ├── edge/
+│   ├── pi-agent/
+│   ├── broker/
+│   ├── gateway/
+│   └── worker/
+├── packages/
+│   ├── tasking/
+│   └── telemetry/
+├── deploy/
+├── scripts/
+├── tests/
+└── docs/
 ```
 
-The next internal split should be behavior-preserving:
-
-1. Give the browser app, voice edge, task gateway, inference broker, and task
-   worker independently buildable packages.
-2. Extract shared task lifecycle types before separating gateway and worker
-   Python environments.
-3. Keep Compose and macOS profiles under the product, referencing service
-   package roots explicitly.
-4. Run the existing product `make check`, black-box voice test, Compose
-   validation, and host preflight after each move.
+Each Python app owns its lock file. Shared packages do not start processes or
+own deployment configuration.
 
 ## Repository rules
 

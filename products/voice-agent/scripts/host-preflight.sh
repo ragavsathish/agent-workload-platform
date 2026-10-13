@@ -26,7 +26,7 @@ free_kib="$(df -Pk "$repo_dir" | awk 'NR==2 {print $4}')"
 (( free_kib >= 15 * 1024 * 1024 )) && pass "at least 15 GiB free disk" || fail "at least 15 GiB free disk is required"
 (( free_kib >= 35 * 1024 * 1024 )) || warn "35 GiB free disk is recommended for images and model caches"
 
-host_env="$repo_dir/server/.env"
+host_env="$repo_dir/deploy/.env"
 if [[ -f "$host_env" ]]; then
   token="$(sed -n 's/^INFERENCE_BROKER_TOKEN=//p' "$host_env" | tail -1)"
   [[ ${#token} -ge 32 && "$token" != replace-with-* ]] && pass "inference broker capability is configured" || fail "INFERENCE_BROKER_TOKEN must be a generated value of at least 32 characters"
@@ -35,13 +35,13 @@ if [[ -f "$host_env" ]]; then
   postgres_password="$(sed -n 's/^POSTGRES_PASSWORD=//p' "$host_env" | tail -1)"
   [[ ${#postgres_password} -ge 16 && "$postgres_password" != replace-with-* ]] && pass "Postgres password is configured" || fail "POSTGRES_PASSWORD must be a generated value of at least 16 characters"
   for key in OLLAMA_MODEL MLX_STT_MODEL MLX_TTS_MODEL VOICE_DEFAULT_WORKSPACE ORCHESTRATOR_ALLOWED_WORKSPACES ARTIFACT_ENDPOINT_URL ARTIFACT_BUCKET; do
-    grep -Eq "^${key}=.+" "$host_env" && pass "$key is configured" || fail "$key is missing from server/.env"
+    grep -Eq "^${key}=.+" "$host_env" && pass "$key is configured" || fail "$key is missing from deploy/.env"
   done
   default_workspace="$(sed -n 's/^VOICE_DEFAULT_WORKSPACE=//p' "$host_env" | tail -1)"
   allowed_workspaces="$(sed -n 's/^ORCHESTRATOR_ALLOWED_WORKSPACES=//p' "$host_env" | tail -1)"
   [[ ",$allowed_workspaces," == *",$default_workspace,"* ]] && pass "default logical workspace is allowlisted" || fail "VOICE_DEFAULT_WORKSPACE must be in ORCHESTRATOR_ALLOWED_WORKSPACES"
 else
-  fail "server/.env is missing; run make setup"
+  fail "deploy/.env is missing; run make setup"
 fi
 
 if curl -fsS http://127.0.0.1:11434/api/version >/dev/null 2>&1; then

@@ -4,7 +4,7 @@
 <dict>
   <key>Label</key><string>com.sathish.pipecat-worker</string>
   <key>ProgramArguments</key>
-  <array><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/scripts/host-worker.sh</string></array>
+  <array><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/scripts/run-worker.sh</string></array>
   <key>RunAtLoad</key><true/>
   <key>EnvironmentVariables</key>
   <dict>
@@ -12,7 +12,7 @@
   </dict>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>10</integer>
-  <key>StandardOutPath</key><string>/dev/null</string>
-  <key>StandardErrorPath</key><string>/dev/null</string>
+  <key>StandardOutPath</key><string>/Users/sathish.narayanan/Library/Logs/PipecatEdge/worker.log</string>
+  <key>StandardErrorPath</key><string>/Users/sathish.narayanan/Library/Logs/PipecatEdge/worker.log</string>
 </dict>
 </plist>

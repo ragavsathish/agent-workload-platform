@@ -4,18 +4,18 @@
 <dict>
   <key>Label</key><string>com.sathish.pipecat-pi-voice</string>
   <key>ProgramArguments</key>
-  <array><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/scripts/host-pi-voice.sh</string></array>
+  <array><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/scripts/run-pi-agent.sh</string></array>
   <key>RunAtLoad</key><true/>
   <key>EnvironmentVariables</key>
   <dict>
     <key>HOME</key><string>/Users/sathish.narayanan</string>
     <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     <key>PI_OFFLINE</key><string>1</string>
-    <key>PI_VOICE_ENV_FILE</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/server/broker.env</string>
+    <key>PI_VOICE_ENV_FILE</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/apps/broker/broker.env</string>
   </dict>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>10</integer>
-  <key>StandardOutPath</key><string>/dev/null</string>
-  <key>StandardErrorPath</key><string>/dev/null</string>
+  <key>StandardOutPath</key><string>/Users/sathish.narayanan/Library/Logs/PipecatEdge/pi-voice.log</string>
+  <key>StandardErrorPath</key><string>/Users/sathish.narayanan/Library/Logs/PipecatEdge/pi-voice.log</string>
 </dict>
 </plist>

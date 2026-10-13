@@ -2,10 +2,10 @@
 set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ollama_model="$(sed -n 's/^OLLAMA_MODEL=//p' "$repo_dir/server/.env" | tail -1)"
-[[ -n "$ollama_model" ]] || { echo "OLLAMA_MODEL is missing from server/.env" >&2; exit 1; }
+ollama_model="$(sed -n 's/^OLLAMA_MODEL=//p' "$repo_dir/deploy/.env" | tail -1)"
+[[ -n "$ollama_model" ]] || { echo "OLLAMA_MODEL is missing from deploy/.env" >&2; exit 1; }
 
-docker compose --env-file "$repo_dir/server/.env" -f "$repo_dir/deploy/compose.yml" exec -T voice-edge python - "$ollama_model" <<'PY'
+docker compose --env-file "$repo_dir/deploy/.env" -f "$repo_dir/deploy/compose.yml" exec -T voice-edge python - "$ollama_model" <<'PY'
 import io
 import json
 import struct

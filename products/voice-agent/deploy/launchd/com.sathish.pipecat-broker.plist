@@ -4,19 +4,19 @@
 <dict>
   <key>Label</key><string>com.sathish.pipecat-broker</string>
   <key>ProgramArguments</key>
-  <array><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/scripts/host-broker.sh</string></array>
+  <array><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/scripts/run-broker.sh</string></array>
   <key>RunAtLoad</key><true/>
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
-    <key>INFERENCE_BROKER_ENV_FILE</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/server/broker.env</string>
+    <key>INFERENCE_BROKER_ENV_FILE</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/apps/broker/broker.env</string>
     <key>OTEL_EXPORTER_OTLP_ENDPOINT</key><string>http://127.0.0.1:4318</string>
     <key>OTEL_LOGS_EXPORTER</key><string>none</string>
     <key>OTEL_METRIC_EXPORT_INTERVAL</key><string>5000</string>
   </dict>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>10</integer>
-  <key>StandardOutPath</key><string>/dev/null</string>
-  <key>StandardErrorPath</key><string>/dev/null</string>
+  <key>StandardOutPath</key><string>/Users/sathish.narayanan/Library/Logs/PipecatEdge/broker.log</string>
+  <key>StandardErrorPath</key><string>/Users/sathish.narayanan/Library/Logs/PipecatEdge/broker.log</string>
 </dict>
 </plist>

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-compose=(docker compose --env-file "$root/server/.env" -f "$root/deploy/compose.yml")
+compose=(docker compose --env-file "$root/deploy/.env" -f "$root/deploy/compose.yml")
 status_file="$(mktemp)"
 trap 'rm -f "$status_file"' EXIT
 
@@ -21,8 +21,8 @@ for _ in {1..600}; do
 done
 [[ "$state" == Running ]] || { echo "Tailscale did not reach Running state within 10 minutes" >&2; exit 1; }
 
-url="$(uv run --project "$root/server" python "$root/deploy/finalize_edge.py" "$root/edge/.env" "$status_file" "$root/server/.env")"
-uv run --project "$root/server" python "$root/deploy/prepare_compose.py" "$root"
+url="$(uv run --project "$root/apps/gateway" python "$root/deploy/finalize_edge.py" "$root/apps/edge/.env" "$status_file" "$root/deploy/.env")"
+uv run --project "$root/apps/gateway" python "$root/deploy/prepare_compose.py" "$root"
 "${compose[@]}" up -d --wait --force-recreate agent-gateway voice-edge
 "${compose[@]}" exec -T tailscale tailscale --socket=/tmp/tailscaled.sock serve reset
 "${compose[@]}" exec -T tailscale tailscale --socket=/tmp/tailscaled.sock serve \
