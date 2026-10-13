@@ -1,4 +1,4 @@
-.PHONY: setup build up down recreate verify cycle-test login status grafana-password warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e host-preflight install-host-services db-init broker worker pull-model check
+.PHONY: setup build up start logs down recreate verify cycle-test login status grafana-password warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e host-preflight install-host-services db-init broker worker pull-model check
 
 COMPOSE = docker compose --env-file deploy/.env -f deploy/compose.yml
 
@@ -18,6 +18,23 @@ build:
 
 up:
 	./scripts/compose-up.sh
+	$(MAKE) logs
+
+start:
+	./scripts/compose-up.sh
+
+logs:
+	@mkdir -p "$$HOME/Library/Logs/PipecatEdge"
+	@touch "$$HOME/Library/Logs/PipecatEdge/broker.log" "$$HOME/Library/Logs/PipecatEdge/pi-voice.log" "$$HOME/Library/Logs/PipecatEdge/worker.log"
+	@chmod 600 "$$HOME/Library/Logs/PipecatEdge/"*.log
+	@interrupted=0; \
+	tail -n 100 -F "$$HOME/Library/Logs/PipecatEdge/"*.log & tail_pid=$$!; \
+	trap 'interrupted=1' INT TERM; \
+	$(COMPOSE) logs -f --tail=100 agent-gateway voice-edge tailscale; status=$$?; \
+	kill "$$tail_pid" 2>/dev/null || true; \
+	wait "$$tail_pid" 2>/dev/null || true; \
+	if [[ "$$interrupted" == 1 || "$$status" == 130 ]]; then exit 0; fi; \
+	exit "$$status"
 
 down:
 	$(COMPOSE) down

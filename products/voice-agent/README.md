@@ -65,10 +65,15 @@ make setup
 # Fill deploy/.env using deploy/.env.example, including fresh random secrets.
 make pull-model
 make host-preflight
-make up
+make start
 make login
 make warm-models
 ```
+
+`make start` deploys in the background. Use `make up` to deploy and then follow
+bounded container output together with the native broker, Pi voice, and worker
+stdout; `Ctrl-C` stops following output but leaves the services running. Use
+`make logs` to follow an already-running deployment.
 
 `make login` performs interactive Tailscale authentication when needed, binds the exact login and
 MagicDNS origin, enables the tailnet-only HTTPS proxy on port 443, and prints the browser URL.
@@ -103,6 +108,9 @@ name when the Mac itself is not connected as a Tailscale client.
 
 ```bash
 make status       # Compose services, tailnet state, native service state
+make start        # deploy, verify, and return after services become healthy
+make up           # deploy, verify, and follow service stdout
+make logs         # follow container and native-service stdout
 make verify       # isolation, capabilities, ingress, broker, and gateway checks
 make grafana-password # print the local Grafana credential after make up
 make recreate     # immutable container recreation plus verification

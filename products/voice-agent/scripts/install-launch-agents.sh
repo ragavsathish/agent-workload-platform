@@ -4,6 +4,7 @@ set -euo pipefail
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 agents_dir="$HOME/Library/LaunchAgents"
 runtime_dir="$HOME/Library/Application Support/PipecatEdge"
+logs_dir="$HOME/Library/Logs/PipecatEdge"
 gondolin_assets_source="$repo_dir/../../artifacts/gondolin-browser/$(uname -m | sed 's/arm64/aarch64/; s/x86_64/x86_64/')"
 gondolin_runtime="$runtime_dir/gondolin-agent"
 voice_agent_runtime="$runtime_dir/voice-pi-agent"
@@ -24,6 +25,7 @@ domain="gui/$UID"
 
 mkdir -p \
   "$agents_dir" \
+  "$logs_dir" \
   "$runtime_dir/scripts" \
   "$runtime_dir/apps/broker/src" \
   "$runtime_dir/apps/worker/src" \
@@ -37,6 +39,9 @@ mkdir -p \
   "$skills_runtime" \
   "$runtime_dir/voice-workspace"
 chmod 700 "$runtime_dir/runtime-home"
+chmod 700 "$logs_dir"
+touch "$logs_dir/broker.log" "$logs_dir/pi-voice.log" "$logs_dir/worker.log"
+chmod 600 "$logs_dir"/*.log
 install -m 700 \
   "$repo_dir/deploy/launchd/run-broker.sh" \
   "$repo_dir/deploy/launchd/run-pi-agent.sh" \
