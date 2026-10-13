@@ -158,7 +158,12 @@ def validate_http_identity(request: Request) -> str:
             for value in required_env("PIPECAT_ALLOWED_ORIGINS").split(",")
             if value.strip()
         }
-        if request.headers.get("origin", "") not in allowed_origins:
+        origin = request.headers.get("origin", "")
+        safe_method = request.method.upper() in {"GET", "HEAD", "OPTIONS"}
+        # Browsers commonly omit Origin on same-origin GET/HEAD requests. Keep
+        # explicit foreign origins out, and require an allowed origin for every
+        # state-changing request. Tailnet identity is required in both cases.
+        if (origin and origin not in allowed_origins) or (not safe_method and not origin):
             raise PermissionError("browser origin is not allowed")
         return validate_identity(
             request.headers.get("tailscale-user-login", "").strip().lower()
@@ -179,6 +184,30 @@ async def broker_transcript_request() -> dict[str, object]:
     payload = response.json()
     if not isinstance(payload, dict):
         raise HTTPException(status_code=502, detail="invalid Pi transcript")
+    return payload
+
+
+async def broker_context_request(method: str, path: str) -> dict[str, object]:
+    headers = {"Authorization": f"Bearer {required_env('INFERENCE_BROKER_TOKEN')}"}
+    timeout = float(os.getenv("PI_VOICE_TIMEOUT_SECONDS", "120")) + 10
+    async with httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=5.0)) as client:
+        response = await client.request(
+            method,
+            f"{required_env('INFERENCE_BROKER_BASE_URL').rstrip('/')}/pi/context{path}",
+            headers=headers,
+        )
+    if response.is_error:
+        detail = "Pi context is unavailable"
+        try:
+            service_detail = response.json().get("detail")
+            if isinstance(service_detail, str):
+                detail = service_detail
+        except ValueError:
+            pass
+        raise HTTPException(status_code=response.status_code, detail=detail)
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=502, detail="invalid Pi context")
     return payload
 
 
@@ -690,6 +719,22 @@ if __name__ == "__main__":
         validate_http_identity(request)
         return JSONResponse(
             await broker_transcript_request(),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/api/pi-context")
+    async def get_pi_context(request: Request):
+        validate_http_identity(request)
+        return JSONResponse(
+            await broker_context_request("GET", ""),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/pi-context/compact")
+    async def compact_pi_context(request: Request):
+        validate_http_identity(request)
+        return JSONResponse(
+            await broker_context_request("POST", "/compact"),
             headers={"Cache-Control": "no-store"},
         )
 
