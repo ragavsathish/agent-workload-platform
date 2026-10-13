@@ -1,0 +1,33 @@
+sequenceDiagram
+    autonumber
+    actor User as Tailnet User
+    participant Browser as Browser Client
+    participant Ingress as Tailscale Serve
+    participant Edge as Voice Edge / Pipecat
+    participant Broker as Inference Broker
+    participant Pi as Pi Voice Service
+    participant Model as Model Provider
+    participant VM as Gondolin Voice VM
+
+    User->>Browser: Start or unmute, then speak
+    Browser->>Ingress: Stream microphone audio over WebRTC
+    Ingress->>Edge: Proxy the authenticated session
+    Edge->>Broker: Transcribe the completed turn with MLX Whisper
+    Broker-->>Edge: Transcript
+    Edge->>Broker: Start an OpenAI-compatible Pi completion stream
+    Broker->>Pi: Forward the new conversational turn over loopback
+    Pi->>Model: Request model completion
+    opt Workspace tool is needed
+        Pi->>VM: Run read, write, edit, or shell
+        VM-->>Pi: Bounded tool result
+    end
+    Model-->>Pi: Response deltas
+    Pi-->>Broker: Stream response deltas with SSE
+    Broker-->>Edge: Stream OpenAI-compatible completion chunks
+    loop Each complete spoken text segment
+        Edge->>Broker: Synthesize with MLX Kokoro
+        Broker-->>Edge: 24 kHz PCM
+        Edge-->>Browser: Stream speech over WebRTC
+    end
+    Edge-->>Browser: Publish final Mermaid and spoken text over RTVI
+    Browser-->>User: Play speech and render diagram and transcript

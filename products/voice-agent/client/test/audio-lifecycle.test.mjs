@@ -15,23 +15,40 @@ test('audio initialization is deferred until the user connects', async () => {
   );
 });
 
-test('conversation controls explicitly start, pause, resume, and stop capture', async () => {
+test('conversation controls mute capture without ending the voice session', async () => {
   const appSource = await readFile(
     new URL('../src/components/App.tsx', import.meta.url),
     'utf8'
   );
 
   assert.match(appSource, /await handleConnect\(\);[\s\S]*client\.enableMic\(true\)/);
-  assert.match(appSource, /client\.enableMic\(!nextPaused\)/);
+  assert.match(appSource, /client\.enableMic\(!nextMuted\)/);
+  assert.match(appSource, /isMuted \? 'Unmute' : 'Mute'/);
+  assert.match(appSource, /'Microphone muted'/);
   assert.match(
     appSource,
     /client\.enableMic\(false\);[\s\S]*await handleDisconnect\(\)/,
-    'Stop must mute capture before disconnecting the transport'
+    'End conversation must mute capture before disconnecting the transport'
   );
-  assert.match(appSource, /isPaused \? 'Resume' : 'Pause'/);
+  assert.match(appSource, /End conversation/);
   assert.match(appSource, /className="conversation-dock"/);
   assert.match(appSource, /<TaskPanel[\s\S]*onClose=/);
   assert.doesNotMatch(appSource, /<ConversationPanel/);
+});
+
+test('context usage is visible and can be compacted without redundant audio controls', async () => {
+  const appSource = await readFile(
+    new URL('../src/components/App.tsx', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(appSource, /fetch\('\/api\/pi-context'/);
+  assert.match(appSource, /fetch\('\/api\/pi-context\/compact', \{ method: 'POST' \}\)/);
+  assert.match(appSource, />Context</);
+  assert.match(appSource, /contextUsage\.percent/);
+  assert.match(appSource, /Compacting…/);
+  assert.doesNotMatch(appSource, /Hands-free/);
+  assert.doesNotMatch(appSource, /Enable sound/);
 });
 
 test('completed task responses render Mermaid and use server-side speech', async () => {

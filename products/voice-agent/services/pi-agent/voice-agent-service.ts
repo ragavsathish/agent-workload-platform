@@ -4,9 +4,11 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
+  calculateContextTokens,
   createAgentSession,
   createExtensionRuntime,
   defineTool,
+  getLastAssistantUsage,
   ModelRuntime,
   SessionManager,
   type AgentSession,
@@ -50,8 +52,17 @@ export type PublicTranscriptEntry = {
   status?: "running" | "completed" | "failed";
 };
 
+export type PublicContextUsage = {
+  tokens: number | null;
+  contextWindow: number | null;
+  percent: number | null;
+  estimated: boolean;
+  canCompact: boolean;
+};
+
 const MAX_TRANSCRIPT_ENTRIES = 200;
 const MAX_TRANSCRIPT_TEXT_CHARS = 24_000;
+const MIN_CONTEXT_TOKENS_TO_COMPACT = 64_000;
 
 /** A bounded, display-safe projection of Pi events for the owner-only browser UI. */
 export class PublicTranscript {
@@ -334,15 +345,23 @@ class VoiceAgent {
   private unsubscribeSession?: () => void;
   private turnQueue: Promise<void> = Promise.resolve();
   private activeDeltaSink?: (delta: string) => void;
+  private estimatedContextTokens?: number;
+  private compacting = false;
+  private persistedContextTokens: number | null;
+  private persistedContextWindow: number | null;
 
   private constructor(
     settings: ServiceSettings,
     modelRuntime: ModelRuntime,
     gondolin: GondolinWorkspace,
+    persistedContextTokens: number | null,
+    persistedContextWindow: number | null,
   ) {
     this.settings = settings;
     this.modelRuntime = modelRuntime;
     this.gondolin = gondolin;
+    this.persistedContextTokens = persistedContextTokens;
+    this.persistedContextWindow = persistedContextWindow;
   }
 
   static async create(settings: ServiceSettings): Promise<VoiceAgent> {
@@ -358,7 +377,20 @@ class VoiceAgent {
       skillsDir: settings.skillsDir,
       sessionLabel: "pi-voice",
     });
-    return new VoiceAgent(settings, modelRuntime, gondolin);
+    const persistedSession = openVoiceSessionManager(settings.cwd, settings.sessionDir);
+    const entries = persistedSession.getEntries();
+    const persistedUsage = getLastAssistantUsage(entries);
+    const modelChange = [...entries].reverse().find((entry) => entry.type === "model_change");
+    const persistedModel = modelChange?.type === "model_change"
+      ? modelRuntime.getModel(modelChange.provider, modelChange.modelId)
+      : undefined;
+    return new VoiceAgent(
+      settings,
+      modelRuntime,
+      gondolin,
+      persistedUsage ? calculateContextTokens(persistedUsage) : null,
+      persistedModel?.contextWindow ?? null,
+    );
   }
 
   private tools() {
@@ -517,6 +549,12 @@ class VoiceAgent {
       } else if (event.type === "message_end" && event.message.role === "assistant") {
         if (this.activeAssistantId) this.transcript.finishAssistant(this.activeAssistantId);
         this.activeAssistantId = undefined;
+        this.estimatedContextTokens = undefined;
+        const usage = this.session?.getContextUsage();
+        if (usage?.tokens !== null && usage?.tokens !== undefined) {
+          this.persistedContextTokens = usage.tokens;
+          this.persistedContextWindow = usage.contextWindow;
+        }
       } else if (event.type === "tool_execution_start") {
         this.transcript.startTool(event.toolCallId, event.toolName);
       } else if (event.type === "tool_execution_end") {
@@ -528,6 +566,46 @@ class VoiceAgent {
 
   transcriptSnapshot(): { revision: number; entries: PublicTranscriptEntry[] } {
     return this.transcript.snapshot();
+  }
+
+  contextSnapshot(): PublicContextUsage {
+    const usage = this.session?.getContextUsage();
+    const tokens = usage?.tokens
+      ?? this.estimatedContextTokens
+      ?? this.persistedContextTokens;
+    const contextWindow = usage?.contextWindow
+      ?? this.session?.model?.contextWindow
+      ?? this.persistedContextWindow;
+    const percent = tokens !== null && contextWindow
+      ? Math.min(100, (tokens / contextWindow) * 100)
+      : null;
+    return {
+      tokens,
+      contextWindow,
+      percent,
+      estimated: usage?.tokens == null && this.estimatedContextTokens !== undefined,
+      canCompact: tokens !== null && tokens >= MIN_CONTEXT_TOKENS_TO_COMPACT && !this.compacting,
+    };
+  }
+
+  async compact(): Promise<PublicContextUsage> {
+    const execute = async (): Promise<PublicContextUsage> => {
+      if (!this.session) throw new Error("Pi voice session is unavailable");
+      this.compacting = true;
+      try {
+        const result = await this.session.compact();
+        this.estimatedContextTokens = result.estimatedTokensAfter;
+        this.persistedContextTokens = result.estimatedTokensAfter ?? null;
+        this.persistedContextWindow = this.session.model?.contextWindow ?? null;
+        return this.contextSnapshot();
+      } finally {
+        this.compacting = false;
+      }
+    };
+
+    const result = this.turnQueue.then(execute, execute);
+    this.turnQueue = result.then(() => undefined, () => undefined);
+    return result;
   }
 
   private async runTurn(rawMessages: unknown, onDelta?: (delta: string) => void): Promise<string> {
@@ -667,6 +745,22 @@ export async function main(): Promise<void> {
     if (request.method === "GET" && request.url === "/v1/transcript") {
       response.setHeader("cache-control", "no-store");
       sendJson(response, 200, agent.transcriptSnapshot());
+      return;
+    }
+    if (request.method === "GET" && request.url === "/v1/context") {
+      response.setHeader("cache-control", "no-store");
+      sendJson(response, 200, agent.contextSnapshot());
+      return;
+    }
+    if (request.method === "POST" && request.url === "/v1/context/compact") {
+      try {
+        response.setHeader("cache-control", "no-store");
+        sendJson(response, 200, await agent.compact());
+      } catch (error) {
+        sendJson(response, 409, {
+          detail: error instanceof Error ? error.message : "Pi context compaction failed",
+        });
+      }
       return;
     }
     if (request.method !== "POST" || !["/v1/turn", "/v1/turn/stream"].includes(request.url || "")) {

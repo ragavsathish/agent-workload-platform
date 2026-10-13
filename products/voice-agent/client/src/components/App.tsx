@@ -8,7 +8,6 @@ import {
   usePipecatConnectionState,
 } from '@pipecat-ai/voice-ui-kit';
 
-import { unlockBotAudio } from '../audio-unlock';
 import type { TransportType } from '../config';
 import { MermaidDiagram } from './MermaidDiagram';
 import { AudioVisualizerRadial } from './pipecat/AudioVisualizerRadial';
@@ -45,6 +44,33 @@ const readMermaidMessage = (value: unknown): string | undefined => {
   return message.diagram;
 };
 
+type ContextUsage = {
+  tokens: number | null;
+  contextWindow: number | null;
+  percent: number | null;
+  estimated: boolean;
+  canCompact: boolean;
+};
+
+const isContextUsage = (value: unknown): value is ContextUsage => {
+  if (typeof value !== 'object' || value === null) return false;
+  const usage = value as Partial<ContextUsage>;
+  return (
+    (typeof usage.tokens === 'number' || usage.tokens === null) &&
+    (typeof usage.contextWindow === 'number' || usage.contextWindow === null) &&
+    (typeof usage.percent === 'number' || usage.percent === null) &&
+    typeof usage.estimated === 'boolean' &&
+    typeof usage.canCompact === 'boolean'
+  );
+};
+
+const formatTokens = (tokens: number): string =>
+  tokens >= 1_000_000
+    ? `${(tokens / 1_000_000).toFixed(2)}M`
+    : tokens >= 1_000
+      ? `${Math.round(tokens / 1_000)}k`
+      : String(tokens);
+
 export const App = ({
   client,
   handleConnect,
@@ -56,25 +82,14 @@ export const App = ({
   const [tasksEnabled, setTasksEnabled] = useState(false);
   const [defaultWorkspace, setDefaultWorkspace] = useState('');
   const [tasksOpen, setTasksOpen] = useState(false);
-  const [soundStatus, setSoundStatus] = useState<'idle' | 'running' | 'blocked'>('idle');
-  const [isPaused, setIsPaused] = useState(false);
-  const [handsFree, setHandsFree] = useState(() => {
-    try {
-      return window.localStorage.getItem('pipecat.hands-free') === 'true';
-    } catch {
-      return false;
-    }
-  });
+  const [isMuted, setIsMuted] = useState(false);
   const [voiceControlBusy, setVoiceControlBusy] = useState(false);
   const [voiceControlError, setVoiceControlError] = useState('');
+  const [contextUsage, setContextUsage] = useState<ContextUsage | null>(null);
+  const [contextBusy, setContextBusy] = useState(false);
+  const [contextError, setContextError] = useState('');
   const [diagram, setDiagram] = useState(INITIAL_DIAGRAM);
   const { isConnected, isConnecting } = usePipecatConnectionState();
-
-  const handleEnableSound = async () => {
-    if (!client) return;
-    const result = await unlockBotAudio(client);
-    setSoundStatus(result === 'running' ? 'running' : 'blocked');
-  };
 
   const startConversation = async () => {
     if (!client || !handleConnect) return;
@@ -83,7 +98,7 @@ export const App = ({
     try {
       await handleConnect();
       client.enableMic(true);
-      setIsPaused(false);
+      setIsMuted(false);
     } catch {
       setVoiceControlError('Could not start the conversation.');
     } finally {
@@ -91,34 +106,16 @@ export const App = ({
     }
   };
 
-  const toggleConversationPause = () => {
+  const toggleConversationMute = () => {
     if (!client || !isConnected) return;
     setVoiceControlError('');
     try {
-      const nextPaused = !isPaused;
-      client.enableMic(!nextPaused);
-      setIsPaused(nextPaused);
+      const nextMuted = !isMuted;
+      client.enableMic(!nextMuted);
+      setIsMuted(nextMuted);
     } catch {
       setVoiceControlError(
-        isPaused ? 'Could not resume listening.' : 'Could not pause listening.'
-      );
-    }
-  };
-
-  const toggleHandsFree = () => {
-    if (!client || !isConnected) return;
-    setVoiceControlError('');
-    const nextHandsFree = !handsFree;
-    try {
-      client.enableMic(nextHandsFree);
-      setHandsFree(nextHandsFree);
-      setIsPaused(!nextHandsFree);
-      window.localStorage.setItem('pipecat.hands-free', String(nextHandsFree));
-    } catch {
-      setVoiceControlError(
-        nextHandsFree
-          ? 'Could not enable hands-free listening.'
-          : 'Could not disable hands-free listening.'
+        isMuted ? 'Could not unmute the microphone.' : 'Could not mute the microphone.'
       );
     }
   };
@@ -130,7 +127,7 @@ export const App = ({
     try {
       client.enableMic(false);
       await handleDisconnect();
-      setIsPaused(false);
+      setIsMuted(false);
     } catch {
       setVoiceControlError('Could not stop the conversation.');
     } finally {
@@ -151,29 +148,6 @@ export const App = ({
   }, [client]);
 
   useEffect(() => {
-    if (!client || !isConnected || !handsFree) return;
-    let wakeLock: WakeLockSentinel | undefined;
-    let active = true;
-    const restoreHandsFree = async () => {
-      if (!active || document.visibilityState !== 'visible') return;
-      try {
-        client.enableMic(true);
-        wakeLock = await navigator.wakeLock?.request('screen');
-      } catch {
-        // Best effort: mobile browsers release wake locks when the screen is locked.
-      }
-    };
-    const handleVisibilityChange = () => void restoreHandsFree();
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    void restoreHandsFree();
-    return () => {
-      active = false;
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      void wakeLock?.release();
-    };
-  }, [client, handsFree, isConnected]);
-
-  useEffect(() => {
     let active = true;
     void fetch('/api/features')
       .then((response) => response.json())
@@ -191,10 +165,48 @@ export const App = ({
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    const refreshContext = async () => {
+      try {
+        const response = await fetch('/api/pi-context', { cache: 'no-store' });
+        const body: unknown = await response.json();
+        if (!response.ok || !isContextUsage(body)) throw new Error('context request failed');
+        if (active) {
+          setContextUsage(body);
+          setContextError('');
+        }
+      } catch {
+        if (active) setContextError('Context unavailable');
+      }
+    };
+    void refreshContext();
+    const timer = window.setInterval(() => void refreshContext(), 10_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  const compactContext = async () => {
+    setContextBusy(true);
+    setContextError('');
+    try {
+      const response = await fetch('/api/pi-context/compact', { method: 'POST' });
+      const body: unknown = await response.json();
+      if (!response.ok || !isContextUsage(body)) throw new Error('context compaction failed');
+      setContextUsage(body);
+    } catch {
+      setContextError('Could not compact context');
+    } finally {
+      setContextBusy(false);
+    }
+  };
+
   const showTransportSelector = availableTransports.length > 1;
   const stateLabel = isConnected
-    ? isPaused
-      ? 'Paused'
+    ? isMuted
+      ? 'Muted'
       : 'Listening'
     : isConnecting
       ? 'Starting…'
@@ -215,8 +227,8 @@ export const App = ({
             <span
               className={`voice-state ${
                 isConnected
-                  ? isPaused
-                    ? 'paused'
+                  ? isMuted
+                    ? 'muted'
                     : 'listening'
                   : isConnecting
                     ? 'starting'
@@ -278,19 +290,44 @@ export const App = ({
             <div className="dock-copy">
               <strong>
                 {isConnected
-                  ? isPaused
-                    ? 'Microphone paused'
+                  ? isMuted
+                    ? 'Microphone muted'
                     : 'Conversation active'
                   : 'Start when you are ready'}
               </strong>
               <span>
                 {isConnected
-                  ? handsFree
-                    ? 'Hands-free listening is on'
-                    : 'Pause between turns when needed'
+                  ? isMuted
+                    ? 'Pi remains connected and can still respond'
+                    : 'Mute the microphone when privacy is needed'
                   : 'Audio stays on this machine'}
               </span>
             </div>
+          </div>
+          <div className="context-control" aria-live="polite">
+            <div className="context-copy">
+              <span>Context</span>
+              <strong>
+                {contextUsage?.tokens !== null && contextUsage?.tokens !== undefined
+                  ? `${contextUsage.estimated ? '~' : ''}${formatTokens(contextUsage.tokens)}`
+                  : '—'}
+                {contextUsage?.contextWindow
+                  ? ` / ${formatTokens(contextUsage.contextWindow)}`
+                  : ''}
+              </strong>
+              {contextUsage?.percent !== null && contextUsage?.percent !== undefined && (
+                <span>{Math.round(contextUsage.percent)}% used</span>
+              )}
+              {contextError && <span className="context-error">{contextError}</span>}
+            </div>
+            <Button
+              className="context-compact"
+              size="sm"
+              variant="outline"
+              disabled={contextBusy || contextUsage?.canCompact !== true}
+              onClick={() => void compactContext()}>
+              {contextBusy ? 'Compacting…' : 'Compact'}
+            </Button>
           </div>
           <div className="dock-actions">
             {!isConnected && (
@@ -305,32 +342,13 @@ export const App = ({
             {isConnected && (
               <>
                 <Button
-                  className="voice-control-hands-free"
+                  className="voice-control-mute"
                   size="lg"
-                  variant={handsFree ? 'default' : 'outline'}
+                  variant={isMuted ? 'default' : 'outline'}
                   disabled={voiceControlBusy}
-                  aria-pressed={handsFree}
-                  onClick={toggleHandsFree}>
-                  {handsFree ? 'Hands-free on' : 'Hands-free off'}
-                </Button>
-                <Button
-                  className="voice-control-pause"
-                  size="lg"
-                  variant="outline"
-                  disabled={voiceControlBusy}
-                  onClick={toggleConversationPause}>
-                  {isPaused ? 'Resume' : 'Pause'}
-                </Button>
-                <Button
-                  className="sound-control"
-                  size="lg"
-                  variant="outline"
-                  onClick={() => void handleEnableSound()}>
-                  {soundStatus === 'running'
-                    ? 'Sound on'
-                    : soundStatus === 'blocked'
-                      ? 'Retry sound'
-                      : 'Enable sound'}
+                  aria-pressed={isMuted}
+                  onClick={toggleConversationMute}>
+                  {isMuted ? 'Unmute' : 'Mute'}
                 </Button>
                 <Button
                   className="voice-control-stop"
@@ -338,7 +356,7 @@ export const App = ({
                   variant="destructive"
                   disabled={voiceControlBusy}
                   onClick={() => void stopConversation()}>
-                  {voiceControlBusy ? 'Stopping…' : 'Stop'}
+                  {voiceControlBusy ? 'Ending…' : 'End conversation'}
                 </Button>
               </>
             )}
