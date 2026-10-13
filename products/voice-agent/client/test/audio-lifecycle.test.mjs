@@ -72,9 +72,16 @@ test('conversation dock uses the source-installed Pipecat UI visualizer', async 
     new URL('../src/components/pipecat/AudioVisualizerRadial.tsx', import.meta.url),
     'utf8'
   );
+  const visualizerHelpers = await readFile(
+    new URL('../src/visualizer.ts', import.meta.url),
+    'utf8'
+  );
 
   assert.match(appSource, /<AudioVisualizerRadial/);
   assert.match(appSource, /participantType="bot"/);
   assert.match(visualizerSource, /usePipecatClientMediaTrack/);
   assert.match(visualizerSource, /createVoiceBands/);
+  assert.match(visualizerHelpers, /export function createVisualizerAnalyser/);
+  assert.match(visualizerHelpers, /export function createVoiceBands/);
+  assert.match(visualizerHelpers, /export function readBand/);
 });
