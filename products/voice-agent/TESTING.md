@@ -18,9 +18,11 @@ make blackbox-voice \
   "Approve that pending task now"
 ```
 
-The default local mode uses `deploy/compose.local-test.yml`. It keeps the shared network namespace
-stable when Tailscale has not yet been authenticated, but opens no listener and provides no tunnel.
-After `make login`, set `BLACKBOX_USE_TAILSCALE=true` to retain the real sidecar while testing.
+The runner automatically retains an authenticated production Tailscale sidecar. When no
+authenticated sidecar is running, it uses `deploy/compose.local-test.yml` as a stable network
+namespace with no listener or tunnel. Set `BLACKBOX_USE_TAILSCALE=true` or `false` only to override
+that detection explicitly; local mode replaces ingress for the duration of that Compose project
+and is therefore inappropriate while a browser session is active.
 
 Before the first voice task, publish the exact committed source snapshot:
 

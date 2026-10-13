@@ -4,8 +4,18 @@ set -euo pipefail
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 [[ $# -ge 1 ]] || { echo "usage: $0 <synthetic utterance> [...]" >&2; exit 2; }
 
-compose=(docker compose --env-file "$repo_dir/server/.env" -f "$repo_dir/deploy/compose.yml")
-if [[ "${BLACKBOX_USE_TAILSCALE:-false}" != "true" ]]; then
+base_compose=(docker compose --env-file "$repo_dir/server/.env" -f "$repo_dir/deploy/compose.yml")
+compose=("${base_compose[@]}")
+tailnet_mode="${BLACKBOX_USE_TAILSCALE:-auto}"
+if [[ "$tailnet_mode" == "auto" ]]; then
+  if "${base_compose[@]}" exec -T tailscale \
+    tailscale --socket=/tmp/tailscaled.sock status >/dev/null 2>&1; then
+    tailnet_mode="true"
+  else
+    tailnet_mode="false"
+  fi
+fi
+if [[ "$tailnet_mode" != "true" ]]; then
   compose+=(-f "$repo_dir/deploy/compose.local-test.yml")
 fi
 
