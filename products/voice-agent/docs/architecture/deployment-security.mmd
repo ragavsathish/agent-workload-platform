@@ -1,45 +1,71 @@
-flowchart TB
-    %% C4 deployment view: private voice ingress and isolated agent tools.
-    USER(["Person<br/><b>Tailnet User</b><br/>talks, listens, explicitly approves"])
-    CONTROL["External system<br/><b>Tailscale Control Plane</b><br/>device and network authority"]
+flowchart LR
+    %% C4 deployment view. Arrows show only trust-boundary crossings and operational dependencies.
+    USER(["Person<br/><b>Tailnet User</b>"])
+    CONTROL["External system<br/><b>Tailscale Control Plane</b>"]
+    MODELS["External system<br/><b>Model Providers</b>"]
+    EXTERNAL["External system<br/><b>Optional Integrations</b>"]
 
-    subgraph DEVICE["User device"]
-        BROWSER["Container<br/><b>Browser Client</b><br/>Safari · React · microphone · speaker"]
+    subgraph DEVICE["User device · Safari or WebRTC browser"]
+        BROWSER["Container<br/><b>Browser Client</b><br/>React · Pipecat RTVI"]
     end
 
-    subgraph MAC["Apple Silicon Mac"]
+    subgraph MAC["Apple Silicon Mac · macOS"]
         direction LR
-        subgraph DOCKER["Docker Desktop Linux VM"]
+
+        subgraph DOCKER["Docker Desktop Linux VM · Docker Compose"]
             direction TB
-            subgraph COMPOSE["Compose · voice services"]
-                direction TB
-                INGRESS["Container<br/><b>Tailnet Ingress</b><br/>Tailscale Serve · trusted HTTPS"]
-                EDGE["Container<br/><b>Voice Edge</b><br/>exact origin · one-use path token"]
-                GATEWAY["Container<br/><b>Agent Gateway</b><br/>four identity-scoped task routes"]
-                DB[("Container database<br/><b>Postgres + Absurd</b><br/>durable proposals · tasks · checkpoints")]
-                INGRESS -->|"authenticated HTTP + WebSocket · shared loopback"| EDGE
-                EDGE -->|"gateway bearer · control network"| GATEWAY
-                GATEWAY -->|"internal data network"| DB
+            subgraph EDGE_NS["Shared Tailscale network namespace"]
+                direction LR
+                INGRESS["Container<br/><b>Tailnet Ingress</b><br/>Tailscale Serve"]
+                EDGE["Container<br/><b>Voice Edge</b><br/>Pipecat · RNNoise/VoxLock · read-only · non-root<br/>model in image · owner sample secret"]
+                INGRESS -->|"loopback proxy"| EDGE
             end
+            GATEWAY["Container<br/><b>Agent Gateway</b><br/>read-only · non-root"]
+            POSTGRES[("Container database<br/><b>PostgreSQL</b><br/>proposals · Absurd queue · checkpoints")]
+            S3[("Container data store<br/><b>S3Mock</b><br/>immutable workspaces · bounded results")]
+            OTEL["Container<br/><b>OTel LGTM</b><br/>metrics · traces · no logs"]
+            GATEWAY -->|"private SQL"| POSTGRES
+            GATEWAY -->|"private S3 API"| S3
         end
 
-        subgraph NATIVE["Native macOS services"]
+        subgraph NATIVE["Native macOS services · launchd · loopback only"]
             direction TB
-            BROKER["Container<br/><b>Inference Broker</b><br/>MLX Whisper · Ollama · MLX Kokoro"]
-            WORKER["Container<br/><b>Pi Worker</b><br/>one durable Pi session per task"]
-            GONDOLIN["Container<br/><b>Gondolin</b><br/>tool micro-VMs"]
-            WASSETTE["Container<br/><b>Wassette</b><br/>permission-scoped MCP components"]
-            WORKER -->|"isolated browser + workspace tools"| GONDOLIN
-            WORKER -->|"scoped integration tools"| WASSETTE
+            BROKER["Container<br/><b>Inference Broker</b><br/>FastAPI · MLX Whisper · MLX Kokoro"]
+            PI["Container<br/><b>Pi Voice Service</b><br/>Node.js · persistent Pi session"]
+            WORKER["Container<br/><b>Pi Task Worker</b><br/>Python · concurrency one"]
+            RUNTIME[("Private data store<br/><b>Runtime Data</b><br/>copied runtimes · secrets · sessions · scratch")]
+            BROKER -->|"bearer HTTP :9446"| PI
+            PI -->|"sessions · workspace · skills"| RUNTIME
+            WORKER -->|"scratch · copied runtime"| RUNTIME
         end
 
-        EDGE -->|"broker bearer · host.docker.internal:9443"| BROKER
-        DB <-->|"loopback 127.0.0.1:54329"| WORKER
+        subgraph ISOLATION["Agent tool isolation"]
+            direction TB
+            VOICE_VM["Container<br/><b>Persistent Voice VM</b><br/>Gondolin · workspace RW · skills RO"]
+            TASK_VM["Container<br/><b>Per-task VM</b><br/>Gondolin · one workspace"]
+            WASSETTE["Container<br/><b>Integration Runtime</b><br/>Wassette · declared permissions"]
+            TASK_VM -->|"MCP"| WASSETTE
+        end
+
+        EDGE -->|"bearer HTTP via host gateway :9443"| BROKER
+        EDGE -->|"control network :9444"| GATEWAY
+        PI -->|"loopback :9444"| GATEWAY
+        WORKER -->|"loopback :54329"| POSTGRES
+        WORKER -->|"loopback :9090"| S3
+        PI -->|"native tools"| VOICE_VM
+        WORKER -->|"Pi extension"| TASK_VM
+        EDGE -.->|"OTLP/HTTP"| OTEL
+        GATEWAY -.->|"OTLP/HTTP"| OTEL
+        BROKER -.->|"loopback OTLP/HTTP"| OTEL
+        INGRESS -->|"tailnet HTTPS :8443<br/>Tailscale identity"| OTEL
     end
 
-    USER -->|"microphone + speaker"| BROWSER
-    BROWSER -->|"tailnet HTTPS + WebSocket"| INGRESS
+    USER -->|"talk · listen · review"| BROWSER
+    BROWSER -->|"tailnet HTTPS · WebRTC"| INGRESS
     INGRESS -.->|"control protocol"| CONTROL
+    PI -->|"host-held credentials"| MODELS
+    WORKER -->|"host-held credentials"| MODELS
+    WASSETTE -->|"permission-scoped HTTPS"| EXTERNAL
 
     classDef person fill:#084c8d,color:#fff,stroke:#05345f,stroke-width:2px;
     classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
@@ -47,7 +73,7 @@ flowchart TB
     classDef security fill:#dcfce7,color:#14532d,stroke:#16a34a,stroke-width:2px;
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
     class USER person;
-    class CONTROL external;
-    class BROWSER,BROKER,WORKER,GONDOLIN,WASSETTE container;
-    class INGRESS,TLSEDGE,EDGE,GATEWAY security;
-    class DB data;
+    class CONTROL,MODELS,EXTERNAL external;
+    class BROWSER,BROKER,PI,WORKER,VOICE_VM,TASK_VM,WASSETTE,OTEL container;
+    class INGRESS,EDGE,GATEWAY security;
+    class POSTGRES,S3,RUNTIME data;

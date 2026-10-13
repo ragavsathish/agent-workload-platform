@@ -5,7 +5,7 @@ import {
   createVisualizerAnalyser,
   createVoiceBands,
   readBand,
-} from '../../lib/visualizer';
+} from '../../visualizer';
 
 type ParticipantType = Parameters<typeof usePipecatClientMediaTrack>[1];
 
@@ -61,7 +61,7 @@ export const AudioVisualizerRadial = memo(function AudioVisualizerRadial({
       const pipeline = createVisualizerAnalyser(track);
       analyser = pipeline.analyser;
       dispose = pipeline.dispose;
-      frequencyData = new Uint8Array(analyser.frequencyBinCount);
+      frequencyData = new Uint8Array(pipeline.analyser.frequencyBinCount);
     }
 
     const bands = createVoiceBands(

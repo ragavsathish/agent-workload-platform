@@ -89,6 +89,23 @@ else
 fi
 [[ "$otel_ports" != *'4317/tcp":[* && "$otel_ports" != *'9090/tcp":[* && "$otel_ports" != *'3100/tcp":[* ]] && pass "collector backends publish no extra host ports" || fail "collector backend ports are exposed"
 [[ "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3300/api/user || true)" == 401 ]] && pass "Grafana requires authentication" || fail "Grafana authentication check failed"
+grafana_env="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$otel_cid")"
+if grep -Fxq 'GF_AUTH_PROXY_ENABLED=true' <<<"$grafana_env" \
+  && grep -Fxq 'GF_AUTH_PROXY_HEADER_NAME=Tailscale-User-Login' <<<"$grafana_env" \
+  && grep -Fxq 'GF_AUTH_PROXY_WHITELIST=172.30.90.2' <<<"$grafana_env"; then
+  pass "Grafana trusts only the Tailscale proxy identity"
+else
+  fail "Grafana Tailscale identity proxy is not configured"
+fi
+tailscale_login="$("${compose[@]}" exec -T tailscale sh -lc \
+  'tailscale --socket=/tmp/tailscaled.sock status --json | sed -n '\''s/.*"LoginName": *"\([^"]*\)".*/\1/p'\'' | head -1')"
+if [[ -n "$tailscale_login" ]] \
+  && "${compose[@]}" exec -T tailscale wget -q -O /dev/null \
+    --header="Tailscale-User-Login: $tailscale_login" http://otel-lgtm:3000/api/user; then
+  pass "Grafana accepts the authenticated Tailscale identity without a password"
+else
+  fail "Grafana rejected the authenticated Tailscale identity"
+fi
 if docker inspect -f '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}' "$("${compose[@]}" ps -q s3mock)" | grep -q '/Documents'; then
   fail "S3Mock binds a Documents path"
 else
@@ -132,10 +149,13 @@ else
 fi
 
 serve_status="$("${compose[@]}" exec -T tailscale tailscale --socket=/tmp/tailscaled.sock serve status 2>/dev/null || true)"
-if [[ "$serve_status" == *'https://'* && "$serve_status" == *'http://127.0.0.1:7860'* ]]; then
-  pass "Tailscale Serve terminates HTTPS and proxies directly to Pipecat"
+if [[ "$serve_status" == *'https://'* \
+  && "$serve_status" == *'http://127.0.0.1:7860'* \
+  && "$serve_status" == *':8443'* \
+  && "$serve_status" == *'http://otel-lgtm:3000'* ]]; then
+  pass "Tailscale Serve terminates HTTPS for Pipecat and Grafana"
 else
-  fail "Tailscale Serve HTTPS proxy is not configured"
+  fail "Tailscale Serve HTTPS proxies are not configured"
 fi
 
 [[ "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:9443/health || true)" == 401 ]] && pass "host inference broker rejects unauthenticated traffic" || fail "host inference broker capability check failed"

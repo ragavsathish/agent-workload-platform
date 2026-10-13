@@ -84,7 +84,8 @@ check:
 	cd server && uv run pytest ../deploy/test_prepare_compose.py
 	cd server && uv run ruff check ../scripts/benchmark_mlx.py
 	cd server && uv run pyright ../scripts/benchmark_mlx.py
-	cd edge && uv sync --python 3.13 && uv run ruff check . && uv run pyright && PYTHONPATH=../server/src uv run python -m unittest discover -p 'test_*.py'
+	cd edge && uv sync --python 3.13 && uv run ruff check . && uv run pyright
+	cd edge && PYTHONPATH=.:../server/src uv run python -m unittest discover -p 'test_*.py'
 	cd client && npm run lint
 	cd client && npm test
 	cd client && npm run build

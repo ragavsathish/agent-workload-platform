@@ -27,4 +27,7 @@ uv run --project "$root/server" python "$root/deploy/prepare_compose.py" "$root"
 "${compose[@]}" exec -T tailscale tailscale --socket=/tmp/tailscaled.sock serve reset
 "${compose[@]}" exec -T tailscale tailscale --socket=/tmp/tailscaled.sock serve \
   --bg --https=443 http://127.0.0.1:7860
+"${compose[@]}" exec -T tailscale tailscale --socket=/tmp/tailscaled.sock serve \
+  --bg --https=8443 http://otel-lgtm:3000
 echo "Voice UI: $url"
+echo "Grafana: ${url}:8443"

@@ -1,35 +1,68 @@
-C4Container
-title Agent Workload Platform - Voice Interface Containers
+flowchart LR
+    %% C4 container view. Each blue node is an independently running application or data store.
+    USER(["Person<br/><b>Tailnet User</b><br/>talks, listens, reviews, delegates"])
+    TSC["External system<br/><b>Tailscale Control Plane</b><br/>device and network authority"]
+    MODELS["External system<br/><b>Model Providers</b><br/>Pi conversational and task models"]
+    INTEGRATIONS["External system<br/><b>External Integrations</b><br/>optional permission-scoped APIs"]
 
-Person(user, "Tailnet User", "Talks to Pi and explicitly approves pending work")
+    subgraph SYSTEM["Voice Agent · system boundary"]
+        direction TB
 
-System_Boundary(platform, "Agent Workload Platform with Voice") {
-  Container(browser, "Browser Client", "React and Pipecat RTVI", "Captures audio, shows task state, and plays speech")
-  Container(ingress, "Tailnet Ingress", "Tailscale Serve", "Authenticates tailnet devices, terminates HTTPS, and proxies HTTP and WebSockets without a public or LAN port")
-  Container(edge, "Voice Edge", "Pipecat and FastAPI", "Validates exact origin and one-use path token, then runs dialogue and four narrow task tools")
-  Container(broker, "Inference Broker", "FastAPI, MLX Whisper, MLX Kokoro", "Exposes bounded STT, TTS, and exact-model chat")
-  Container(gateway, "Agent Gateway", "FastAPI", "Scopes propose, status, voice approval, and cancel to one tailnet identity")
-  ContainerDb(queue, "Durable Task Store", "Postgres and Absurd", "Stores proposals, plan hashes, tasks, checkpoints, and results")
-  Container(worker, "Pi Worker", "Native macOS process", "Runs one durable Pi session per approved task")
-  Container(gondolin, "Gondolin Tool Runtime", "Micro-VM MCP server", "Isolates browser and workspace tools")
-  Container(wassette, "Wassette MCP Runtime", "Permission-scoped WebAssembly", "Provides bounded integration tools")
-  ContainerDb(sessions, "Pi Sessions", "Host filesystem", "Stores durable per-task histories")
-}
+        subgraph VOICE["Interactive voice path"]
+            direction LR
+            BROWSER["Container<br/><b>Browser Client</b><br/>React · Pipecat RTVI"]
+            INGRESS["Container<br/><b>Tailnet Ingress</b><br/>Tailscale Serve"]
+            EDGE["Container<br/><b>Voice Edge</b><br/>Python · Pipecat · RNNoise/VoxLock · FastAPI"]
+            BROKER["Container<br/><b>Inference Broker</b><br/>Python · FastAPI · MLX"]
+            PI["Container<br/><b>Pi Voice Service</b><br/>TypeScript · Pi coding agent"]
+            VOICE_VM["Container<br/><b>Voice Tool Sandbox</b><br/>Gondolin micro-VM"]
+            BROWSER -->|"signaling · audio · UI"| INGRESS
+            INGRESS -->|"authenticated proxy"| EDGE
+            EDGE -->|"STT · Pi stream · TTS · context"| BROKER
+            BROKER -->|"turns · transcript · context"| PI
+            PI -->|"read · write · edit · shell"| VOICE_VM
+        end
 
-System_Ext(tailscale, "Tailscale Control Plane", "Authenticates devices and distributes tailnet configuration")
-System_Ext(ollama, "Ollama", "Runs the exact local dialogue model")
-System_Ext(models, "Model Providers", "Serve Pi's selected agent model")
+        subgraph TASK["Durable delegated-work path"]
+            direction LR
+            GATEWAY["Container<br/><b>Agent Gateway</b><br/>Python · FastAPI"]
+            TASKS[("Container database<br/><b>Task Database and Queue</b><br/>PostgreSQL · Absurd schema")]
+            WORKER["Container<br/><b>Pi Task Worker</b><br/>Python · Pi coding agent"]
+            TASK_TOOLS["Container<br/><b>Task Tool Runtime</b><br/>Gondolin · optional Wassette"]
+            GATEWAY -->|"persist · enqueue"| TASKS
+            TASKS -->|"claim · checkpoint"| WORKER
+            WORKER -->|"isolated tools"| TASK_TOOLS
+        end
 
-Rel(user, browser, "Talks, listens, and approves through")
-Rel(browser, ingress, "Loads UI and streams audio", "Tailnet HTTPS and WebSocket")
-Rel(ingress, tailscale, "Obtains device authorization and network configuration from")
-Rel(ingress, edge, "Forwards authenticated HTTP and WebSocket traffic", "Shared loopback")
-Rel(edge, broker, "Requests bounded inference", "Bearer-authenticated HTTP")
-Rel(edge, gateway, "Proposes, reads, approves, and cancels tasks", "Bearer-authenticated HTTP")
-Rel(broker, ollama, "Requests exact-model completions", "Mac loopback HTTP")
-Rel(gateway, queue, "Applies identity-bound task transitions", "Private SQL")
-Rel(worker, queue, "Consumes approved work and checkpoints results")
-Rel(worker, models, "Requests agent completions")
-Rel(worker, gondolin, "Invokes isolated tools", "Pi extension and MCP")
-Rel(worker, wassette, "Invokes permission-scoped integrations", "Pi extension and MCP")
-Rel(worker, sessions, "Writes task history")
+        subgraph DATA["Runtime data and operations"]
+            direction LR
+            VOICE_DATA[("Container data store<br/><b>Voice Runtime Data</b><br/>sessions · workspace · skills")]
+            ARTIFACTS[("Container data store<br/><b>Workspace and Result Store</b><br/>S3-compatible object storage")]
+            OTEL["Container<br/><b>Metrics and Traces</b><br/>OpenTelemetry LGTM"]
+        end
+
+        EDGE -->|"browser task API"| GATEWAY
+        PI -->|"voice task tools"| GATEWAY
+        PI -->|"session · workspace · skills"| VOICE_DATA
+        GATEWAY -->|"resolve workspace"| ARTIFACTS
+        ARTIFACTS -->|"materialize · capture result"| WORKER
+        EDGE -.->|"metrics · traces"| OTEL
+        BROKER -.->|"metrics · traces"| OTEL
+        GATEWAY -.->|"metrics · traces"| OTEL
+        INGRESS -->|"authenticated Grafana proxy"| OTEL
+    end
+
+    USER -->|"tailnet HTTPS · WebRTC"| BROWSER
+    INGRESS -.->|"control protocol"| TSC
+    PI -->|"provider API"| MODELS
+    WORKER -->|"provider API"| MODELS
+    TASK_TOOLS -->|"declared capabilities"| INTEGRATIONS
+
+    classDef person fill:#084c8d,color:#fff,stroke:#05345f,stroke-width:2px;
+    classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
+    classDef container fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
+    classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
+    class USER person;
+    class TSC,MODELS,INTEGRATIONS external;
+    class BROWSER,INGRESS,EDGE,BROKER,PI,VOICE_VM,GATEWAY,WORKER,TASK_TOOLS,OTEL container;
+    class TASKS,VOICE_DATA,ARTIFACTS data;
