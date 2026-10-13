@@ -12,6 +12,8 @@ sequenceDiagram
     User->>Browser: Start or unmute, then speak
     Browser->>Ingress: Stream microphone audio over WebRTC
     Ingress->>Edge: Proxy the authenticated session
+    Edge->>Edge: Apply selected RNNoise or VoxLock input filter
+    Edge->>Edge: Detect the completed turn with VAD and Smart Turn
     Edge->>Broker: Transcribe the completed turn with MLX Whisper
     Broker-->>Edge: Transcript
     Edge->>Broker: Start an OpenAI-compatible Pi completion stream

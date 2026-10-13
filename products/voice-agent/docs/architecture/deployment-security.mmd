@@ -17,7 +17,7 @@ flowchart LR
             subgraph EDGE_NS["Shared Tailscale network namespace"]
                 direction LR
                 INGRESS["Container<br/><b>Tailnet Ingress</b><br/>Tailscale Serve"]
-                EDGE["Container<br/><b>Voice Edge</b><br/>Pipecat · read-only · non-root"]
+                EDGE["Container<br/><b>Voice Edge</b><br/>Pipecat · RNNoise/VoxLock · read-only · non-root<br/>model in image · owner sample secret"]
                 INGRESS -->|"loopback proxy"| EDGE
             end
             GATEWAY["Container<br/><b>Agent Gateway</b><br/>read-only · non-root"]
@@ -57,6 +57,7 @@ flowchart LR
         EDGE -.->|"OTLP/HTTP"| OTEL
         GATEWAY -.->|"OTLP/HTTP"| OTEL
         BROKER -.->|"loopback OTLP/HTTP"| OTEL
+        INGRESS -->|"tailnet HTTPS :8443<br/>Tailscale identity"| OTEL
     end
 
     USER -->|"talk · listen · review"| BROWSER

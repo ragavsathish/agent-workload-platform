@@ -154,10 +154,13 @@ audio or transcript text.
 ## Local observability
 
 The pinned `grafana/otel-lgtm` development bundle provides Grafana, Prometheus, Tempo, and an OTLP
-collector. Open <http://127.0.0.1:3300>, use user `admin`, and obtain the generated local password
-with `make grafana-password`. The provisioned **Pipecat Voice Overview** dashboard shows operation
-rates, p95 durations, errors, and recent traces for the voice edge, gateway, and native MLX
-inference broker.
+collector. From an authenticated tailnet device, open
+<https://pipecat-edge.tailf6d713.ts.net:8443>; Grafana trusts only the identity header injected by
+the Tailscale proxy and does not ask for another password. Direct Mac-loopback access at
+<http://127.0.0.1:3300> still requires user `admin`; obtain its generated password with
+`make grafana-password`. The provisioned **Pipecat Voice Overview** dashboard shows operation rates,
+p95 durations, errors, and recent traces for the voice edge, gateway, and native MLX inference
+broker.
 
 Grafana and OTLP/HTTP bind only to Mac loopback. OTLP/gRPC, Prometheus, Tempo, and Loki ports are not
 published. Application and bundle Docker logs remain disabled, and applications do not send the

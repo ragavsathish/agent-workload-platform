@@ -1,0 +1,31 @@
+sequenceDiagram
+    autonumber
+    actor User as Tailnet User
+    participant Browser as Browser Client
+    participant Ingress as Tailscale Serve
+    participant Edge as Voice Edge / Pipecat
+    participant Broker as Inference Broker
+    participant Pi as Pi Voice Service
+
+    loop While the voice UI is open
+        Browser->>Ingress: GET /api/pi-context
+        Ingress->>Edge: Proxy with authenticated tailnet identity
+        Edge->>Broker: GET /v1/pi/context with broker capability
+        Broker->>Pi: GET /v1/context over loopback
+        Pi-->>Broker: Bounded tokens, window, percent, canCompact
+        Broker-->>Edge: Context usage without transcript content
+        Edge-->>Browser: no-store context snapshot
+        Browser-->>User: Refresh context meter and compact availability
+    end
+    opt User requests compaction when enabled
+        User->>Browser: Select Compact
+        Browser->>Ingress: POST /api/pi-context/compact
+        Ingress->>Edge: Proxy with authenticated tailnet identity
+        Edge->>Broker: POST /v1/pi/context/compact with capability
+        Broker->>Pi: POST /v1/context/compact over loopback
+        Pi->>Pi: Compact the persistent native Pi session
+        Pi-->>Broker: Refreshed bounded context usage
+        Broker-->>Edge: Refreshed context usage
+        Edge-->>Browser: no-store context snapshot
+        Browser-->>User: Refresh context meter
+    end

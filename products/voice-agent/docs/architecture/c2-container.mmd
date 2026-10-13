@@ -12,14 +12,14 @@ flowchart LR
             direction LR
             BROWSER["Container<br/><b>Browser Client</b><br/>React · Pipecat RTVI"]
             INGRESS["Container<br/><b>Tailnet Ingress</b><br/>Tailscale Serve"]
-            EDGE["Container<br/><b>Voice Edge</b><br/>Python · Pipecat · FastAPI"]
+            EDGE["Container<br/><b>Voice Edge</b><br/>Python · Pipecat · RNNoise/VoxLock · FastAPI"]
             BROKER["Container<br/><b>Inference Broker</b><br/>Python · FastAPI · MLX"]
             PI["Container<br/><b>Pi Voice Service</b><br/>TypeScript · Pi coding agent"]
             VOICE_VM["Container<br/><b>Voice Tool Sandbox</b><br/>Gondolin micro-VM"]
             BROWSER -->|"signaling · audio · UI"| INGRESS
             INGRESS -->|"authenticated proxy"| EDGE
-            EDGE -->|"STT · Pi stream · TTS"| BROKER
-            BROKER -->|"turns · transcript"| PI
+            EDGE -->|"STT · Pi stream · TTS · context"| BROKER
+            BROKER -->|"turns · transcript · context"| PI
             PI -->|"read · write · edit · shell"| VOICE_VM
         end
 
@@ -49,6 +49,7 @@ flowchart LR
         EDGE -.->|"metrics · traces"| OTEL
         BROKER -.->|"metrics · traces"| OTEL
         GATEWAY -.->|"metrics · traces"| OTEL
+        INGRESS -->|"authenticated Grafana proxy"| OTEL
     end
 
     USER -->|"tailnet HTTPS · WebRTC"| BROWSER

@@ -81,7 +81,9 @@ The `otel-lgtm` bundle is connected to the private control network. Only Grafana
 published, both on loopback; collector and datastore ports are not exposed to the LAN or tailnet.
 Telemetry deliberately excludes logs and all user-controlled values. Its named volume contains
 only operation metrics and sanitized traces and can be removed separately if local telemetry must
-be erased.
+be erased. Tailscale Serve exposes Grafana separately on tailnet-only HTTPS port 8443 and injects
+the authenticated login; Grafana accepts that header only from the fixed Tailscale container IP.
+Direct loopback access continues to require the generated Grafana admin password.
 
 The phone must run Tailscale and join the same tailnet. Tailscale Serve terminates trusted HTTPS,
 adds the authenticated tailnet identity, and forwards HTTP and WebSocket traffic directly to

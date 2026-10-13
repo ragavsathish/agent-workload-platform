@@ -12,12 +12,15 @@ notation is used for runtime views because it preserves order without crossing r
 | C2 containers | Which independently running parts own voice, Pi, task, artifact, and telemetry responsibilities? | [c2-container.mmd](c2-container.mmd) | [PNG](c2-container.png) |
 | D1 interactive voice turn | Where does one microphone turn go before audio and Mermaid return to the browser? | [d1-interactive-voice-turn.mmd](d1-interactive-voice-turn.mmd) | [PNG](d1-interactive-voice-turn.png) |
 | D2 delegated task | How does requested project work become an isolated durable task and result? | [d2-delegated-task.mmd](d2-delegated-task.mmd) | [PNG](d2-delegated-task.png) |
+| D3 context management | How does the browser observe and compact the persistent Pi context without reading transcript content? | [d3-context-management.mmd](d3-context-management.mmd) | [PNG](d3-context-management.png) |
 | Deployment/security | Where do the parts run and which trust boundaries do they cross? | [deployment-security.mmd](deployment-security.mmd) | [PNG](deployment-security.png) |
 
 Pipecat is an off-the-shelf library inside the **Voice Edge**, not a separately deployed service.
 It owns WebRTC media orchestration, Silero VAD, Smart Turn v3, STT/LLM/TTS sequencing, heartbeats,
-and pipeline metrics. The React client uses Pipecat RTVI, while Tailscale Serve is the only browser
-ingress. There is no Caddy or public/LAN application port.
+and pipeline metrics. Before turn detection, the edge applies exactly one server-side input filter:
+RNNoise by default or VoxLock when owner-voice isolation is enabled. The React client uses Pipecat
+RTVI, while Tailscale Serve is the only browser ingress. It exposes the voice UI on tailnet HTTPS
+and Grafana on tailnet-only port 8443; there is no Caddy or public/LAN application port.
 
 The active conversational backend is the native **Pi Voice Service**. The edge calls it through the
 capability-limited **Inference Broker**, which converts the streamed native Pi response into the
@@ -38,8 +41,10 @@ Wassette with explicit permissions.
 | Browser Client | `client/src/`; production assets copied by `edge/Containerfile` |
 | Tailnet Ingress | `deploy/compose.yml`; `scripts/compose-login.sh` |
 | Voice Edge | `edge/bot.py`; `edge/Containerfile` |
+| Input Audio Filter | `edge/audio_filter.py`; `deploy/prepare_compose.py`; `edge/Containerfile` |
 | Inference Broker | `server/src/voice_agent/speech/presentation/http.py`; broker LaunchAgent |
 | Pi Voice Service | `services/pi-agent/voice-agent-service.ts`; Pi voice LaunchAgent |
+| Pi Context Usage and Compaction | `client/src/components/App.tsx`; `edge/bot.py`; broker HTTP adapter; `services/pi-agent/voice-agent-service.ts` |
 | Voice Tool Sandbox and Runtime Data | `services/pi-agent/gondolin-workspace.ts`; `scripts/install-launch-agents.sh` |
 | Agent Gateway | `server/src/voice_agent/tasking/presentation/gateway.py`; `gateway/Containerfile` |
 | Task Database and Queue | `server/migrations/`; `tasking/application/service.py`; Compose Postgres service |
@@ -57,7 +62,8 @@ privilege escalation, and receive only narrowly scoped secrets. No service mount
 
 Tailscale authenticates the device, terminates trusted HTTPS, and injects the owner identity. The edge
 requires the exact configured origin and single allowed tailnet login before accepting signaling or
-owner-scoped HTTP operations.
+owner-scoped HTTP operations. Grafana accepts the injected login only from the fixed Tailscale
+container address; direct loopback access continues to require its generated administrator password.
 
 MLX and host-held Pi credentials stay in native loopback-only services because Docker Desktop does not
 provide those host capabilities directly. The broker exposes bounded STT, TTS, Pi completion, and
@@ -66,7 +72,9 @@ selection API. Native Pi tools run inside Gondolin micro-VMs. Optional integrati
 Wassette with declared network and secret permissions.
 
 OTel exports metrics and traces only. Application log export is disabled, Docker logging is disabled
-for content-bearing services, and voice content is deliberately excluded from telemetry.
+for content-bearing services, and voice content is deliberately excluded from telemetry. VoxLock's
+owner sample is a generated Compose secret, while its digest-verified model is baked into the
+read-only edge image; neither is exported through telemetry.
 
 ## Render and verify
 
