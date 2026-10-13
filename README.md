@@ -4,7 +4,8 @@ This monorepo lets an agent running on a client machine orchestrate products
 across local tools, capability-limited WebAssembly modules, isolated Gondolin
 micro-VMs, browsers, storage systems, and remote model infrastructure.
 
-C4-to-Excalidraw is the first workload, not the scope of the platform.
+C4-to-Excalidraw is delivered by the Architecture Visualization product, not
+the scope of the platform.
 Its browserless Wasm path is tested with context, container, component,
 dynamic, and deployment views. Wassette loads one composed `c4-suite.wasm`;
 WAC assembles that suite from immutable, independently reusable components.
@@ -19,20 +20,12 @@ component by pinned OCI digest—without rebuilding it.
 
 _C1 system context rendered from the policy-approved Excalidraw scene._
 
-## C4 workload
+## Architecture Visualization product
 
-C4-to-Excalidraw is the first platform workload. Follow the [C4 workload
-README](workloads/c4-excalidraw/README.md) for setup, build, verification, and
+C4-to-Excalidraw is the first architecture visualization pipeline. Follow the
+[product
+README](products/architecture-visualization/README.md) for setup, build, verification, and
 the real Pi dog-food run, including supported syntax and rendering limits.
-
-## k3s Earendil runtime
-
-The development-agent runtime can run as a hardened Pi workload beside a
-separately confined Wassette deployment in k3s. Pi retains the model loop but
-starts without its local shell and filesystem tools; its only workload tools
-come from Wassette. See [the k3s Earendil runtime](runtimes/k3s-earendil/README.md)
-for image construction, credential provisioning, deployment, and boundary
-verification.
 
 ## Voice agent product
 
@@ -46,9 +39,9 @@ security boundary, exact prerequisites, and repeatable lifecycle checks.
 
 The source-controlled architecture views are:
 
-- [C1 system context](workloads/c4-excalidraw/examples/c1-system-context.mmd)
-- [C2 container view](workloads/c4-excalidraw/examples/c2-container.mmd)
-- [C3 Pi extension components](workloads/c4-excalidraw/examples/c3-pi-extension-components.mmd)
+- [C1 system context](products/architecture-visualization/examples/c1-system-context.mmd)
+- [C2 container view](products/architecture-visualization/examples/c2-container.mmd)
+- [C3 Pi extension components](products/architecture-visualization/examples/c3-pi-extension-components.mmd)
 
 ## Layout
 
@@ -56,21 +49,19 @@ The source-controlled architecture views are:
   services, workers, deployment profiles, tests, documentation, and vocabulary.
   - `voice-agent` — tailnet-only browser voice with host MLX inference and
     Gondolin-isolated Pi tools.
-- `apps/` — reusable runnable applications, including the pinned `excalidraw-mcp` submodule.
-- `workloads/` — independently runnable agent workloads, including `c4-excalidraw`.
-- `adapters/` — implementations at external seams:
-  - `mermaid-to-excalidraw` — untouched upstream submodule.
-  - `c4-gondolin` — platform-owned C4/browser adapter.
-- `components/` — reusable WIT/WebAssembly modules.
-- `runtimes/` — Pi, Wassette, and Gondolin runtime integration.
-  - `gondolin-browser` — Pi extension that exposes the official Playwright MCP
+  - `architecture-visualization` — C4 models compiled into editable Excalidraw
+    scenes and portable render artifacts.
+- `platform/` — stable capabilities with more than one product consumer.
+  - `agent-execution/gondolin-session` — Pi extension that exposes Playwright MCP
     tools from an isolated VM alongside persistent memory and optional GitHub
     tools in Wassette, without copying their schemas.
+- `vendor/` — pinned, unmodified upstream source retained as Git submodules.
+- `runtimes/` — transitional local deployments awaiting a product boundary;
+  new shared code belongs under `platform/`.
 
 Product-specific contracts, prompts, examples, and modules remain inside the
 product until another product genuinely reuses them. Shared implementations
-then move to `components/`, `adapters/`, `apps/`, or `runtimes/` according to
-their responsibility.
+then move to a platform context with a stable contract.
 
 The repository is migrating from technical top-level buckets to product and
 bounded-context ownership. See [Monorepo organization](docs/monorepo-organization.md)

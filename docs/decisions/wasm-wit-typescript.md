@@ -62,5 +62,5 @@ The real end-to-end dog-food run is:
 make c4
 ```
 
-See the [C4 workload README](../../workloads/c4-excalidraw/README.md) for
+See the [C4 workload README](../../products/architecture-visualization/README.md) for
 prerequisites and the complete sequence.

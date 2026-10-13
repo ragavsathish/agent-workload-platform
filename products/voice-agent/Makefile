@@ -73,7 +73,7 @@ pull-model:
 	ollama pull qwen3.5:9b-mlx
 
 check:
-	pnpm --dir ../.. --filter @agent-workload-platform/gondolin-browser check
+	pnpm --dir ../.. --filter @agent-workload-platform/gondolin-session check
 	pnpm --dir ../.. --filter @agent-workload-platform/voice-pi-agent check
 	pnpm --dir ../.. --filter @agent-workload-platform/voice-pi-agent test
 	cd server && uv sync --python 3.13

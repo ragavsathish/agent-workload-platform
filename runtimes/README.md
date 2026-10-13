@@ -1,22 +1,15 @@
-# Runtimes
+# Transitional runtimes
 
-Shared runtime integration belongs here. Pi coordinates workloads, Wassette
-runs composed WebAssembly suites, and Gondolin supplies optional isolated QEMU
-fallbacks. For the C4 workload, Wassette loads `c4-suite.wasm` while Pi invokes
-its typed tools. C4-specific orchestration stays in
-`workloads/c4-excalidraw`.
+Shared execution code has moved to
+[`platform/agent-execution`](../platform/agent-execution/README.md). This
+directory remains only while the local Earendil deployment is prepared for its
+own product migration; new shared code must not be added here.
 
-## k3s Earendil
+## Gondolin Agent Session
 
-`k3s-earendil` packages Pi and Wassette as separate hardened workloads. It is
-the cluster deployment path for the development workflow agent. Pi has no
-built-in coding tools, no service-account token, and no inbound service.
-Wassette has no external network route and loads only the baked C4 suite. See
-[`k3s-earendil/README.md`](k3s-earendil/README.md).
-
-## Gondolin agent runtime
-
-`gondolin-browser` runs the official
+The shared implementation now lives at
+[`platform/agent-execution/gondolin-session`](../platform/agent-execution/gondolin-session).
+It runs the official
 [`@playwright/mcp`](https://github.com/microsoft/playwright-mcp) server inside a
 Gondolin VM and provides `gondolin_bash` for general agent work. The current
 task workspace is the only host directory mounted into the VM, at
@@ -31,8 +24,8 @@ component by pinned digest. Pi discovers every schema at runtime; no upstream
 tool definition is copied.
 
 ```sh
-make gondolin-browser-build
-pi --no-extensions --extension ./runtimes/gondolin-browser/pi-extension.ts
+make gondolin-session-build
+pi --no-extensions --extension ./platform/agent-execution/gondolin-session/pi-extension.ts
 ```
 
 For browser tasks, Pi can search durable knowledge before navigation and save
@@ -51,7 +44,7 @@ workspace file is readable and writable from the VM while an unmounted host
 path remains inaccessible:
 
 ```sh
-cd runtimes/gondolin-browser
+cd platform/agent-execution/gondolin-session
 pnpm test:agent
 ```
 
@@ -61,7 +54,7 @@ Export a fine-grained token to enable the existing component:
 
 ```sh
 export GITHUB_TOKEN=github_pat_...
-pi --no-extensions --extension ./runtimes/gondolin-browser/pi-extension.ts
+pi --no-extensions --extension ./platform/agent-execution/gondolin-session/pi-extension.ts
 ```
 
 The default Pi surface contains 14 read-only repository, code, issue, pull

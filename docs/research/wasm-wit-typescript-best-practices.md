@@ -13,7 +13,7 @@ compatibility world.
 Sources are limited to the WebAssembly Component Model
 specification/documentation and Bytecode Alliance projects (Jco, ComponentizeJS,
 and Wasmtime). The research is specifically aimed at porting
-`workloads/c4-excalidraw/components/src/*.js` to TypeScript without weakening the
+`products/architecture-visualization/components/src/*.js` to TypeScript without weakening the
 existing WIT boundary.
 
 ## Executive recommendations
