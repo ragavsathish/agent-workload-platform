@@ -6,7 +6,8 @@ dependencies = [
     "httpx>=0.28,<1",
     "opentelemetry-exporter-otlp-proto-http>=1.38,<2",
     "opentelemetry-sdk>=1.38,<2",
-    "pipecat-ai[openai,runner,silero,webrtc]>=1.12,<2",
+    "pipecat-ai[openai,rnnoise,runner,silero,webrtc]>=1.12,<2",
+    "voxlock[pipecat]==1.1.0",
 ]
 
 [dependency-groups]

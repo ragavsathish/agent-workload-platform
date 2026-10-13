@@ -44,6 +44,26 @@ for service in agent-gateway voice-edge; do
   docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$cid" | grep -Fxq 'OTEL_LOGS_EXPORTER=none' && pass "$service exports no OpenTelemetry logs" || fail "$service OpenTelemetry log export is not disabled"
 done
 
+if "${compose[@]}" exec -T voice-edge /app/.venv/bin/python - <<'PY'
+import json
+import os
+import urllib.request
+
+with urllib.request.urlopen("http://127.0.0.1:7860/api/features", timeout=5) as response:
+    features = json.load(response)
+selected = os.environ.get("VOICE_INPUT_FILTER", "rnnoise")
+assert features["audioFilter"] == {"name": selected, "ready": True}
+if selected == "voxlock":
+    assert os.path.isfile("/run/secrets/voxlock-voice-sample")
+    assert os.path.isfile("/app/models/voxlock/enroll.onnx")
+    assert os.path.isfile("/app/models/voxlock/chunk_int8.onnx")
+PY
+then
+  pass "voice edge input filter and local model are ready"
+else
+  fail "voice edge input filter readiness check failed"
+fi
+
 published="$("${compose[@]}" ps --format json | sed -n 's/.*"Publishers":\[\([^]]*\)\].*/\1/p')"
 if docker inspect -f '{{json .NetworkSettings.Ports}}' "$("${compose[@]}" ps -q postgres)" | grep -q '127.0.0.1'; then
   pass "Postgres is published only on host loopback"

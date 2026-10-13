@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 import secrets
 import sys
+import wave
+from array import array
 from pathlib import Path
 from urllib.parse import quote
 
@@ -18,6 +20,53 @@ def required(values: dict[str, str | None], name: str, minimum: int = 1) -> str:
     return value
 
 
+def materialize_voice_sample(source: Path, destination: Path) -> None:
+    """Store only the loudest three seconds from the first fifteen seconds."""
+    with wave.open(str(source), "rb") as sample:
+        duration = sample.getnframes() / sample.getframerate()
+        if (
+            sample.getnchannels() != 1
+            or sample.getsampwidth() != 2
+            or sample.getframerate() != 16_000
+            or duration < 3.0
+        ):
+            raise SystemExit(
+                "VoxLock sample must be mono 16 kHz PCM16 WAV with at least 3 seconds"
+            )
+        pcm = array("h")
+        pcm.frombytes(sample.readframes(min(sample.getnframes(), 15 * 16_000)))
+    if sys.byteorder != "little":
+        pcm.byteswap()
+
+    frame_samples = 160
+    window_frames = 300
+    energies = [
+        sum(value * value for value in pcm[offset : offset + frame_samples])
+        for offset in range(0, len(pcm) - frame_samples + 1, frame_samples)
+    ]
+    rolling = sum(energies[:window_frames])
+    best_energy = rolling
+    best_frame = 0
+    for index in range(window_frames, len(energies)):
+        rolling += energies[index] - energies[index - window_frames]
+        if rolling > best_energy:
+            best_energy = rolling
+            best_frame = index - window_frames + 1
+    if best_energy <= 0:
+        raise SystemExit("VoxLock sample contains no usable speech")
+
+    start = best_frame * frame_samples
+    selected = pcm[start : start + 3 * 16_000]
+    temporary = destination.with_suffix(".wav.part")
+    with wave.open(str(temporary), "wb") as target:
+        target.setnchannels(1)
+        target.setsampwidth(2)
+        target.setframerate(16_000)
+        target.writeframes(selected.tobytes())
+    temporary.replace(destination)
+    os.chmod(destination, 0o600)
+
+
 def main() -> None:
     root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
     values = dotenv_values(root / "server/.env")
@@ -28,6 +77,24 @@ def main() -> None:
 
     secrets_dir = root / "deploy/secrets"
     secrets_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    input_filter = (values.get("VOICE_INPUT_FILTER") or "rnnoise").strip().lower()
+    if input_filter not in {"rnnoise", "voxlock"}:
+        raise SystemExit("VOICE_INPUT_FILTER must be rnnoise or voxlock")
+    sample_path = secrets_dir / "voxlock-voice-sample.wav"
+    sample_source = values.get("VOXLOCK_VOICE_SAMPLE_SOURCE") or ""
+    if sample_source:
+        source = Path(sample_source).expanduser().resolve()
+        if not source.is_file():
+            raise SystemExit("VOXLOCK_VOICE_SAMPLE_SOURCE must be a readable WAV file")
+        materialize_voice_sample(source, sample_path)
+    elif input_filter == "voxlock" and not sample_path.is_file():
+        raise SystemExit(
+            "Set VOXLOCK_VOICE_SAMPLE_SOURCE or place the sample at "
+            "deploy/secrets/voxlock-voice-sample.wav"
+        )
+    elif not sample_path.exists():
+        sample_path.touch(mode=0o600)
+
     grafana_path = secrets_dir / "grafana-admin-password"
     configured_grafana = values.get("GRAFANA_ADMIN_PASSWORD") or ""
     if configured_grafana and not configured_grafana.startswith("replace-with-"):

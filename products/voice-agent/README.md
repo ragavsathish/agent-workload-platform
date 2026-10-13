@@ -136,9 +136,18 @@ an explicitly proposed task instruction. Queue workers run Pi with `--no-session
 launch services write stdout and stderr to `/dev/null`, so agent conversations are not retained as
 Pi session JSONL. The synthetic black-box runner reports event counts, never transcript text.
 
+The server-side microphone filter is selected with `VOICE_INPUT_FILTER=rnnoise|voxlock`; RNNoise
+is the rollback default. VoxLock uses the host WAV named by `VOXLOCK_VOICE_SAMPLE_SOURCE`.
+`make up` validates mono 16 kHz PCM16 input, extracts the strongest three seconds from its first
+15 seconds, and writes only that derived sample to an ignored mode-0600 Compose secret. The edge
+loads hash-verified ONNX models baked into its image and runs with Hugging Face networking disabled.
+VoxLock is target-speaker isolation, not authentication or liveness detection. See the
+[VoxLock implementation and validation guide](../../docs/research/voxlock-pipecat-integration.md).
+
 Silero VAD keeps Pipecat's recommended `stop_secs=0.2`; `LocalSmartTurnAnalyzerV3` decides when a
 spoken turn is complete. MLX Whisper receives every completed audio segment directly—there is no
-speaker-recognition gate. Payload-free metrics distinguish accepted audio, emitted or empty
+speaker-authentication gate. The selected input filter runs before VAD and transcription.
+Payload-free metrics distinguish accepted audio, emitted or empty
 transcripts, Smart Turn inference triggers, completed turns, and stop timeouts without exporting
 audio or transcript text.
 

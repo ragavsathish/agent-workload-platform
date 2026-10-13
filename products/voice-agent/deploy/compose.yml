@@ -205,10 +205,11 @@ services:
       INFERENCE_BROKER_BASE_URL: http://inference-broker:9443/v1
       AGENT_GATEWAY_BASE_URL: http://agent-gateway:9444/v1
       VOICE_DEFAULT_WORKSPACE: ${VOICE_DEFAULT_WORKSPACE:?set VOICE_DEFAULT_WORKSPACE in server/.env}
+      VOICE_INPUT_FILTER: ${VOICE_INPUT_FILTER:-rnnoise}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-lgtm:4318
       OTEL_LOGS_EXPORTER: none
       OTEL_METRIC_EXPORT_INTERVAL: "5000"
-    secrets: [broker-token, agent-gateway-token]
+    secrets: [broker-token, agent-gateway-token, voxlock-voice-sample]
     read_only: true
     tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=256m"]
     cap_drop: [ALL]
@@ -248,3 +249,5 @@ secrets:
     file: ./secrets/approval-secret
   grafana-admin-password:
     file: ./secrets/grafana-admin-password
+  voxlock-voice-sample:
+    file: ./secrets/voxlock-voice-sample.wav
