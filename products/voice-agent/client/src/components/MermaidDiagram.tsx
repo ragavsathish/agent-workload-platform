@@ -2,6 +2,8 @@ import { useEffect, useId, useRef, useState } from 'react';
 
 import mermaid from 'mermaid';
 
+import { renderMermaidInto } from '../render-mermaid';
+
 mermaid.initialize({
   startOnLoad: false,
   securityLevel: 'strict',
@@ -21,21 +23,22 @@ export const MermaidDiagram = ({ diagram }: MermaidDiagramProps) => {
   useEffect(() => {
     let active = true;
 
-    void mermaid
-      .render(`voice-diagram-${instanceId}`, diagram)
-      .then(({ svg, bindFunctions }) => {
-        if (!active || !containerRef.current) return;
-        containerRef.current.innerHTML = svg;
-        bindFunctions?.(containerRef.current);
-        setFailedDiagram((failed) =>
-          failed === diagram ? undefined : failed
-        );
-      })
-      .catch(() => {
-        if (!active || !containerRef.current) return;
-        containerRef.current.replaceChildren();
-        setFailedDiagram(diagram);
+    const container = containerRef.current;
+    if (!container) return;
+
+    void renderMermaidInto({
+      container,
+      diagram,
+      renderIdPrefix: `voice-diagram-${instanceId}`,
+      render: mermaid.render,
+      isCurrent: () => active,
+    }).then((rendered) => {
+      if (!active) return;
+      setFailedDiagram((failed) => {
+        if (!rendered) return diagram;
+        return failed === diagram ? undefined : failed;
       });
+    });
 
     return () => {
       active = false;
