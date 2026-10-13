@@ -1,0 +1,250 @@
+name: pipecat-mlx-voice
+
+services:
+  s3mock-init:
+    image: adobe/s3mock:5.0.0@sha256:c461c8f4234bd63540d2f3a3cabce69d814c78dc890a5af08727525a028e23da
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["chown 65532:65532 /s3mockroot"]
+    volumes: [s3mock-data:/s3mockroot]
+    network_mode: none
+    cap_drop: [ALL]
+    cap_add: [CHOWN]
+    security_opt: [no-new-privileges:true]
+    restart: "no"
+
+  s3mock:
+    image: adobe/s3mock:5.0.0@sha256:c461c8f4234bd63540d2f3a3cabce69d814c78dc890a5af08727525a028e23da
+    restart: unless-stopped
+    depends_on:
+      s3mock-init:
+        condition: service_completed_successfully
+    environment:
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: ${ARTIFACT_BUCKET:-agent-artifacts}
+      COM_ADOBE_TESTING_S3MOCK_STORE_ROOT: /s3mockroot
+      COM_ADOBE_TESTING_S3MOCK_STORE_RETAIN_FILES_ON_EXIT: "true"
+    ports: ["127.0.0.1:9090:9090"]
+    volumes: [s3mock-data:/s3mockroot]
+    networks: [data, host-access]
+    user: "65532:65532"
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=64m,uid=65532,gid=65532"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9090/"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  postgres:
+    image: postgres@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: voice_agents
+      POSTGRES_USER: voice_agents
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-password
+    secrets: [postgres-password]
+    ports: ["127.0.0.1:54329:5432"]
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    networks: [data, host-access]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U voice_agents -d voice_agents"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    security_opt: [no-new-privileges:true]
+
+  otel-lgtm:
+    image: grafana/otel-lgtm:0.30.1@sha256:bb182ac3174a20923fa58f00d1790fa71eb06cc0150078c0b0e8feb9e6611492
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        export GF_SECURITY_ADMIN_PASSWORD="$$(cat /run/secrets/grafana-admin-password)"
+        exec /otel-lgtm/run-all.sh
+    restart: unless-stopped
+    environment:
+      ENABLE_LOGS_ALL: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      PROMETHEUS_EXTRA_ARGS: --storage.tsdb.retention.time=7d
+    secrets: [grafana-admin-password]
+    ports:
+      - "127.0.0.1:3300:3000"
+      - "127.0.0.1:4318:4318"
+    volumes:
+      - otel-lgtm-data:/data
+      - ./observability/dashboards.yml:/otel-lgtm/grafana/conf/provisioning/dashboards/pipecat.yml:ro
+      - ./observability/pipecat-overview.json:/otel-lgtm/grafana/conf/provisioning/dashboards/pipecat/pipecat-overview.json:ro
+    networks:
+      control:
+        ipv4_address: 172.30.90.4
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 512
+    mem_limit: 2g
+    cpus: 2
+    healthcheck:
+      test: ["CMD", "cat", "/tmp/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 15s
+    logging:
+      driver: none
+
+  agent-gateway:
+    image: local/pipecat-agent-gateway:compose
+    pull_policy: never
+    build:
+      context: ..
+      dockerfile: gateway/Containerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      s3mock:
+        condition: service_healthy
+      otel-lgtm:
+        condition: service_healthy
+    environment:
+      AGENT_GATEWAY_HOST: 0.0.0.0
+      AGENT_GATEWAY_PORT: "9444"
+      AGENT_GATEWAY_TOKEN_FILE: /run/secrets/agent-gateway-token
+      DATABASE_URL_FILE: /run/secrets/database-url
+      ORCHESTRATOR_APPROVAL_SECRET_FILE: /run/secrets/approval-secret
+      ORCHESTRATOR_APPROVAL_TTL_SECONDS: ${ORCHESTRATOR_APPROVAL_TTL_SECONDS:-300}
+      ORCHESTRATOR_ALLOWED_USERS: ${ORCHESTRATOR_ALLOWED_USERS:-}
+      ORCHESTRATOR_WORKSPACE_ROOTS: ${ORCHESTRATOR_WORKSPACE_ROOTS:-}
+      ORCHESTRATOR_DEFER_WORKSPACE_VALIDATION: "true"
+      ABSURD_QUEUE: ${ABSURD_QUEUE:-agents}
+      WORKER_TASK_TIMEOUT_SECONDS: ${WORKER_TASK_TIMEOUT_SECONDS:-1800}
+      ARTIFACT_ENDPOINT_URL: http://s3mock:9090
+      ARTIFACT_BUCKET: ${ARTIFACT_BUCKET:-agent-artifacts}
+      ARTIFACT_ACCESS_KEY: ${ARTIFACT_ACCESS_KEY:-local-test}
+      ARTIFACT_SECRET_KEY: ${ARTIFACT_SECRET_KEY:-local-test}
+      ORCHESTRATOR_ALLOWED_WORKSPACES: ${ORCHESTRATOR_ALLOWED_WORKSPACES:?set ORCHESTRATOR_ALLOWED_WORKSPACES in server/.env}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-lgtm:4318
+      OTEL_LOGS_EXPORTER: none
+      OTEL_METRIC_EXPORT_INTERVAL: "5000"
+    secrets: [agent-gateway-token, database-url, approval-secret]
+    # Native Pi voice RPC receives only this bearer-protected, loopback-bound
+    # task lifecycle capability. It is never exposed on the Mac LAN.
+    ports: ["127.0.0.1:9444:9444"]
+    networks:
+      control:
+        ipv4_address: 172.30.90.3
+      data:
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=64m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1
+    logging:
+      driver: none
+
+  tailscale:
+    image: docker.io/tailscale/tailscale@sha256:c507f3a2a6ab1cabd8d809b98edeb41edbd5c3fb6ad9632ffd098b4c7d0b4065
+    restart: unless-stopped
+    hostname: pipecat-edge
+    environment:
+      TS_USERSPACE: "false"
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SOCKET: /tmp/tailscaled.sock
+      TS_HOSTNAME: pipecat-edge
+      TS_ACCEPT_DNS: "false"
+      TS_AUTH_ONCE: "true"
+      TS_BOOT_TIMEOUT: "10m"
+      TS_DEBUG_FIREWALL_MODE: nftables
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    # Voice shares this service's network namespace. Pin its capability
+    # endpoints so host and internal control-plane routing remain explicit.
+    extra_hosts:
+      - "inference-broker:host-gateway"
+      - "agent-gateway:172.30.90.3"
+      - "otel-lgtm:172.30.90.4"
+    networks:
+      control:
+        ipv4_address: 172.30.90.2
+    read_only: true
+    tmpfs:
+      - "/tmp:rw,noexec,nosuid,nodev,size=64m"
+      - "/run:rw,noexec,nosuid,nodev,size=16m"
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 1
+
+  voice-edge:
+    image: local/pipecat-edge:compose
+    pull_policy: never
+    build:
+      context: ..
+      dockerfile: edge/Containerfile
+    restart: unless-stopped
+    depends_on:
+      agent-gateway:
+        condition: service_healthy
+      tailscale:
+        condition: service_started
+    network_mode: service:tailscale
+    env_file: [../edge/.env]
+    environment:
+      INFERENCE_BROKER_BASE_URL: http://inference-broker:9443/v1
+      AGENT_GATEWAY_BASE_URL: http://agent-gateway:9444/v1
+      VOICE_DEFAULT_WORKSPACE: ${VOICE_DEFAULT_WORKSPACE:?set VOICE_DEFAULT_WORKSPACE in server/.env}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-lgtm:4318
+      OTEL_LOGS_EXPORTER: none
+      OTEL_METRIC_EXPORT_INTERVAL: "5000"
+    secrets: [broker-token, agent-gateway-token]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=256m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    user: "65532:65532"
+    pids_limit: 256
+    mem_limit: 2g
+    cpus: 2
+    logging:
+      driver: none
+
+volumes:
+  otel-lgtm-data:
+  s3mock-data:
+  postgres-data:
+  tailscale-state:
+
+networks:
+  control:
+    ipam:
+      config:
+        - subnet: 172.30.90.0/24
+  data:
+    internal: true
+  host-access:
+
+secrets:
+  broker-token:
+    file: ./secrets/broker-token
+  agent-gateway-token:
+    file: ./secrets/agent-gateway-token
+  postgres-password:
+    file: ./secrets/postgres-password
+  database-url:
+    file: ./secrets/database-url
+  approval-secret:
+    file: ./secrets/approval-secret
+  grafana-admin-password:
+    file: ./secrets/grafana-admin-password
