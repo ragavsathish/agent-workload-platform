@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  canCompactContext,
   latestConversationPrompt,
   normalizeMessages,
   openVoiceSessionManager,
@@ -78,6 +79,12 @@ test("parseEnvFile accepts the installed quoted environment format", () => {
     A: "one",
     B: "two words",
   });
+});
+
+test("persisted Pi context can be compacted before an arbitrary 64k threshold", () => {
+  assert.equal(canCompactContext(55_000, false), true);
+  assert.equal(canCompactContext(55_000, true), false);
+  assert.equal(canCompactContext(null, false), false);
 });
 
 test("public transcript exposes text and tool status without tool payloads", () => {

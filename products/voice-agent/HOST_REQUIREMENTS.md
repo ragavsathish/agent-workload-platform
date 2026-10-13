@@ -63,6 +63,7 @@ S3Mock artifacts use another named volume inside Docker Desktop and never bind-m
 | Address | Owner | Purpose |
 |---|---|---|
 | tailnet HTTPS 443 | Tailscale Serve | trusted HTTPS and private browser ingress |
+| tailnet HTTPS 8443 | Tailscale Serve | passwordless Grafana using authenticated Tailnet identity |
 | shared loopback `127.0.0.1:7860` | Pipecat voice edge | browser UI and WebSocket audio behind Serve |
 | `127.0.0.1:54329` | Docker Postgres | native Pi worker queue access |
 | `127.0.0.1:9090` | Docker S3Mock | native worker immutable inputs and task result artifacts |
@@ -77,11 +78,13 @@ gateway. Compose assigns the dedicated `inference-broker` alias because Tailscal
 synthesize an IPv6 answer for `host.docker.internal`; the random broker capability and exact
 route/model limits are therefore part of the security boundary.
 
-The `otel-lgtm` bundle is connected to the private control network. Only Grafana and OTLP/HTTP are
-published, both on loopback; collector and datastore ports are not exposed to the LAN or tailnet.
-Telemetry deliberately excludes logs and all user-controlled values. Its named volume contains
-only operation metrics and sanitized traces and can be removed separately if local telemetry must
-be erased.
+The `otel-lgtm` bundle is connected to the private control network. Grafana and OTLP/HTTP are
+published on Mac loopback. Tailscale Serve proxies only Grafana to tailnet HTTPS 8443, where
+Grafana trusts the Tailscale-injected owner login only from the fixed ingress address. Direct
+loopback access retains Grafana's password login. OTLP and the collector/datastore ports are not
+exposed to the LAN or tailnet. Telemetry deliberately excludes logs and all user-controlled values.
+Its named volume contains only operation metrics and sanitized traces and can be removed separately
+if local telemetry must be erased.
 
 The phone must run Tailscale and join the same tailnet. Tailscale Serve terminates trusted HTTPS,
 adds the authenticated tailnet identity, and forwards HTTP and WebSocket traffic directly to

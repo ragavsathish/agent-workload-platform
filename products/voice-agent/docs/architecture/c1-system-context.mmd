@@ -1,17 +1,31 @@
-C4Context
-title Agent Workload Platform - Private Voice Interface Context
+flowchart LR
+    %% C4 system-context view. Keep relationship labels short so generated renders remain readable.
+    subgraph PEOPLE["People"]
+        direction TB
+        VOICE_USER(["Person<br/><b>Voice Operator</b><br/>browser conversation and orchestration"])
+        TASK_USER(["Person<br/><b>Task Operator</b><br/>explicit durable-task operations"])
+    end
 
-Person(user, "Tailnet User", "Talks to Pi and explicitly approves proposed work from an authenticated browser")
+    SYSTEM["Software system<br/><b>Voice Agent</b><br/>persistent Pi conversation, visual and spoken responses,<br/>and durable agent tasks"]
 
-System(platform, "Agent Workload Platform with Voice", "Provides an isolated Pipecat voice interface, durable Pi task coordination, and sandboxed MCP tools")
+    subgraph EXTERNALS["External systems"]
+        direction TB
+        TAILSCALE["External system<br/><b>Tailscale Control Plane</b><br/>device and private-network authority"]
+        TELEGRAM["External system<br/><b>Telegram Bot API</b><br/>task commands and bounded results"]
+        MODELS["External system<br/><b>Model Providers</b><br/>conversational and task models"]
+        INTEGRATIONS["External system<br/><b>External Integrations</b><br/>permission-scoped optional APIs"]
+    end
 
-System_Ext(tailscale, "Tailscale Control Plane", "Authenticates devices and distributes tailnet identity and network configuration")
-System_Ext(models, "Model Providers", "Serve the models selected by Pi using the host's subscription credentials")
-System_Ext(ollama, "Ollama", "Runs the one locally approved conversational model on the Mac")
-System_Ext(github, "GitHub", "Optional repository API reached only through a permission-scoped Wassette component")
+    VOICE_USER -->|"voice · diagrams · transcripts<br/>Tailnet HTTPS and WebRTC"| SYSTEM
+    TASK_USER -->|"create · approve · inspect · cancel"| TELEGRAM
+    SYSTEM -->|"long poll · task views"| TELEGRAM
+    SYSTEM -.->|"private-network configuration"| TAILSCALE
+    SYSTEM -->|"provider APIs"| MODELS
+    SYSTEM -->|"scoped HTTPS"| INTEGRATIONS
 
-Rel(user, platform, "Converses, proposes work, approves by voice, and hears results", "Tailnet HTTPS and WebSocket audio")
-Rel(platform, tailscale, "Authenticates devices and obtains tailnet configuration from", "Tailscale control protocol")
-Rel(platform, ollama, "Requests voice-dialogue chat completions from", "Loopback OpenAI-compatible HTTP")
-Rel(platform, models, "Requests Pi agent completions from", "Provider API")
-Rel(platform, github, "Reads or changes repositories when explicitly authorized", "Wassette-scoped HTTPS")
+    classDef person fill:#084c8d,color:#fff,stroke:#05345f,stroke-width:2px;
+    classDef system fill:#1168bd,color:#fff,stroke:#0b4884,stroke-width:2px;
+    classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
+    class VOICE_USER,TASK_USER person;
+    class SYSTEM system;
+    class TAILSCALE,TELEGRAM,MODELS,INTEGRATIONS external;

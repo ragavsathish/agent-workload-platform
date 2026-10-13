@@ -48,9 +48,7 @@ class TaskService:
         if not cleaned:
             raise ProposalError("instruction cannot be empty")
         if self.artifacts:
-            resolved = self.artifacts.resolve_workspace(
-                workspace, self.settings.allowed_workspaces
-            )
+            resolved = self.artifacts.resolve_workspace(workspace, self.settings.allowed_workspaces)
         else:
             resolved = (
                 validate_workspace_boundary(workspace, self.settings.workspace_roots)
@@ -203,6 +201,21 @@ class TaskService:
         if row is None:
             raise RuntimeError("proposal cancellation returned no row")
         return self._view(row, include_token=False)
+
+    def get_artifact(
+        self, *, identity: str, proposal_id: str, artifact: str
+    ) -> tuple[str, str, bytes]:
+        row = self._get_owned(identity, proposal_id)
+        if not row.get("task_id"):
+            raise ProposalError("task has no artifacts")
+        if self.artifacts is None:
+            raise ProposalError("task artifacts are unavailable")
+        try:
+            return self.artifacts.read_result_artifact(
+                task_id=str(row["task_id"]), artifact=artifact
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            raise ProposalError(str(exc)) from exc
 
     def _get_owned(self, identity: str, proposal_id: str) -> dict[str, Any]:
         with psycopg.connect(self.settings.database_url) as conn:

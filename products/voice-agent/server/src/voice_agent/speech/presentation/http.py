@@ -411,6 +411,40 @@ async def pi_transcript(request: Request, _: None = Depends(authenticate)) -> Re
     )
 
 
+async def _pi_context_request(client: httpx.AsyncClient, method: str, path: str) -> Response:
+    try:
+        response = await client.request(
+            method,
+            f"{_pi_service_url()}{path}",
+            headers={"Authorization": f"Bearer {BROKER_TOKEN}"},
+            timeout=float(os.getenv("PI_VOICE_TIMEOUT_SECONDS", "120")) + 5,
+        )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="Pi context is unavailable") from exc
+    if response.status_code not in {200, 409} or len(response.content) > 16_384:
+        raise HTTPException(status_code=502, detail="Pi context is unavailable")
+    return Response(
+        content=response.content,
+        status_code=response.status_code,
+        media_type="application/json",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/v1/pi/context", response_model=None)
+async def pi_context(request: Request, _: None = Depends(authenticate)) -> Response:
+    """Return bounded Pi context-window usage without transcript content."""
+
+    return await _pi_context_request(request.app.state.http, "GET", "/v1/context")
+
+
+@app.post("/v1/pi/context/compact", response_model=None)
+async def compact_pi_context(request: Request, _: None = Depends(authenticate)) -> Response:
+    """Compact the persistent voice session after any active turn completes."""
+
+    return await _pi_context_request(request.app.state.http, "POST", "/v1/context/compact")
+
+
 if __name__ == "__main__":
     import uvicorn
 

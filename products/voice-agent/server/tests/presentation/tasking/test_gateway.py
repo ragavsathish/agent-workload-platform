@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 def load_gateway(monkeypatch):
     monkeypatch.setenv("AGENT_GATEWAY_ENV_FILE", "/nonexistent/pipecat-test.env")
     monkeypatch.setenv("AGENT_GATEWAY_TOKEN", "g" * 32)
+    monkeypatch.setenv("TELEGRAM_GATEWAY_TOKEN", "t" * 32)
     monkeypatch.setenv("DATABASE_URL", "postgresql://test.invalid/test")
     monkeypatch.setenv("ORCHESTRATOR_APPROVAL_SECRET", "a" * 32)
     monkeypatch.setenv("ORCHESTRATOR_WORKSPACE_ROOTS", "/tmp")
@@ -22,9 +23,64 @@ def test_health_requires_the_separate_gateway_capability(monkeypatch):
     client = TestClient(gateway.app)
 
     assert client.get("/health").status_code == 401
-    assert client.get(
-        "/health", headers={"Authorization": f"Bearer {'g' * 32}"}
-    ).json() == {"status": "ok"}
+    assert client.get("/health", headers={"Authorization": f"Bearer {'g' * 32}"}).json() == {
+        "status": "ok"
+    }
+    assert client.get("/health", headers={"Authorization": f"Bearer {'t' * 32}"}).json() == {
+        "status": "ok"
+    }
+
+
+def test_telegram_capability_can_create_and_approve_but_cannot_impersonate(monkeypatch):
+    gateway = load_gateway(monkeypatch)
+
+    class FakeTasks:
+        def propose(self, **values):
+            return {"id": "proposal-1", "status": "pending", "result": None, **values}
+
+        def get(self, **_values):
+            return {
+                "id": "proposal-1",
+                "status": "pending",
+                "approval_token": "host-only-token",
+                "result": None,
+            }
+
+        def approve(self, **values):
+            assert values["token"] == "host-only-token"
+            return {"id": "proposal-1", "status": "approved", "result": None}
+
+    monkeypatch.setattr(gateway, "service", lambda: FakeTasks())
+    client = TestClient(gateway.app)
+    headers = {"Authorization": f"Bearer {'t' * 32}"}
+    created = client.post(
+        "/v1/tasks",
+        headers=headers,
+        json={
+            "identity": "owner@example.com",
+            "instruction": "Run tests",
+            "workspace": "project",
+        },
+    )
+    assert created.status_code == 201
+    assert "approval_token" not in created.json()
+    approved = client.post(
+        "/v1/tasks/proposal-1/approve",
+        headers=headers,
+        json={"identity": "owner@example.com"},
+    )
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+    denied = client.post(
+        "/v1/tasks",
+        headers=headers,
+        json={
+            "identity": "attacker@example.com",
+            "instruction": "Run tests",
+            "workspace": "project",
+        },
+    )
+    assert denied.status_code == 403
 
 
 def test_voice_view_never_returns_host_approval_token_or_raw_events(monkeypatch):

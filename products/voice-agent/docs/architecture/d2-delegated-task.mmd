@@ -1,0 +1,58 @@
+sequenceDiagram
+    autonumber
+    actor User as Tailnet User
+    actor TaskUser as Telegram Task Operator
+    participant Browser as Browser Client
+    participant Telegram as Task Telegram Adapter
+    participant Voice as Pi Voice Service
+    participant Edge as Voice Edge
+    participant Gateway as Agent Gateway
+    participant Store as S3 Workspace / Result Store
+    participant Queue as PostgreSQL / Absurd
+    participant Worker as Pi Task Worker
+    participant Model as Model Provider
+    participant Tools as Gondolin / Wassette
+
+    alt Browser task panel
+        User->>Browser: Submit or approve durable work
+        Browser->>Edge: Send owner-scoped lifecycle action
+        Edge->>Gateway: Forward lifecycle action with gateway capability
+    else Telegram task console
+        TaskUser->>Telegram: /create workspace instruction
+        Telegram->>Gateway: Create pending proposal with task-only capability
+        TaskUser->>Telegram: /approve proposal-id
+        Telegram->>Gateway: Approve explicit proposal
+    else Pi voice tool
+        User->>Voice: Ask Pi to delegate durable work
+        Voice->>Gateway: Propose or directly submit with owner identity
+    end
+    Gateway->>Store: Resolve allowlisted immutable Git bundle
+    Store-->>Gateway: Content-addressed workspace URI
+    Gateway->>Queue: Persist proposal and enqueue only approved work
+    Worker->>Queue: Claim one task
+    Worker->>Store: Download and verify workspace bundle
+    Store-->>Worker: Immutable Git bundle
+    Worker->>Model: Run stateless Pi task-agent loop
+    Worker->>Tools: Execute isolated workspace or integration tools
+    Tools-->>Worker: Bounded tool result
+    Model-->>Worker: Final spoken and Mermaid response
+    Worker->>Store: Upload bounded patch, status, and execution result
+    Worker->>Queue: Checkpoint terminal result
+    alt Browser result
+        User->>Browser: Refresh status or request result
+        Browser->>Edge: Read task state
+        Edge->>Gateway: Get owner-filtered result
+    else Telegram result
+        TaskUser->>Telegram: /task or /artifact
+        Telegram->>Gateway: Get owner-filtered result or bounded artifact
+    end
+    Gateway->>Queue: Fetch task snapshot
+    Queue-->>Gateway: State and bounded result
+    alt Browser result delivery
+        Gateway-->>Edge: Public task view
+        Edge-->>Browser: Result, Mermaid, and optional speech
+        Browser-->>User: Show or speak result
+    else Telegram result delivery
+        Gateway-->>Telegram: Task view or bounded artifact
+        Telegram-->>TaskUser: Message or document
+    end

@@ -1,97 +1,146 @@
 {
   "annotations": {"list": []},
+  "description": "Operational health for the Pipecat voice path: telemetry freshness, turn delivery, latency, and failures.",
   "editable": false,
   "graphTooltip": 1,
   "panels": [
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "description": "Seconds since the voice stack last emitted an operation metric.",
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "decimals": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 60}, {"color": "red", "value": 180}]}, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 4, "x": 0, "y": 0},
       "id": 1,
-      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
-      "targets": [
-        {
-          "expr": "sum(rate(pipecat_operation_total[$__rate_interval])) by (service_name, app_operation, app_outcome)",
-          "legendFormat": "{{service_name}} · {{app_operation}} · {{app_outcome}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Operation rate",
-      "type": "timeseries"
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
+      "targets": [{"expr": "clamp_min(time() - max(timestamp(pipecat_operation_total{service_namespace=\"pipecat-mlx-voice\"})), 0)", "instant": true, "legendFormat": "seconds ago", "range": false, "refId": "A"}],
+      "title": "Telemetry freshness",
+      "type": "stat"
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "description": "Voice sessions opened in the selected time range.",
+      "fieldConfig": {"defaults": {"color": {"mode": "fixedColor", "fixedColor": "blue"}, "decimals": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 5, "x": 4, "y": 0},
       "id": 2,
-      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "center", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
+      "targets": [{"expr": "sum(increase(pipecat_operation_total{app_operation=\"voice.session\"}[$__range])) or vector(0)", "instant": true, "legendFormat": "sessions", "range": false, "refId": "A"}],
+      "title": "Voice sessions",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Voice turns that reached a completed response in the selected time range.",
+      "fieldConfig": {"defaults": {"color": {"mode": "fixedColor", "fixedColor": "green"}, "decimals": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 5, "x": 9, "y": 0},
+      "id": 3,
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "center", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
+      "targets": [{"expr": "sum(increase(pipecat_operation_total{app_operation=\"pipecat.turn.completed\"}[$__range])) or vector(0)", "instant": true, "legendFormat": "completed", "range": false, "refId": "A"}],
+      "title": "Completed turns",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Explicit Pipecat errors in the selected time range.",
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "decimals": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 5, "x": 14, "y": 0},
+      "id": 4,
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "center", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
+      "targets": [{"expr": "sum(increase(pipecat_operation_total{app_operation=\"pipecat.error\"}[$__range])) or vector(0)", "instant": true, "legendFormat": "errors", "range": false, "refId": "A"}],
+      "title": "Voice errors",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "User turns that did not close normally before the stop timeout.",
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "decimals": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 1}, {"color": "red", "value": 3}]}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 5, "x": 19, "y": 0},
+      "id": 5,
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "center", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
+      "targets": [{"expr": "sum(increase(pipecat_operation_total{app_operation=\"pipecat.user_turn.stop_timeout\"}[$__range])) or vector(0)", "instant": true, "legendFormat": "timeouts", "range": false, "refId": "A"}],
+      "title": "Turn timeouts",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "95th-percentile latency across the user-visible response path and its main stages.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 10, "lineInterpolation": "smooth", "lineWidth": 2, "pointSize": 4, "showPoints": "never", "spanNulls": true, "stacking": {"group": "A", "mode": "none"}}, "decimals": 2, "min": 0, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 9, "w": 16, "x": 0, "y": 5},
+      "id": 6,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
       "targets": [
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(pipecat_operation_duration_seconds_bucket[$__rate_interval])) by (le, service_name, app_operation))",
-          "legendFormat": "{{service_name}} · {{app_operation}}",
-          "refId": "A"
-        }
+        {"expr": "histogram_quantile(0.95, sum(rate(pipecat_operation_duration_seconds_bucket{app_operation=\"pipecat.user_bot_latency\"}[$__rate_interval])) by (le))", "legendFormat": "User → reply", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, sum(rate(pipecat_operation_duration_seconds_bucket{app_operation=\"inference.stt\"}[$__rate_interval])) by (le))", "legendFormat": "Speech to text", "refId": "B"},
+        {"expr": "histogram_quantile(0.95, sum(rate(pipecat_operation_duration_seconds_bucket{app_operation=\"inference.pi\"}[$__rate_interval])) by (le))", "legendFormat": "Pi agent", "refId": "C"},
+        {"expr": "histogram_quantile(0.95, sum(rate(pipecat_operation_duration_seconds_bucket{app_operation=\"inference.tts\"}[$__rate_interval])) by (le))", "legendFormat": "Text to speech", "refId": "D"}
       ],
-      "title": "Operation latency p95",
+      "title": "Voice latency · p95",
       "type": "timeseries"
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
-      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 8},
-      "id": 3,
-      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto"},
+      "description": "Latest 95th-percentile latency by stage. Labels are attached directly to each bar.",
+      "fieldConfig": {"defaults": {"color": {"mode": "continuous-GrYlRd"}, "decimals": 2, "min": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 2}, {"color": "red", "value": 5}]}, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 9, "w": 8, "x": 16, "y": 5},
+      "id": 7,
+      "options": {"displayMode": "gradient", "maxVizHeight": 300, "minVizHeight": 16, "minVizWidth": 8, "namePlacement": "left", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showUnfilled": true, "sizing": "auto", "valueMode": "color"},
       "targets": [
-        {
-          "expr": "sum(pipecat_operation_total)",
-          "legendFormat": "operations",
-          "refId": "A"
-        }
+        {"expr": "histogram_quantile(0.95, sum(rate(pipecat_operation_duration_seconds_bucket{app_operation=\"pipecat.user_bot_latency\"}[$__rate_interval])) by (le))", "instant": true, "legendFormat": "User → reply", "range": false, "refId": "A"},
+        {"expr": "histogram_quantile(0.95, sum(rate(pipecat_operation_duration_seconds_bucket{app_operation=\"inference.stt\"}[$__rate_interval])) by (le))", "instant": true, "legendFormat": "Speech to text", "range": false, "refId": "B"},
+        {"expr": "histogram_quantile(0.95, sum(rate(pipecat_operation_duration_seconds_bucket{app_operation=\"inference.pi\"}[$__rate_interval])) by (le))", "instant": true, "legendFormat": "Pi agent", "range": false, "refId": "C"},
+        {"expr": "histogram_quantile(0.95, sum(rate(pipecat_operation_duration_seconds_bucket{app_operation=\"inference.tts\"}[$__rate_interval])) by (le))", "instant": true, "legendFormat": "Text to speech", "range": false, "refId": "D"}
       ],
-      "title": "Observed operations",
-      "type": "stat"
+      "title": "Current latency by stage",
+      "type": "bargauge"
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
-      "gridPos": {"h": 7, "w": 8, "x": 8, "y": 8},
-      "id": 4,
-      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto"},
+      "description": "How user turns end over time. Interruptions are expected during barge-in; errors and timeouts need attention.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto", "drawStyle": "bars", "fillOpacity": 55, "lineWidth": 1, "pointSize": 3, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "normal"}}, "decimals": 0, "min": 0, "unit": "short"}, "overrides": [
+        {"matcher": {"id": "byName", "options": "Completed"}, "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixedColor"}}]},
+        {"matcher": {"id": "byName", "options": "Interrupted"}, "properties": [{"id": "color", "value": {"fixedColor": "blue", "mode": "fixedColor"}}]},
+        {"matcher": {"id": "byName", "options": "Timeout"}, "properties": [{"id": "color", "value": {"fixedColor": "orange", "mode": "fixedColor"}}]},
+        {"matcher": {"id": "byName", "options": "Error"}, "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixedColor"}}]}
+      ]},
+      "gridPos": {"h": 8, "w": 14, "x": 0, "y": 14},
+      "id": 8,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
       "targets": [
-        {
-          "expr": "sum(pipecat_operation_total{app_outcome=\"error\"})",
-          "legendFormat": "errors",
-          "refId": "A"
-        }
+        {"expr": "sum(increase(pipecat_operation_total{app_operation=\"pipecat.turn.completed\"}[$__rate_interval]))", "legendFormat": "Completed", "refId": "A"},
+        {"expr": "sum(increase(pipecat_operation_total{app_operation=\"pipecat.turn.interrupted\"}[$__rate_interval]))", "legendFormat": "Interrupted", "refId": "B"},
+        {"expr": "sum(increase(pipecat_operation_total{app_operation=\"pipecat.user_turn.stop_timeout\"}[$__rate_interval]))", "legendFormat": "Timeout", "refId": "C"},
+        {"expr": "sum(increase(pipecat_operation_total{app_operation=\"pipecat.error\"}[$__rate_interval]))", "legendFormat": "Error", "refId": "D"}
       ],
-      "title": "Operation errors",
-      "type": "stat"
+      "title": "Turn outcomes",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Errors and timeouts grouped by operation for the selected time range.",
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "decimals": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 1}, {"color": "red", "value": 3}]}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 10, "x": 14, "y": 14},
+      "id": 9,
+      "options": {"displayMode": "gradient", "maxVizHeight": 300, "minVizHeight": 16, "minVizWidth": 8, "namePlacement": "left", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showUnfilled": true, "sizing": "auto", "valueMode": "color"},
+      "targets": [{"expr": "sort_desc(sum(increase(pipecat_operation_total{app_outcome=~\"error|timeout\"}[$__range])) by (app_operation))", "instant": true, "legendFormat": "{{app_operation}}", "range": false, "refId": "A"}],
+      "title": "Failures by operation",
+      "type": "bargauge"
     },
     {
       "datasource": {"type": "tempo", "uid": "tempo"},
-      "gridPos": {"h": 7, "w": 8, "x": 16, "y": 8},
-      "id": 5,
+      "description": "Recent traces across the voice stack. Telemetry intentionally excludes transcript and audio payloads.",
+      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 22},
+      "id": 10,
       "options": {"showHeader": true},
-      "targets": [
-        {
-          "limit": 20,
-          "query": "{ resource.service.namespace = \"pipecat-mlx-voice\" }",
-          "queryType": "traceql",
-          "refId": "A",
-          "tableType": "traces"
-        }
-      ],
-      "title": "Recent payload-free traces",
+      "targets": [{"limit": 20, "query": "{ resource.service.namespace = \"pipecat-mlx-voice\" }", "queryType": "traceql", "refId": "A", "tableType": "traces"}],
+      "title": "Recent traces · payload-free",
       "type": "table"
     }
   ],
   "refresh": "10s",
   "schemaVersion": 41,
-  "tags": ["pipecat", "voice", "otel"],
+  "tags": ["pipecat", "voice", "otel", "health"],
   "templating": {"list": []},
   "time": {"from": "now-30m", "to": "now"},
   "timezone": "browser",
-  "title": "Pipecat Voice Overview",
+  "title": "Pipecat Voice Health",
   "uid": "pipecat-voice-overview",
-  "version": 1
+  "version": 2
 }

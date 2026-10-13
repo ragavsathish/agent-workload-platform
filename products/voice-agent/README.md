@@ -73,7 +73,8 @@ make warm-models
 ```
 
 `make login` performs interactive Tailscale authentication when needed, binds the exact login and
-MagicDNS origin, enables the tailnet-only HTTPS proxy on port 443, and prints the browser URL.
+MagicDNS origin, enables tailnet-only HTTPS proxies for the voice UI on port 443 and Grafana on
+port 8443, and prints both browser URLs.
 
 ## Browser URL
 
@@ -113,6 +114,7 @@ make benchmark-mlx # warm CPU, RSS, tokens/s, and realtime-factor benchmark
 make publish-workspace WORKSPACE_ID=agent-workload-platform REPOSITORY=/path/to/repository
 make blackbox-voice UTTERANCE="Propose a task in the default workspace to inspect it"
 make blackbox-e2e # synthetic voice through Pipecat plus a Postgres assertion
+make telegram-up # optional owner-only Telegram task console
 make down         # stop Compose services; preserve Postgres and Tailscale volumes
 make check        # tests, lint, type checks, build, Compose and plist validation
 ```
@@ -123,6 +125,20 @@ host loopback so the optional Pi voice backend can use only its four task-lifecy
 The native inference broker listens on `127.0.0.1:9443`; Docker Desktop makes that protected
 capability available through the private `inference-broker` host-gateway alias. No service listens
 on the Mac LAN interface; browser access is available only through the tailnet listener.
+
+## Telegram task console
+
+Telegram is a separate interface to durable Agent Tasks, not another voice-orchestrator session.
+Set `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and `TELEGRAM_ALLOWED_USER_IDS` in `server/.env`, then
+run `make telegram-up`. The adapter accepts `/create <workspace> <instruction>`, `/tasks`,
+`/task <id>`, `/approve <id>`, `/cancel <id>`, and
+`/artifact <id> <patch|status|execution>`. Creating a proposal never starts work; approval remains
+a separate explicit command. Plain messages are treated as help, not instructions.
+
+The adapter has a dedicated gateway capability that can operate tasks but cannot access the voice
+transcript, Pi context, inference broker, database, or artifact store directly. Both the configured
+Telegram chat ID and sender user ID must match. Telegram polling state is persisted in its own
+Docker volume; message bodies and task results are not written to Docker logs or telemetry.
 
 S3Mock stores committed Git bundles and result patches in a Docker named volume; it never
 bind-mounts `~/Documents`. Each task verifies the bundle digest, expands it beneath
@@ -145,15 +161,21 @@ audio or transcript text.
 ## Local observability
 
 The pinned `grafana/otel-lgtm` development bundle provides Grafana, Prometheus, Tempo, and an OTLP
-collector. Open <http://127.0.0.1:3300>, use user `admin`, and obtain the generated local password
-with `make grafana-password`. The provisioned **Pipecat Voice Overview** dashboard shows operation
-rates, p95 durations, errors, and recent traces for the voice edge, gateway, and native MLX
-inference broker.
+collector. From a device on the authenticated tailnet, open
+<https://pipecat-edge.tailf6d713.ts.net:8443>. From the Mac, <http://127.0.0.1:3300> remains
+available. Tailscale supplies the owner identity to Grafana, so the Tailnet URL requires no separate
+password. Direct Mac-loopback access keeps Grafana's `admin` login; obtain its generated recovery
+password with `make grafana-password`. The provisioned **Pipecat Voice Overview** dashboard shows
+operation rates, p95 durations, errors, and recent traces for the voice edge, gateway, and native
+MLX inference broker.
 
-Grafana and OTLP/HTTP bind only to Mac loopback. OTLP/gRPC, Prometheus, Tempo, and Loki ports are not
-published. Application and bundle Docker logs remain disabled, and applications do not send the
-OpenTelemetry logs signal. Telemetry is stored in the `otel-lgtm-data` Docker volume; Prometheus
-retention is seven days. This all-in-one bundle is for private local monitoring, not production.
+Grafana and OTLP/HTTP bind only to Mac loopback. Tailscale Serve additionally proxies Grafana over
+tailnet-only HTTPS on port 8443. Grafana trusts `Tailscale-User-Login` only from the fixed Tailscale
+ingress address; Tailscale strips caller-supplied identity headers before injecting the authenticated
+owner. OTLP/gRPC, Prometheus, Tempo, and Loki ports are not published or proxied. Application and
+bundle Docker logs remain disabled, and applications do not send the OpenTelemetry logs signal.
+Telemetry is stored in the `otel-lgtm-data` Docker volume; Prometheus retention is seven days. This
+all-in-one bundle is for private local monitoring, not production.
 
 The black-box runner synthesizes speech with Kokoro, streams it through the same authenticated
 WebSocket used by the browser, transcribes it with MLX Whisper, and exercises the LLM/tool path.

@@ -1,4 +1,4 @@
-.PHONY: setup build up down recreate verify cycle-test login status grafana-password warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e host-preflight install-host-services db-init broker worker pull-model check
+.PHONY: setup build up down recreate verify cycle-test login status telegram-up grafana-password warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e host-preflight install-host-services db-init broker worker pull-model check
 
 setup:
 	cd server && uv sync --python 3.13
@@ -33,6 +33,9 @@ login:
 
 status:
 	./scripts/compose-status.sh
+
+telegram-up:
+	./scripts/telegram-up.sh
 
 grafana-password:
 	@test -s deploy/secrets/grafana-admin-password || { echo "Run make up first" >&2; exit 1; }
@@ -83,6 +86,7 @@ check:
 	cd server && uv run ruff check ../scripts/benchmark_mlx.py
 	cd server && uv run pyright ../scripts/benchmark_mlx.py
 	cd edge && uv sync --python 3.13 && uv run ruff check . && uv run pyright
+	cd edge && PYTHONPATH=.:../server/src uv run python -m unittest discover -p 'test_*.py'
 	cd client && npm run lint
 	cd client && npm test
 	cd client && npm run build

@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Annotated
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
 from voice_agent.shared.telemetry import configure_telemetry
@@ -34,6 +34,14 @@ GATEWAY_TOKEN = (
 )
 if len(GATEWAY_TOKEN) < 32:
     raise RuntimeError("AGENT_GATEWAY_TOKEN must contain at least 32 characters")
+telegram_gateway_token_file = os.getenv("TELEGRAM_GATEWAY_TOKEN_FILE")
+TELEGRAM_GATEWAY_TOKEN = (
+    Path(telegram_gateway_token_file).read_text(encoding="utf-8").strip()
+    if telegram_gateway_token_file
+    else os.getenv("TELEGRAM_GATEWAY_TOKEN", "")
+)
+if TELEGRAM_GATEWAY_TOKEN and len(TELEGRAM_GATEWAY_TOKEN) < 32:
+    raise RuntimeError("TELEGRAM_GATEWAY_TOKEN must contain at least 32 characters")
 
 settings = Settings.from_env()
 settings.require_api()
@@ -55,10 +63,24 @@ class ProposalRequest(IdentityRequest):
     workspace: str = Field(min_length=1, max_length=4_096)
 
 
-async def authenticate(authorization: Annotated[str | None, Header()] = None) -> None:
+async def authenticate_voice(authorization: Annotated[str | None, Header()] = None) -> None:
     expected = f"Bearer {GATEWAY_TOKEN}"
     if authorization is None or not secrets.compare_digest(authorization, expected):
         raise HTTPException(status_code=401, detail="invalid agent gateway credential")
+
+
+async def authenticate_task_operator(
+    authorization: Annotated[str | None, Header()] = None,
+) -> None:
+    if authorization is None:
+        raise HTTPException(status_code=401, detail="invalid task operator credential")
+    candidates = [GATEWAY_TOKEN]
+    if TELEGRAM_GATEWAY_TOKEN:
+        candidates.append(TELEGRAM_GATEWAY_TOKEN)
+    if not any(
+        secrets.compare_digest(authorization, f"Bearer {candidate}") for candidate in candidates
+    ):
+        raise HTTPException(status_code=401, detail="invalid task operator credential")
 
 
 def normalized_identity(identity: str) -> str:
@@ -98,7 +120,9 @@ def _public_task_result(task_result: object) -> object:
         try:
             normalized = parse_pi_event_stream(StringIO(execution["stdout"]))
         except RuntimeError:
-            normalized = response_from_text("Legacy task completed; its final response is unavailable.")
+            normalized = response_from_text(
+                "Legacy task completed; its final response is unavailable."
+            )
         response_text = normalized.text
     else:
         normalized = response_from_text("Task completed.")
@@ -134,12 +158,12 @@ def service() -> TaskService:
 
 
 @app.get("/health")
-async def health(_: None = Depends(authenticate)) -> dict[str, str]:
+async def health(_: None = Depends(authenticate_task_operator)) -> dict[str, str]:
     return {"status": "ok"}
 
 
 @app.post("/v1/tasks", status_code=201)
-async def propose(body: ProposalRequest, _: None = Depends(authenticate)):
+async def propose(body: ProposalRequest, _: None = Depends(authenticate_task_operator)):
     with telemetry.observe("task.propose"):
         try:
             result = await asyncio.to_thread(
@@ -157,7 +181,7 @@ async def propose(body: ProposalRequest, _: None = Depends(authenticate)):
 async def list_tasks(
     identity: str = Query(min_length=3, max_length=320),
     limit: int = Query(default=50, ge=1, le=100),
-    _: None = Depends(authenticate),
+    _: None = Depends(authenticate_task_operator),
 ):
     with telemetry.observe("task.list"):
         results = await asyncio.to_thread(
@@ -172,7 +196,7 @@ async def list_tasks(
 async def get_task(
     proposal_id: str,
     identity: str = Query(min_length=3, max_length=320),
-    _: None = Depends(authenticate),
+    _: None = Depends(authenticate_task_operator),
 ):
     with telemetry.observe("task.get"):
         try:
@@ -190,15 +214,13 @@ async def get_task(
 async def approve(
     proposal_id: str,
     body: IdentityRequest,
-    _: None = Depends(authenticate),
+    _: None = Depends(authenticate_task_operator),
 ):
     with telemetry.observe("task.approve"):
         identity = normalized_identity(body.identity)
         try:
             tasks = service()
-            pending = await asyncio.to_thread(
-                tasks.get, identity=identity, proposal_id=proposal_id
-            )
+            pending = await asyncio.to_thread(tasks.get, identity=identity, proposal_id=proposal_id)
             token = pending.get("approval_token")
             if not isinstance(token, str):
                 raise ProposalError("proposal is not available for approval")
@@ -217,7 +239,7 @@ async def approve(
 async def cancel(
     proposal_id: str,
     body: IdentityRequest,
-    _: None = Depends(authenticate),
+    _: None = Depends(authenticate_task_operator),
 ):
     with telemetry.observe("task.cancel"):
         try:
@@ -227,6 +249,30 @@ async def cancel(
                 proposal_id=proposal_id,
             )
             return voice_view(result)
+        except ProposalError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/v1/tasks/{proposal_id}/artifacts/{artifact}")
+async def get_artifact(
+    proposal_id: str,
+    artifact: str,
+    identity: str = Query(min_length=3, max_length=320),
+    _: None = Depends(authenticate_task_operator),
+) -> Response:
+    with telemetry.observe("task.artifact.get"):
+        try:
+            filename, content_type, payload = await asyncio.to_thread(
+                service().get_artifact,
+                identity=normalized_identity(identity),
+                proposal_id=proposal_id,
+                artifact=artifact,
+            )
+            return Response(
+                payload,
+                media_type=content_type,
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
         except ProposalError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 

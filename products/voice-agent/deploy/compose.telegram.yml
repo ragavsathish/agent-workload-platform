@@ -1,0 +1,83 @@
+services:
+  task-telegram-init:
+    image: local/pipecat-agent-gateway:compose
+    pull_policy: never
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["chown 65532:65532 /var/lib/task-telegram"]
+    user: "0:0"
+    read_only: true
+    volumes:
+      - task-telegram-state:/var/lib/task-telegram
+    network_mode: none
+    cap_drop: [ALL]
+    cap_add: [CHOWN]
+    security_opt: [no-new-privileges:true]
+    restart: "no"
+
+  agent-gateway:
+    environment:
+      TELEGRAM_GATEWAY_TOKEN_FILE: /run/secrets/telegram-gateway-token
+    secrets:
+      - telegram-gateway-token
+
+  task-telegram:
+    image: local/pipecat-agent-gateway:compose
+    pull_policy: never
+    entrypoint:
+      - /app/.venv/bin/python
+      - -m
+      - voice_agent.tasking.presentation.telegram
+    restart: unless-stopped
+    depends_on:
+      agent-gateway:
+        condition: service_healthy
+      task-telegram-init:
+        condition: service_completed_successfully
+    environment:
+      AGENT_GATEWAY_BASE_URL: http://agent-gateway:9444/v1
+      ORCHESTRATOR_ALLOWED_USERS: ${ORCHESTRATOR_ALLOWED_USERS:?set ORCHESTRATOR_ALLOWED_USERS in server/.env}
+      TELEGRAM_ALLOWED_USER_IDS: ${TELEGRAM_ALLOWED_USER_IDS:?set TELEGRAM_ALLOWED_USER_IDS in server/.env}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:?set TELEGRAM_CHAT_ID in server/.env}
+      TELEGRAM_BOT_TOKEN_FILE: /run/secrets/telegram-bot-token
+      TELEGRAM_GATEWAY_TOKEN_FILE: /run/secrets/telegram-gateway-token
+      TELEGRAM_STATE_PATH: /var/lib/task-telegram/state.json
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-lgtm:4318
+      OTEL_LOGS_EXPORTER: none
+      OTEL_METRIC_EXPORT_INTERVAL: "5000"
+    secrets:
+      - telegram-bot-token
+      - telegram-gateway-token
+    volumes:
+      - task-telegram-state:/var/lib/task-telegram
+    networks:
+      - control
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m,uid=65532,gid=65532
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    user: "65532:65532"
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 0.5
+    logging:
+      driver: none
+    healthcheck:
+      test:
+        - CMD
+        - /app/.venv/bin/python
+        - -c
+        - import pathlib,time; p=pathlib.Path('/var/lib/task-telegram/state.json'); assert p.is_file() and time.time()-p.stat().st_mtime < 90
+      interval: 15s
+      timeout: 3s
+      start_period: 35s
+      retries: 4
+
+volumes:
+  task-telegram-state:
+
+secrets:
+  telegram-bot-token:
+    file: ./secrets/telegram-bot-token
+  telegram-gateway-token:
+    file: ./secrets/telegram-gateway-token

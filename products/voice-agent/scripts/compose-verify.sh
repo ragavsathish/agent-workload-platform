@@ -112,10 +112,71 @@ else
 fi
 
 serve_status="$("${compose[@]}" exec -T tailscale tailscale --socket=/tmp/tailscaled.sock serve status 2>/dev/null || true)"
-if [[ "$serve_status" == *'https://'* && "$serve_status" == *'http://127.0.0.1:7860'* ]]; then
-  pass "Tailscale Serve terminates HTTPS and proxies directly to Pipecat"
+if [[ "$serve_status" == *'https://'* && "$serve_status" == *'http://127.0.0.1:7860'* && "$serve_status" == *':8443'* && "$serve_status" == *'http://otel-lgtm:3000'* ]]; then
+  pass "Tailscale Serve exposes Pipecat and identity-authenticated Grafana only to the tailnet"
 else
-  fail "Tailscale Serve HTTPS proxy is not configured"
+  fail "Tailscale Serve Pipecat/Grafana HTTPS proxies are not configured"
+fi
+
+tailnet_dns="$("${compose[@]}" exec -T tailscale tailscale --socket=/tmp/tailscaled.sock status --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')"
+tailnet_ip="$("${compose[@]}" exec -T tailscale tailscale --socket=/tmp/tailscaled.sock ip -4)"
+if "${compose[@]}" exec -T voice-edge /app/.venv/bin/python - "$tailnet_dns" "$tailnet_ip" <<'PY'
+import json
+import os
+import socket
+import sys
+import urllib.request
+
+name, address = sys.argv[1:]
+owner = os.environ["EDGE_ALLOWED_USERS"].split(",", 1)[0].strip().lower()
+original = socket.getaddrinfo
+
+
+def resolve(host, port, *args, **kwargs):
+    return original(address if host == name else host, port, *args, **kwargs)
+
+
+socket.getaddrinfo = resolve
+request = urllib.request.Request(
+    f"https://{name}:8443/api/user",
+    headers={"Tailscale-User-Login": "attacker@example.invalid"},
+)
+with urllib.request.urlopen(request, timeout=10) as response:
+    payload = json.load(response)
+assert response.status == 200
+assert payload["login"].lower() == owner
+with urllib.request.urlopen(
+    f"https://{name}:8443/api/dashboards/uid/pipecat-voice-overview", timeout=10
+) as response:
+    dashboard = json.load(response)
+assert response.status == 200
+assert dashboard["dashboard"]["title"] == "Pipecat Voice Health"
+PY
+then
+  pass "Grafana trusts the Tailscale owner and serves the dashboard without a password"
+else
+  fail "Grafana did not accept the Tailscale-injected owner identity"
+fi
+
+if "${compose[@]}" exec -T agent-gateway /app/.venv/bin/python - <<'PY'
+import urllib.error
+import urllib.request
+
+request = urllib.request.Request(
+    "http://otel-lgtm:3000/api/user",
+    headers={"Tailscale-User-Login": "attacker@example.invalid"},
+)
+try:
+    urllib.request.urlopen(request, timeout=5)
+except urllib.error.HTTPError as error:
+    assert error.code == 401
+else:
+    raise AssertionError("Grafana accepted a forged identity header")
+PY
+then
+  pass "Grafana rejects a forged identity header outside the Tailscale ingress"
+else
+  fail "Grafana accepted a forged identity header outside the Tailscale ingress"
 fi
 
 [[ "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:9443/health || true)" == 401 ]] && pass "host inference broker rejects unauthenticated traffic" || fail "host inference broker capability check failed"

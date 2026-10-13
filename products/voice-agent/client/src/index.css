@@ -102,7 +102,7 @@
   box-shadow: 0 0 0.65rem rgb(86 227 159 / 55%);
 }
 
-.voice-state.paused::before,
+.voice-state.muted::before,
 .voice-state.starting::before {
   background: #ffb84d;
 }
@@ -243,6 +243,46 @@
 .dock-copy span {
   color: #73808a;
   font: 500 0.68rem/1.2 ui-sans-serif, system-ui, sans-serif;
+}
+
+.context-control {
+  display: flex;
+  min-width: 13rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-left: 1px solid #2a343c;
+  padding-left: 1rem;
+}
+
+.context-copy {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.context-copy > span:first-child {
+  color: #73808a;
+  font: 600 0.58rem/1.2 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.context-copy strong {
+  color: #e6edf1;
+  font: 650 0.78rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.context-copy > span:not(:first-child) {
+  color: #73808a;
+  font: 500 0.62rem/1.2 ui-sans-serif, system-ui, sans-serif;
+}
+
+.context-copy .context-error {
+  color: #f0a4a8;
+}
+
+.context-compact {
+  white-space: nowrap;
 }
 
 .dock-actions {
@@ -693,6 +733,16 @@
     gap: 0.65rem;
     margin-top: 0.6rem;
     padding: 0.75rem;
+  }
+
+  .context-control {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    border-top: 1px solid #2a343c;
+    border-left: 0;
+    padding-top: 0.65rem;
+    padding-left: 0;
   }
 
   .dock-copy {
