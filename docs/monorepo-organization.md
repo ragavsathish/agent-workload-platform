@@ -36,35 +36,30 @@ because it uses Docker, macOS LaunchAgents, or Kubernetes.
 
 ## Voice Agent boundary
 
-The Voice Agent moved as one vertical slice before its internal services were
-rearranged. This keeps Compose build contexts, macOS installation, ignored
-secrets, local virtual environments, and existing verification commands
-working together. Its current internal directories are therefore transitional
-but explicitly owned:
+The Voice Agent is a vertical product slice. Deployable processes are explicit
+apps; code enters `packages/` only when at least two apps consume its interface:
 
 ```text
 products/voice-agent/
-├── client/       browser application
-├── edge/         Pipecat/WebRTC voice edge
-├── gateway/      task-gateway container package
-├── services/
-│   └── pi-agent/ persistent Pi voice session and isolated tools
-├── server/       native inference, worker, and orchestration modules
+├── apps/
+│   ├── web/      browser application
+│   ├── edge/     Pipecat/WebRTC voice edge
+│   ├── pi-agent/ persistent Pi voice session and isolated tools
+│   ├── broker/   native MLX inference adapter
+│   ├── gateway/  task lifecycle HTTP adapter
+│   └── worker/   durable isolated Pi task consumer
+├── packages/
+│   ├── tasking/  task domain, use cases, persistence, and artifacts
+│   └── telemetry/ payload-free Python observability adapter
 ├── deploy/       Compose, macOS, tailnet, secrets, and observability
 ├── scripts/      lifecycle and verification commands
 └── docs/         product architecture and research
 ```
 
-The next internal split should be behavior-preserving:
-
-1. Give the browser app, voice edge, task gateway, inference broker, and task
-   worker independently buildable packages.
-2. Extract shared task lifecycle types before separating gateway and worker
-   Python environments.
-3. Keep Compose and macOS profiles under the product, referencing service
-   package roots explicitly.
-4. Run the existing product `make check`, black-box voice test, Compose
-   validation, and host preflight after each move.
+Each Python app owns its environment and lock file. Compose and macOS profiles
+remain product deployment concerns and reference app roots explicitly. The
+shared packages expose source interfaces; they do not own process startup,
+transport adapters, or deployment configuration.
 
 ## Repository rules
 

@@ -10,18 +10,19 @@ boundaries as authoritative Mermaid sources.
 
 ## Product structure
 
-This directory is the complete voice-agent product boundary:
+This directory is the complete voice-agent product boundary. Deployable processes live in
+`apps/`; reusable code lives in `packages/` only when multiple apps consume it:
 
-- `client/` is the browser application.
-- `edge/` is the containerized Pipecat/WebRTC voice edge.
-- `gateway/` builds the containerized task-gateway service.
-- `services/pi-agent/` owns the persistent Pi voice session and its
-  Gondolin-isolated native tools.
-- `server/` contains the `speech` and `tasking` bounded contexts, including the
-  native inference broker, task gateway, durable worker, and shared telemetry.
-- `deploy/` owns Compose, macOS LaunchAgent, tailnet, secret-mount, and
-  observability configuration.
-- `scripts/` is the product lifecycle and verification surface.
+- `apps/web/` is the browser application.
+- `apps/edge/` is the containerized Pipecat/WebRTC voice edge.
+- `apps/pi-agent/` owns the persistent Pi voice session and its Gondolin-isolated native tools.
+- `apps/broker/` is the native MLX inference adapter exposed on host loopback.
+- `apps/gateway/` is the containerized owner-facing task lifecycle API.
+- `apps/worker/` consumes durable tasks and runs isolated Pi jobs.
+- `packages/tasking/` owns shared task domain, application, persistence, and artifact code.
+- `packages/telemetry/` owns the payload-free OpenTelemetry adapter shared by Python apps.
+- `deploy/` owns Compose, macOS LaunchAgent, tailnet, secret-mount, and observability
+  configuration; `scripts/` is the product lifecycle and verification surface.
 
 The product vocabulary is defined in [GLOSSARY.md](GLOSSARY.md). Repository-wide
 ownership and planned extractions are documented in
@@ -64,7 +65,7 @@ tools still execute through Gondolin rather than in the voice stack.
 ```bash
 cd products/voice-agent
 make setup
-# Fill server/.env using server/.env.example, including fresh random secrets.
+# Fill deploy/.env using deploy/.env.example, including fresh random secrets.
 make pull-model
 make host-preflight
 make up
@@ -173,7 +174,7 @@ Before Tailscale login it uses `deploy/compose.local-test.yml` as a non-listenin
 set `BLACKBOX_USE_TAILSCALE=true` to test an authenticated tunnel namespace. See
 [TESTING.md](TESTING.md) for assertions and failure interpretation.
 
-Set `VOICE_LLM_BACKEND=pi` in `edge/.env` to select the alternate
+Set `VOICE_LLM_BACKEND=pi` in `apps/edge/.env` to select the alternate
 `Whisper -> Pi agent -> restricted Pi task tools -> Kokoro` path. The default remains `ollama`.
 Pi voice uses a dedicated long-running Node service built on Pi's `createAgentSession()` SDK. The
 service keeps conversation state between turns, reconciles a restarted or reset Pipecat transcript,

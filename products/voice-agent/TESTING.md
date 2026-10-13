@@ -43,7 +43,7 @@ Pipecat metric to become queryable through Grafana.
 Verify durable results without displaying capabilities:
 
 ```bash
-docker compose --env-file server/.env \
+docker compose --env-file deploy/.env \
   -f deploy/compose.yml -f deploy/compose.local-test.yml \
   exec -T postgres psql -U voice_agents -d voice_agents -P pager=off \
   -c "SELECT id, identity, workspace, status, task_id, created_at FROM voice_task_proposals ORDER BY created_at DESC LIMIT 5"

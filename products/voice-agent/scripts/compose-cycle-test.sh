@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-compose=(docker compose --env-file "$root/server/.env" -f "$root/deploy/compose.yml")
+compose=(docker compose --env-file "$root/deploy/.env" -f "$root/deploy/compose.yml")
 
 for cycle in 1 2 3; do
   echo "Lifecycle cycle $cycle/3"

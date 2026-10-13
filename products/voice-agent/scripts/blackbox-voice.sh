@@ -4,7 +4,7 @@ set -euo pipefail
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 [[ $# -ge 1 ]] || { echo "usage: $0 <synthetic utterance> [...]" >&2; exit 2; }
 
-base_compose=(docker compose --env-file "$repo_dir/server/.env" -f "$repo_dir/deploy/compose.yml")
+base_compose=(docker compose --env-file "$repo_dir/deploy/.env" -f "$repo_dir/deploy/compose.yml")
 compose=("${base_compose[@]}")
 tailnet_mode="${BLACKBOX_USE_TAILSCALE:-auto}"
 if [[ "$tailnet_mode" == "auto" ]]; then

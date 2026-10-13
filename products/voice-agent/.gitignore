@@ -154,9 +154,9 @@ activemq-data/
 deploy/keys/
 deploy/secrets/
 deploy/edge-bundle/
-edge/.env
-edge/.venv/
-edge/client-dist/
+apps/edge/.env
+apps/edge/.venv/
+apps/edge/client-dist/
 env/
 venv/
 ENV/

@@ -2,8 +2,8 @@
 
 Date: 2026-10-13
 
-Scope: Pipecat 1.12.0, pinned by `edge/uv.lock`, compared with the current
-`edge/bot.py` and host inference broker. Sources are Pipecat's official
+Scope: Pipecat 1.12.0, pinned by `apps/edge/uv.lock`, compared with the current
+`apps/edge/bot.py` and host inference broker. Sources are Pipecat's official
 documentation and the first-party Pipecat 1.12.0 source tag.
 
 ## Executive finding
@@ -46,7 +46,7 @@ Sources:
 - [Pipecat 1.12.0 `VADParams` source](https://github.com/pipecat-ai/pipecat/blob/v1.12.0/src/pipecat/audio/vad/vad_analyzer.py#L23-L56)
 - [Smart Turn on Pipecat Cloud](https://docs.pipecat.ai/pipecat-cloud/guides/smart-turn)
 
-The current code at `edge/bot.py:437` uses the recommended value:
+The current code in `apps/edge/bot.py` uses the recommended value:
 
 ```python
 vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.2))
@@ -113,11 +113,11 @@ Sources:
 
 In this project, empty text can be produced before Pipecat sees the response:
 
-- `server/src/voice_agent/speech/presentation/http.py`: enrollment capture consumes audio and
+- `apps/broker/src/voice_agent/speech/presentation/http.py`: enrollment capture consumes audio and
   returns `{"text": ""}`.
-- `server/src/voice_agent/speech/presentation/http.py`: speaker verification rejection returns
+- `apps/broker/src/voice_agent/speech/presentation/http.py`: speaker verification rejection returns
   `{"text": ""}` before Whisper.
-- `server/src/voice_agent/speech/presentation/http.py`: segments with `no_speech_prob >= 0.6`
+- `apps/broker/src/voice_agent/speech/presentation/http.py`: segments with `no_speech_prob >= 0.6`
   and one hard-coded compression-ratio value are discarded; all segments can
   therefore collapse to empty text.
 - At audit time, the live host environment had `SPEAKER_VERIFICATION_ENABLED=true`; the subsequent
@@ -129,7 +129,7 @@ that never produce STT frames.
 
 ### `FilterIncompleteUserTurnStrategies` is an additional LLM gate
 
-The current code does not use Smart Turn alone. At `edge/bot.py:438-444`, it wraps
+The current code does not use Smart Turn alone. In `apps/edge/bot.py`, it wraps
 the Smart Turn stop strategy in `FilterIncompleteUserTurnStrategies`.
 
 That wrapper defers Smart Turn's stop signal, starts LLM inference, and finalizes
@@ -150,7 +150,7 @@ Sources:
 - [Pipecat 1.12.0 strategy composition](https://github.com/pipecat-ai/pipecat/blob/v1.12.0/src/pipecat/turns/user_turn_strategies.py#L103-L150)
 
 The application tells the Pi/LLM response to be "exactly one JSON object" at
-`edge/bot.py:219-222`. Pipecat simultaneously injects instructions requiring a
+`apps/edge/bot.py`. Pipecat simultaneously injects instructions requiring a
 marker before the speakable response. Pipecat 1.12.0's graceful fallback forwards
 markerless buffered text at response end, but only marker detection (or a tool
 call) broadcasts the completion frame. This can make audio eventually appear
@@ -161,7 +161,7 @@ and [the fallback path](https://github.com/pipecat-ai/pipecat/blob/v1.12.0/src/p
 
 ### The STT safety deadline is calibrated for the wrong service
 
-`edge/bot.py:209-213` instantiates `OpenAISTTService` without overriding
+`apps/edge/bot.py` instantiates `OpenAISTTService` without overriding
 `ttfs_p99_latency`. Pipecat 1.12.0 therefore advertises the OpenAI REST default,
 2.01 seconds. The endpoint is actually the local MLX Whisper broker, not OpenAI.
 Pipecat documents that self-hosted/local deployments must measure and override

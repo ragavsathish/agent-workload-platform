@@ -25,8 +25,11 @@ domain="gui/$UID"
 mkdir -p \
   "$agents_dir" \
   "$runtime_dir/scripts" \
-  "$runtime_dir/server/src" \
-  "$runtime_dir/server/migrations" \
+  "$runtime_dir/apps/broker/src" \
+  "$runtime_dir/apps/worker/src" \
+  "$runtime_dir/packages/tasking/src" \
+  "$runtime_dir/packages/tasking/migrations" \
+  "$runtime_dir/packages/telemetry/src" \
   "$runtime_dir/runtime-home" \
   "$gondolin_runtime" \
   "$voice_agent_runtime" \
@@ -40,11 +43,18 @@ install -m 700 \
   "$repo_dir/scripts/host-worker.sh" \
   "$runtime_dir/scripts/"
 install -m 600 \
-  "$repo_dir/server/pyproject.toml" \
-  "$repo_dir/server/uv.lock" \
-  "$runtime_dir/server/"
-rsync -a --delete "$repo_dir/server/src/" "$runtime_dir/server/src/"
-install -m 600 "$repo_dir"/server/migrations/*.sql "$runtime_dir/server/migrations/"
+  "$repo_dir/apps/broker/pyproject.toml" \
+  "$repo_dir/apps/broker/uv.lock" \
+  "$runtime_dir/apps/broker/"
+install -m 600 \
+  "$repo_dir/apps/worker/pyproject.toml" \
+  "$repo_dir/apps/worker/uv.lock" \
+  "$runtime_dir/apps/worker/"
+rsync -a --delete "$repo_dir/apps/broker/src/" "$runtime_dir/apps/broker/src/"
+rsync -a --delete "$repo_dir/apps/worker/src/" "$runtime_dir/apps/worker/src/"
+rsync -a --delete "$repo_dir/packages/tasking/src/" "$runtime_dir/packages/tasking/src/"
+rsync -a --delete "$repo_dir/packages/telemetry/src/" "$runtime_dir/packages/telemetry/src/"
+install -m 600 "$repo_dir"/packages/tasking/migrations/*.sql "$runtime_dir/packages/tasking/migrations/"
 gondolin_deploy="$(mktemp -d "$runtime_dir/gondolin-agent.deploy.XXXXXX")"
 trap 'rm -rf "$gondolin_deploy"' EXIT
 # Produce a standalone dependency graph instead of copying pnpm links that
@@ -73,24 +83,25 @@ rsync -a --delete "$gondolin_assets_source/" "$gondolin_assets_runtime/"
 rsync -a --delete --exclude='.git/' "$skills_dir/" "$skills_runtime/"
 
 awk -F= '/^(INFERENCE_BROKER_TOKEN|BROKER_MAX_AUDIO_BYTES|BROKER_MAX_AUDIO_SECONDS|BROKER_MAX_CHAT_BYTES|BROKER_MAX_TTS_CHARS|OLLAMA_MODEL|OLLAMA_BASE_URL|MLX_STT_MODEL|STT_LANGUAGE|MLX_TTS_MODEL|MLX_TTS_VOICE|MLX_TTS_SPEED|MLX_TTS_LANGUAGE_CODE|MLX_TTS_STREAMING_INTERVAL|AGENT_GATEWAY_TOKEN|ORCHESTRATOR_ALLOWED_USERS|PI_BINARY|PI_MODEL|PI_VOICE_MODEL|PI_VOICE_THINKING|PI_VOICE_TIMEOUT_SECONDS)=/ {print}' \
-  "$repo_dir/server/.env" > "$runtime_dir/server/broker.env"
+  "$repo_dir/deploy/.env" > "$runtime_dir/apps/broker/broker.env"
 printf 'AGENT_GATEWAY_BASE_URL="http://127.0.0.1:9444/v1"\nGONDOLIN_BROWSER_ASSETS="%s"\nPI_CODING_AGENT_DIR="%s"\nPI_VOICE_CWD="%s"\nPI_VOICE_SESSION_DIR="%s"\nPI_VOICE_SKILLS_DIR="%s"\nPI_VOICE_SERVICE_URL="http://127.0.0.1:9446"\n' \
   "$gondolin_assets_runtime" \
   "$HOME/.pi/agent" \
   "$runtime_dir/voice-workspace" \
   "$runtime_dir/pi-voice-sessions" \
   "$skills_runtime" \
-  >> "$runtime_dir/server/broker.env"
-chmod 600 "$runtime_dir/server/broker.env"
+  >> "$runtime_dir/apps/broker/broker.env"
+chmod 600 "$runtime_dir/apps/broker/broker.env"
 awk -F= '/^(DATABASE_URL|ABSURD_QUEUE|ORCHESTRATOR_APPROVAL_SECRET|ORCHESTRATOR_APPROVAL_TTL_SECONDS|ORCHESTRATOR_ALLOWED_USERS|ORCHESTRATOR_WORKSPACE_ROOTS|ORCHESTRATOR_ALLOWED_WORKSPACES|ARTIFACT_ENDPOINT_URL|ARTIFACT_BUCKET|ARTIFACT_ACCESS_KEY|ARTIFACT_SECRET_KEY|WORKER_SCRATCH_ROOT|WORKER_MAX_ARTIFACT_BYTES|PI_BINARY|PI_MODEL|PI_THINKING|PI_SESSION_DIR|WORKER_ALLOW_UNSANDBOXED|WORKER_TASK_TIMEOUT_SECONDS|WORKER_MAX_OUTPUT_BYTES|GITHUB_TOKEN|WASSETTE_BIN|WASSETTE_COMPONENT_DIR|WASSETTE_GITHUB_COMPONENT|WASSETTE_GITHUB_WRITE|MEMORY_FILE_PATH)=/ {print}' \
-  "$repo_dir/server/.env" > "$runtime_dir/server/worker.env"
+  "$repo_dir/deploy/.env" > "$runtime_dir/apps/worker/worker.env"
 printf 'PI_GONDOLIN_EXTENSION="%s"\nGONDOLIN_BROWSER_ASSETS="%s"\nGONDOLIN_BROWSER_TOOLS=0\nGONDOLIN_MEMORY_TOOLS=0\nPI_CODING_AGENT_DIR="%s"\n' \
   "$gondolin_runtime/dist/pi-extension.js" \
   "$gondolin_assets_runtime" \
   "$HOME/.pi/agent" \
-  >> "$runtime_dir/server/worker.env"
-chmod 600 "$runtime_dir/server/worker.env"
-/opt/homebrew/bin/uv sync --project "$runtime_dir/server" --frozen --no-dev
+  >> "$runtime_dir/apps/worker/worker.env"
+chmod 600 "$runtime_dir/apps/worker/worker.env"
+/opt/homebrew/bin/uv sync --project "$runtime_dir/apps/broker" --frozen --no-dev
+/opt/homebrew/bin/uv sync --project "$runtime_dir/apps/worker" --frozen --no-dev
 
 for label in com.sathish.pipecat-agent-gateway com.sathish.pipecat-edge-machine com.sathish.pipecat-edge-tunnel; do
   launchctl bootout "$domain/$label" >/dev/null 2>&1 || true
@@ -123,6 +134,9 @@ for _ in {1..30}; do
   if [[ "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:9443/health 2>/dev/null || true)" == 401 ]] \
     && [[ "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:9446/health 2>/dev/null || true)" == 401 ]] \
     && launchctl print "$domain/com.sathish.pipecat-worker" >/dev/null 2>&1; then
+    # The new app runtimes are healthy, so remove the superseded tree and its
+    # copied environment files instead of retaining stale capabilities.
+    rm -rf "$runtime_dir/server"
     echo "Native inference broker, Pi voice service, and Pi worker converged."
     exit 0
   fi

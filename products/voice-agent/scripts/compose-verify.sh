@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-compose=(docker compose --env-file "$root/server/.env" -f "$root/deploy/compose.yml")
+compose=(docker compose --env-file "$root/deploy/.env" -f "$root/deploy/compose.yml")
 failures=0
 pass() { printf 'PASS  %s\n' "$*"; }
 warn() { printf 'WARN  %s\n' "$*"; }

@@ -3,7 +3,7 @@ packages:
   - vendor/mermaid-to-excalidraw
   - products/architecture-visualization/integrations/gondolin
   - platform/agent-execution/gondolin-session
-  - products/voice-agent/services/pi-agent
+  - products/voice-agent/apps/pi-agent
   - products/architecture-visualization
   - products/architecture-visualization/core
   - products/architecture-visualization/components

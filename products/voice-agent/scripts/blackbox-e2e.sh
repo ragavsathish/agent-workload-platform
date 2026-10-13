@@ -2,10 +2,10 @@
 set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-configured_identity="$(sed -n 's/^ORCHESTRATOR_ALLOWED_USERS=//p' "$repo_dir/server/.env" | tail -1)"
+configured_identity="$(sed -n 's/^ORCHESTRATOR_ALLOWED_USERS=//p' "$repo_dir/deploy/.env" | tail -1)"
 identity="${BLACKBOX_IDENTITY:-${configured_identity%%,*}}"
 [[ -n "$identity" ]] || { echo "FAIL no smoke-test identity is configured" >&2; exit 1; }
-compose=(docker compose --env-file "$repo_dir/server/.env" -f "$repo_dir/deploy/compose.yml" -f "$repo_dir/deploy/compose.local-test.yml")
+compose=(docker compose --env-file "$repo_dir/deploy/.env" -f "$repo_dir/deploy/compose.yml" -f "$repo_dir/deploy/compose.local-test.yml")
 
 ORCHESTRATOR_ALLOWED_USERS="$identity" \
   "${compose[@]}" up -d --wait --build tailscale s3mock postgres agent-gateway voice-edge >/dev/null
@@ -30,7 +30,7 @@ after="$("${compose[@]}" exec -T postgres psql -U voice_agents -d voice_agents -
 latest="$("${compose[@]}" exec -T postgres psql -U voice_agents -d voice_agents -Atc \
   "SELECT identity || '|' || status || '|' || workspace FROM voice_task_proposals ORDER BY created_at DESC LIMIT 1")"
 IFS='|' read -r actual_identity status workspace <<<"$latest"
-expected_workspace="$(sed -n 's/^VOICE_DEFAULT_WORKSPACE=//p' "$repo_dir/server/.env" | tail -1)"
+expected_workspace="$(sed -n 's/^VOICE_DEFAULT_WORKSPACE=//p' "$repo_dir/deploy/.env" | tail -1)"
 [[ "$actual_identity" == "$identity" ]] || { echo "FAIL persisted identity mismatch" >&2; exit 1; }
 [[ "$status" == "pending" ]] || { echo "FAIL proposal should remain pending" >&2; exit 1; }
 expected_prefix="s3://agent-artifacts/workspaces/$expected_workspace/sources/"

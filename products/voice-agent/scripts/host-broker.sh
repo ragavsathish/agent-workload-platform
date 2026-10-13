@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$repo_dir/server"
-export PYTHONPATH="$repo_dir/server/src"
+runtime_dir="$HOME/Library/Application Support/PipecatEdge"
+cd "$runtime_dir/apps/broker"
+export PYTHONPATH="$runtime_dir/apps/broker/src:$runtime_dir/packages/telemetry/src"
 exec /opt/homebrew/bin/uv run python -m voice_agent.speech.presentation.http

@@ -1,4 +1,4 @@
-# 0002: Layer the Voice Agent server by bounded context
+# 0002: Separate Voice Agent apps from shared bounded-context packages
 
 Status: Accepted
 
@@ -20,11 +20,13 @@ to transcription or durable task approval required reading unrelated modules.
 
 ## Decision and Rationale
 
-Use a `src/voice_agent` package with `speech` and `tasking` bounded contexts.
-Within each context, separate domain or application logic from infrastructure
-and presentation adapters. Tests mirror those roles. Database migrations stay
-at the server root because they are release artifacts, not importable domain
-code.
+Use independently deployable roots under `products/voice-agent/apps`. Keep the
+speech implementation in the broker app because it has one process owner. Put
+the tasking domain, application, persistence, artifact code, and migrations in
+`packages/tasking` because both gateway and worker consume that seam. Put the
+payload-free Python telemetry adapter in `packages/telemetry` because edge,
+gateway, and broker consume it. Transport and process entrypoints remain in
+their owning apps. Tests follow the code they verify.
 
 | Driver | Initial reason | Evidence or constraint | Trade-off | Assessment |
 | --- | --- | --- | --- | --- |
@@ -34,8 +36,9 @@ code.
 
 ## Consequences
 
-Runtime commands use package module paths and set `PYTHONPATH=src`. Docker and
-host installers copy the package tree instead of selected flat files. New code
-must use the `Speech Inference Context` or `Tasking Context` language and place
-tests in the matching layer. The removed legacy server bot must not be restored;
-the Pipecat voice pipeline is owned by `edge/`.
+Runtime commands compose each app source root with only its shared package
+roots. Docker and host installers copy those explicit roots. Every deployable
+Python app owns a lock file; shared packages do not own process startup. New
+code must use the `Speech Inference Context` or `Tasking Context` language and
+place tests with the owning app or package. The Pipecat voice pipeline is owned
+by `apps/edge/`.

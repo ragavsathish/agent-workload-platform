@@ -110,7 +110,7 @@ services:
     pull_policy: never
     build:
       context: ..
-      dockerfile: gateway/Containerfile
+      dockerfile: apps/gateway/Dockerfile
     restart: unless-stopped
     depends_on:
       postgres:
@@ -135,7 +135,7 @@ services:
       ARTIFACT_BUCKET: ${ARTIFACT_BUCKET:-agent-artifacts}
       ARTIFACT_ACCESS_KEY: ${ARTIFACT_ACCESS_KEY:-local-test}
       ARTIFACT_SECRET_KEY: ${ARTIFACT_SECRET_KEY:-local-test}
-      ORCHESTRATOR_ALLOWED_WORKSPACES: ${ORCHESTRATOR_ALLOWED_WORKSPACES:?set ORCHESTRATOR_ALLOWED_WORKSPACES in server/.env}
+      ORCHESTRATOR_ALLOWED_WORKSPACES: ${ORCHESTRATOR_ALLOWED_WORKSPACES:?set ORCHESTRATOR_ALLOWED_WORKSPACES in deploy/.env}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-lgtm:4318
       OTEL_LOGS_EXPORTER: none
       OTEL_METRIC_EXPORT_INTERVAL: "5000"
@@ -199,7 +199,7 @@ services:
     pull_policy: never
     build:
       context: ..
-      dockerfile: edge/Containerfile
+      dockerfile: apps/edge/Containerfile
     restart: unless-stopped
     depends_on:
       agent-gateway:
@@ -207,11 +207,11 @@ services:
       tailscale:
         condition: service_started
     network_mode: service:tailscale
-    env_file: [../edge/.env]
+    env_file: [../apps/edge/.env]
     environment:
       INFERENCE_BROKER_BASE_URL: http://inference-broker:9443/v1
       AGENT_GATEWAY_BASE_URL: http://agent-gateway:9444/v1
-      VOICE_DEFAULT_WORKSPACE: ${VOICE_DEFAULT_WORKSPACE:?set VOICE_DEFAULT_WORKSPACE in server/.env}
+      VOICE_DEFAULT_WORKSPACE: ${VOICE_DEFAULT_WORKSPACE:?set VOICE_DEFAULT_WORKSPACE in deploy/.env}
       VOICE_INPUT_FILTER: ${VOICE_INPUT_FILTER:-rnnoise}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-lgtm:4318
       OTEL_LOGS_EXPORTER: none

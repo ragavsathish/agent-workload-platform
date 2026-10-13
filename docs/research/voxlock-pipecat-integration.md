@@ -41,7 +41,7 @@ first-call model download and needs no Hugging Face token.
 
 ## Enrollment sample
 
-Set these values in the ignored `products/voice-agent/server/.env`:
+Set these values in the ignored `products/voice-agent/deploy/.env`:
 
 ```dotenv
 VOICE_INPUT_FILTER=voxlock
