@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  canManuallyCompact,
   latestConversationPrompt,
   normalizeMessages,
   openVoiceSessionManager,
@@ -142,6 +143,13 @@ test("a persistent Pi session receives only the newest user turn", () => {
   ]);
   const { transcript } = splitConversation(messages);
   assert.equal(latestConversationPrompt(transcript), "Which proposal?");
+});
+
+test("manual compaction follows Pi's retained-context boundary instead of a 64k gate", () => {
+  assert.equal(canManuallyCompact(63_895, 20_000, false, "message"), true);
+  assert.equal(canManuallyCompact(20_000, 20_000, false, "message"), false);
+  assert.equal(canManuallyCompact(63_895, 20_000, true, "message"), false);
+  assert.equal(canManuallyCompact(63_895, 20_000, false, "compaction"), false);
 });
 
 test("a persistent Pi session rejects a conversation without a final user turn", () => {

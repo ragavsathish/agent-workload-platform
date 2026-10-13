@@ -7,6 +7,7 @@ import {
   calculateContextTokens,
   createAgentSession,
   createExtensionRuntime,
+  DEFAULT_COMPACTION_SETTINGS,
   defineTool,
   getLastAssistantUsage,
   ModelRuntime,
@@ -62,7 +63,19 @@ export type PublicContextUsage = {
 
 const MAX_TRANSCRIPT_ENTRIES = 200;
 const MAX_TRANSCRIPT_TEXT_CHARS = 24_000;
-const MIN_CONTEXT_TOKENS_TO_COMPACT = 64_000;
+
+export function canManuallyCompact(
+  tokens: number | null,
+  keepRecentTokens: number,
+  compacting: boolean,
+  lastEntryType: string | undefined,
+): boolean {
+  return tokens !== null
+    && tokens > keepRecentTokens
+    && !compacting
+    && lastEntryType !== undefined
+    && lastEntryType !== "compaction";
+}
 
 /** A bounded, display-safe projection of Pi events for the owner-only browser UI. */
 export class PublicTranscript {
@@ -579,17 +592,28 @@ class VoiceAgent {
     const percent = tokens !== null && contextWindow
       ? Math.min(100, (tokens / contextWindow) * 100)
       : null;
+    const sessionManager = this.session?.sessionManager
+      ?? openVoiceSessionManager(this.settings.cwd, this.settings.sessionDir);
+    const branch = sessionManager.getBranch();
+    const keepRecentTokens = this.session?.settingsManager.getCompactionKeepRecentTokens()
+      ?? DEFAULT_COMPACTION_SETTINGS.keepRecentTokens;
     return {
       tokens,
       contextWindow,
       percent,
       estimated: usage?.tokens == null && this.estimatedContextTokens !== undefined,
-      canCompact: tokens !== null && tokens >= MIN_CONTEXT_TOKENS_TO_COMPACT && !this.compacting,
+      canCompact: canManuallyCompact(
+        tokens,
+        keepRecentTokens,
+        this.compacting,
+        branch.at(-1)?.type,
+      ),
     };
   }
 
   async compact(): Promise<PublicContextUsage> {
     const execute = async (): Promise<PublicContextUsage> => {
+      if (!this.session) await this.newSession(this.systemPrompt);
       if (!this.session) throw new Error("Pi voice session is unavailable");
       this.compacting = true;
       try {
