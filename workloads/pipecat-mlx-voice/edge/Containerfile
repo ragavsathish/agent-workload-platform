@@ -1,0 +1,29 @@
+FROM ghcr.io/astral-sh/uv@sha256:88bc6eb1ccd4b82efd0e1b530caffabddf50dc2bf612e66c14ea25b8ee8a4d3d AS uv
+FROM docker.io/library/python@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f
+
+LABEL io.pipecat.edge="true"
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HOME=/tmp \
+    XDG_CACHE_HOME=/tmp/cache \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
+
+COPY --from=uv /uv /usr/local/bin/uv
+RUN groupadd --gid 65532 app && useradd --uid 65532 --gid 65532 --no-create-home app
+
+WORKDIR /app
+COPY edge/pyproject.toml edge/uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
+COPY edge/bot.py ./
+COPY edge/visual_response.py ./
+COPY server/telemetry.py ./
+COPY client/dist ./client-dist
+
+USER 65532:65532
+EXPOSE 7860
+HEALTHCHECK --interval=5s --timeout=3s --start-period=10s --retries=6 \
+    CMD ["/app/.venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/api/features', timeout=3).read()"]
+ENTRYPOINT ["/app/.venv/bin/python", "bot.py"]
+CMD ["-t", "webrtc", "--host", "127.0.0.1", "--port", "7860"]

@@ -1,0 +1,77 @@
+# Voice black-box testing
+
+For a quick check of the already-running native Pi service, use the host smoke test:
+
+```bash
+make pi-e2e-smoke
+```
+
+It authenticates against the loopback broker, sends one real `pi-agent` completion, and reads the
+authenticated transcript projection. It does not start Compose, restart LaunchAgents, print response
+content, or exercise microphone/WebSocket audio. Use `make blackbox-e2e` below for the full synthetic
+audio path through Pipecat.
+
+The black-box runner uses no microphone shortcut and no direct STT injection. It asks the native
+Kokoro broker to synthesize an utterance, resamples the PCM to browser input format, obtains a
+one-use Pipecat session token, and streams 20 ms protobuf audio frames over the browser-facing
+WebSocket. The token is carried in the URL path so the test matches the Safari/Tailscale ingress.
+The resulting MLX Whisper transcript drives Ollama and the real gateway.
+
+```bash
+make warm-models
+make blackbox-e2e
+make blackbox-voice \
+  UTTERANCE="Propose a task in the default workspace to inspect it without changing files"
+
+# Multiple turns, including approval, can be passed directly:
+./scripts/blackbox-voice.sh \
+  "Propose a task in the default workspace to report ready without changing files" \
+  "Approve that pending task now"
+```
+
+The default local mode uses `deploy/compose.local-test.yml`. It keeps the shared network namespace
+stable when Tailscale has not yet been authenticated, but opens no listener and provides no tunnel.
+After `make login`, set `BLACKBOX_USE_TAILSCALE=true` to retain the real sidecar while testing.
+
+Before the first voice task, publish the exact committed source snapshot:
+
+```bash
+make publish-workspace \
+  WORKSPACE_ID=agent-workload-platform \
+  REPOSITORY=/path/to/agent-workload-platform
+```
+
+The proposal stores the resulting content-addressed S3 URI, not a host filesystem path.
+Verification also asserts that S3Mock is loopback-only and has no Documents bind mount.
+The runner intentionally prints only audio byte counts and event counts; it never prints recognized
+or synthesized text. Compose verification fails if Docker logging is enabled for the voice edge or
+gateway, if OpenTelemetry log export is enabled, if Grafana allows anonymous access, or if an
+observability port is published beyond loopback. The end-to-end test also waits for a payload-free
+Pipecat metric to become queryable through Grafana.
+
+Verify durable results without displaying capabilities:
+
+```bash
+docker compose --env-file server/.env \
+  -f deploy/compose.yml -f deploy/compose.local-test.yml \
+  exec -T postgres psql -U voice_agents -d voice_agents -P pager=off \
+  -c "SELECT id, identity, workspace, status, task_id, created_at FROM voice_task_proposals ORDER BY created_at DESC LIMIT 5"
+```
+
+Expected security properties:
+
+- a proposal is `pending` in Postgres before a later explicit approval;
+- “propose and approve” in one turn remains pending;
+- approval creates one Absurd task id and does not expose the signed approval token to voice-edge;
+- missing/replayed session tokens and hostile origins fail the WebSocket handshake;
+- missing gateway bearer credentials return 401, wrong identities return 403, and workspace escapes
+  return 400;
+- malformed audio and oversized broker requests are rejected before model execution;
+- worker/provider failures remain durable in the Absurd tables and never cause an unsandboxed
+  fallback.
+
+The test is deliberately exploratory: inspect transcript segmentation and the exact plan persisted
+by the LLM, and vary silence, clipping, identity, origin, workspace, and approval phrasing. A
+successful transport test does not imply a successful agent run; Pi provider login remains a
+separate host prerequisite documented in
+[HOST_REQUIREMENTS.md](HOST_REQUIREMENTS.md).

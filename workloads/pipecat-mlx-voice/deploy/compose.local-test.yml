@@ -1,0 +1,11 @@
+# Stable network anchor for black-box tests before the Tailscale node is logged in.
+# This never exposes a port and must not be used as the production tunnel.
+services:
+  tailscale:
+    entrypoint: ["/bin/sh", "-c", "exec sleep infinity"]
+    command: []
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 5s
+      timeout: 2s
+      retries: 3
