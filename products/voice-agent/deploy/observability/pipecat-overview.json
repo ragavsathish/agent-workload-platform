@@ -1,97 +1,175 @@
 {
   "annotations": {"list": []},
+  "description": "Product-focused health, voice journey, latency, reliability, filtering, and task activity. Payload-free metrics and traces only.",
   "editable": false,
   "graphTooltip": 1,
   "panels": [
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
       "id": 1,
-      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
-      "targets": [
-        {
-          "expr": "sum(rate(pipecat_operation_total[$__rate_interval])) by (service_name, app_operation, app_outcome)",
-          "legendFormat": "{{service_name}} · {{app_operation}} · {{app_outcome}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Operation rate",
-      "type": "timeseries"
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"editorMode": "code", "expr": "round(sum(increase(pipecat_operation_total{app_operation=\"voice.session\",app_outcome=\"ok\"}[$__range])))", "instant": true, "legendFormat": "sessions", "range": false, "refId": "A"}],
+      "title": "Sessions ended",
+      "type": "stat"
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0},
       "id": 2,
-      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"editorMode": "code", "expr": "round(sum(increase(pipecat_operation_total{app_operation=\"pipecat.turn.completed\",app_outcome=\"ok\"}[$__range])))", "instant": true, "legendFormat": "completed turns", "range": false, "refId": "A"}],
+      "title": "Completed turns",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "decimals": 2, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 3}, {"color": "red", "value": 6}]}, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0},
+      "id": 3,
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"editorMode": "code", "expr": "histogram_quantile(0.95, sum(increase(pipecat_operation_duration_seconds_bucket{app_operation=\"pipecat.user_bot_latency\"}[$__range])) by (le))", "instant": true, "legendFormat": "p95", "range": false, "refId": "A"}],
+      "title": "Reply latency p95",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 0},
+      "id": 4,
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "auto", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
       "targets": [
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(pipecat_operation_duration_seconds_bucket[$__rate_interval])) by (le, service_name, app_operation))",
-          "legendFormat": "{{service_name}} · {{app_operation}}",
-          "refId": "A"
-        }
+        {"editorMode": "code", "expr": "round(sum(increase(pipecat_operation_total{app_outcome=\"error\"}[$__range])))", "instant": true, "legendFormat": "errors", "range": false, "refId": "A"},
+        {"editorMode": "code", "expr": "round(sum(increase(pipecat_operation_total{app_outcome=\"timeout\"}[$__range])))", "instant": true, "legendFormat": "timeouts", "range": false, "refId": "B"}
       ],
-      "title": "Operation latency p95",
+      "title": "Errors and timeouts",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "How many detected speech events progressed through transcription, inference, and audible response during the selected time range.",
+      "fieldConfig": {"defaults": {"color": {"fixedColor": "blue", "mode": "fixed"}, "min": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 9, "w": 10, "x": 0, "y": 5},
+      "id": 5,
+      "options": {"displayMode": "gradient", "legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false}, "maxVizHeight": 300, "minVizHeight": 16, "minVizWidth": 8, "namePlacement": "auto", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showUnfilled": true, "sizing": "auto", "text": {"titleSize": 12, "valueSize": 18}, "valueMode": "color"},
+      "targets": [
+        {"editorMode": "code", "expr": "round(sum(increase(pipecat_operation_total{app_operation=\"pipecat.speech.user_speech_started\"}[$__range])))", "instant": true, "legendFormat": "1 · Speech detected", "range": false, "refId": "A"},
+        {"editorMode": "code", "expr": "round(sum(increase(pipecat_operation_total{app_operation=\"pipecat.user_turn.transcript_emitted\"}[$__range])))", "instant": true, "legendFormat": "2 · Transcript emitted", "range": false, "refId": "B"},
+        {"editorMode": "code", "expr": "round(sum(increase(pipecat_operation_total{app_operation=\"pipecat.user_turn.inference_triggered\"}[$__range])))", "instant": true, "legendFormat": "3 · Inference triggered", "range": false, "refId": "C"},
+        {"editorMode": "code", "expr": "round(sum(increase(pipecat_operation_total{app_operation=\"pipecat.speech.bot_speech_started\"}[$__range])))", "instant": true, "legendFormat": "4 · Reply audio started", "range": false, "refId": "D"}
+      ],
+      "title": "Voice journey",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Completed, interrupted, and timed-out turns during the selected range.",
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 9, "w": 7, "x": 10, "y": 5},
+      "id": 6,
+      "options": {"displayLabels": ["name", "percent"], "legend": {"displayMode": "table", "placement": "bottom", "showLegend": true, "values": ["value", "percent"]}, "pieType": "donut", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "tooltip": {"hideZeros": false, "mode": "single", "sort": "none"}},
+      "targets": [
+        {"editorMode": "code", "expr": "round(sum(increase(pipecat_operation_total{app_operation=\"pipecat.turn.completed\"}[$__range])))", "instant": true, "legendFormat": "Completed", "range": false, "refId": "A"},
+        {"editorMode": "code", "expr": "round(sum(increase(pipecat_operation_total{app_operation=\"pipecat.turn.interrupted\"}[$__range])))", "instant": true, "legendFormat": "Interrupted", "range": false, "refId": "B"},
+        {"editorMode": "code", "expr": "round(sum(increase(pipecat_operation_total{app_operation=\"pipecat.user_turn.stop_timeout\"}[$__range])))", "instant": true, "legendFormat": "Timed out", "range": false, "refId": "C"}
+      ],
+      "title": "Conversation outcomes",
+      "type": "piechart"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Share of voice-filter chunks emitted downstream instead of buffered. A low value can indicate aggressive owner-voice filtering or mostly background audio.",
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "decimals": 1, "max": 100, "min": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 10}, {"color": "green", "value": 25}]}, "unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 9, "w": 7, "x": 17, "y": 5},
+      "id": 7,
+      "options": {"minVizHeight": 75, "minVizWidth": 75, "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showThresholdLabels": false, "showThresholdMarkers": true, "sizing": "auto"},
+      "targets": [{"editorMode": "code", "expr": "100 * sum(increase(pipecat_operation_total{app_operation=~\"audio[.]filter[.].*[.]process\",app_outcome=\"emitted\"}[$__range])) / clamp_min(sum(increase(pipecat_operation_total{app_operation=~\"audio[.]filter[.].*[.]process\",app_outcome=~\"emitted|buffered\"}[$__range])), 1)", "instant": true, "legendFormat": "audio passed", "range": false, "refId": "A"}],
+      "title": "Voice-filter pass rate",
+      "type": "gauge"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "User speech end to first audible bot response. Lower is better.",
+      "fieldConfig": {"defaults": {"custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "seconds", "axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 12, "lineInterpolation": "smooth", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": true}, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 14},
+      "id": 8,
+      "options": {"legend": {"calcs": ["lastNotNull", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "histogram_quantile(0.50, sum(rate(pipecat_operation_duration_seconds_bucket{app_operation=\"pipecat.user_bot_latency\"}[$__rate_interval])) by (le))", "legendFormat": "p50 reply", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.95, sum(rate(pipecat_operation_duration_seconds_bucket{app_operation=\"pipecat.user_bot_latency\"}[$__rate_interval])) by (le))", "legendFormat": "p95 reply", "range": true, "refId": "B"}
+      ],
+      "title": "User-perceived reply latency",
       "type": "timeseries"
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
-      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 8},
-      "id": 3,
-      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto"},
-      "targets": [
-        {
-          "expr": "sum(pipecat_operation_total)",
-          "legendFormat": "operations",
-          "refId": "A"
-        }
-      ],
-      "title": "Observed operations",
-      "type": "stat"
+      "description": "Native speech and Pi inference stages. The slowest line identifies the dominant response bottleneck.",
+      "fieldConfig": {"defaults": {"custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "seconds", "axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 8, "lineInterpolation": "smooth", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": true}, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 14},
+      "id": 9,
+      "options": {"legend": {"calcs": ["lastNotNull", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [{"editorMode": "code", "expr": "histogram_quantile(0.95, sum(rate(pipecat_operation_duration_seconds_bucket{app_operation=~\"inference.stt|inference.pi|inference.tts\"}[$__rate_interval])) by (le, app_operation))", "legendFormat": "{{app_operation}}", "range": true, "refId": "A"}],
+      "title": "Inference stage latency p95",
+      "type": "timeseries"
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
-      "gridPos": {"h": 7, "w": 8, "x": 8, "y": 8},
-      "id": 4,
-      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto"},
+      "description": "Voice events that show whether the browser-to-agent conversation is progressing or repeatedly interrupting.",
+      "fieldConfig": {"defaults": {"custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "events / second", "axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 18, "lineInterpolation": "stepAfter", "lineWidth": 1, "pointSize": 4, "showPoints": "never", "spanNulls": true}, "unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 23},
+      "id": 10,
+      "options": {"legend": {"calcs": ["sum"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
       "targets": [
-        {
-          "expr": "sum(pipecat_operation_total{app_outcome=\"error\"})",
-          "legendFormat": "errors",
-          "refId": "A"
-        }
+        {"editorMode": "code", "expr": "sum(rate(pipecat_operation_total{app_operation=\"pipecat.speech.user_speech_started\"}[$__rate_interval]))", "legendFormat": "speech detected", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "sum(rate(pipecat_operation_total{app_operation=\"pipecat.user_turn.transcript_emitted\"}[$__rate_interval]))", "legendFormat": "transcript emitted", "range": true, "refId": "B"},
+        {"editorMode": "code", "expr": "sum(rate(pipecat_operation_total{app_operation=\"pipecat.speech.bot_speech_started\"}[$__rate_interval]))", "legendFormat": "reply audio", "range": true, "refId": "C"},
+        {"editorMode": "code", "expr": "sum(rate(pipecat_operation_total{app_operation=\"pipecat.speech.interruption\"}[$__rate_interval]))", "legendFormat": "interruptions", "range": true, "refId": "D"}
       ],
-      "title": "Operation errors",
-      "type": "stat"
+      "title": "Conversation activity",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Payload-free failures grouped by fixed operation and outcome labels.",
+      "fieldConfig": {"defaults": {"custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "events / second", "axisPlacement": "auto", "drawStyle": "bars", "fillOpacity": 65, "lineWidth": 1, "pointSize": 4, "showPoints": "never", "spanNulls": true, "stacking": {"group": "A", "mode": "normal"}}, "unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 23},
+      "id": 11,
+      "options": {"legend": {"calcs": ["sum"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [{"editorMode": "code", "expr": "sum(rate(pipecat_operation_total{app_outcome=~\"error|timeout\"}[$__rate_interval])) by (service_name, app_operation, app_outcome)", "legendFormat": "{{service_name}} · {{app_operation}} · {{app_outcome}}", "range": true, "refId": "A"}],
+      "title": "Errors and turn timeouts",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Voice-created task proposals and decisions during the selected range.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 32},
+      "id": 12,
+      "options": {"displayMode": "gradient", "legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false}, "maxVizHeight": 300, "minVizHeight": 16, "minVizWidth": 8, "namePlacement": "auto", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showUnfilled": true, "sizing": "auto", "valueMode": "color"},
+      "targets": [{"editorMode": "code", "expr": "round(sum by (app_operation) (increase(pipecat_operation_total{app_operation=~\"task.propose|task.approve|task.cancel\"}[$__range])))", "instant": true, "legendFormat": "{{app_operation}}", "range": false, "refId": "A"}],
+      "title": "Agent task activity",
+      "type": "bargauge"
     },
     {
       "datasource": {"type": "tempo", "uid": "tempo"},
-      "gridPos": {"h": 7, "w": 8, "x": 16, "y": 8},
-      "id": 5,
-      "options": {"showHeader": true},
-      "targets": [
-        {
-          "limit": 20,
-          "query": "{ resource.service.namespace = \"pipecat-mlx-voice\" }",
-          "queryType": "traceql",
-          "refId": "A",
-          "tableType": "traces"
-        }
-      ],
+      "description": "Recent payload-free traces for drilling from a slow or failed operation into its service path.",
+      "gridPos": {"h": 8, "w": 16, "x": 8, "y": 32},
+      "id": 13,
+      "options": {"cellHeight": "sm", "showHeader": true},
+      "targets": [{"limit": 20, "query": "{ resource.service.namespace = \"pipecat-mlx-voice\" }", "queryType": "traceql", "refId": "A", "tableType": "traces"}],
       "title": "Recent payload-free traces",
       "type": "table"
     }
   ],
   "refresh": "10s",
   "schemaVersion": 41,
-  "tags": ["pipecat", "voice", "otel"],
+  "tags": ["pipecat", "voice", "product", "otel"],
   "templating": {"list": []},
   "time": {"from": "now-30m", "to": "now"},
   "timezone": "browser",
-  "title": "Pipecat Voice Overview",
+  "title": "Voice Product Health",
   "uid": "pipecat-voice-overview",
-  "version": 1
+  "version": 2
 }

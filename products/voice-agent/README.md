@@ -164,14 +164,16 @@ collector. From an authenticated tailnet device, open
 <https://pipecat-edge.tailf6d713.ts.net:8443>; Grafana trusts only the identity header injected by
 the Tailscale proxy and does not ask for another password. Direct Mac-loopback access at
 <http://127.0.0.1:3300> still requires user `admin`; obtain its generated password with
-`make grafana-password`. The provisioned **Pipecat Voice Overview** dashboard shows operation rates,
-p95 durations, errors, and recent traces for the voice edge, gateway, and native MLX inference
-broker.
+`make grafana-password`. The provisioned **Voice Product Health** dashboard follows the product
+journey from detected speech through transcript, Pi inference, and reply audio. It also shows turn
+outcomes, voice-filter pass rate, user-perceived and inference-stage latency, task activity,
+failures, and recent payload-free traces.
 
 Grafana and OTLP/HTTP bind only to Mac loopback. OTLP/gRPC, Prometheus, Tempo, and Loki ports are not
-published. Application and bundle Docker logs remain disabled, and applications do not send the
-OpenTelemetry logs signal. Telemetry is stored in the `otel-lgtm-data` Docker volume; Prometheus
-retention is seven days. This all-in-one bundle is for private local monitoring, not production.
+published. Gateway and edge stdout is retained only in bounded local Docker logs for `make logs`;
+applications do not send the OpenTelemetry logs signal. Telemetry is stored in the
+`otel-lgtm-data` Docker volume; Prometheus retention is seven days. This all-in-one bundle is for
+private local monitoring, not production.
 
 The black-box runner synthesizes speech with Kokoro, streams it through the same authenticated
 WebSocket used by the browser, transcribes it with MLX Whisper, and exercises the LLM/tool path.
