@@ -1,5 +1,7 @@
 .PHONY: setup build up down recreate verify cycle-test login status grafana-password warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e host-preflight install-host-services db-init broker worker pull-model check
 
+COMPOSE = docker compose --env-file deploy/.env -f deploy/compose.yml
+
 setup:
 	uv sync --project apps/broker --python 3.13
 	uv sync --project apps/gateway --python 3.13
@@ -12,29 +14,32 @@ setup:
 
 build:
 	cd apps/web && npm run build
-	docker compose --env-file deploy/.env -f deploy/compose.yml build
+	$(COMPOSE) build
 
 up:
 	./scripts/compose-up.sh
 
 down:
-	./scripts/compose-down.sh
+	$(COMPOSE) down
 
 recreate:
-	docker compose --env-file deploy/.env -f deploy/compose.yml up -d --wait --force-recreate
+	$(COMPOSE) up -d --wait --force-recreate
 	./scripts/compose-verify.sh
 
 verify:
 	./scripts/compose-verify.sh
 
 cycle-test:
-	./scripts/compose-cycle-test.sh
+	./tests/e2e/compose-cycle.sh
 
 login:
 	./scripts/compose-login.sh
 
 status:
-	./scripts/compose-status.sh
+	$(COMPOSE) ps
+	$(COMPOSE) exec -T tailscale tailscale --socket=/tmp/tailscaled.sock status || true
+	launchctl print "gui/$$UID/com.sathish.pipecat-broker" | sed -n '1,20p'
+	launchctl print "gui/$$UID/com.sathish.pipecat-worker" | sed -n '1,20p'
 
 grafana-password:
 	@test -s deploy/secrets/grafana-admin-password || { echo "Run make up first" >&2; exit 1; }
@@ -45,10 +50,12 @@ warm-models:
 	./scripts/edge-warm-models.sh
 
 benchmark-mlx:
-	./scripts/benchmark-mlx.sh
+	./scripts/edge-warm-models.sh >/dev/null
+	uv run --project apps/broker python apps/broker/benchmark.py $(ARGS)
 
 publish-workspace:
-	./scripts/publish-workspace.sh "$(WORKSPACE_ID)" "$(REPOSITORY)"
+	@test -n "$(WORKSPACE_ID)" -a -n "$(REPOSITORY)" || { echo "Set WORKSPACE_ID and REPOSITORY" >&2; exit 2; }
+	cd apps/gateway && PYTHONPATH=src:../../packages/tasking/src uv run --env-file ../../deploy/.env python -m voice_gateway.publish_workspace "$(WORKSPACE_ID)" "$(REPOSITORY)"
 
 blackbox-voice:
 	./tests/e2e/blackbox-voice.sh "$(UTTERANCE)"
@@ -96,7 +103,7 @@ check:
 	cd apps/web && npm run lint
 	cd apps/web && npm test
 	cd apps/web && npm run build
-	docker compose --env-file deploy/.env -f deploy/compose.yml config --quiet
+	$(COMPOSE) config --quiet
 	for script in scripts/*.sh; do bash -n "$$script"; done
 	for script in tests/e2e/*.sh deploy/launchd/run-*.sh; do bash -n "$$script"; done
 	for plist in deploy/launchd/*.plist; do plutil -lint "$$plist"; done

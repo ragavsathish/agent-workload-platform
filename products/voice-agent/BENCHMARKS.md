@@ -32,8 +32,8 @@ Reproduce the steady-state benchmark:
 ```bash
 make benchmark-mlx
 # More samples or machine-readable output:
-./scripts/benchmark-mlx.sh --iterations 5
-./scripts/benchmark-mlx.sh --iterations 5 --json
+make benchmark-mlx ARGS="--iterations 5"
+make benchmark-mlx ARGS="--iterations 5 --json"
 ```
 
 The runner warms all three models, then samples the actual native broker or Ollama MLX runner at
