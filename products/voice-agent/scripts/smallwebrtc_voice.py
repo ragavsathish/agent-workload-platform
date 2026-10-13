@@ -18,17 +18,24 @@ from av import AudioFrame
 class SyntheticMicrophone(MediaStreamTrack):
     kind = "audio"
 
-    def __init__(self, pcm: bytes) -> None:
+    def __init__(self, pcm: bytes, playback_started: asyncio.Event) -> None:
         super().__init__()
         self._pcm = pcm
         self._offset = 0
         self._pts = 0
+        self._playback_started = playback_started
 
     async def recv(self) -> AudioFrame:
         samples = 320  # 20 ms at 16 kHz
-        end = self._offset + samples * 2
-        payload = self._pcm[self._offset:end]
-        self._offset = end
+        if self._playback_started.is_set():
+            end = self._offset + samples * 2
+            payload = self._pcm[self._offset:end]
+            self._offset = end
+        else:
+            # Keep RTP flowing while the welcome turn runs. Starting a track
+            # with speech immediately after an await clips its leading audio
+            # while the receiver and jitter buffer become active.
+            payload = b""
         payload += b"\0" * max(0, samples * 2 - len(payload))
         frame = AudioFrame(format="s16", layout="mono", samples=samples)
         frame.planes[0].update(payload)
@@ -74,7 +81,8 @@ async def synthesize(utterance: str) -> bytes:
 async def run(utterance: str, identity: str, origin: str, timeout: float) -> dict[str, object]:
     pcm = await synthesize(utterance)
     peer = RTCPeerConnection()
-    peer.addTrack(SyntheticMicrophone(pcm))
+    playback_started = asyncio.Event()
+    peer.addTrack(SyntheticMicrophone(pcm, playback_started))
     channel = peer.createDataChannel("data")
     events: list[str] = []
     output_bytes = 0
@@ -102,7 +110,10 @@ async def run(utterance: str, identity: str, origin: str, timeout: float) -> dic
             event_type = str(payload.get("type", ""))
             events.append(event_type)
             if event_type == "bot-stopped-speaking" and ready.is_set():
-                response_done.set()
+                if playback_started.is_set():
+                    response_done.set()
+                else:
+                    playback_started.set()
         except Exception:
             return
 
@@ -142,6 +153,10 @@ async def run(utterance: str, identity: str, origin: str, timeout: float) -> dic
     )
 
     await asyncio.wait_for(ready.wait(), timeout=20)
+    # The server starts a welcome turn after client-ready. Do not let the
+    # synthetic microphone interrupt it: browser users naturally wait for this
+    # cue, and the black-box probe must exercise the same turn boundary.
+    await asyncio.wait_for(playback_started.wait(), timeout=timeout)
     for offset in range(0, len(pcm), 640):
         await asyncio.sleep(0.02)
     # Give VAD one second of trailing silence after the utterance.
