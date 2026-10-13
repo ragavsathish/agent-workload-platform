@@ -4,7 +4,7 @@
 <dict>
   <key>Label</key><string>com.sathish.pipecat-pi-voice</string>
   <key>ProgramArguments</key>
-  <array><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/scripts/host-pi-voice.sh</string></array>
+  <array><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/scripts/run-pi-agent.sh</string></array>
   <key>RunAtLoad</key><true/>
   <key>EnvironmentVariables</key>
   <dict>

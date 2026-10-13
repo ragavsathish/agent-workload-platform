@@ -45,7 +45,7 @@ Wassette with explicit permissions.
 | Inference Broker | `apps/broker/src/voice_agent/speech/presentation/http.py`; broker LaunchAgent |
 | Pi Voice Service | `apps/pi-agent/voice-agent-service.ts`; Pi voice LaunchAgent |
 | Pi Context Usage and Compaction | `apps/web/src/components/App.tsx`; `apps/edge/bot.py`; broker HTTP adapter; `apps/pi-agent/voice-agent-service.ts` |
-| Voice Tool Sandbox and Runtime Data | `apps/pi-agent/gondolin-workspace.ts`; `scripts/install-launch-agents.sh` |
+| Voice Tool Sandbox and Runtime Data | `apps/pi-agent/gondolin-workspace.ts`; `scripts/install-launch-agents.sh`; `deploy/launchd/run-pi-agent.sh` |
 | Agent Gateway | `apps/gateway/src/voice_gateway/main.py`; `apps/gateway/Dockerfile` |
 | Task Database and Queue | `packages/tasking/migrations/`; `packages/tasking/src/voice_agent/tasking/application/service.py`; Compose Postgres service |
 | Workspace and Result Store | `packages/tasking/src/voice_agent/tasking/infrastructure/artifacts.py`; Compose S3Mock service |

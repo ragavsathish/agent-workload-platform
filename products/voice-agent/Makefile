@@ -51,10 +51,10 @@ publish-workspace:
 	./scripts/publish-workspace.sh "$(WORKSPACE_ID)" "$(REPOSITORY)"
 
 blackbox-voice:
-	./scripts/blackbox-voice.sh "$(UTTERANCE)"
+	./tests/e2e/blackbox-voice.sh "$(UTTERANCE)"
 
 blackbox-e2e:
-	./scripts/blackbox-e2e.sh
+	./tests/e2e/blackbox-e2e.sh
 
 host-preflight:
 	./scripts/host-preflight.sh
@@ -79,8 +79,8 @@ check:
 	pnpm --dir ../.. --filter @agent-workload-platform/voice-pi-agent check
 	pnpm --dir ../.. --filter @agent-workload-platform/voice-pi-agent test
 	uv sync --project apps/broker --python 3.13
-	uv run --project apps/broker ruff check --config apps/broker/pyproject.toml apps/broker packages/telemetry deploy/test_prepare_compose.py scripts/benchmark_mlx.py
-	uv run --project apps/broker pyright --project apps/broker/pyproject.toml apps/broker packages/telemetry scripts/benchmark_mlx.py
+	uv run --project apps/broker ruff check --config apps/broker/pyproject.toml apps/broker packages/telemetry deploy/test_prepare_compose.py
+	uv run --project apps/broker pyright --project apps/broker/pyproject.toml apps/broker packages/telemetry
 	PYTHONPATH=apps/broker/src:packages/telemetry/src uv run --project apps/broker pytest apps/broker/tests packages/telemetry/tests deploy/test_prepare_compose.py
 	uv sync --project apps/gateway --python 3.13
 	uv run --project apps/gateway ruff check --config apps/gateway/pyproject.toml apps/gateway packages/tasking
@@ -98,4 +98,5 @@ check:
 	cd apps/web && npm run build
 	docker compose --env-file deploy/.env -f deploy/compose.yml config --quiet
 	for script in scripts/*.sh; do bash -n "$$script"; done
+	for script in tests/e2e/*.sh deploy/launchd/run-*.sh; do bash -n "$$script"; done
 	for plist in deploy/launchd/*.plist; do plutil -lint "$$plist"; done

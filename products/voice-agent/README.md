@@ -17,6 +17,7 @@ apps/       web, edge, pi-agent, broker, gateway, worker
 packages/   tasking, telemetry
 deploy/     Compose, macOS services, Tailscale, secrets, observability
 scripts/    setup, operation, and verification
+tests/      end-to-end probes
 docs/       product architecture
 ```
 

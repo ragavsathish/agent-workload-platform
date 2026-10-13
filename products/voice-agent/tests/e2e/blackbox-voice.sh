@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 [[ $# -ge 1 ]] || { echo "usage: $0 <synthetic utterance> [...]" >&2; exit 2; }
 
 base_compose=(docker compose --env-file "$repo_dir/deploy/.env" -f "$repo_dir/deploy/compose.yml")
@@ -28,4 +28,4 @@ if [[ -n "${BLACKBOX_IDENTITY:-}" ]]; then
   probe_args+=(--identity "$BLACKBOX_IDENTITY")
 fi
 "${compose[@]}" \
-  exec -T voice-edge /app/.venv/bin/python - "${probe_args[@]}" < "$repo_dir/scripts/smallwebrtc_voice.py"
+  exec -T voice-edge /app/.venv/bin/python - "${probe_args[@]}" < "$repo_dir/tests/e2e/smallwebrtc_voice.py"

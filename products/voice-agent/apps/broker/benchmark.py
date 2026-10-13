@@ -72,7 +72,7 @@ def find_pid(marker: str) -> int:
     output = subprocess.check_output(["ps", "-axo", "pid=,command="], text=True)
     candidates = []
     for line in output.splitlines():
-        if marker in line and "benchmark_mlx.py" not in line:
+        if marker in line and Path(__file__).name not in line:
             candidates.append(int(line.strip().split(maxsplit=1)[0]))
     if not candidates:
         raise RuntimeError(f"process not found: {marker}")

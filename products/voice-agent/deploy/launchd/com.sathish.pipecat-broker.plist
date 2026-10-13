@@ -4,7 +4,7 @@
 <dict>
   <key>Label</key><string>com.sathish.pipecat-broker</string>
   <key>ProgramArguments</key>
-  <array><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/scripts/host-broker.sh</string></array>
+  <array><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/scripts/run-broker.sh</string></array>
   <key>RunAtLoad</key><true/>
   <key>EnvironmentVariables</key>
   <dict>

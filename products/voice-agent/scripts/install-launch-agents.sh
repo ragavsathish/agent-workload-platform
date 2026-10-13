@@ -38,10 +38,14 @@ mkdir -p \
   "$runtime_dir/voice-workspace"
 chmod 700 "$runtime_dir/runtime-home"
 install -m 700 \
-  "$repo_dir/scripts/host-broker.sh" \
-  "$repo_dir/scripts/host-pi-voice.sh" \
-  "$repo_dir/scripts/host-worker.sh" \
+  "$repo_dir/deploy/launchd/run-broker.sh" \
+  "$repo_dir/deploy/launchd/run-pi-agent.sh" \
+  "$repo_dir/deploy/launchd/run-worker.sh" \
   "$runtime_dir/scripts/"
+rm -f \
+  "$runtime_dir/scripts/host-broker.sh" \
+  "$runtime_dir/scripts/host-pi-voice.sh" \
+  "$runtime_dir/scripts/host-worker.sh"
 install -m 600 \
   "$repo_dir/apps/broker/pyproject.toml" \
   "$repo_dir/apps/broker/uv.lock" \

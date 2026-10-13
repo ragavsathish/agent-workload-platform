@@ -13,7 +13,7 @@ make blackbox-voice \
   UTTERANCE="Propose a task in the default workspace to inspect it without changing files"
 
 # Multiple turns, including approval, can be passed directly:
-./scripts/blackbox-voice.sh \
+./tests/e2e/blackbox-voice.sh \
   "Propose a task in the default workspace to report ready without changing files" \
   "Approve that pending task now"
 ```

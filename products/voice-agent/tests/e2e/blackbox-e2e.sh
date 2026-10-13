@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 configured_identity="$(sed -n 's/^ORCHESTRATOR_ALLOWED_USERS=//p' "$repo_dir/deploy/.env" | tail -1)"
 identity="${BLACKBOX_IDENTITY:-${configured_identity%%,*}}"
 [[ -n "$identity" ]] || { echo "FAIL no smoke-test identity is configured" >&2; exit 1; }
@@ -15,7 +15,7 @@ before="$("${compose[@]}" exec -T postgres psql -U voice_agents -d voice_agents 
 result_file="$(mktemp -t pipecat-blackbox.XXXXXX)"
 trap 'rm -f "$result_file"' EXIT
 
-BLACKBOX_IDENTITY="$identity" BLACKBOX_SKIP_UP=true "$repo_dir/scripts/blackbox-voice.sh" \
+BLACKBOX_IDENTITY="$identity" BLACKBOX_SKIP_UP=true "$repo_dir/tests/e2e/blackbox-voice.sh" \
   "Propose a task in the default workspace to report voice black box complete without changing files" \
   >"$result_file"
 cat "$result_file"
@@ -36,4 +36,4 @@ expected_workspace="$(sed -n 's/^VOICE_DEFAULT_WORKSPACE=//p' "$repo_dir/deploy/
 expected_prefix="s3://agent-artifacts/workspaces/$expected_workspace/sources/"
 [[ "$workspace" == "$expected_prefix"*.bundle ]] || { echo "FAIL persisted immutable workspace mismatch" >&2; exit 1; }
 echo "PASS synthetic voice created one pending, identity-bound Postgres proposal"
-"$repo_dir/scripts/otel-smoke-test.sh"
+"$repo_dir/tests/e2e/otel-smoke-test.sh"

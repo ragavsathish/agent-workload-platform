@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 password_file="$root/deploy/secrets/grafana-admin-password"
 [[ -s "$password_file" ]] || { echo "FAIL Grafana credential is missing" >&2; exit 1; }
 password="$(<"$password_file")"

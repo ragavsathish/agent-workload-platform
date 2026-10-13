@@ -53,6 +53,7 @@ products/voice-agent/
 │   └── telemetry/
 ├── deploy/
 ├── scripts/
+├── tests/
 └── docs/
 ```
 
