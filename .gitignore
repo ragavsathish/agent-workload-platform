@@ -3,6 +3,7 @@
 **/.vite/
 **/.wassette-components/
 **/artifacts/
+**/.build/
 **/.pi/agent/
 **/.pi/auth.json
 **/.pi/*.session*

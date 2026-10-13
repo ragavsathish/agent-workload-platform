@@ -1,0 +1,1 @@
+"""Speech inference transport adapters."""
