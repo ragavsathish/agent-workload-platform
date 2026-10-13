@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc",
     "check": "tsc --noEmit",
+    "test:agent": "pnpm run build && node agent-smoke-test.mjs",
     "test:memory": "pnpm run build && node memory-smoke-test.mjs",
     "test:smoke": "pnpm run build && node smoke-test.mjs",
     "test:voice": "pnpm run build && node --test voice-agent-service.test.mjs"

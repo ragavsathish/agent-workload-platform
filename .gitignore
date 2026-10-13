@@ -3,6 +3,10 @@
 **/.vite/
 **/.wassette-components/
 **/artifacts/
+**/.build/
+**/.pi/agent/
+**/.pi/auth.json
+**/.pi/*.session*
 workloads/c4-excalidraw/components/generated/
 workloads/c4-excalidraw/core/generated/
 .DS_Store

@@ -6,11 +6,24 @@ fallbacks. For the C4 workload, Wassette loads `c4-suite.wasm` while Pi invokes
 its typed tools. C4-specific orchestration stays in
 `workloads/c4-excalidraw`.
 
-## Gondolin browser
+## k3s Earendil
+
+`k3s-earendil` packages Pi and Wassette as separate hardened workloads. It is
+the cluster deployment path for the development workflow agent. Pi has no
+built-in coding tools, no service-account token, and no inbound service.
+Wassette has no external network route and loads only the baked C4 suite. See
+[`k3s-earendil/README.md`](k3s-earendil/README.md).
+
+## Gondolin agent runtime
 
 `gondolin-browser` runs the official
 [`@playwright/mcp`](https://github.com/microsoft/playwright-mcp) server inside a
-Gondolin VM. Its Pi extension calls `tools/list` at session start and registers
+Gondolin VM and provides `gondolin_bash` for general agent work. The current
+task workspace is the only host directory mounted into the VM, at
+`/workspace`; other host paths are unavailable. Pi's host-side built-in tools
+stay disabled. Shell commands have a bounded timeout and output size.
+
+The extension calls Playwright's `tools/list` at session start and registers
 the returned names, descriptions, and JSON Schemas unchanged. The platform
 also runs the maintained `@modelcontextprotocol/server-memory` package. If
 `GITHUB_TOKEN` is present, it loads Microsoft's published `github-js` OCI
@@ -30,6 +43,17 @@ from pages. Memory defaults to
 Override it with `MEMORY_FILE_PATH`. The server is an upstream dependency, so
 the platform owns only its small MCP client adapter rather than a storage
 implementation.
+
+For repository, filesystem, and system-inspection tasks, Pi uses
+`gondolin_bash`. System information describes the isolated VM and its mounted
+workspace, never the Mac host. The runtime's agent smoke test verifies that a
+workspace file is readable and writable from the VM while an unmounted host
+path remains inaccessible:
+
+```sh
+cd runtimes/gondolin-browser
+pnpm test:agent
+```
 
 ## GitHub
 

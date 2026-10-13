@@ -1,0 +1,35 @@
+C4Container
+title Agent Workload Platform - Voice Interface Containers
+
+Person(user, "Tailnet User", "Talks to Pi and explicitly approves pending work")
+
+System_Boundary(platform, "Agent Workload Platform with Voice") {
+  Container(browser, "Browser Client", "React and Pipecat RTVI", "Captures audio, shows task state, and plays speech")
+  Container(ingress, "Tailnet Ingress", "Tailscale Serve", "Authenticates tailnet devices, terminates HTTPS, and proxies HTTP and WebSockets without a public or LAN port")
+  Container(edge, "Voice Edge", "Pipecat and FastAPI", "Validates exact origin and one-use path token, then runs dialogue and four narrow task tools")
+  Container(broker, "Inference Broker", "FastAPI, MLX Whisper, MLX Kokoro", "Exposes bounded STT, TTS, and exact-model chat")
+  Container(gateway, "Agent Gateway", "FastAPI", "Scopes propose, status, voice approval, and cancel to one tailnet identity")
+  ContainerDb(queue, "Durable Task Store", "Postgres and Absurd", "Stores proposals, plan hashes, tasks, checkpoints, and results")
+  Container(worker, "Pi Worker", "Native macOS process", "Runs one durable Pi session per approved task")
+  Container(gondolin, "Gondolin Tool Runtime", "Micro-VM MCP server", "Isolates browser and workspace tools")
+  Container(wassette, "Wassette MCP Runtime", "Permission-scoped WebAssembly", "Provides bounded integration tools")
+  ContainerDb(sessions, "Pi Sessions", "Host filesystem", "Stores durable per-task histories")
+}
+
+System_Ext(tailscale, "Tailscale Control Plane", "Authenticates devices and distributes tailnet configuration")
+System_Ext(ollama, "Ollama", "Runs the exact local dialogue model")
+System_Ext(models, "Model Providers", "Serve Pi's selected agent model")
+
+Rel(user, browser, "Talks, listens, and approves through")
+Rel(browser, ingress, "Loads UI and streams audio", "Tailnet HTTPS and WebSocket")
+Rel(ingress, tailscale, "Obtains device authorization and network configuration from")
+Rel(ingress, edge, "Forwards authenticated HTTP and WebSocket traffic", "Shared loopback")
+Rel(edge, broker, "Requests bounded inference", "Bearer-authenticated HTTP")
+Rel(edge, gateway, "Proposes, reads, approves, and cancels tasks", "Bearer-authenticated HTTP")
+Rel(broker, ollama, "Requests exact-model completions", "Mac loopback HTTP")
+Rel(gateway, queue, "Applies identity-bound task transitions", "Private SQL")
+Rel(worker, queue, "Consumes approved work and checkpoints results")
+Rel(worker, models, "Requests agent completions")
+Rel(worker, gondolin, "Invokes isolated tools", "Pi extension and MCP")
+Rel(worker, wassette, "Invokes permission-scoped integrations", "Pi extension and MCP")
+Rel(worker, sessions, "Writes task history")

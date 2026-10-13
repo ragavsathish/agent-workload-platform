@@ -1,6 +1,6 @@
 # Agent Workload Platform
 
-This monorepo lets an agent running on a client machine orchestrate workloads
+This monorepo lets an agent running on a client machine orchestrate products
 across local tools, capability-limited WebAssembly modules, isolated Gondolin
 micro-VMs, browsers, storage systems, and remote model infrastructure.
 
@@ -25,6 +25,25 @@ C4-to-Excalidraw is the first platform workload. Follow the [C4 workload
 README](workloads/c4-excalidraw/README.md) for setup, build, verification, and
 the real Pi dog-food run, including supported syntax and rendering limits.
 
+## k3s Earendil runtime
+
+The development-agent runtime can run as a hardened Pi workload beside a
+separately confined Wassette deployment in k3s. Pi retains the model loop but
+starts without its local shell and filesystem tools; its only workload tools
+come from Wassette. See [the k3s Earendil runtime](runtimes/k3s-earendil/README.md)
+for image construction, credential provisioning, deployment, and boundary
+verification.
+
+## Voice agent product
+
+The [voice agent product](products/voice-agent/README.md) provides
+a private browser voice assistant for Apple Silicon. MLX Whisper, Ollama, and
+Kokoro stay on macOS behind a narrow authenticated inference broker, while the
+browser-facing Pipecat application, task gateway, storage, observability, and
+tailnet ingress run under Docker Compose. See its
+[host requirements](products/voice-agent/HOST_REQUIREMENTS.md) for the
+security boundary, exact prerequisites, and repeatable lifecycle checks.
+
 The source-controlled architecture views are:
 
 - [C1 system context](workloads/c4-excalidraw/examples/c1-system-context.mmd)
@@ -33,6 +52,10 @@ The source-controlled architecture views are:
 
 ## Layout
 
+- `products/` — user-facing vertical slices. Each product owns its applications,
+  services, workers, deployment profiles, tests, documentation, and vocabulary.
+  - `voice-agent` — tailnet-only browser voice with host MLX inference and
+    Gondolin-isolated Pi tools.
 - `apps/` — reusable runnable applications, including the pinned `excalidraw-mcp` submodule.
 - `workloads/` — independently runnable agent workloads, including `c4-excalidraw`.
 - `adapters/` — implementations at external seams:
@@ -44,10 +67,14 @@ The source-controlled architecture views are:
     tools from an isolated VM alongside persistent memory and optional GitHub
     tools in Wassette, without copying their schemas.
 
-Workload-specific contracts, prompts, examples, and modules remain inside the
-workload until another workload genuinely reuses them. Shared implementations
+Product-specific contracts, prompts, examples, and modules remain inside the
+product until another product genuinely reuses them. Shared implementations
 then move to `components/`, `adapters/`, `apps/`, or `runtimes/` according to
 their responsibility.
+
+The repository is migrating from technical top-level buckets to product and
+bounded-context ownership. See [Monorepo organization](docs/monorepo-organization.md)
+for the target structure and remaining moves.
 
 There is no repository-specific dispatcher or lifecycle wrapper. A single pnpm
 workspace installs and runs every JavaScript package. Upstream lockfiles remain
