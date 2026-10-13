@@ -36,30 +36,28 @@ because it uses Docker, macOS LaunchAgents, or Kubernetes.
 
 ## Voice Agent boundary
 
-The Voice Agent is a vertical product slice. Deployable processes are explicit
-apps; code enters `packages/` only when at least two apps consume its interface:
+The Voice Agent follows one rule: deployable processes are apps; reusable code
+with multiple consumers is a package.
 
 ```text
 products/voice-agent/
 ├── apps/
-│   ├── web/      browser application
-│   ├── edge/     Pipecat/WebRTC voice edge
-│   ├── pi-agent/ persistent Pi voice session and isolated tools
-│   ├── broker/   native MLX inference adapter
-│   ├── gateway/  task lifecycle HTTP adapter
-│   └── worker/   durable isolated Pi task consumer
+│   ├── web/
+│   ├── edge/
+│   ├── pi-agent/
+│   ├── broker/
+│   ├── gateway/
+│   └── worker/
 ├── packages/
-│   ├── tasking/  task domain, use cases, persistence, and artifacts
-│   └── telemetry/ payload-free Python observability adapter
-├── deploy/       Compose, macOS, tailnet, secrets, and observability
-├── scripts/      lifecycle and verification commands
-└── docs/         product architecture and research
+│   ├── tasking/
+│   └── telemetry/
+├── deploy/
+├── scripts/
+└── docs/
 ```
 
-Each Python app owns its environment and lock file. Compose and macOS profiles
-remain product deployment concerns and reference app roots explicitly. The
-shared packages expose source interfaces; they do not own process startup,
-transport adapters, or deployment configuration.
+Each Python app owns its lock file. Shared packages do not start processes or
+own deployment configuration.
 
 ## Repository rules
 

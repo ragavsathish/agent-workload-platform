@@ -10,19 +10,15 @@ boundaries as authoritative Mermaid sources.
 
 ## Product structure
 
-This directory is the complete voice-agent product boundary. Deployable processes live in
-`apps/`; reusable code lives in `packages/` only when multiple apps consume it:
+Deployable processes live in `apps/`. Code shared by multiple apps lives in `packages/`.
 
-- `apps/web/` is the browser application.
-- `apps/edge/` is the containerized Pipecat/WebRTC voice edge.
-- `apps/pi-agent/` owns the persistent Pi voice session and its Gondolin-isolated native tools.
-- `apps/broker/` is the native MLX inference adapter exposed on host loopback.
-- `apps/gateway/` is the containerized owner-facing task lifecycle API.
-- `apps/worker/` consumes durable tasks and runs isolated Pi jobs.
-- `packages/tasking/` owns shared task domain, application, persistence, and artifact code.
-- `packages/telemetry/` owns the payload-free OpenTelemetry adapter shared by Python apps.
-- `deploy/` owns Compose, macOS LaunchAgent, tailnet, secret-mount, and observability
-  configuration; `scripts/` is the product lifecycle and verification surface.
+```text
+apps/       web, edge, pi-agent, broker, gateway, worker
+packages/   tasking, telemetry
+deploy/     Compose, macOS services, Tailscale, secrets, observability
+scripts/    setup, operation, and verification
+docs/       product architecture
+```
 
 The product vocabulary is defined in [GLOSSARY.md](GLOSSARY.md). Repository-wide
 ownership and planned extractions are documented in
