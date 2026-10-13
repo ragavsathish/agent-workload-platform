@@ -26,20 +26,30 @@ def test_health_requires_the_separate_gateway_capability(monkeypatch):
     ).json() == {"status": "ok"}
 
 
-def test_voice_view_never_returns_host_approval_token(monkeypatch):
+def test_voice_view_never_returns_host_approval_token_or_raw_events(monkeypatch):
     gateway = load_gateway(monkeypatch)
 
     view = gateway.voice_view(
         {
             "approval_token": "host-only",
             "status": "pending",
-            "result": {"stdout": "x" * 20_000},
+            "result": {
+                "state": "completed",
+                "result": {
+                    "exit_code": 0,
+                    "stdout": "private raw output",
+                    "response": {
+                        "spoken": "Done.",
+                        "mermaid": "flowchart TD\n  task --> done",
+                    },
+                },
+            },
         }
     )
 
     assert "approval_token" not in view
-    assert view["result_truncated"] is True
-    assert len(view["result"]) == 12_000
+    assert "private raw output" not in str(view)
+    assert view["result"]["result"]["response"]["spoken"] == "Done."
 
 
 def test_gateway_capability_is_bound_to_one_configured_identity(monkeypatch):

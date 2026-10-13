@@ -9,14 +9,97 @@ import {
   normalizeMessages,
   openVoiceSessionManager,
   parseEnvFile,
+  PublicTranscript,
   splitConversation,
+  submitAgentTask,
 } from "./dist/voice-agent-service.js";
+import {
+  createGondolinTools,
+  GUEST_SKILLS,
+  toGondolinPath,
+} from "./dist/gondolin-workspace.js";
+
+test("voice Pi exposes its native coding tools through Gondolin", () => {
+  const tools = createGondolinTools({ fs: {} }, "/host/workspace");
+  assert.deepEqual(tools.map((tool) => tool.name), ["read", "write", "edit", "bash"]);
+});
+
+test("Gondolin tool paths stay inside the mounted workspace", () => {
+  assert.equal(toGondolinPath("/host/workspace", "/host/workspace"), "/workspace");
+  assert.equal(
+    toGondolinPath("/host/workspace", "/host/workspace/src/app.ts"),
+    "/workspace/src/app.ts",
+  );
+  assert.throws(
+    () => toGondolinPath("/host/workspace", "/host/private.txt"),
+    /path escapes workspace/,
+  );
+});
+
+test("reusable skills have a dedicated guest mount", () => {
+  assert.equal(GUEST_SKILLS, "/skills");
+});
+
+test("voice Pi can submit durable work directly to another Pi worker", async () => {
+  const requests = [];
+  const result = await submitAgentTask(
+    async (method, path, body) => {
+      requests.push({ method, path, body });
+      return path === "/tasks"
+        ? { id: "proposal-1", status: "pending" }
+        : { id: "proposal-1", status: "queued" };
+    },
+    "owner@example.com",
+    "Run the complete test suite.",
+    "default",
+  );
+
+  assert.deepEqual(requests, [
+    {
+      method: "POST",
+      path: "/tasks",
+      body: {
+        identity: "owner@example.com",
+        instruction: "Run the complete test suite.",
+        workspace: "default",
+      },
+    },
+    {
+      method: "POST",
+      path: "/tasks/proposal-1/approve",
+      body: { identity: "owner@example.com" },
+    },
+  ]);
+  assert.deepEqual(result, { id: "proposal-1", status: "queued" });
+});
 
 test("parseEnvFile accepts the installed quoted environment format", () => {
   assert.deepEqual(parseEnvFile('A=one\nB="two words"\n# ignored\n'), {
     A: "one",
     B: "two words",
   });
+});
+
+test("public transcript exposes text and tool status without tool payloads", () => {
+  const transcript = new PublicTranscript();
+  transcript.addUser("Inspect the repository.");
+  const assistantId = transcript.beginAssistant();
+  transcript.appendAssistantText(assistantId, "I will inspect it.");
+  transcript.finishAssistant(assistantId);
+  transcript.startTool("call-secret", "gondolin_bash");
+  transcript.finishTool("call-secret", false);
+
+  const snapshot = transcript.snapshot();
+  assert.equal(snapshot.revision, 6);
+  assert.deepEqual(
+    snapshot.entries.map(({ role, text, status }) => ({ role, text, status })),
+    [
+      { role: "user", text: "Inspect the repository.", status: undefined },
+      { role: "assistant", text: "I will inspect it.", status: "completed" },
+      { role: "tool", text: "gondolin_bash", status: "completed" },
+    ],
+  );
+  assert.doesNotMatch(JSON.stringify(snapshot), /argument|result|secret payload/);
 });
 
 test("voice messages keep the system prompt separate from the transcript", () => {

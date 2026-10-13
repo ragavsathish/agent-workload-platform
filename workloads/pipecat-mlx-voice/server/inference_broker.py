@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field
 
 from mlx_tts import synthesize_pcm
 from telemetry import configure_telemetry
+from transcription import extract_transcript
 
 # The broker handles raw voice data. Do not emit library or application logs from this process.
 logger.remove()
@@ -114,6 +115,7 @@ async def transcribe(
         if len(content) > MAX_AUDIO_BYTES:
             raise HTTPException(status_code=413, detail="audio payload too large")
         audio = _decode_wav(content)
+        telemetry.record("inference.stt.audio", outcome="accepted")
         async with _inference_slot:
             result = cast(
                 dict[str, Any],
@@ -125,13 +127,15 @@ async def transcribe(
                     language=os.getenv("STT_LANGUAGE", "en"),
                 ),
             )
-        text = " ".join(
-            str(segment.get("text", "")).strip()
-            for segment in result.get("segments", [])
-            if segment.get("no_speech_prob", 0.0) < 0.6
-            and segment.get("compression_ratio") != 0.5555555555555556
-        ).strip()
-        return {"text": text}
+        transcript = extract_transcript(result)
+        telemetry.record("inference.stt.transcript", outcome=transcript.outcome)
+        if transcript.filtered_segments:
+            telemetry.record(
+                "inference.stt.segment",
+                outcome="filtered",
+                count=transcript.filtered_segments,
+            )
+        return {"text": transcript.text}
 
 
 @app.post("/v1/audio/speech")
@@ -295,6 +299,68 @@ async def pi_chat(request: Request, _: None = Depends(authenticate)) -> Streamin
         if payload.get("tools"):
             raise HTTPException(status_code=400, detail="external tools are not accepted by Pi voice")
         client: httpx.AsyncClient = request.app.state.http
+        completion_id = f"chatcmpl-pi-{uuid.uuid4().hex}"
+        created = int(time.time())
+
+        if payload.get("stream", False):
+            async def chunks():
+                try:
+                    async with client.stream(
+                        "POST",
+                        f"{_pi_service_url()}/v1/turn/stream",
+                        json={"messages": messages},
+                        headers={"Authorization": f"Bearer {BROKER_TOKEN}"},
+                        timeout=float(os.getenv("PI_VOICE_TIMEOUT_SECONDS", "120")) + 5,
+                    ) as response:
+                        if response.status_code != 200:
+                            yield f"data: {json.dumps({'error': {'message': 'Pi voice turn failed'}})}\n\n"
+                            yield "data: [DONE]\n\n"
+                            return
+                        async for line in response.aiter_lines():
+                            if not line.startswith("data: "):
+                                continue
+                            raw_event = line[6:]
+                            try:
+                                event = json.loads(raw_event)
+                            except ValueError:
+                                continue
+                            if event.get("type") == "delta" and isinstance(event.get("delta"), str):
+                                chunk = {
+                                    "id": completion_id,
+                                    "object": "chat.completion.chunk",
+                                    "created": created,
+                                    "model": "pi-agent",
+                                    "choices": [{
+                                        "index": 0,
+                                        "delta": {"role": "assistant", "content": event["delta"]},
+                                        "finish_reason": None,
+                                    }],
+                                }
+                                yield f"data: {json.dumps(chunk)}\n\n"
+                            elif event.get("type") == "error":
+                                error_chunk = {"error": {"message": str(event.get("detail", "Pi voice turn failed"))}}
+                                yield f"data: {json.dumps(error_chunk)}\n\n"
+                                break
+                except (TimeoutError, httpx.HTTPError) as exc:
+                    error_chunk = {"error": {"message": "Pi voice service is unavailable"}}
+                    logger.debug("Pi streaming request failed: {}", exc)
+                    yield f"data: {json.dumps(error_chunk)}\n\n"
+                last = {
+                    "id": completion_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": "pi-agent",
+                    "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                }
+                yield f"data: {json.dumps(last)}\n\n"
+                yield "data: [DONE]\n\n"
+
+            return StreamingResponse(
+                chunks(),
+                media_type="text/event-stream",
+                headers={"cache-control": "no-cache, no-transform", "x-accel-buffering": "no"},
+            )
+
         try:
             async with asyncio.timeout(float(os.getenv("PI_VOICE_TIMEOUT_SECONDS", "120")) + 5):
                 response = await client.post(
@@ -314,44 +380,35 @@ async def pi_chat(request: Request, _: None = Depends(authenticate)) -> Streamin
         if not isinstance(text, str) or not text.strip():
             raise HTTPException(status_code=502, detail="Pi voice returned an empty response")
 
-        completion_id = f"chatcmpl-pi-{uuid.uuid4().hex}"
-        created = int(time.time())
-        if not payload.get("stream", False):
-            return Response(
-                content=json.dumps(
-                    _openai_completion(
-                        text, model="pi-agent", completion_id=completion_id, created=created
-                    )
-                ),
-                media_type="application/json",
-            )
+        return Response(
+            content=json.dumps(
+                _openai_completion(
+                    text, model="pi-agent", completion_id=completion_id, created=created
+                )
+            ),
+            media_type="application/json",
+        )
 
-        async def chunks():
-            first = {
-                "id": completion_id,
-                "object": "chat.completion.chunk",
-                "created": created,
-                "model": "pi-agent",
-                "choices": [
-                    {
-                        "index": 0,
-                        "delta": {"role": "assistant", "content": text},
-                        "finish_reason": None,
-                    }
-                ],
-            }
-            last = {
-                "id": completion_id,
-                "object": "chat.completion.chunk",
-                "created": created,
-                "model": "pi-agent",
-                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
-            }
-            yield f"data: {json.dumps(first)}\n\n"
-            yield f"data: {json.dumps(last)}\n\n"
-            yield "data: [DONE]\n\n"
 
-        return StreamingResponse(chunks(), media_type="text/event-stream")
+@app.get("/v1/pi/transcript", response_model=None)
+async def pi_transcript(request: Request, _: None = Depends(authenticate)) -> Response:
+    """Return Pi's bounded, display-safe transcript projection."""
+
+    client: httpx.AsyncClient = request.app.state.http
+    try:
+        response = await client.get(
+            f"{_pi_service_url()}/v1/transcript",
+            headers={"Authorization": f"Bearer {BROKER_TOKEN}"},
+        )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="Pi transcript is unavailable") from exc
+    if response.status_code != 200 or len(response.content) > 1_000_000:
+        raise HTTPException(status_code=502, detail="Pi transcript is unavailable")
+    return Response(
+        content=response.content,
+        media_type="application/json",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 if __name__ == "__main__":

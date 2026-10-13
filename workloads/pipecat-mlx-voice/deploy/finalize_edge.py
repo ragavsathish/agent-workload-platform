@@ -22,15 +22,16 @@ def main() -> None:
     replacements = {
         "EDGE_ALLOWED_USERS": login,
         "PIPECAT_ALLOWED_ORIGINS": f"https://{dns_name}",
-        # Tailscale Serve terminates HTTPS and forwards the authenticated user
-        # identity while tokens travel in Pipecat's supported URL path.
-        "PIPECAT_WEBSOCKET_AUTH": "token",
         "AGENT_GATEWAY_TOKEN_FILE": "/run/secrets/agent-gateway-token",
         "AGENT_GATEWAY_BASE_URL": "http://agent-gateway:9444/v1",
     }
 
     def update(path: Path, values: dict[str, str]) -> None:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        lines = [
+            line
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.split("=", 1)[0] != "PIPECAT_WEBSOCKET_AUTH"
+        ]
         seen: set[str] = set()
         output: list[str] = []
         for line in lines:

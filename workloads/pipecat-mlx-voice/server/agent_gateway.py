@@ -11,6 +11,7 @@ import asyncio
 import json
 import os
 import secrets
+from io import StringIO
 from pathlib import Path
 from typing import Annotated
 
@@ -19,6 +20,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from orchestrator.config import Settings
+from orchestrator.pi_response import parse_pi_event_stream, response_from_text
 from orchestrator.service import ProposalError, TaskService
 from telemetry import configure_telemetry
 
@@ -72,15 +74,58 @@ def normalized_identity(identity: str) -> str:
     return value
 
 
+def _public_task_result(task_result: object) -> object:
+    if not isinstance(task_result, dict):
+        return task_result
+    public: dict[str, object] = {"state": task_result.get("state", "pending")}
+    if task_result.get("failure") is not None:
+        public["failure"] = str(task_result["failure"])[:2_000]
+
+    execution = task_result.get("result")
+    if not isinstance(execution, dict):
+        return public
+
+    response = execution.get("response")
+    if isinstance(response, dict):
+        normalized = response_from_text(json.dumps(response, ensure_ascii=False))
+        original_text = response.get("text")
+        response_text = (
+            original_text.strip()[:12_000]
+            if isinstance(original_text, str) and original_text.strip()
+            else normalized.spoken
+        )
+    elif isinstance(execution.get("stdout"), str):
+        try:
+            normalized = parse_pi_event_stream(StringIO(execution["stdout"]))
+        except RuntimeError:
+            normalized = response_from_text("Legacy task completed; its final response is unavailable.")
+        response_text = normalized.text
+    else:
+        normalized = response_from_text("Task completed.")
+        response_text = normalized.text
+
+    public_execution: dict[str, object] = {
+        "exit_code": execution.get("exit_code"),
+        "response": {
+            "text": response_text,
+            "spoken": normalized.spoken,
+            "mermaid": normalized.mermaid,
+        },
+    }
+    artifacts = execution.get("artifacts")
+    if isinstance(artifacts, dict):
+        public_execution["artifacts"] = sorted(
+            str(name) for name in artifacts if isinstance(name, str)
+        )
+    public["result"] = public_execution
+    return public
+
+
 def voice_view(result: dict[str, object]) -> dict[str, object]:
-    """Remove host approval capabilities and bound task output for voice."""
+    """Remove host capabilities and raw Pi events from the owner-facing view."""
     view = dict(result)
     view.pop("approval_token", None)
-    task_result = view.get("result")
-    if task_result is not None:
-        rendered = json.dumps(task_result, default=str, ensure_ascii=True)
-        view["result"] = rendered[:12_000]
-        view["result_truncated"] = len(rendered) > 12_000
+    view["result"] = _public_task_result(view.get("result"))
     return view
 
 
@@ -106,6 +151,21 @@ async def propose(body: ProposalRequest, _: None = Depends(authenticate)):
             return voice_view(result)
         except (ProposalError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/v1/tasks")
+async def list_tasks(
+    identity: str = Query(min_length=3, max_length=320),
+    limit: int = Query(default=50, ge=1, le=100),
+    _: None = Depends(authenticate),
+):
+    with telemetry.observe("task.list"):
+        results = await asyncio.to_thread(
+            service().list,
+            identity=normalized_identity(identity),
+            limit=limit,
+        )
+        return [voice_view(result) for result in results]
 
 
 @app.get("/v1/tasks/{proposal_id}")

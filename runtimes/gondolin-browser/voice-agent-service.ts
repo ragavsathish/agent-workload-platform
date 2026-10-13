@@ -13,6 +13,8 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
+import { GondolinWorkspace } from "./gondolin-workspace.js";
+
 type VoiceMessage = {
   role: "system" | "developer" | "user" | "assistant";
   content: string;
@@ -21,6 +23,7 @@ type VoiceMessage = {
 type ServiceSettings = {
   agentDir: string;
   cwd: string;
+  gondolinAssets: string;
   gatewayToken: string;
   gatewayUrl: string;
   identity: string;
@@ -29,6 +32,7 @@ type ServiceSettings = {
   model?: string;
   sessionDir: string;
   serviceToken: string;
+  skillsDir: string;
   thinking: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   timeoutMs: number;
 };
@@ -37,6 +41,93 @@ type ToolResult = {
   content: Array<{ type: "text"; text: string }>;
   details: { service: string; tool: string };
 };
+
+export type PublicTranscriptEntry = {
+  id: string;
+  timestamp: number;
+  role: "user" | "assistant" | "tool";
+  text: string;
+  status?: "running" | "completed" | "failed";
+};
+
+const MAX_TRANSCRIPT_ENTRIES = 200;
+const MAX_TRANSCRIPT_TEXT_CHARS = 24_000;
+
+/** A bounded, display-safe projection of Pi events for the owner-only browser UI. */
+export class PublicTranscript {
+  private entries: PublicTranscriptEntry[] = [];
+  private nextId = 1;
+  private revision = 0;
+
+  private append(
+    entry: Omit<PublicTranscriptEntry, "id" | "timestamp">,
+    requestedId?: string,
+  ): string {
+    const id = requestedId?.slice(0, 128) || String(this.nextId++);
+    this.entries.push({
+      ...entry,
+      id,
+      timestamp: Date.now(),
+      text: entry.text.slice(0, MAX_TRANSCRIPT_TEXT_CHARS),
+    });
+    if (this.entries.length > MAX_TRANSCRIPT_ENTRIES) {
+      this.entries.splice(0, this.entries.length - MAX_TRANSCRIPT_ENTRIES);
+    }
+    this.revision += 1;
+    return id;
+  }
+
+  addUser(text: string): void {
+    this.append({ role: "user", text });
+  }
+
+  beginAssistant(): string {
+    return this.append({ role: "assistant", text: "", status: "running" });
+  }
+
+  appendAssistantText(id: string, delta: string): void {
+    const entry = this.entries.find((candidate) => candidate.id === id);
+    if (!entry || entry.role !== "assistant" || entry.status !== "running") return;
+    entry.text = (entry.text + delta).slice(0, MAX_TRANSCRIPT_TEXT_CHARS);
+    this.revision += 1;
+  }
+
+  finishAssistant(id: string): void {
+    const index = this.entries.findIndex((candidate) => candidate.id === id);
+    if (index < 0) return;
+    if (!this.entries[index].text.trim()) {
+      this.entries.splice(index, 1);
+    } else {
+      this.entries[index].status = "completed";
+    }
+    this.revision += 1;
+  }
+
+  startTool(toolCallId: string, toolName: string): void {
+    const safeName = toolName.replace(/[^a-zA-Z0-9_.:-]/g, "").slice(0, 80) || "tool";
+    this.append({
+      role: "tool",
+      text: safeName,
+      status: "running",
+    }, toolCallId);
+  }
+
+  finishTool(toolCallId: string, failed: boolean): void {
+    const entry = this.entries.find(
+      (candidate) => candidate.role === "tool" && candidate.id === toolCallId.slice(0, 128),
+    );
+    if (!entry) return;
+    entry.status = failed ? "failed" : "completed";
+    this.revision += 1;
+  }
+
+  snapshot(): { revision: number; entries: PublicTranscriptEntry[] } {
+    return {
+      revision: this.revision,
+      entries: this.entries.map((entry) => ({ ...entry })),
+    };
+  }
+}
 
 const MAX_BODY_BYTES = 131_072;
 const proposalIdParameters = Type.Object(
@@ -208,17 +299,50 @@ async function gatewayRequest(
   return payload as Record<string, unknown>;
 }
 
+type TaskGatewayRequest = (
+  method: "GET" | "POST",
+  path: string,
+  body?: Record<string, string>,
+) => Promise<Record<string, unknown>>;
+
+export async function submitAgentTask(
+  request: TaskGatewayRequest,
+  identity: string,
+  instruction: string,
+  workspace: string,
+): Promise<Record<string, unknown>> {
+  const proposal = await request("POST", "/tasks", { identity, instruction, workspace });
+  if (typeof proposal.id !== "string" || proposal.id.length === 0) {
+    throw new Error("agent gateway created a proposal without an ID");
+  }
+  return request(
+    "POST",
+    `/tasks/${encodeURIComponent(proposal.id)}/approve`,
+    { identity },
+  );
+}
+
 class VoiceAgent {
+  private readonly gondolin: GondolinWorkspace;
   private readonly modelRuntime: ModelRuntime;
   private readonly settings: ServiceSettings;
   private createdThisTurn = new Set<string>();
   private session?: AgentSession;
   private systemPrompt = "";
+  private readonly transcript = new PublicTranscript();
+  private activeAssistantId?: string;
+  private unsubscribeSession?: () => void;
   private turnQueue: Promise<void> = Promise.resolve();
+  private activeDeltaSink?: (delta: string) => void;
 
-  private constructor(settings: ServiceSettings, modelRuntime: ModelRuntime) {
+  private constructor(
+    settings: ServiceSettings,
+    modelRuntime: ModelRuntime,
+    gondolin: GondolinWorkspace,
+  ) {
     this.settings = settings;
     this.modelRuntime = modelRuntime;
+    this.gondolin = gondolin;
   }
 
   static async create(settings: ServiceSettings): Promise<VoiceAgent> {
@@ -228,11 +352,18 @@ class VoiceAgent {
       modelsStorePath: join(settings.agentDir, "models-store.json"),
       allowModelNetwork: false,
     });
-    return new VoiceAgent(settings, modelRuntime);
+    const gondolin = await GondolinWorkspace.create({
+      imagePath: settings.gondolinAssets,
+      localCwd: settings.cwd,
+      skillsDir: settings.skillsDir,
+      sessionLabel: "pi-voice",
+    });
+    return new VoiceAgent(settings, modelRuntime, gondolin);
   }
 
   private tools() {
     return [
+      ...this.gondolin.tools(),
       defineTool({
         name: "propose_agent_task",
         label: "Propose agent task",
@@ -253,6 +384,29 @@ class VoiceAgent {
           });
           if (typeof payload.id === "string") this.createdThisTurn.add(payload.id);
           return toolResult(payload, "propose_agent_task");
+        },
+      }),
+      defineTool({
+        name: "submit_agent_task",
+        label: "Submit agent task",
+        description:
+          "Create and immediately approve durable project work for another Pi worker to pick up. No later approval is required.",
+        promptSnippet: "Submit durable asynchronous work directly to another Pi worker.",
+        parameters: Type.Object(
+          {
+            instruction: Type.String({ description: "Complete and specific instruction for Pi." }),
+            workspace: Type.String({ description: "Allowlisted logical workspace name." }),
+          },
+          { additionalProperties: false },
+        ),
+        execute: async (_toolCallId, params) => {
+          const payload = await submitAgentTask(
+            (method, path, body) => gatewayRequest(this.settings, method, path, body),
+            this.settings.identity,
+            params.instruction,
+            params.workspace,
+          );
+          return toolResult(payload, "submit_agent_task");
         },
       }),
       defineTool({
@@ -309,6 +463,8 @@ class VoiceAgent {
   }
 
   private async newSession(systemPrompt: string): Promise<void> {
+    this.unsubscribeSession?.();
+    this.unsubscribeSession = undefined;
     this.session?.dispose();
     const resourceLoader = staticResourceLoader(systemPrompt);
     let model;
@@ -329,9 +485,13 @@ class VoiceAgent {
       modelRuntime: this.modelRuntime,
       model,
       thinkingLevel: this.settings.thinking,
-      noTools: "builtin",
       tools: [
+        "read",
+        "write",
+        "edit",
+        "bash",
         "propose_agent_task",
+        "submit_agent_task",
         "get_agent_task",
         "approve_agent_task",
         "cancel_agent_task",
@@ -341,10 +501,36 @@ class VoiceAgent {
       sessionManager: openVoiceSessionManager(this.settings.cwd, this.settings.sessionDir),
     });
     this.session = session;
+    this.unsubscribeSession = session.subscribe((event) => {
+      if (event.type === "message_start" && event.message.role === "assistant") {
+        this.activeAssistantId = this.transcript.beginAssistant();
+      } else if (
+        event.type === "message_update"
+        && event.assistantMessageEvent.type === "text_delta"
+      ) {
+        this.activeAssistantId ??= this.transcript.beginAssistant();
+        this.transcript.appendAssistantText(
+          this.activeAssistantId,
+          event.assistantMessageEvent.delta,
+        );
+        this.activeDeltaSink?.(event.assistantMessageEvent.delta);
+      } else if (event.type === "message_end" && event.message.role === "assistant") {
+        if (this.activeAssistantId) this.transcript.finishAssistant(this.activeAssistantId);
+        this.activeAssistantId = undefined;
+      } else if (event.type === "tool_execution_start") {
+        this.transcript.startTool(event.toolCallId, event.toolName);
+      } else if (event.type === "tool_execution_end") {
+        this.transcript.finishTool(event.toolCallId, event.isError);
+      }
+    });
     this.systemPrompt = systemPrompt;
   }
 
-  async turn(rawMessages: unknown): Promise<string> {
+  transcriptSnapshot(): { revision: number; entries: PublicTranscriptEntry[] } {
+    return this.transcript.snapshot();
+  }
+
+  private async runTurn(rawMessages: unknown, onDelta?: (delta: string) => void): Promise<string> {
     const execute = async (): Promise<string> => {
       const messages = normalizeMessages(rawMessages);
       const { systemPrompt, transcript } = splitConversation(messages);
@@ -355,6 +541,8 @@ class VoiceAgent {
 
       this.createdThisTurn = new Set<string>();
       const prompt = latestConversationPrompt(transcript);
+      this.transcript.addUser(prompt);
+      this.activeDeltaSink = onDelta;
 
       let timedOut = false;
       const timeout = setTimeout(() => {
@@ -366,6 +554,7 @@ class VoiceAgent {
         await this.session.waitForIdle();
       } finally {
         clearTimeout(timeout);
+        this.activeDeltaSink = undefined;
       }
       if (timedOut) throw new Error("Pi voice turn timed out");
       return assistantText(this.session);
@@ -374,6 +563,30 @@ class VoiceAgent {
     const result = this.turnQueue.then(execute, execute);
     this.turnQueue = result.then(() => undefined, () => undefined);
     return result;
+  }
+
+  async turn(rawMessages: unknown): Promise<string> {
+    return this.runTurn(rawMessages);
+  }
+
+  async streamTurn(rawMessages: unknown, onDelta: (delta: string) => void): Promise<string> {
+    return this.runTurn(rawMessages, onDelta);
+  }
+
+  async abort(): Promise<void> {
+    await this.session?.abort();
+  }
+
+  async close(): Promise<void> {
+    this.unsubscribeSession?.();
+    this.unsubscribeSession = undefined;
+    const session = this.session;
+    this.session = undefined;
+    if (session) {
+      await session.abort().catch(() => undefined);
+      session.dispose();
+    }
+    await this.gondolin.close();
   }
 }
 
@@ -417,11 +630,14 @@ async function loadSettings(): Promise<ServiceSettings> {
   const sessionDir = resolve(
     process.env.PI_VOICE_SESSION_DIR || join(agentDir, "voice-sessions"),
   );
+  const cwd = resolve(process.env.PI_VOICE_CWD || process.cwd());
+  const skillsDir = resolve(process.env.PI_VOICE_SKILLS_DIR || join(cwd, "..", "skills"));
   await mkdir(sessionDir, { recursive: true, mode: 0o700 });
   await chmod(sessionDir, 0o700);
   return {
     agentDir,
-    cwd: resolve(process.env.PI_VOICE_CWD || process.cwd()),
+    cwd,
+    gondolinAssets: resolve(requiredEnv("GONDOLIN_BROWSER_ASSETS")),
     gatewayToken: requiredEnv("AGENT_GATEWAY_TOKEN"),
     gatewayUrl: (process.env.AGENT_GATEWAY_BASE_URL || "http://127.0.0.1:9444/v1").replace(/\/$/, ""),
     identity: identities[0],
@@ -430,6 +646,7 @@ async function loadSettings(): Promise<ServiceSettings> {
     model: process.env.PI_VOICE_MODEL?.trim() || process.env.PI_MODEL?.trim() || undefined,
     sessionDir,
     serviceToken: requiredEnv("INFERENCE_BROKER_TOKEN"),
+    skillsDir,
     thinking,
     timeoutMs: Number.parseFloat(process.env.PI_VOICE_TIMEOUT_SECONDS || "120") * 1000,
   };
@@ -447,21 +664,69 @@ export async function main(): Promise<void> {
       sendJson(response, 200, { status: "ok" });
       return;
     }
-    if (request.method !== "POST" || request.url !== "/v1/turn") {
+    if (request.method === "GET" && request.url === "/v1/transcript") {
+      response.setHeader("cache-control", "no-store");
+      sendJson(response, 200, agent.transcriptSnapshot());
+      return;
+    }
+    if (request.method !== "POST" || !["/v1/turn", "/v1/turn/stream"].includes(request.url || "")) {
       sendJson(response, 404, { detail: "not found" });
       return;
     }
     try {
       const body = await readBody(request);
       if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("invalid request");
-      const text = await agent.turn((body as Record<string, unknown>).messages);
-      sendJson(response, 200, { text });
+      const messages = (body as Record<string, unknown>).messages;
+      if (request.url === "/v1/turn/stream") {
+        response.writeHead(200, {
+          "cache-control": "no-cache, no-transform",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "x-accel-buffering": "no",
+        });
+        const send = (event: Record<string, unknown>) => {
+          response.write(`data: ${JSON.stringify(event)}\n\n`);
+        };
+        const abortOnDisconnect = () => {
+          if (!response.writableEnded) void agent.abort();
+        };
+        request.once("close", abortOnDisconnect);
+        try {
+          await agent.streamTurn(messages, (delta) => send({ type: "delta", delta }));
+          send({ type: "done" });
+          response.end();
+        } catch (error) {
+          send({
+            type: "error",
+            detail: error instanceof Error ? error.message : "Pi voice turn failed",
+          });
+          response.end();
+        } finally {
+          request.off("close", abortOnDisconnect);
+        }
+      } else {
+        const text = await agent.turn(messages);
+        sendJson(response, 200, { text });
+      }
     } catch (error) {
       const detail = error instanceof Error ? error.message : "Pi voice turn failed";
-      sendJson(response, 502, { detail });
+      if (!response.headersSent) sendJson(response, 502, { detail });
+      else response.end();
     }
   });
   server.listen(settings.listenPort, settings.listenHost);
+
+  let shuttingDown = false;
+  const shutdown = async (): Promise<void> => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    await agent.close();
+    await new Promise<void>((resolveShutdown, rejectShutdown) => {
+      server.close((error) => error ? rejectShutdown(error) : resolveShutdown());
+    });
+  };
+  process.once("SIGINT", () => void shutdown());
+  process.once("SIGTERM", () => void shutdown());
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

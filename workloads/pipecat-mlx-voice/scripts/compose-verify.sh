@@ -79,67 +79,36 @@ voice_ports="$(docker inspect -f '{{json .NetworkSettings.Ports}}' "$tailscale_c
 [[ -z "$(docker port "$tailscale_cid" 2>/dev/null)" && "$voice_ports" != *'"0.0.0.0"'* && "$voice_ports" != *'"::"'* ]] && pass "voice/Tailscale namespace publishes no Docker port" || fail "voice/Tailscale publishes a Docker port"
 
 if "${compose[@]}" exec -T voice-edge /app/.venv/bin/python - <<'PY'
-import asyncio
 import json
 import os
+import urllib.error
 import urllib.request
 
-import websockets
 
-
-async def probe() -> None:
-    assert os.environ["PIPECAT_WEBSOCKET_AUTH"] == "token"
-    origin = os.environ["PIPECAT_ALLOWED_ORIGINS"]
+def rejected(headers: dict[str, str]) -> bool:
     request = urllib.request.Request(
-        "http://127.0.0.1:7860/start",
-        data=b'{"transport":"websocket"}',
-        headers={"Content-Type": "application/json", "Origin": origin},
+        "http://127.0.0.1:7860/api/offer",
+        data=json.dumps({"sdp": "invalid", "type": "offer"}).encode(),
+        headers={"Content-Type": "application/json", **headers},
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=5) as response:
-        token = json.load(response)["token"]
-    async with websockets.connect(
-        f"ws://127.0.0.1:7860/ws-client/{token}",
-        origin=origin,
-        additional_headers={"tailscale-user-login": os.environ["EDGE_ALLOWED_USERS"]},
-        open_timeout=5,
-    ) as socket:
-        await asyncio.sleep(0.2)
-        assert socket.close_code is None
     try:
-        async with websockets.connect(
-            "ws://127.0.0.1:7860/ws-client",
-            origin=origin,
-            additional_headers={"tailscale-user-login": os.environ["EDGE_ALLOWED_USERS"]},
-            open_timeout=5,
-        ):
-            pass
-    except websockets.InvalidStatus as exc:
-        assert exc.response.status_code == 403
-    else:
-        raise AssertionError("missing WebSocket token was accepted")
-    with urllib.request.urlopen(request, timeout=5) as response:
-        hostile_origin_token = json.load(response)["token"]
-    try:
-        async with websockets.connect(
-            f"ws://127.0.0.1:7860/ws-client/{hostile_origin_token}",
-            origin="https://attacker.invalid",
-            additional_headers={"tailscale-user-login": os.environ["EDGE_ALLOWED_USERS"]},
-            open_timeout=5,
-        ):
-            pass
-    except websockets.InvalidStatus as exc:
-        assert exc.response.status_code == 403
-    else:
-        raise AssertionError("hostile WebSocket origin was accepted")
+        urllib.request.urlopen(request, timeout=5)
+    except urllib.error.HTTPError as exc:
+        return exc.code == 403
+    return False
 
 
-asyncio.run(probe())
+origin = os.environ["PIPECAT_ALLOWED_ORIGINS"].split(",", 1)[0]
+identity = os.environ["EDGE_ALLOWED_USERS"].split(",", 1)[0]
+assert rejected({"Origin": origin})
+assert rejected({"Origin": origin, "tailscale-user-login": "attacker@example.invalid"})
+assert rejected({"Origin": "https://attacker.invalid", "tailscale-user-login": identity})
 PY
 then
-  pass "voice WebSocket requires a one-use path token and exact origin"
+  pass "SmallWebRTC signaling requires the exact Tailscale identity and browser origin"
 else
-  fail "voice WebSocket path-token ingress is not enforced"
+  fail "SmallWebRTC signaling identity/origin checks are not enforced"
 fi
 
 serve_status="$("${compose[@]}" exec -T tailscale tailscale --socket=/tmp/tailscaled.sock serve status 2>/dev/null || true)"

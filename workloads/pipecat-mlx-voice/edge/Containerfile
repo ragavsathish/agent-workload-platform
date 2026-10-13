@@ -17,6 +17,8 @@ WORKDIR /app
 COPY edge/pyproject.toml edge/uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY edge/bot.py ./
+COPY edge/otel_bridge.py ./
+COPY edge/visual_response.py ./
 COPY server/telemetry.py ./
 COPY client/dist ./client-dist
 

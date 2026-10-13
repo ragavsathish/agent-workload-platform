@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 
 from .artifacts import ArtifactStore
 from .config import Settings
+from .pi_response import parse_pi_event_stream, presentation_prompt
 from .workspaces import resolve_workspace
 
 
@@ -37,7 +38,7 @@ def build_pi_command(settings: Settings, *, task_id: str, instruction: str) -> l
         command.extend(["--no-builtin-tools", "--extension", str(settings.gondolin_extension)])
     elif not settings.allow_unsandboxed:
         raise RuntimeError("PI_GONDOLIN_EXTENSION is required unless WORKER_ALLOW_UNSANDBOXED=true")
-    command.extend(["--", instruction])
+    command.extend(["--", presentation_prompt(instruction)])
     return command
 
 
@@ -75,17 +76,19 @@ def run_pi(
             file.seek(max(file.tell() - settings.max_output_bytes, 0))
             return file.read().decode("utf-8", errors="replace")
 
-        stdout = tail(stdout_file)
         stderr = tail(stderr_file)
-    result = {
+        if completed.returncode != 0:
+            raise RuntimeError(f"Pi exited with {completed.returncode}: {stderr[-2000:]}")
+        stdout_file.seek(0)
+        response = parse_pi_event_stream(stdout_file)
+    return {
         "exit_code": completed.returncode,
-        "stdout": stdout,
-        "stderr": stderr,
-        "session_id": task_id,
+        "response": {
+            "text": response.text,
+            "spoken": response.spoken,
+            "mermaid": response.mermaid,
+        },
     }
-    if completed.returncode != 0:
-        raise RuntimeError(f"Pi exited with {completed.returncode}: {stderr[-2000:]}")
-    return result
 
 
 def create_worker(settings: Settings) -> Absurd:

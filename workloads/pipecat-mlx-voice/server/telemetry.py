@@ -33,6 +33,20 @@ class Telemetry:
     operations: Counter
     duration: Histogram
 
+    def record(
+        self,
+        operation: str,
+        *,
+        outcome: str = "ok",
+        duration_seconds: float | None = None,
+        count: int = 1,
+    ) -> None:
+        """Record a bounded event without accepting payload data."""
+        attributes = {"app.operation": operation, "app.outcome": outcome}
+        self.operations.add(count, attributes)
+        if duration_seconds is not None:
+            self.duration.record(max(0.0, duration_seconds), attributes)
+
     @contextmanager
     def observe(self, operation: str) -> Iterator[Span]:
         """Measure one named operation without recording its arguments or exception."""

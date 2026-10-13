@@ -1,6 +1,8 @@
 """Tailnet-facing Pipecat process for the isolated Linux VM."""
 
 import os
+import wave
+from io import BytesIO
 from pathlib import Path
 
 import httpx
@@ -9,8 +11,15 @@ from fastapi import HTTPException, Request
 from loguru import logger
 from pipecat.adapters.schemas.direct_function import DirectFunction
 from pipecat.adapters.schemas.function_schema import FunctionSchema
+from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
 from pipecat.audio.vad.silero import SileroVADAnalyzer
-from pipecat.frames.frames import LLMRunFrame
+from pipecat.audio.vad.vad_analyzer import VADParams
+from pipecat.frames.frames import (
+    LLMFullResponseEndFrame,
+    LLMFullResponseStartFrame,
+    LLMRunFrame,
+    LLMTextFrame,
+)
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext
@@ -18,6 +27,7 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
+from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.runner.types import (
     RunnerArguments,
     SmallWebRTCRunnerArguments,
@@ -28,8 +38,13 @@ from pipecat.services.openai.stt import OpenAISTTService
 from pipecat.services.openai.tts import OpenAITTSService
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
+from pipecat.turns.user_stop import TurnAnalyzerUserTurnStopStrategy
+from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.workers.runner import WorkerRunner
 from telemetry import configure_telemetry
+
+from otel_bridge import configure_pipecat_observers
+from visual_response import StreamingSpokenExtractor, parse_visual_response
 
 # Voice content must never reach stdout/stderr. Docker also uses the `none` log driver, but removing
 # Loguru's shared handler prevents Pipecat from formatting transcripts or LLM context at all.
@@ -37,6 +52,63 @@ logger.remove()
 
 load_dotenv(override=True)
 telemetry = configure_telemetry("pipecat-voice-edge")
+
+
+class VoiceVisualResponseProcessor(FrameProcessor):
+    """Split one model response into browser Mermaid and TTS-safe speech."""
+
+    def __init__(self):
+        super().__init__()
+        self._buffering = False
+        self._chunks: list[str] = []
+        self._spoken_extractor = StreamingSpokenExtractor()
+        self._streamed_spoken = False
+
+    async def process_frame(self, frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+
+        if direction != FrameDirection.DOWNSTREAM:
+            await self.push_frame(frame, direction)
+            return
+
+        if isinstance(frame, LLMFullResponseStartFrame):
+            self._buffering = True
+            self._chunks = []
+            self._spoken_extractor = StreamingSpokenExtractor()
+            self._streamed_spoken = False
+            await self.push_frame(frame)
+            return
+
+        if self._buffering and isinstance(frame, LLMTextFrame):
+            self._chunks.append(frame.text)
+            spoken_delta = self._spoken_extractor.feed(frame.text)
+            if spoken_delta:
+                self._streamed_spoken = True
+                await self.push_frame(LLMTextFrame(spoken_delta))
+            return
+
+        if self._buffering and isinstance(frame, LLMFullResponseEndFrame):
+            raw = "".join(self._chunks)
+            self._buffering = False
+            self._chunks = []
+            if not raw.strip():
+                await self.push_frame(frame)
+                return
+
+            response = parse_visual_response(raw)
+            await self.pipeline_worker.rtvi.send_server_message(
+                {
+                    "type": "mermaid",
+                    "diagram": response.mermaid,
+                    "spoken": response.spoken,
+                }
+            )
+            if not self._streamed_spoken:
+                await self.push_frame(LLMTextFrame(response.spoken))
+            await self.push_frame(frame)
+            return
+
+        await self.push_frame(frame, direction)
 
 
 def required_env(name: str) -> str:
@@ -81,6 +153,13 @@ def validate_identity(identity: str) -> str:
 
 def validate_http_identity(request: Request) -> str:
     try:
+        allowed_origins = {
+            value.strip()
+            for value in required_env("PIPECAT_ALLOWED_ORIGINS").split(",")
+            if value.strip()
+        }
+        if request.headers.get("origin", "") not in allowed_origins:
+            raise PermissionError("browser origin is not allowed")
         return validate_identity(
             request.headers.get("tailscale-user-login", "").strip().lower()
         )
@@ -88,25 +167,70 @@ def validate_http_identity(request: Request) -> str:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
 
-async def broker_enrollment_request(
-    method: str, path: str, *, json: dict[str, str] | None = None, session: str | None = None
-) -> dict[str, object]:
+async def broker_transcript_request() -> dict[str, object]:
     headers = {"Authorization": f"Bearer {required_env('INFERENCE_BROKER_TOKEN')}"}
-    if session:
-        headers["X-Speaker-Enrollment-Session"] = session
-    async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
-        response = await client.request(
-            method,
-            f"{required_env('INFERENCE_BROKER_BASE_URL').rstrip('/')}{path}",
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
+        response = await client.get(
+            f"{required_env('INFERENCE_BROKER_BASE_URL').rstrip('/')}/pi/transcript",
             headers=headers,
-            json=json,
         )
     if response.is_error:
-        raise HTTPException(status_code=response.status_code, detail="enrollment request rejected")
+        raise HTTPException(status_code=502, detail="Pi transcript is unavailable")
     payload = response.json()
     if not isinstance(payload, dict):
-        raise HTTPException(status_code=502, detail="invalid enrollment response")
+        raise HTTPException(status_code=502, detail="invalid Pi transcript")
     return payload
+
+
+async def owner_gateway_request(
+    request: Request,
+    method: str,
+    path: str,
+    *,
+    body: dict[str, object] | None = None,
+) -> object:
+    """Proxy one owner-scoped task operation through the narrow gateway."""
+    identity = validate_http_identity(request)
+    headers = {"Authorization": f"Bearer {required_env('AGENT_GATEWAY_TOKEN')}"}
+    url = f"{required_env('AGENT_GATEWAY_BASE_URL').rstrip('/')}{path}"
+    async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0)) as client:
+        if method == "GET":
+            response = await client.request(
+                method, url, headers=headers, params={"identity": identity}
+            )
+        else:
+            response = await client.request(
+                method, url, headers=headers, json={"identity": identity, **(body or {})}
+            )
+    if response.is_error:
+        try:
+            detail = response.json().get("detail", "task request failed")
+        except (ValueError, AttributeError):
+            detail = "task request failed"
+        raise HTTPException(status_code=response.status_code, detail=str(detail))
+    return response.json()
+
+
+def task_spoken_text(view: object) -> str:
+    if not isinstance(view, dict):
+        raise HTTPException(status_code=502, detail="invalid task response")
+    snapshot = view.get("result")
+    execution = snapshot.get("result") if isinstance(snapshot, dict) else None
+    response = execution.get("response") if isinstance(execution, dict) else None
+    spoken = response.get("spoken") if isinstance(response, dict) else None
+    if not isinstance(spoken, str) or not spoken.strip():
+        raise HTTPException(status_code=409, detail="task response is not ready")
+    return spoken.strip()[:2_000]
+
+
+def pcm_wave(pcm: bytes) -> bytes:
+    output = BytesIO()
+    with wave.open(output, "wb") as target:
+        target.setnchannels(1)
+        target.setsampwidth(2)
+        target.setframerate(24_000)
+        target.writeframes(pcm)
+    return output.getvalue()
 
 
 async def run_bot(transport: BaseTransport, identity: str):
@@ -132,7 +256,15 @@ async def run_bot(transport: BaseTransport, identity: str):
         settings=OpenAILLMService.Settings(
             model=model,
             system_instruction=(
-                "You are a precise voice control interface to Pi, a coding-agent coordinator. "
+                "You are a precise, voice-operated coding agent. "
+                "Every final response must be exactly one JSON object with two string fields: "
+                '"spoken" and "mermaid". Do not wrap the JSON or Mermaid in code fences. The '
+                '"spoken" value is the shortest complete natural-language answer and is the only '
+                'text that will be read aloud. The "mermaid" value is a valid Mermaid diagram '
+                "that visually captures the current result, state, action, or flow. Prefer a small "
+                "flowchart TD unless sequence or state notation explains the answer better. Use "
+                "short labels and meaningful directed relationships. Never put Mermaid syntax in "
+                'the "spoken" value. '
                 "Answer only what the user asked, using the shortest complete response. Lead with "
                 "the result or current status. Do not use greetings, filler, praise, repetition, "
                 "or unsupported speculation. Prefer concrete names, identifiers, states, and "
@@ -140,14 +272,27 @@ async def run_bot(transport: BaseTransport, identity: str):
                 "correct action. Clearly distinguish requested, pending, completed, failed, and "
                 "cancelled actions. Never say an action succeeded until its tool result confirms "
                 "success. Report only the relevant facts returned by tools and do not embellish "
-                "them. Responses are spoken, so use plain sentences without visual formatting. "
-                "You can propose, inspect, approve, and cancel agent tasks with the available "
-                "tools. Creating a proposal never runs it. "
+                'them. Keep "spoken" in plain sentences without visual formatting. '
+                "For ordinary coding, inspection, testing, package installation, and shell work, "
+                "act immediately with the native read, write, edit, and bash tools. Do not ask "
+                "for confirmation and do not create a task proposal. All four tools run inside "
+                "one persistent Gondolin voice VM with a writable dedicated voice workspace at "
+                "/workspace. Reusable skills are mounted separately and read-only at /skills. "
+                "When a request matches a skill, inspect its complete SKILL.md with bash before "
+                "acting and follow it while it remains relevant. Never attempt to modify /skills. "
+                "Never describe VM state as Mac host state. You may "
+                "make any change the user requests inside that VM and workspace. "
+                "Use submit_agent_task when work should continue asynchronously, must target a "
+                "durable project workspace, or is better handled by another Pi worker. You may "
+                "submit that work yourself without asking for approval. State the exact delegated "
+                "instruction and returned task ID. You can also propose, inspect, approve, and "
+                "cancel queued tasks with the available tools. Creating a proposal never runs it, "
+                "while submit_agent_task creates and immediately queues the task. "
                 "After proposing, read back the exact instruction and workspace. Approval is "
                 "allowed only in a later user turn when the user explicitly asks to approve that "
                 "pending task. Never approve in the same turn as proposal creation and never infer "
-                "approval from unrelated speech. Pi performs approved work "
-                "through Gondolin and Wassette MCP; do not claim the voice VM has host access. "
+                "approval from unrelated speech. Approved durable work runs separately through "
+                "Gondolin and Wassette MCP. "
                 f"The configured default workspace is exactly {default_workspace}. When the user "
                 "says the default or current workspace, use that exact logical name without "
                 "rewriting it."
@@ -208,6 +353,30 @@ async def run_bot(transport: BaseTransport, identity: str):
             logger.exception("Unable to inspect agent task")
             await params.result_callback({"error": str(exc)})
 
+    async def submit_agent_task(params: FunctionCallParams) -> None:
+        try:
+            proposal = await gateway_request(
+                "POST",
+                "/tasks",
+                json={
+                    "identity": identity,
+                    "instruction": str(params.arguments["instruction"]),
+                    "workspace": str(params.arguments["workspace"]),
+                },
+            )
+            proposal_id = proposal.get("id")
+            if not isinstance(proposal_id, str) or not proposal_id:
+                raise RuntimeError("agent gateway created a proposal without an ID")
+            result = await gateway_request(
+                "POST",
+                f"/tasks/{proposal_id}/approve",
+                json={"identity": identity},
+            )
+            await params.result_callback(result)
+        except Exception as exc:
+            logger.exception("Unable to submit agent task")
+            await params.result_callback({"error": str(exc)})
+
     async def approve_agent_task(params: FunctionCallParams) -> None:
         try:
             proposal_id = str(params.arguments["proposal_id"])
@@ -263,6 +432,24 @@ async def run_bot(transport: BaseTransport, identity: str):
             handler=get_agent_task,
         ),
         FunctionSchema(
+            name="submit_agent_task",
+            description=(
+                "Create and immediately approve durable project work for another Pi worker."
+            ),
+            properties={
+                "instruction": {
+                    "type": "string",
+                    "description": "The complete and specific instruction for Pi.",
+                },
+                "workspace": {
+                    "type": "string",
+                    "description": "Allowlisted logical name of the project workspace.",
+                },
+            },
+            required=["instruction", "workspace"],
+            handler=submit_agent_task,
+        ),
+        FunctionSchema(
             name="approve_agent_task",
             description=(
                 "Approve one pending proposal only after the user explicitly asks to approve "
@@ -280,19 +467,52 @@ async def run_bot(transport: BaseTransport, identity: str):
             handler=cancel_agent_task,
         ),
     ]
-    # In Pi mode the native Pi process owns the same four tools through its
+    # In Pi mode the native Pi process owns the task tools through its
     # restricted extension. Ollama mode keeps executing them in this edge.
     context = LLMContext(tools=[] if llm_backend == "pi" else gateway_tools)
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
-        user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer()),
+        user_params=LLMUserAggregatorParams(
+            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.2)),
+            user_turn_strategies=UserTurnStrategies(
+                stop=[
+                    TurnAnalyzerUserTurnStopStrategy(
+                        turn_analyzer=LocalSmartTurnAnalyzerV3(),
+                    )
+                ]
+            ),
+            user_idle_timeout=90.0,
+        ),
     )
+
+    @user_aggregator.event_handler("on_user_turn_started")
+    async def on_user_turn_started(_aggregator, _strategy):
+        telemetry.record("pipecat.user_turn.started")
+
+    @user_aggregator.event_handler("on_user_turn_inference_triggered")
+    async def on_user_turn_inference_triggered(_aggregator, _strategy):
+        telemetry.record("pipecat.user_turn.inference_triggered")
+
+    @user_aggregator.event_handler("on_user_turn_stopped")
+    async def on_user_turn_stopped(_aggregator, _strategy, _message):
+        telemetry.record("pipecat.user_turn.stopped")
+
+    @user_aggregator.event_handler("on_user_turn_stop_timeout")
+    async def on_user_turn_stop_timeout(_aggregator):
+        telemetry.record("pipecat.user_turn.stop_timeout", outcome="timeout")
+
+    @user_aggregator.event_handler("on_user_turn_message_added")
+    async def on_user_turn_message_added(_aggregator, _message):
+        telemetry.record("pipecat.user_turn.transcript_emitted")
+
+    visual_response = VoiceVisualResponseProcessor()
     pipeline = Pipeline(
         [
             transport.input(),
             stt,
             user_aggregator,
             llm,
+            visual_response,
             tts,
             transport.output(),
             assistant_aggregator,
@@ -303,10 +523,13 @@ async def run_bot(transport: BaseTransport, identity: str):
         params=PipelineParams(
             audio_in_sample_rate=16000,
             audio_out_sample_rate=24000,
+            enable_heartbeats=True,
+            heartbeats_period_secs=5.0,
+            heartbeats_monitor_secs=15.0,
             enable_metrics=True,
             enable_usage_metrics=True,
         ),
-        observers=[],
+        observers=list(configure_pipecat_observers(telemetry)),
     )
 
     @worker.rtvi.event_handler("on_client_ready")
@@ -315,7 +538,9 @@ async def run_bot(transport: BaseTransport, identity: str):
             {
                 "role": "developer",
                 "content": (
-                    f"The authenticated user is {identity}. Say exactly: Voice interface ready."
+                    f"The authenticated user is {identity}. Respond with spoken exactly "
+                    '"Voice interface ready." and a Mermaid flowchart showing Voice connected '
+                    "to Pi."
                 ),
             }
         )
@@ -355,7 +580,7 @@ async def bot(runner_args: RunnerArguments):
 
 
 if __name__ == "__main__":
-    from fastapi.responses import FileResponse, JSONResponse
+    from fastapi.responses import FileResponse, JSONResponse, Response
     from fastapi.staticfiles import StaticFiles
     from pipecat.runner.run import app, main
 
@@ -388,30 +613,84 @@ if __name__ == "__main__":
     async def features():
         return {
             "tasks": True,
-            "speakerEnrollment": True,
+            "piTranscript": True,
             "approval": "voice-yolo",
             "isolation": "docker-desktop-compose",
+            "defaultWorkspace": required_env("VOICE_DEFAULT_WORKSPACE"),
         }
 
-    @app.post("/api/speaker-enrollment/claim")
-    async def claim_speaker_enrollment(request: Request):
-        validate_http_identity(request)
-        body = await request.json()
-        token = body.get("token") if isinstance(body, dict) else None
-        if not isinstance(token, str) or not 16 <= len(token) <= 128:
-            raise HTTPException(status_code=400, detail="invalid enrollment token")
-        return await broker_enrollment_request(
-            "POST", "/speaker/enrollment/claim", json={"token": token}
+    @app.get("/api/tasks")
+    async def list_browser_tasks(request: Request):
+        return JSONResponse(
+            await owner_gateway_request(request, "GET", "/tasks"),
+            headers={"Cache-Control": "no-store"},
         )
 
-    @app.get("/api/speaker-enrollment/status")
-    async def get_speaker_enrollment_status(request: Request):
+    @app.post("/api/tasks", status_code=201)
+    async def create_browser_task(request: Request):
+        try:
+            payload = await request.json()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="invalid task request") from exc
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=400, detail="invalid task request")
+        instruction = payload.get("instruction")
+        workspace = payload.get("workspace") or required_env("VOICE_DEFAULT_WORKSPACE")
+        if not isinstance(instruction, str) or not isinstance(workspace, str):
+            raise HTTPException(status_code=400, detail="invalid task request")
+        result = await owner_gateway_request(
+            request,
+            "POST",
+            "/tasks",
+            body={"instruction": instruction, "workspace": workspace},
+        )
+        return JSONResponse(result, status_code=201, headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/tasks/{proposal_id}/approve")
+    async def approve_browser_task(proposal_id: str, request: Request):
+        return JSONResponse(
+            await owner_gateway_request(request, "POST", f"/tasks/{proposal_id}/approve"),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/tasks/{proposal_id}/cancel")
+    async def cancel_browser_task(proposal_id: str, request: Request):
+        return JSONResponse(
+            await owner_gateway_request(request, "POST", f"/tasks/{proposal_id}/cancel"),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/api/tasks/{proposal_id}/speech")
+    async def task_speech(proposal_id: str, request: Request):
+        task = await owner_gateway_request(request, "GET", f"/tasks/{proposal_id}")
+        spoken = task_spoken_text(task)
+        headers = {"Authorization": f"Bearer {required_env('INFERENCE_BROKER_TOKEN')}"}
+        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=5.0)) as client:
+            response = await client.post(
+                f"{required_env('INFERENCE_BROKER_BASE_URL').rstrip('/')}/audio/speech",
+                headers=headers,
+                json={
+                    "model": "kokoro",
+                    "input": spoken,
+                    "voice": "alloy",
+                    "response_format": "pcm",
+                    "speed": 1.0,
+                },
+            )
+        if response.is_error or len(response.content) > 50_000_000:
+            raise HTTPException(status_code=502, detail="task speech is unavailable")
+        return Response(
+            content=pcm_wave(response.content),
+            media_type="audio/wav",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/api/pi-transcript")
+    async def get_pi_transcript(request: Request):
         validate_http_identity(request)
-        session = request.headers.get("x-speaker-enrollment-session", "")
-        if not 16 <= len(session) <= 128:
-            raise HTTPException(status_code=400, detail="invalid enrollment session")
-        return await broker_enrollment_request(
-            "GET", "/speaker/enrollment/status", session=session
+        return JSONResponse(
+            await broker_transcript_request(),
+            headers={"Cache-Control": "no-store"},
         )
 
     main()

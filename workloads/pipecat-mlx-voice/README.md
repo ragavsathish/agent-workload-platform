@@ -89,6 +89,12 @@ an explicitly proposed task instruction. Queue workers run Pi with `--no-session
 launch services write stdout and stderr to `/dev/null`, so agent conversations are not retained as
 Pi session JSONL. The synthetic black-box runner reports event counts, never transcript text.
 
+Silero VAD keeps Pipecat's recommended `stop_secs=0.2`; `LocalSmartTurnAnalyzerV3` decides when a
+spoken turn is complete. MLX Whisper receives every completed audio segment directly—there is no
+speaker-recognition gate. Payload-free metrics distinguish accepted audio, emitted or empty
+transcripts, Smart Turn inference triggers, completed turns, and stop timeouts without exporting
+audio or transcript text.
+
 ## Local observability
 
 The pinned `grafana/otel-lgtm` development bundle provides Grafana, Prometheus, Tempo, and an OTLP

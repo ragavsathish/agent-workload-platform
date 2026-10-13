@@ -12,6 +12,7 @@ import {
 } from '@pipecat-ai/voice-ui-kit';
 
 import { App } from './components/App';
+import { TranscriptView } from './components/TranscriptView';
 import {
   AVAILABLE_TRANSPORTS,
   DEFAULT_TRANSPORT,
@@ -59,8 +60,16 @@ export const Main = () => {
   );
 };
 
+const transcriptView = new URLSearchParams(window.location.search).get('view') === 'transcript';
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <Main />
+    {transcriptView ? (
+      <ThemeProvider defaultTheme="terminal" disableStorage>
+        <TranscriptView />
+      </ThemeProvider>
+    ) : (
+      <Main />
+    )}
   </StrictMode>
 );

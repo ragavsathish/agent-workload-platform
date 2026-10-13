@@ -14,4 +14,4 @@ if [[ "${BLACKBOX_SKIP_UP:-false}" != "true" ]]; then
     "${compose[@]}" up -d --wait --build tailscale s3mock agent-gateway voice-edge >/dev/null
 fi
 "${compose[@]}" \
-  exec -T voice-edge /app/.venv/bin/python - "$@" < "$repo_dir/scripts/blackbox_voice.py"
+  exec -T voice-edge /app/.venv/bin/python - "$@" < "$repo_dir/scripts/smallwebrtc_voice.py"

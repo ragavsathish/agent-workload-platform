@@ -1,4 +1,4 @@
-.PHONY: setup build up down recreate verify cycle-test login status grafana-password warm-models benchmark-mlx benchmark-swift compare-broker-interfaces validate-swift-models smoke-swift-models publish-workspace blackbox-voice blackbox-e2e host-preflight install-host-services db-init broker worker pull-model swift-broker-check check
+.PHONY: setup build up down recreate verify cycle-test login status grafana-password warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e host-preflight install-host-services db-init broker worker pull-model check
 
 setup:
 	cd server && uv sync --python 3.13
@@ -44,18 +44,6 @@ warm-models:
 benchmark-mlx:
 	./scripts/benchmark-mlx.sh
 
-benchmark-swift:
-	cd server && uv run python ../scripts/benchmark_mlx.py --label swift --base-url http://127.0.0.1:9445 --broker-marker pipecat-swift-broker $(if $(STT_WAV),--stt-wav "$(STT_WAV)",--skip-stt)
-
-compare-broker-interfaces:
-	cd server && uv run python ../scripts/compare_broker_interfaces.py $(if $(STT_WAV),--stt-wav "$(STT_WAV)",)
-
-validate-swift-models:
-	./scripts/validate-swift-models.sh
-
-smoke-swift-models:
-	./scripts/smoke-swift-models.sh
-
 publish-workspace:
 	./scripts/publish-workspace.sh "$(WORKSPACE_ID)" "$(REPOSITORY)"
 
@@ -82,9 +70,6 @@ worker:
 
 pull-model:
 	ollama pull qwen3.5:9b-mlx
-
-swift-broker-check:
-	./swift-broker/scripts/check.sh
 
 check:
 	pnpm --dir ../.. --filter @agent-workload-platform/gondolin-browser check
