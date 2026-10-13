@@ -21,7 +21,7 @@ The Mermaid C4 sources are authoritative:
 | Pi Worker | `server/src/voice_agent/tasking/workers/pi_worker.py`; worker LaunchAgent |
 | Pi Voice Service | `services/pi-agent/voice-agent-service.ts`; Pi voice LaunchAgent |
 | Voice Gondolin Workspace | `services/pi-agent/gondolin-workspace.ts` |
-| Worker Gondolin and Wassette | `runtimes/gondolin-browser/pi-extension.ts` and its MCP clients |
+| Worker Gondolin and Wassette | `platform/agent-execution/gondolin-session/pi-extension.ts` and its MCP clients |
 
 ## Security perspective
 

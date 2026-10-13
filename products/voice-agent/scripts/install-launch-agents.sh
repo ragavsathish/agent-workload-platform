@@ -49,12 +49,12 @@ gondolin_deploy="$(mktemp -d "$runtime_dir/gondolin-agent.deploy.XXXXXX")"
 trap 'rm -rf "$gondolin_deploy"' EXIT
 # Produce a standalone dependency graph instead of copying pnpm links that
 # resolve back into the repository (and therefore into protected Documents).
-/opt/homebrew/bin/pnpm --dir "$repo_dir/../.." --filter @agent-workload-platform/gondolin-browser build
+/opt/homebrew/bin/pnpm --dir "$repo_dir/../.." --filter @agent-workload-platform/gondolin-session build
 /opt/homebrew/bin/pnpm --dir "$repo_dir/../.." --filter @agent-workload-platform/voice-pi-agent build
 /opt/homebrew/bin/pnpm \
   --dir "$repo_dir/../.." \
   --config.inject-workspace-packages=true \
-  --filter @agent-workload-platform/gondolin-browser \
+  --filter @agent-workload-platform/gondolin-session \
   deploy --prod --ignore-scripts "$gondolin_deploy"
 rsync -a --delete "$gondolin_deploy/" "$gondolin_runtime/"
 rm -rf "$gondolin_deploy"

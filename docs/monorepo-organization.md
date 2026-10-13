@@ -1,9 +1,9 @@
 # Monorepo organization
 
-The repository is moving incrementally from technical top-level buckets to
-product and bounded-context ownership. The Voice Agent is the first product at
-`products/voice-agent`; all other paths remain operational until a focused move
-can preserve their builds and tests.
+The repository is organized around product and bounded-context ownership.
+Voice Agent and Architecture Visualization are product vertical slices;
+Agent Execution is the first shared platform context. Earendil remains the one
+transitional area until its local work is ready for an isolated migration.
 
 ## Dependency direction
 
@@ -25,16 +25,14 @@ because it uses Docker, macOS LaunchAgents, or Kubernetes.
 
 ## Current and target ownership
 
-| Current path | Target ownership | Next focused change |
+| Path | Ownership | Status or next focused change |
 | --- | --- | --- |
-| `products/voice-agent` | Voice Agent product | Separate its browser app and independently deployed Python/Node processes only after package contracts are explicit |
-| `workloads/c4-excalidraw` | `products/architecture-visualization` | Move the C4 compiler, capability components, contracts, examples, tests, and application as one vertical slice |
-| `adapters/c4-gondolin` | Architecture Visualization integration | Move with the C4 product because it has no second consumer |
-| `runtimes/k3s-earendil` | `products/secure-agent-workspace` | Move images, policies, manifests, media worker, and tests together; replace its source-tree C4 dependency with an artifact contract |
-| `runtimes/gondolin-browser` | `platform/agent-execution/gondolin-session` plus product adapters | The Voice Agent service is separated; move the remaining generic runtime after C4 dependencies are made explicit |
-| `apps/excalidraw-mcp` | `vendor/excalidraw-mcp` | Move the unchanged submodule and update provenance/build references |
-| `adapters/mermaid-to-excalidraw` | `vendor/mermaid-to-excalidraw` | Move the unchanged submodule with the same vendor policy |
-| `components` | No root source owner | Remove artifact symlinks; keep generated capability artifacts with the producing product |
+| `products/voice-agent` | Voice Agent product | Canonical; the obsolete `workloads/pipecat-mlx-voice` copy is removed |
+| `products/architecture-visualization` | Architecture Visualization product | Canonical vertical slice including C4 components, contracts, examples, and its Gondolin integration |
+| `platform/agent-execution/gondolin-session` | Agent Execution platform context | Shared by Voice Agent and Architecture Visualization; product-specific voice services are excluded |
+| `vendor/excalidraw-mcp` | Upstream vendor source | Pinned, unmodified Git submodule |
+| `vendor/mermaid-to-excalidraw` | Upstream vendor source | Pinned, unmodified Git submodule |
+| `runtimes/k3s-earendil` | Future Secure Agent Workspace product | Migrate only when its local source is ready; replace its source-tree C4 dependency with an artifact contract |
 
 ## Voice Agent boundary
 
@@ -84,15 +82,12 @@ The next internal split should be behavior-preserving:
 
 ## Migration sequence
 
-1. **Voice Agent product boundary** — move the product, glossary, links, and
-   architecture ownership without changing runtime behavior.
-2. **Vendor isolation** — move both unchanged Excalidraw submodules and update
-   provenance.
-3. **Architecture Visualization product** — move C4 and its product-local
-   Gondolin integration.
-4. **Secure Agent Workspace product** — move the Earendil deployment and make
+1. **Voice Agent product boundary** — complete.
+2. **Vendor isolation** — complete.
+3. **Architecture Visualization product** — complete.
+4. **Agent Execution platform context** — complete for the two current
+   consumers.
+5. **Secure Agent Workspace product** — move the Earendil deployment and make
    capability inputs explicit artifacts.
-5. **Platform extraction** — retain only execution, orchestration, capability,
-   or observability code with multiple consumers.
 6. **Enforcement and cleanup** — add ownership rules, path-scoped CI, dependency
    checks, and delete obsolete technical buckets.

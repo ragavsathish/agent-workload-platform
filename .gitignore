@@ -7,7 +7,7 @@
 **/.pi/agent/
 **/.pi/auth.json
 **/.pi/*.session*
-workloads/c4-excalidraw/components/generated/
-workloads/c4-excalidraw/core/generated/
+products/architecture-visualization/components/generated/
+products/architecture-visualization/core/generated/
 .DS_Store
 .pnpm-store/v11/
