@@ -1,7 +1,9 @@
 flowchart LR
     %% C4 deployment view. Arrows show only trust-boundary crossings and operational dependencies.
-    USER(["Person<br/><b>Tailnet User</b>"])
+    USER(["Person<br/><b>Voice Operator</b>"])
+    TASK_USER(["Person<br/><b>Task Operator</b>"])
     CONTROL["External system<br/><b>Tailscale Control Plane</b>"]
+    TELEGRAM_API["External system<br/><b>Telegram Bot API</b>"]
     MODELS["External system<br/><b>Model Providers</b>"]
     EXTERNAL["External system<br/><b>Optional Integrations</b>"]
 
@@ -18,14 +20,16 @@ flowchart LR
                 direction LR
                 INGRESS["Container<br/><b>Tailnet Ingress</b><br/>Tailscale Serve"]
                 EDGE["Container<br/><b>Voice Edge</b><br/>Pipecat · read-only · non-root"]
-                INGRESS -->|"loopback proxy"| EDGE
+                INGRESS -->|"voice UI proxy :443"| EDGE
             end
             GATEWAY["Container<br/><b>Agent Gateway</b><br/>read-only · non-root"]
+            TELEGRAM["Container<br/><b>Task Telegram Adapter</b><br/>long polling · read-only · non-root"]
             POSTGRES[("Container database<br/><b>PostgreSQL</b><br/>proposals · Absurd queue · checkpoints")]
             S3[("Container data store<br/><b>S3Mock</b><br/>immutable workspaces · bounded results")]
             OTEL["Container<br/><b>OTel LGTM</b><br/>metrics · traces · no logs"]
             GATEWAY -->|"private SQL"| POSTGRES
             GATEWAY -->|"private S3 API"| S3
+            TELEGRAM -->|"scoped bearer HTTP"| GATEWAY
         end
 
         subgraph NATIVE["Native macOS services · launchd · loopback only"]
@@ -56,11 +60,15 @@ flowchart LR
         WORKER -->|"Pi extension"| TASK_VM
         EDGE -.->|"OTLP/HTTP"| OTEL
         GATEWAY -.->|"OTLP/HTTP"| OTEL
+        TELEGRAM -.->|"OTLP/HTTP"| OTEL
         BROKER -.->|"loopback OTLP/HTTP"| OTEL
+        INGRESS -->|"owner identity header · Grafana :8443"| OTEL
     end
 
     USER -->|"talk · listen · review"| BROWSER
-    BROWSER -->|"tailnet HTTPS · WebRTC"| INGRESS
+    TASK_USER -->|"create · approve · inspect · cancel"| TELEGRAM_API
+    TELEGRAM -->|"outbound HTTPS only"| TELEGRAM_API
+    BROWSER -->|"tailnet HTTPS :443/:8443 · WebRTC"| INGRESS
     INGRESS -.->|"control protocol"| CONTROL
     PI -->|"host-held credentials"| MODELS
     WORKER -->|"host-held credentials"| MODELS
@@ -71,8 +79,8 @@ flowchart LR
     classDef container fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
     classDef security fill:#dcfce7,color:#14532d,stroke:#16a34a,stroke-width:2px;
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
-    class USER person;
-    class CONTROL,MODELS,EXTERNAL external;
-    class BROWSER,BROKER,PI,WORKER,VOICE_VM,TASK_VM,WASSETTE,OTEL container;
+    class USER,TASK_USER person;
+    class CONTROL,TELEGRAM_API,MODELS,EXTERNAL external;
+    class BROWSER,TELEGRAM,BROKER,PI,WORKER,VOICE_VM,TASK_VM,WASSETTE,OTEL container;
     class INGRESS,EDGE,GATEWAY security;
     class POSTGRES,S3,RUNTIME data;

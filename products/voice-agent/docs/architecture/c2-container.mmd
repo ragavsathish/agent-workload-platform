@@ -1,7 +1,9 @@
 flowchart LR
     %% C4 container view. Each blue node is an independently running application or data store.
-    USER(["Person<br/><b>Tailnet User</b><br/>talks, listens, reviews, delegates"])
+    USER(["Person<br/><b>Voice Operator</b><br/>talks, listens, orchestrates"])
+    TASK_USER(["Person<br/><b>Task Operator</b><br/>creates, approves, inspects, cancels"])
     TSC["External system<br/><b>Tailscale Control Plane</b><br/>device and network authority"]
+    TELEGRAM_API["External system<br/><b>Telegram Bot API</b><br/>task commands and bounded results"]
     MODELS["External system<br/><b>Model Providers</b><br/>Pi conversational and task models"]
     INTEGRATIONS["External system<br/><b>External Integrations</b><br/>optional permission-scoped APIs"]
 
@@ -24,11 +26,13 @@ flowchart LR
         end
 
         subgraph TASK["Durable delegated-work path"]
-            direction LR
+            direction TB
+            TELEGRAM["Container<br/><b>Task Telegram Adapter</b><br/>Python · long polling · no Pi session"]
             GATEWAY["Container<br/><b>Agent Gateway</b><br/>Python · FastAPI"]
             TASKS[("Container database<br/><b>Task Database and Queue</b><br/>PostgreSQL · Absurd schema")]
             WORKER["Container<br/><b>Pi Task Worker</b><br/>Python · Pi coding agent"]
             TASK_TOOLS["Container<br/><b>Task Tool Runtime</b><br/>Gondolin · optional Wassette"]
+            TELEGRAM -->|"scoped task lifecycle API"| GATEWAY
             GATEWAY -->|"persist · enqueue"| TASKS
             TASKS -->|"claim · checkpoint"| WORKER
             WORKER -->|"isolated tools"| TASK_TOOLS
@@ -49,9 +53,12 @@ flowchart LR
         EDGE -.->|"metrics · traces"| OTEL
         BROKER -.->|"metrics · traces"| OTEL
         GATEWAY -.->|"metrics · traces"| OTEL
+        TELEGRAM -.->|"metrics · traces"| OTEL
     end
 
     USER -->|"tailnet HTTPS · WebRTC"| BROWSER
+    TASK_USER -->|"explicit task commands"| TELEGRAM_API
+    TELEGRAM -->|"long poll · send message/document"| TELEGRAM_API
     INGRESS -.->|"control protocol"| TSC
     PI -->|"provider API"| MODELS
     WORKER -->|"provider API"| MODELS
@@ -61,7 +68,7 @@ flowchart LR
     classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
     classDef container fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
-    class USER person;
-    class TSC,MODELS,INTEGRATIONS external;
-    class BROWSER,INGRESS,EDGE,BROKER,PI,VOICE_VM,GATEWAY,WORKER,TASK_TOOLS,OTEL container;
+    class USER,TASK_USER person;
+    class TSC,TELEGRAM_API,MODELS,INTEGRATIONS external;
+    class BROWSER,INGRESS,EDGE,BROKER,PI,VOICE_VM,TELEGRAM,GATEWAY,WORKER,TASK_TOOLS,OTEL container;
     class TASKS,VOICE_DATA,ARTIFACTS data;

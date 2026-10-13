@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 
 import boto3
 from botocore.client import Config
+from botocore.exceptions import ClientError
 
 _WORKSPACE_NAME = re.compile(r"[a-z0-9][a-z0-9._-]{0,127}")
 
@@ -90,9 +91,7 @@ class ArtifactStore:
 
     def resolve_workspace(self, name: str, allowed: tuple[str, ...]) -> str:
         validate_workspace_name(name, allowed)
-        response = self.client.get_object(
-            Bucket=self.bucket, Key=f"workspaces/{name}/current.json"
-        )
+        response = self.client.get_object(Bucket=self.bucket, Key=f"workspaces/{name}/current.json")
         pointer = json.loads(response["Body"].read())
         key = str(pointer["source_key"])
         digest = str(pointer["sha256"])
@@ -150,9 +149,7 @@ class ArtifactStore:
             ["git", "-C", str(workspace), "add", "--intent-to-add", "--all"],
             check=True,
         )
-        patch = subprocess.check_output(
-            ["git", "-C", str(workspace), "diff", "--binary", "HEAD"]
-        )
+        patch = subprocess.check_output(["git", "-C", str(workspace), "diff", "--binary", "HEAD"])
         if len(patch) > max_bytes:
             raise ValueError("task patch exceeds WORKER_MAX_ARTIFACT_BYTES")
         status = subprocess.check_output(
@@ -175,3 +172,23 @@ class ArtifactStore:
             )
             uris[label] = f"s3://{self.bucket}/{key}"
         return uris
+
+    def read_result_artifact(self, *, task_id: str, artifact: str) -> tuple[str, str, bytes]:
+        allowed = {
+            "patch": ("changes.patch", "text/x-diff"),
+            "status": ("status.txt", "text/plain"),
+            "execution": ("execution.json", "application/json"),
+        }
+        if artifact not in allowed:
+            raise ValueError("unknown task artifact")
+        filename, content_type = allowed[artifact]
+        try:
+            response = self.client.get_object(Bucket=self.bucket, Key=f"tasks/{task_id}/{filename}")
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") in {"NoSuchKey", "404"}:
+                raise FileNotFoundError("task artifact not found") from exc
+            raise
+        payload = response["Body"].read()
+        if len(payload) > 20_000_000:
+            raise ValueError("task artifact exceeds Telegram delivery limit")
+        return filename, content_type, payload

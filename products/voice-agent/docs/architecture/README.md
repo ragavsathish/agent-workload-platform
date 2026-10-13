@@ -31,6 +31,12 @@ and bounded task outputs. The native **Pi Task Worker** materializes one bundle 
 space and invokes Pi with the Gondolin extension. Optional external integrations are exposed through
 Wassette with explicit permissions.
 
+The optional **Task Telegram Adapter** is a separate Task Console, not another orchestrator or Pi
+session. It long-polls Telegram, accepts commands only from one configured chat and an allowlist of
+numeric sender IDs, and calls the Agent Gateway with a distinct task-operator capability. `/create`
+always creates a pending proposal; `/approve` is a separate explicit action. It has no route to the
+browser media pipeline, Pi Voice Service, model provider, or agent tools.
+
 ## Model-to-code traceability
 
 | C4 element | Repository evidence |
@@ -42,6 +48,7 @@ Wassette with explicit permissions.
 | Pi Voice Service | `services/pi-agent/voice-agent-service.ts`; Pi voice LaunchAgent |
 | Voice Tool Sandbox and Runtime Data | `services/pi-agent/gondolin-workspace.ts`; `scripts/install-launch-agents.sh` |
 | Agent Gateway | `server/src/voice_agent/tasking/presentation/gateway.py`; `gateway/Containerfile` |
+| Task Telegram Adapter | `server/src/voice_agent/tasking/presentation/telegram.py`; `deploy/compose.telegram.yml` |
 | Task Database and Queue | `server/migrations/`; `tasking/application/service.py`; Compose Postgres service |
 | Workspace and Result Store | `tasking/infrastructure/artifacts.py`; Compose S3Mock service |
 | Pi Task Worker | `server/src/voice_agent/tasking/workers/pi_worker.py`; worker LaunchAgent |
@@ -65,8 +72,10 @@ transcript APIs to the edge; it does not expose a generic filesystem, shell, que
 selection API. Native Pi tools run inside Gondolin micro-VMs. Optional integration tools run through
 Wassette with declared network and secret permissions.
 
-OTel exports metrics and traces only. Application log export is disabled, Docker logging is disabled
-for content-bearing services, and voice content is deliberately excluded from telemetry.
+OTel exports metrics and traces only. Grafana is available locally and through a Tailnet HTTPS
+listener that maps the Tailscale-injected owner identity into a Grafana viewer; collector and
+datastore APIs remain private. Application log export is disabled, Docker logging is disabled for
+content-bearing services, and voice content is deliberately excluded from telemetry.
 
 ## Render and verify
 

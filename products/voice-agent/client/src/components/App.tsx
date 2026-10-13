@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { RTVIEvent } from '@pipecat-ai/client-js';
 import type { PipecatBaseChildProps } from '@pipecat-ai/voice-ui-kit';
@@ -9,6 +9,7 @@ import {
 } from '@pipecat-ai/voice-ui-kit';
 
 import type { TransportType } from '../config';
+import { formatTokens } from '../context-usage';
 import { MermaidDiagram } from './MermaidDiagram';
 import { AudioVisualizerRadial } from './pipecat/AudioVisualizerRadial';
 import { TaskPanel } from './TaskPanel';
@@ -64,12 +65,24 @@ const isContextUsage = (value: unknown): value is ContextUsage => {
   );
 };
 
-const formatTokens = (tokens: number): string =>
-  tokens >= 1_000_000
-    ? `${(tokens / 1_000_000).toFixed(2)}M`
-    : tokens >= 1_000
-      ? `${Math.round(tokens / 1_000)}k`
-      : String(tokens);
+const applyBrowserAudioProcessing = async (
+  client: NonNullable<PipecatBaseChildProps['client']>
+) => {
+  const audioTrack = client.tracks().local.audio;
+  if (!audioTrack) return;
+
+  try {
+    await audioTrack.applyConstraints({
+      noiseSuppression: true,
+      echoCancellation: true,
+      autoGainControl: true,
+      channelCount: 1,
+    });
+  } catch {
+    // These are optional browser hints. Keep the session usable when a browser
+    // or microphone driver rejects one of them; the edge still applies RNNoise.
+  }
+};
 
 export const App = ({
   client,
@@ -91,12 +104,25 @@ export const App = ({
   const [diagram, setDiagram] = useState(INITIAL_DIAGRAM);
   const { isConnected, isConnecting } = usePipecatConnectionState();
 
+  const refreshContext = useCallback(async () => {
+    try {
+      const response = await fetch('/api/pi-context', { cache: 'no-store' });
+      const body: unknown = await response.json();
+      if (!response.ok || !isContextUsage(body)) throw new Error('context request failed');
+      setContextUsage(body);
+      setContextError('');
+    } catch {
+      setContextError('Context unavailable');
+    }
+  }, []);
+
   const startConversation = async () => {
     if (!client || !handleConnect) return;
     setVoiceControlBusy(true);
     setVoiceControlError('');
     try {
       await handleConnect();
+      await applyBrowserAudioProcessing(client);
       client.enableMic(true);
       setIsMuted(false);
     } catch {
@@ -166,27 +192,21 @@ export const App = ({
   }, []);
 
   useEffect(() => {
-    let active = true;
-    const refreshContext = async () => {
-      try {
-        const response = await fetch('/api/pi-context', { cache: 'no-store' });
-        const body: unknown = await response.json();
-        if (!response.ok || !isContextUsage(body)) throw new Error('context request failed');
-        if (active) {
-          setContextUsage(body);
-          setContextError('');
-        }
-      } catch {
-        if (active) setContextError('Context unavailable');
-      }
-    };
-    void refreshContext();
+    const initial = window.setTimeout(() => void refreshContext(), 0);
     const timer = window.setInterval(() => void refreshContext(), 10_000);
     return () => {
-      active = false;
+      window.clearTimeout(initial);
       window.clearInterval(timer);
     };
-  }, []);
+  }, [refreshContext]);
+
+  useEffect(() => {
+    if (!client) return;
+    client.on(RTVIEvent.BotStoppedSpeaking, refreshContext);
+    return () => {
+      client.off(RTVIEvent.BotStoppedSpeaking, refreshContext);
+    };
+  }, [client, refreshContext]);
 
   const compactContext = async () => {
     setContextBusy(true);

@@ -68,9 +68,16 @@ services:
     environment:
       ENABLE_LOGS_ALL: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+      GF_AUTH_PROXY_ENABLED: "true"
+      GF_AUTH_PROXY_HEADER_NAME: Tailscale-User-Login
+      GF_AUTH_PROXY_HEADER_PROPERTY: username
+      GF_AUTH_PROXY_SYNC_TTL: "0"
+      GF_AUTH_PROXY_WHITELIST: 172.30.90.2
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_USERS_AUTO_ASSIGN_ORG_ROLE: Viewer
       GF_USERS_ALLOW_SIGN_UP: "false"
       PROMETHEUS_EXTRA_ARGS: --storage.tsdb.retention.time=7d
     secrets: [grafana-admin-password]

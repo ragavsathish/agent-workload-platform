@@ -11,6 +11,7 @@ from fastapi import HTTPException, Request
 from loguru import logger
 from pipecat.adapters.schemas.direct_function import DirectFunction
 from pipecat.adapters.schemas.function_schema import FunctionSchema
+from pipecat.audio.filters.rnnoise_filter import RNNoiseFilter
 from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
@@ -599,6 +600,7 @@ async def bot(runner_args: RunnerArguments):
                     webrtc_connection=runner_args.webrtc_connection,
                     params=TransportParams(
                         audio_in_enabled=True,
+                        audio_in_filter=RNNoiseFilter(),
                         audio_out_enabled=True,
                     ),
                 )

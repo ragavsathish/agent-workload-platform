@@ -15,6 +15,20 @@ test('audio initialization is deferred until the user connects', async () => {
   );
 });
 
+test('microphone capture requests browser audio cleanup', async () => {
+  const appSource = await readFile(
+    new URL('../src/components/App.tsx', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(appSource, /client\.tracks\(\)\.local\.audio/);
+  assert.match(appSource, /audioTrack\.applyConstraints\(/);
+  assert.match(appSource, /noiseSuppression:\s*true/);
+  assert.match(appSource, /echoCancellation:\s*true/);
+  assert.match(appSource, /autoGainControl:\s*true/);
+  assert.match(appSource, /channelCount:\s*1/);
+});
+
 test('conversation controls mute capture without ending the voice session', async () => {
   const appSource = await readFile(
     new URL('../src/components/App.tsx', import.meta.url),
@@ -47,6 +61,11 @@ test('context usage is visible and can be compacted without redundant audio cont
   assert.match(appSource, />Context</);
   assert.match(appSource, /contextUsage\.percent/);
   assert.match(appSource, /Compacting…/);
+  assert.match(
+    appSource,
+    /client\.on\(RTVIEvent\.BotStoppedSpeaking, refreshContext\)/,
+    'context usage must refresh as soon as a voice response completes'
+  );
   assert.doesNotMatch(appSource, /Hands-free/);
   assert.doesNotMatch(appSource, /Enable sound/);
 });

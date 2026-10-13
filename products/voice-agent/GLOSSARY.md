@@ -55,6 +55,12 @@ The authenticated product service that owns task proposal, approval,
 cancellation, status, and bounded result access.
 _Avoid_: Agent gateway, API server
 
+**Task Console**:
+An owner interface for creating, reviewing, approving, cancelling, and reading
+Agent Tasks. The Telegram adapter is a Task Console, not a conversational agent
+or a second Pi session.
+_Avoid_: Telegram agent, chat orchestrator
+
 **Published Workspace**:
 An immutable repository bundle registered as the input to an Agent Task.
 _Avoid_: Host mount, current directory

@@ -1,15 +1,31 @@
-C4Context
-title Voice Agent - System Context
+flowchart LR
+    %% C4 system-context view. Keep relationship labels short so generated renders remain readable.
+    subgraph PEOPLE["People"]
+        direction TB
+        VOICE_USER(["Person<br/><b>Voice Operator</b><br/>browser conversation and orchestration"])
+        TASK_USER(["Person<br/><b>Task Operator</b><br/>explicit durable-task operations"])
+    end
 
-Person(user, "Tailnet User", "Uses a private browser voice interface for interactive coding and durable delegated work")
+    SYSTEM["Software system<br/><b>Voice Agent</b><br/>persistent Pi conversation, visual and spoken responses,<br/>and durable agent tasks"]
 
-System(voice_agent, "Voice Agent", "Turns browser speech into a persistent Pi conversation, visual and spoken responses, and optional durable agent tasks")
+    subgraph EXTERNALS["External systems"]
+        direction TB
+        TAILSCALE["External system<br/><b>Tailscale Control Plane</b><br/>device and private-network authority"]
+        TELEGRAM["External system<br/><b>Telegram Bot API</b><br/>task commands and bounded results"]
+        MODELS["External system<br/><b>Model Providers</b><br/>conversational and task models"]
+        INTEGRATIONS["External system<br/><b>External Integrations</b><br/>permission-scoped optional APIs"]
+    end
 
-System_Ext(tailscale, "Tailscale Control Plane", "Authenticates devices and distributes private network configuration")
-System_Ext(models, "Model Providers", "Serve the models selected by the native Pi runtimes using host credentials")
-System_Ext(integrations, "External Integrations", "Optional APIs, such as GitHub, exposed through permission-scoped Wassette components")
+    VOICE_USER -->|"voice · diagrams · transcripts<br/>Tailnet HTTPS and WebRTC"| SYSTEM
+    TASK_USER -->|"create · approve · inspect · cancel"| TELEGRAM
+    SYSTEM -->|"long poll · task views"| TELEGRAM
+    SYSTEM -.->|"private-network configuration"| TAILSCALE
+    SYSTEM -->|"provider APIs"| MODELS
+    SYSTEM -->|"scoped HTTPS"| INTEGRATIONS
 
-Rel_D(user, voice_agent, "Talks, sees diagrams and transcripts, and delegates work", "Tailnet HTTPS, WebRTC")
-Rel_R(voice_agent, tailscale, "Obtains device identity and private network configuration from", "Tailscale control protocol")
-Rel_R(voice_agent, models, "Requests conversational and task-agent completions from", "Provider APIs")
-Rel_R(voice_agent, integrations, "Uses explicitly configured integration capabilities from", "Permission-scoped HTTPS")
+    classDef person fill:#084c8d,color:#fff,stroke:#05345f,stroke-width:2px;
+    classDef system fill:#1168bd,color:#fff,stroke:#0b4884,stroke-width:2px;
+    classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
+    class VOICE_USER,TASK_USER person;
+    class SYSTEM system;
+    class TAILSCALE,TELEGRAM,MODELS,INTEGRATIONS external;

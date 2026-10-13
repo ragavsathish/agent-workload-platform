@@ -62,7 +62,12 @@ export type PublicContextUsage = {
 
 const MAX_TRANSCRIPT_ENTRIES = 200;
 const MAX_TRANSCRIPT_TEXT_CHARS = 24_000;
-const MIN_CONTEXT_TOKENS_TO_COMPACT = 64_000;
+export function canCompactContext(
+  tokens: number | null,
+  compacting: boolean,
+): boolean {
+  return tokens !== null && tokens > 0 && !compacting;
+}
 
 /** A bounded, display-safe projection of Pi events for the owner-only browser UI. */
 export class PublicTranscript {
@@ -584,12 +589,13 @@ class VoiceAgent {
       contextWindow,
       percent,
       estimated: usage?.tokens == null && this.estimatedContextTokens !== undefined,
-      canCompact: tokens !== null && tokens >= MIN_CONTEXT_TOKENS_TO_COMPACT && !this.compacting,
+      canCompact: canCompactContext(tokens, this.compacting),
     };
   }
 
   async compact(): Promise<PublicContextUsage> {
     const execute = async (): Promise<PublicContextUsage> => {
+      if (!this.session) await this.newSession(this.systemPrompt);
       if (!this.session) throw new Error("Pi voice session is unavailable");
       this.compacting = true;
       try {
