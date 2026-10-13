@@ -7,6 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app/src \
     HOME=/tmp \
+    HF_HUB_OFFLINE=1 \
     XDG_CACHE_HOME=/tmp/cache \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
@@ -17,7 +18,12 @@ RUN groupadd --gid 65532 app && useradd --uid 65532 --gid 65532 --no-create-home
 WORKDIR /app
 COPY edge/pyproject.toml edge/uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
+COPY edge/fetch_voxlock_model.py ./
+RUN /app/.venv/bin/python fetch_voxlock_model.py /app/models/voxlock \
+    && /app/.venv/bin/python -c 'from voxlock import VoxLock; VoxLock("/app/models/voxlock", precision="int8", threads=2)' \
+    && chmod -R a-w /app/models/voxlock
 COPY edge/bot.py ./
+COPY edge/audio_filter.py ./
 COPY edge/otel_bridge.py ./
 COPY edge/visual_response.py ./
 COPY server/src/voice_agent/__init__.py ./src/voice_agent/__init__.py

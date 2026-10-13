@@ -43,6 +43,7 @@ from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.workers.runner import WorkerRunner
 from voice_agent.shared.telemetry import configure_telemetry
 
+from audio_filter import audio_filter_readiness, create_audio_filter
 from otel_bridge import configure_pipecat_observers
 from visual_response import StreamingSpokenExtractor, parse_visual_response
 
@@ -570,6 +571,7 @@ async def bot(runner_args: RunnerArguments):
                     webrtc_connection=runner_args.webrtc_connection,
                     params=TransportParams(
                         audio_in_enabled=True,
+                        audio_in_filter=create_audio_filter(telemetry),
                         audio_out_enabled=True,
                     ),
                 )
@@ -617,6 +619,7 @@ if __name__ == "__main__":
             "approval": "voice-yolo",
             "isolation": "docker-desktop-compose",
             "defaultWorkspace": required_env("VOICE_DEFAULT_WORKSPACE"),
+            "audioFilter": audio_filter_readiness(),
         }
 
     @app.get("/api/tasks")
