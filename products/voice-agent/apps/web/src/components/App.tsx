@@ -83,6 +83,8 @@ export const App = ({
   const [defaultWorkspace, setDefaultWorkspace] = useState('');
   const [tasksOpen, setTasksOpen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [isBotThinking, setIsBotThinking] = useState(false);
+  const [isBotSpeaking, setIsBotSpeaking] = useState(false);
   const [voiceControlBusy, setVoiceControlBusy] = useState(false);
   const [voiceControlError, setVoiceControlError] = useState('');
   const [contextUsage, setContextUsage] = useState<ContextUsage | null>(null);
@@ -128,6 +130,8 @@ export const App = ({
       client.enableMic(false);
       await handleDisconnect();
       setIsMuted(false);
+      setIsBotThinking(false);
+      setIsBotSpeaking(false);
     } catch {
       setVoiceControlError('Could not stop the conversation.');
     } finally {
@@ -144,6 +148,30 @@ export const App = ({
     client.on(RTVIEvent.ServerMessage, handleServerMessage);
     return () => {
       client.off(RTVIEvent.ServerMessage, handleServerMessage);
+    };
+  }, [client]);
+
+  useEffect(() => {
+    if (!client) return;
+    const handleLlmStarted = () => setIsBotThinking(true);
+    const handleLlmStopped = () => setIsBotThinking(false);
+    const handleBotStartedSpeaking = () => setIsBotSpeaking(true);
+    const handleBotStoppedSpeaking = () => setIsBotSpeaking(false);
+    const handleDisconnected = () => {
+      setIsBotThinking(false);
+      setIsBotSpeaking(false);
+    };
+    client.on(RTVIEvent.BotLlmStarted, handleLlmStarted);
+    client.on(RTVIEvent.BotLlmStopped, handleLlmStopped);
+    client.on(RTVIEvent.BotStartedSpeaking, handleBotStartedSpeaking);
+    client.on(RTVIEvent.BotStoppedSpeaking, handleBotStoppedSpeaking);
+    client.on(RTVIEvent.Disconnected, handleDisconnected);
+    return () => {
+      client.off(RTVIEvent.BotLlmStarted, handleLlmStarted);
+      client.off(RTVIEvent.BotLlmStopped, handleLlmStopped);
+      client.off(RTVIEvent.BotStartedSpeaking, handleBotStartedSpeaking);
+      client.off(RTVIEvent.BotStoppedSpeaking, handleBotStoppedSpeaking);
+      client.off(RTVIEvent.Disconnected, handleDisconnected);
     };
   }, [client]);
 
@@ -204,10 +232,19 @@ export const App = ({
   };
 
   const showTransportSelector = availableTransports.length > 1;
+  const agentActivity = isBotSpeaking
+    ? 'speaking'
+    : isBotThinking
+      ? 'thinking'
+      : 'idle';
   const stateLabel = isConnected
-    ? isMuted
-      ? 'Muted'
-      : 'Listening'
+    ? agentActivity === 'speaking'
+      ? 'Speaking'
+      : agentActivity === 'thinking'
+        ? 'Thinking…'
+        : isMuted
+          ? 'Muted'
+          : 'Listening'
     : isConnecting
       ? 'Starting…'
       : 'Ready';
@@ -227,9 +264,13 @@ export const App = ({
             <span
               className={`voice-state ${
                 isConnected
-                  ? isMuted
-                    ? 'muted'
-                    : 'listening'
+                  ? agentActivity === 'speaking'
+                    ? 'speaking'
+                    : agentActivity === 'thinking'
+                      ? 'thinking'
+                      : isMuted
+                        ? 'muted'
+                        : 'listening'
                   : isConnecting
                     ? 'starting'
                     : 'stopped'
@@ -237,6 +278,13 @@ export const App = ({
               role="status">
               <span className="voice-state-label">{stateLabel}</span>
             </span>
+            <Button
+              className="audio-diagnostics-launch"
+              size="sm"
+              variant="outline"
+              onClick={() => window.open('/?view=audio-diagnostics', '_blank', 'noopener,noreferrer')}>
+              Replays
+            </Button>
             <Button
               className="transcript-launch"
               size="sm"
@@ -284,22 +332,31 @@ export const App = ({
               <AudioVisualizerRadial
                 participantType="bot"
                 isConnecting={isConnecting}
+                isThinking={agentActivity === 'thinking'}
               />
               <span className="pi-activity-core">P</span>
             </div>
             <div className="dock-copy">
               <strong>
                 {isConnected
-                  ? isMuted
-                    ? 'Microphone muted'
-                    : 'Conversation active'
+                  ? agentActivity === 'speaking'
+                    ? 'Pi is responding'
+                    : agentActivity === 'thinking'
+                      ? 'Pi is thinking'
+                      : isMuted
+                        ? 'Microphone muted'
+                        : 'Conversation active'
                   : 'Start when you are ready'}
               </strong>
               <span>
                 {isConnected
-                  ? isMuted
-                    ? 'Pi remains connected and can still respond'
-                    : 'Mute the microphone when privacy is needed'
+                  ? agentActivity === 'speaking'
+                    ? 'Response audio is playing'
+                    : agentActivity === 'thinking'
+                      ? 'Working on your request'
+                      : isMuted
+                        ? 'Pi remains connected and can still respond'
+                        : 'Mute the microphone when privacy is needed'
                   : 'Audio stays on this machine'}
               </span>
             </div>

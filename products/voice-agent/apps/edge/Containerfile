@@ -14,16 +14,21 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 COPY --from=uv /uv /usr/local/bin/uv
 RUN groupadd --gid 65532 app && useradd --uid 65532 --gid 65532 --no-create-home app
+RUN install -d -o app -g app -m 0700 /var/lib/voice-diagnostics
 
 WORKDIR /app
 COPY apps/edge/pyproject.toml apps/edge/uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY apps/edge/fetch_voxlock_model.py ./
+COPY apps/edge/instrument_voxlock_model.py ./
 RUN /app/.venv/bin/python fetch_voxlock_model.py /app/models/voxlock \
+    && UV_CACHE_DIR=/tmp/voxlock-instrument-cache uv run --with onnx --no-project python instrument_voxlock_model.py /app/models/voxlock/chunk_int8.onnx \
     && /app/.venv/bin/python -c 'from voxlock import VoxLock; VoxLock("/app/models/voxlock", precision="int8", threads=2)' \
+    && uv cache clean --cache-dir /tmp/voxlock-instrument-cache \
     && chmod -R a-w /app/models/voxlock
 COPY apps/edge/bot.py ./
 COPY apps/edge/audio_filter.py ./
+COPY apps/edge/audio_diagnostics.py ./
 COPY apps/edge/otel_bridge.py ./
 COPY apps/edge/visual_response.py ./
 COPY packages/telemetry/src ./src

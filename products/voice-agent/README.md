@@ -136,20 +136,31 @@ bind-mounts `~/Documents`. Each task verifies the bundle digest, expands it bene
 the scratch directory. The mock validates the local artifact contract, not production IAM or
 durability; swap its endpoint for a real S3-compatible service before relying on those guarantees.
 
-Raw audio and synthesized speech exist only in memory while streaming. Transcripts remain in the
-in-memory conversation context for the active call and are discarded with it. Postgres stores only
-an explicitly proposed task instruction. Queue workers run Pi with `--no-session`, and native
+Raw microphone input and the VoxLock/RNNoise comparison outputs are retained as WAV files for the
+five most recent completed conversations in the private `voice-diagnostics` Docker volume. The
+tailnet-authenticated **Replays** page exposes all three versions for listening; the oldest session
+is deleted after the sixth completes. Recording stops at `VOICE_DIAGNOSTIC_MAX_SECONDS` per session,
+and audio is never exported to OpenTelemetry. The same page uses WaveSurfer for replay waveforms
+and raw/VoxLock spectrograms, and Recharts for input/output energy, suppression, per-filter
+latency, LSTM-state activity, and the model's predicted complex-mask magnitude. The edge image
+instruments the digest-verified VoxLock ONNX graph at build time to expose that mask; it records
+only frequency-band aggregates, not model tensors. The live view polls a bounded microphone
+envelope rather than sending replayable audio samples. Synthesized speech exists only in memory while
+streaming. Transcripts remain in the in-memory conversation context for the active call and are
+discarded with it. Postgres stores only an explicitly proposed task instruction. Queue workers run Pi
+with `--no-session`, and native
 launch services write stdout and stderr to `/dev/null`, so agent conversations are not retained as
 Pi session JSONL. The synthetic black-box runner reports event counts, never transcript text.
 
 The server-side microphone filter is selected with `VOICE_INPUT_FILTER=rnnoise|voxlock`; RNNoise
-is the rollback default. VoxLock uses the host WAV named by `VOXLOCK_VOICE_SAMPLE_SOURCE`.
+is the rollback default. Both filters process the same input so their last-five replay files are
+directly comparable, while only the selected filter continues to VAD and transcription. VoxLock
+uses the host WAV named by `VOXLOCK_VOICE_SAMPLE_SOURCE`.
 `make up` validates mono 16 kHz PCM16 input, extracts the strongest three seconds from its first
 15 seconds, and writes only that derived sample to an ignored mode-0600 Compose secret. The edge
 loads hash-verified ONNX models baked into its image and runs with Hugging Face networking disabled.
 VoxLock is target-speaker isolation, not authentication or liveness detection. See the
 [VoxLock implementation and validation guide](../../docs/research/voxlock-pipecat-integration.md).
-
 Silero VAD keeps Pipecat's recommended `stop_secs=0.2`; `LocalSmartTurnAnalyzerV3` decides when a
 spoken turn is complete. MLX Whisper receives every completed audio segment directly—there is no
 speaker-authentication gate. The selected input filter runs before VAD and transcription.

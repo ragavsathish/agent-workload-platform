@@ -1,4 +1,4 @@
-.PHONY: setup build up start logs down recreate verify cycle-test login status grafana-password warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e host-preflight install-host-services db-init broker worker pull-model check
+.PHONY: setup build up start logs down recreate verify cycle-test login status grafana-password warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e playwright-voice host-preflight install-host-services db-init broker worker pull-model check
 
 COMPOSE = docker compose --env-file deploy/.env -f deploy/compose.yml
 
@@ -79,6 +79,9 @@ blackbox-voice:
 
 blackbox-e2e:
 	./tests/e2e/blackbox-e2e.sh
+
+playwright-voice:
+	./tests/e2e/playwright-voice.sh
 
 host-preflight:
 	./scripts/host-preflight.sh

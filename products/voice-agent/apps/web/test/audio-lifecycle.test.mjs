@@ -79,9 +79,54 @@ test('conversation dock uses the source-installed Pipecat UI visualizer', async 
 
   assert.match(appSource, /<AudioVisualizerRadial/);
   assert.match(appSource, /participantType="bot"/);
+  assert.match(appSource, /RTVIEvent\.BotLlmStarted/);
+  assert.match(appSource, /RTVIEvent\.BotLlmStopped/);
+  assert.match(appSource, /RTVIEvent\.BotStartedSpeaking/);
+  assert.match(appSource, /isThinking=\{agentActivity === 'thinking'\}/);
+  assert.match(appSource, /'Pi is thinking'/);
   assert.match(visualizerSource, /usePipecatClientMediaTrack/);
   assert.match(visualizerSource, /createVoiceBands/);
   assert.match(visualizerHelpers, /export function createVisualizerAnalyser/);
   assert.match(visualizerHelpers, /export function createVoiceBands/);
   assert.match(visualizerHelpers, /export function readBand/);
+});
+
+test('the last five completed conversations expose comparable audio replays', async () => {
+  const appSource = await readFile(
+    new URL('../src/components/App.tsx', import.meta.url),
+    'utf8'
+  );
+  const mainSource = await readFile(new URL('../src/main.tsx', import.meta.url), 'utf8');
+  const diagnosticsSource = await readFile(
+    new URL('../src/components/AudioDiagnosticsView.tsx', import.meta.url),
+    'utf8'
+  );
+  const waveformSource = await readFile(
+    new URL('../src/components/AudioWaveform.tsx', import.meta.url),
+    'utf8'
+  );
+  const chartsSource = await readFile(
+    new URL('../src/components/AudioDiagnosticsCharts.tsx', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(appSource, /\?view=audio-diagnostics/);
+  assert.match(mainSource, /<AudioDiagnosticsView/);
+  assert.match(diagnosticsSource, /fetch\('\/api\/audio-diagnostics'/);
+  assert.match(diagnosticsSource, /values\.slice\(0, 5\)/);
+  assert.match(diagnosticsSource, /Raw microphone/);
+  assert.match(diagnosticsSource, /VoxLock/);
+  assert.match(diagnosticsSource, /RNNoise/);
+  assert.match(diagnosticsSource, /<AudioWaveform/);
+  assert.match(diagnosticsSource, /Load waveform comparison/);
+  assert.match(waveformSource, /from '@wavesurfer\/react'/);
+  assert.match(waveformSource, /spectrogram\.esm\.js/);
+  assert.match(waveformSource, /normalize=\{false\}/);
+  assert.match(chartsSource, /from 'recharts'/);
+  assert.match(chartsSource, /audio-diagnostics\/live/);
+  assert.match(chartsSource, /Input and output energy/);
+  assert.match(chartsSource, /Suppression/);
+  assert.match(chartsSource, /inference latency/);
+  assert.match(chartsSource, /LSTM-state RMS activity/);
+  assert.match(chartsSource, /predicted complex-mask magnitude/);
 });

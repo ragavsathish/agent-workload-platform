@@ -1,4 +1,4 @@
-import { StrictMode, useState } from 'react';
+import { lazy, StrictMode, Suspense, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { ThemeProvider } from '@pipecat-ai/voice-ui-kit';
@@ -20,6 +20,12 @@ import {
 } from './config';
 import type { TransportType } from './config';
 import './index.css';
+
+const AudioDiagnosticsView = lazy(() =>
+  import('./components/AudioDiagnosticsView').then((module) => ({
+    default: module.AudioDiagnosticsView,
+  }))
+);
 
 export const Main = () => {
   const [transportType, setTransportType] =
@@ -60,13 +66,19 @@ export const Main = () => {
   );
 };
 
-const transcriptView = new URLSearchParams(window.location.search).get('view') === 'transcript';
+const view = new URLSearchParams(window.location.search).get('view');
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {transcriptView ? (
+    {view === 'transcript' ? (
       <ThemeProvider defaultTheme="terminal" disableStorage>
         <TranscriptView />
+      </ThemeProvider>
+    ) : view === 'audio-diagnostics' ? (
+      <ThemeProvider defaultTheme="terminal" disableStorage>
+        <Suspense fallback={<SpinLoader />}>
+          <AudioDiagnosticsView />
+        </Suspense>
       </ThemeProvider>
     ) : (
       <Main />

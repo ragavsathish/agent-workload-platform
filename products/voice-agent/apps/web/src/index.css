@@ -102,6 +102,17 @@
   box-shadow: 0 0 0.65rem rgb(86 227 159 / 55%);
 }
 
+.voice-state.thinking::before {
+  background: #72b7ef;
+  box-shadow: 0 0 0.7rem rgb(114 183 239 / 50%);
+  animation: thinking-pulse 1.2s ease-in-out infinite;
+}
+
+.voice-state.speaking::before {
+  background: #72efb6;
+  box-shadow: 0 0 0.75rem rgb(114 239 182 / 60%);
+}
+
 .voice-state.muted::before,
 .voice-state.starting::before {
   background: #ffb84d;
@@ -212,8 +223,28 @@
 }
 
 .pi-activity canvas[data-state='speaking'],
-.pi-activity canvas[data-state='connecting'] {
+.pi-activity canvas[data-state='connecting'],
+.pi-activity canvas[data-state='thinking'] {
   filter: drop-shadow(0 0 0.7rem rgb(86 227 159 / 35%));
+}
+
+@keyframes thinking-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-state.thinking::before {
+    animation: none;
+  }
 }
 
 .pi-activity-core {
@@ -443,6 +474,275 @@
   color: #65717b;
   font-size: 0.68rem;
   text-align: center;
+}
+
+.audio-diagnostics-page {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100vh;
+  padding: clamp(1rem, 4vw, 3rem);
+  background:
+    radial-gradient(circle at 50% -15%, rgb(42 128 91 / 18%), transparent 38rem),
+    #090b0d;
+  color: #e7edf2;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+.audio-diagnostics-header {
+  display: flex;
+  width: min(100%, 72rem);
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 auto 1.5rem;
+}
+
+.audio-diagnostics-header h1 {
+  margin: 0.35rem 0 0.45rem;
+  font-size: clamp(1.35rem, 4vw, 2rem);
+}
+
+.audio-diagnostics-header p:not(.eyebrow) {
+  max-width: 42rem;
+  margin: 0;
+  color: #89949f;
+  line-height: 1.5;
+}
+
+.audio-diagnostics-header button {
+  border: 1px solid #365044;
+  border-radius: 7px;
+  padding: 0.55rem 0.8rem;
+  background: #14271f;
+  color: #b9f5d6;
+  cursor: pointer;
+}
+
+.audio-session-list {
+  display: grid;
+  width: min(100%, 72rem);
+  gap: 1rem;
+  margin: 0 auto;
+}
+
+.live-diagnostic {
+  width: min(100%, 72rem);
+  box-sizing: border-box;
+  margin: 0 auto 1rem;
+  border: 1px solid #283038;
+  border-radius: 14px;
+  padding: 1rem;
+  background: rgb(16 21 26 / 94%);
+}
+
+.live-diagnostic > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.live-diagnostic h2,
+.diagnostic-chart h3 {
+  margin: 0.25rem 0 0;
+  color: #e7edf2;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.live-diagnostic > header > span {
+  color: #71e9ad;
+  font: 0.7rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.live-waveform {
+  height: 5.5rem;
+  margin-top: 0.75rem;
+  background: #0b0f12;
+}
+
+.audio-session-card {
+  border: 1px solid #283038;
+  border-radius: 14px;
+  padding: clamp(0.85rem, 2vw, 1.25rem);
+  background: rgb(16 21 26 / 94%);
+}
+
+.audio-session-card > header,
+.audio-session-card > header > div,
+.audio-variant-header {
+  display: flex;
+  align-items: center;
+}
+
+.audio-session-card > header {
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.audio-session-card > header > div {
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.audio-session-number {
+  color: #71e9ad;
+  font: 650 0.75rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.audio-session-card time,
+.audio-session-duration {
+  color: #7f8b95;
+  font-size: 0.75rem;
+}
+
+.audio-variant-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.audio-variant {
+  min-width: 0;
+  border: 1px solid #222b32;
+  border-radius: 9px;
+  padding: 0.75rem;
+  background: #0b0f12;
+}
+
+.audio-variant-header {
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.audio-variant strong {
+  font-size: 0.78rem;
+}
+
+.audio-variant span {
+  border-radius: 999px;
+  padding: 0.2rem 0.4rem;
+  background: #194a37;
+  color: #8cf5c1;
+  font-size: 0.58rem;
+  text-transform: uppercase;
+}
+
+.audio-comparison-load,
+.audio-waveform-controls button {
+  border: 1px solid #365044;
+  border-radius: 7px;
+  padding: 0.48rem 0.7rem;
+  background: #14271f;
+  color: #b9f5d6;
+  cursor: pointer;
+}
+
+.audio-waveform {
+  min-width: 0;
+}
+
+.audio-spectrogram {
+  min-height: 7rem;
+  overflow: hidden;
+  background: #080b0e;
+}
+
+.audio-spectrogram > div {
+  background: #080b0e !important;
+}
+
+.audio-waveform-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.audio-waveform-controls button:disabled {
+  cursor: wait;
+  opacity: 0.45;
+}
+
+.audio-waveform-controls span {
+  padding: 0;
+  background: transparent;
+  color: #7f8b95;
+  font: 0.65rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-transform: none;
+}
+
+.diagnostic-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.diagnostic-chart {
+  min-width: 0;
+  border-top: 1px solid #273039;
+  padding-top: 0.8rem;
+}
+
+.diagnostic-chart:last-child {
+  grid-column: 1 / -1;
+}
+
+.diagnostic-chart-canvas {
+  height: 15rem;
+  margin-top: 0.65rem;
+}
+
+.audio-session-warning,
+.audio-diagnostics-error,
+.audio-diagnostics-empty {
+  color: #ffbd76;
+  font-size: 0.76rem;
+}
+
+.audio-diagnostics-empty,
+.audio-diagnostics-error {
+  width: min(100%, 72rem);
+  box-sizing: border-box;
+  margin: 3rem auto;
+  text-align: center;
+}
+
+.audio-diagnostics-footer {
+  width: min(100%, 72rem);
+  margin: 1rem auto 0;
+  color: #65717b;
+  font-size: 0.68rem;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .audio-variant-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .audio-diagnostics-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .audio-diagnostics-header button {
+    align-self: flex-start;
+  }
+
+  .diagnostic-chart-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .diagnostic-chart:last-child {
+    grid-column: auto;
+  }
 }
 
 .task-panel {

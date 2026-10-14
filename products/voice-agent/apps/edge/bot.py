@@ -43,6 +43,7 @@ from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.workers.runner import WorkerRunner
 from voice_agent.shared.telemetry import configure_telemetry
 
+from audio_diagnostics import audio_diagnostic_store
 from audio_filter import audio_filter_readiness, create_audio_filter
 from otel_bridge import configure_pipecat_observers
 from visual_response import StreamingSpokenExtractor, parse_visual_response
@@ -723,6 +724,44 @@ if __name__ == "__main__":
         return JSONResponse(
             await broker_transcript_request(),
             headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/api/audio-diagnostics")
+    async def list_audio_diagnostics(request: Request):
+        validate_http_identity(request)
+        return JSONResponse(
+            {"sessions": audio_diagnostic_store().list()},
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/api/audio-diagnostics/live")
+    async def live_audio_diagnostics(request: Request):
+        validate_http_identity(request)
+        return JSONResponse(
+            audio_diagnostic_store().live_snapshot(),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/api/audio-diagnostics/{session_id}/metrics")
+    async def audio_diagnostic_metrics(session_id: str, request: Request):
+        validate_http_identity(request)
+        try:
+            payload = audio_diagnostic_store().metrics(session_id)
+        except (ValueError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=404, detail="audio diagnostic not found") from exc
+        return JSONResponse(payload, headers={"Cache-Control": "no-store, private"})
+
+    @app.get("/api/audio-diagnostics/{session_id}/{variant}.wav")
+    async def replay_audio_diagnostic(session_id: str, variant: str, request: Request):
+        validate_http_identity(request)
+        try:
+            target = audio_diagnostic_store().audio_path(session_id, variant)
+        except (ValueError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=404, detail="audio diagnostic not found") from exc
+        return FileResponse(
+            target,
+            media_type="audio/wav",
+            headers={"Cache-Control": "no-store, private"},
         )
 
     @app.get("/api/pi-context")
