@@ -1,0 +1,70 @@
+http:
+  middlewares:
+    tailnet-loopback-only:
+      ipAllowList:
+        sourceRange:
+          - "127.0.0.1/32"
+        rejectStatusCode: 404
+    git-prefix:
+      stripPrefix:
+        prefixes:
+          - /git
+    git-encoded-paths:
+      encodedCharacters:
+        allowEncodedSlash: true
+    metrics-slash:
+      redirectRegex:
+        regex: "^(https?://[^/]+/metrics)$"
+        replacement: "${1}/"
+        permanent: true
+    git-slash:
+      redirectRegex:
+        regex: "^(https?://[^/]+/git)$"
+        replacement: "${1}/"
+        permanent: true
+
+  routers:
+    metrics-root:
+      entryPoints: [tailnet]
+      rule: "HeaderRegexp(`Tailscale-User-Login`, `.+`) && Path(`/metrics`)"
+      priority: 310
+      middlewares: [tailnet-loopback-only, metrics-slash]
+      service: noop@internal
+    metrics:
+      entryPoints: [tailnet]
+      rule: "HeaderRegexp(`Tailscale-User-Login`, `.+`) && PathPrefix(`/metrics/`)"
+      priority: 300
+      middlewares: [tailnet-loopback-only]
+      service: grafana
+    git-root:
+      entryPoints: [tailnet]
+      rule: "HeaderRegexp(`Tailscale-User-Login`, `.+`) && Path(`/git`)"
+      priority: 210
+      middlewares: [tailnet-loopback-only, git-slash]
+      service: noop@internal
+    git:
+      entryPoints: [tailnet]
+      rule: "HeaderRegexp(`Tailscale-User-Login`, `.+`) && PathPrefix(`/git/`)"
+      priority: 200
+      middlewares: [tailnet-loopback-only, git-encoded-paths, git-prefix]
+      service: gitea
+    live:
+      entryPoints: [tailnet]
+      rule: "HeaderRegexp(`Tailscale-User-Login`, `.+`) && PathPrefix(`/`)"
+      priority: 1
+      middlewares: [tailnet-loopback-only]
+      service: voice-edge
+
+  services:
+    voice-edge:
+      loadBalancer:
+        servers:
+          - url: http://127.0.0.1:7860
+    grafana:
+      loadBalancer:
+        servers:
+          - url: http://otel-lgtm:3000
+    gitea:
+      loadBalancer:
+        servers:
+          - url: http://gitea:3000

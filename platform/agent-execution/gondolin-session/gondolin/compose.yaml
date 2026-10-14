@@ -1,0 +1,20 @@
+services:
+  voice-runtime-amd64:
+    profiles: [amd64]
+    image: voice-agent-gondolin:playwright-mcp-0.0.79-amd64
+    platform: linux/amd64
+    build:
+      context: ../../../..
+      dockerfile: platform/agent-execution/gondolin-session/gondolin/Dockerfile.voice
+      args:
+        PLAYWRIGHT_MCP_IMAGE: mcr.microsoft.com/playwright/mcp:v0.0.79@sha256:add8756264bc95962597d2e5095b66317acb1d89a7c8b64f264e7d2dee140bc9
+
+  voice-runtime-arm64:
+    profiles: [arm64]
+    image: voice-agent-gondolin:playwright-mcp-0.0.79-arm64
+    platform: linux/arm64
+    build:
+      context: ../../../..
+      dockerfile: platform/agent-execution/gondolin-session/gondolin/Dockerfile.voice
+      args:
+        PLAYWRIGHT_MCP_IMAGE: mcr.microsoft.com/playwright/mcp:v0.0.79@sha256:2f69a7a48fb9e5eea360f8f160192b11241e6e7d124389c103164f39e6fd2f8d

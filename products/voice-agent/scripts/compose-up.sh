@@ -15,8 +15,9 @@ uv run --project apps/gateway python deploy/prepare_edge_env.py apps/edge/.env
 uv run --project apps/gateway python deploy/prepare_compose.py "$root"
 
 "${compose[@]}" build
-"${compose[@]}" up -d --wait --force-recreate postgres s3mock
+"${compose[@]}" up -d --wait --force-recreate postgres s3mock gitea
 "$root/scripts/db-init.sh"
+"$root/scripts/gitea-sync.sh"
 "$root/scripts/install-launch-agents.sh"
 "${compose[@]}" up -d --wait --force-recreate
 "$root/scripts/compose-verify.sh"

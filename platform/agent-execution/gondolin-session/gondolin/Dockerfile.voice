@@ -1,0 +1,24 @@
+# syntax=docker/dockerfile:1.7
+
+ARG PLAYWRIGHT_MCP_IMAGE
+FROM ${PLAYWRIGHT_MCP_IMAGE}
+
+ARG TARGETARCH
+ARG TEA_VERSION=0.15.1
+USER root
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update \
+    && apt-get install --yes --no-install-recommends awscli ca-certificates curl git \
+    && case "$TARGETARCH" in \
+         amd64) tea_sha256=aac99cc6e650a81ae7b5061f8c75bc0eade4509c828d97b6072e1f0a3bd24357 ;; \
+         arm64) tea_sha256=0db109df6696bfe01f9203402f503404692404d4ea9c16a540ecaeecc8e6bab2 ;; \
+         *) echo "Unsupported Tea architecture: $TARGETARCH" >&2; exit 1 ;; \
+       esac \
+    && curl --fail --location --silent --show-error \
+       "https://dl.gitea.com/tea/${TEA_VERSION}/tea-${TEA_VERSION}-linux-${TARGETARCH}" \
+       --output /tmp/tea \
+    && echo "$tea_sha256  /tmp/tea" | sha256sum --check --strict \
+    && install -m 0555 /tmp/tea /usr/local/bin/tea \
+    && rm /tmp/tea
+USER node

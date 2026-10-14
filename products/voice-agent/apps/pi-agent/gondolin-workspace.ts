@@ -11,10 +11,17 @@ import {
   type ReadOperations,
   type WriteOperations,
 } from "@earendil-works/pi-coding-agent";
-import { ReadonlyProvider, RealFSProvider, VM } from "@earendil-works/gondolin";
+import {
+  createHttpHooks,
+  ReadonlyProvider,
+  RealFSProvider,
+  VM,
+} from "@earendil-works/gondolin";
 
 const GUEST_WORKSPACE = "/workspace";
 export const GUEST_SKILLS = "/skills";
+export const GUEST_S3MOCK_ENDPOINT = "http://s3mock.local:9090";
+export const GUEST_GITEA_ENDPOINT = "http://gitea.local:3001";
 
 function shQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
@@ -131,11 +138,75 @@ export function createGondolinTools(vm: VM, localCwd: string) {
 }
 
 type GondolinWorkspaceOptions = {
+  giteaEndpointUrl: string;
+  giteaOwner: string;
+  giteaToken: string;
   imagePath: string;
   localCwd: string;
   skillsDir: string;
+  s3MockAccessKey: string;
+  s3MockBucket: string;
+  s3MockEndpointUrl: string;
+  s3MockSecretKey: string;
   sessionLabel?: string;
 };
+
+function loopbackOrigin(value: string, service: string): URL {
+  const origin = new URL(value);
+  if (origin.protocol !== "http:" || origin.hostname !== "127.0.0.1" || !origin.port
+    || origin.pathname !== "/" || origin.search || origin.hash) {
+    throw new Error(`Gondolin ${service} endpoint must be an HTTP loopback origin with an explicit port`);
+  }
+  return origin;
+}
+
+export function createGondolinServiceAccess(options: GondolinWorkspaceOptions) {
+  const s3Upstream = loopbackOrigin(options.s3MockEndpointUrl, "S3Mock");
+  const giteaUpstream = loopbackOrigin(options.giteaEndpointUrl, "Gitea");
+  const s3Guest = new URL(GUEST_S3MOCK_ENDPOINT);
+  s3Guest.port = s3Upstream.port;
+  const giteaGuest = new URL(GUEST_GITEA_ENDPOINT);
+  giteaGuest.port = giteaUpstream.port;
+  const { httpHooks, env } = createHttpHooks({
+    allowedHosts: [],
+    allowedInternalHosts: [s3Upstream.hostname],
+    onRequest: (request) => {
+      const requested = new URL(request.url);
+      const route = [
+        { guest: s3Guest, upstream: s3Upstream },
+        { guest: giteaGuest, upstream: giteaUpstream },
+      ].find(({ guest }) => requested.hostname === guest.hostname && requested.port === guest.port);
+      if (!route) {
+        return new Response("network destination denied", { status: 403 });
+      }
+      requested.protocol = route.upstream.protocol;
+      requested.hostname = route.upstream.hostname;
+      requested.port = route.upstream.port;
+      return new Request(requested, request);
+    },
+  });
+  return {
+    httpHooks,
+    env: {
+      ...env,
+      AWS_ACCESS_KEY_ID: options.s3MockAccessKey,
+      AWS_SECRET_ACCESS_KEY: options.s3MockSecretKey,
+      AWS_DEFAULT_REGION: "us-east-1",
+      AWS_REGION: "us-east-1",
+      S3_BUCKET: options.s3MockBucket,
+      S3_ENDPOINT_URL: s3Guest.origin,
+      GITEA_BASE_URL: giteaGuest.origin,
+      GITEA_OWNER: options.giteaOwner,
+    },
+  };
+}
+
+export function createGondolinMounts(options: GondolinWorkspaceOptions) {
+  return {
+    [GUEST_WORKSPACE]: new RealFSProvider(options.localCwd),
+    [GUEST_SKILLS]: new ReadonlyProvider(new RealFSProvider(options.skillsDir)),
+  };
+}
 
 export class GondolinWorkspace {
   private constructor(
@@ -150,18 +221,35 @@ export class GondolinWorkspace {
     if (!existsSync(options.skillsDir)) {
       throw new Error(`Missing skills directory: ${options.skillsDir}`);
     }
+    const serviceAccess = createGondolinServiceAccess(options);
     const vm = await VM.create({
       sandbox: { imagePath: options.imagePath },
+      dns: { mode: "synthetic", syntheticHostMapping: "per-host" },
+      env: serviceAccess.env,
+      httpHooks: serviceAccess.httpHooks,
       vfs: {
-        mounts: {
-          [GUEST_WORKSPACE]: new RealFSProvider(options.localCwd),
-          [GUEST_SKILLS]: new ReadonlyProvider(new RealFSProvider(options.skillsDir)),
-        },
+        mounts: createGondolinMounts(options),
       },
       memory: "2G",
       cpus: 2,
       sessionLabel: options.sessionLabel ?? "pi-voice",
     });
+    const teaLogin = await vm.exec([
+      "/usr/local/bin/tea",
+      "login",
+      "add",
+      "--name",
+      "local",
+      "--url",
+      new URL(GUEST_GITEA_ENDPOINT).origin,
+      "--token",
+      options.giteaToken,
+      "--no-version-check",
+    ]);
+    if (!teaLogin.ok) {
+      await vm.close();
+      throw new Error("Could not configure the scoped Gitea CLI login");
+    }
     return new GondolinWorkspace(vm, options.localCwd);
   }
 

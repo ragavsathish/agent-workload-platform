@@ -1,13 +1,13 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { chmod, mkdir, readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
   calculateContextTokens,
   createAgentSession,
-  createExtensionRuntime,
   DEFAULT_COMPACTION_SETTINGS,
+  DefaultResourceLoader,
   defineTool,
   getLastAssistantUsage,
   ModelRuntime,
@@ -16,7 +16,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
-import { GondolinWorkspace } from "./gondolin-workspace.js";
+import { GondolinWorkspace, GUEST_SKILLS } from "./gondolin-workspace.js";
 
 type VoiceMessage = {
   role: "system" | "developer" | "user" | "assistant";
@@ -26,6 +26,9 @@ type VoiceMessage = {
 type ServiceSettings = {
   agentDir: string;
   cwd: string;
+  giteaEndpointUrl: string;
+  giteaOwner: string;
+  giteaToken: string;
   gondolinAssets: string;
   gatewayToken: string;
   gatewayUrl: string;
@@ -36,6 +39,10 @@ type ServiceSettings = {
   sessionDir: string;
   serviceToken: string;
   skillsDir: string;
+  s3MockAccessKey: string;
+  s3MockBucket: string;
+  s3MockEndpointUrl: string;
+  s3MockSecretKey: string;
   thinking: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   timeoutMs: number;
 };
@@ -160,7 +167,6 @@ const proposalIdParameters = Type.Object(
   },
   { additionalProperties: false },
 );
-
 function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is required`);
@@ -274,25 +280,50 @@ function toolResult(payload: Record<string, unknown>, tool: string): ToolResult 
   };
 }
 
-function staticResourceLoader(systemPrompt: string) {
-  const extensionsResult = {
-    extensions: [],
-    errors: [],
-    runtime: createExtensionRuntime(),
-  };
-  return {
-    getExtensions: () => extensionsResult,
-    getSkills: () => ({ skills: [], diagnostics: [] }),
-    getPrompts: () => ({ prompts: [], diagnostics: [] }),
-    getThemes: () => ({ themes: [], diagnostics: [] }),
-    getAgentsFiles: () => ({ agentsFiles: [] }),
-    getSystemPrompt: () => systemPrompt,
-    getSystemPromptSource: () => undefined,
-    getAppendSystemPrompt: () => [],
-    getAppendSystemPromptSources: () => [],
-    extendResources: (_paths: unknown) => undefined,
-    reload: async () => undefined,
-  };
+function guestSkillPath(skillsDir: string, hostPath: string): string {
+  const relativePath = relative(skillsDir, hostPath);
+  if (
+    relativePath === ".."
+    || relativePath.startsWith(`..${sep}`)
+    || isAbsolute(relativePath)
+  ) {
+    throw new Error(`Pi discovered a skill outside the configured skills directory: ${hostPath}`);
+  }
+  return posix.join(GUEST_SKILLS, ...relativePath.split(sep));
+}
+
+export async function skillResourceLoader(
+  systemPrompt: string,
+  settings: Pick<ServiceSettings, "agentDir" | "cwd" | "skillsDir">,
+): Promise<DefaultResourceLoader> {
+  const loader = new DefaultResourceLoader({
+    cwd: settings.cwd,
+    agentDir: settings.agentDir,
+    systemPrompt,
+    additionalSkillPaths: [settings.skillsDir],
+    noExtensions: true,
+    noSkills: true,
+    noPromptTemplates: true,
+    noThemes: true,
+    noContextFiles: true,
+    skillsOverride: ({ skills, diagnostics }) => ({
+      diagnostics,
+      skills: skills.map((skill) => ({
+        ...skill,
+        filePath: guestSkillPath(settings.skillsDir, skill.filePath),
+        baseDir: guestSkillPath(settings.skillsDir, skill.baseDir),
+        sourceInfo: {
+          ...skill.sourceInfo,
+          path: guestSkillPath(settings.skillsDir, skill.sourceInfo.path),
+          ...(skill.sourceInfo.baseDir
+            ? { baseDir: guestSkillPath(settings.skillsDir, skill.sourceInfo.baseDir) }
+            : {}),
+        },
+      })),
+    }),
+  });
+  await loader.reload();
+  return loader;
 }
 
 async function gatewayRequest(
@@ -385,9 +416,16 @@ class VoiceAgent {
       allowModelNetwork: false,
     });
     const gondolin = await GondolinWorkspace.create({
+      giteaEndpointUrl: settings.giteaEndpointUrl,
+      giteaOwner: settings.giteaOwner,
+      giteaToken: settings.giteaToken,
       imagePath: settings.gondolinAssets,
       localCwd: settings.cwd,
       skillsDir: settings.skillsDir,
+      s3MockAccessKey: settings.s3MockAccessKey,
+      s3MockBucket: settings.s3MockBucket,
+      s3MockEndpointUrl: settings.s3MockEndpointUrl,
+      s3MockSecretKey: settings.s3MockSecretKey,
       sessionLabel: "pi-voice",
     });
     const persistedSession = openVoiceSessionManager(settings.cwd, settings.sessionDir);
@@ -511,7 +549,7 @@ class VoiceAgent {
     this.unsubscribeSession?.();
     this.unsubscribeSession = undefined;
     this.session?.dispose();
-    const resourceLoader = staticResourceLoader(systemPrompt);
+    const resourceLoader = await skillResourceLoader(systemPrompt, this.settings);
     let model;
     if (this.settings.model) {
       const separator = this.settings.model.indexOf("/");
@@ -739,6 +777,9 @@ async function loadSettings(): Promise<ServiceSettings> {
   return {
     agentDir,
     cwd,
+    giteaEndpointUrl: requiredEnv("GITEA_ENDPOINT_URL"),
+    giteaOwner: requiredEnv("GITEA_OWNER"),
+    giteaToken: requiredEnv("GITEA_TOKEN"),
     gondolinAssets: resolve(requiredEnv("GONDOLIN_BROWSER_ASSETS")),
     gatewayToken: requiredEnv("AGENT_GATEWAY_TOKEN"),
     gatewayUrl: (process.env.AGENT_GATEWAY_BASE_URL || "http://127.0.0.1:9444/v1").replace(/\/$/, ""),
@@ -749,6 +790,10 @@ async function loadSettings(): Promise<ServiceSettings> {
     sessionDir,
     serviceToken: requiredEnv("INFERENCE_BROKER_TOKEN"),
     skillsDir,
+    s3MockAccessKey: requiredEnv("ARTIFACT_ACCESS_KEY"),
+    s3MockBucket: requiredEnv("ARTIFACT_BUCKET"),
+    s3MockEndpointUrl: requiredEnv("ARTIFACT_ENDPOINT_URL"),
+    s3MockSecretKey: requiredEnv("ARTIFACT_SECRET_KEY"),
     thinking,
     timeoutMs: Number.parseFloat(process.env.PI_VOICE_TIMEOUT_SECONDS || "120") * 1000,
   };

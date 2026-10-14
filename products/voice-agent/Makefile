@@ -30,7 +30,7 @@ logs:
 	@interrupted=0; \
 	tail -n 100 -F "$$HOME/Library/Logs/PipecatEdge/"*.log & tail_pid=$$!; \
 	trap 'interrupted=1' INT TERM; \
-	$(COMPOSE) logs -f --tail=100 agent-gateway voice-edge tailscale; status=$$?; \
+	$(COMPOSE) logs -f --tail=100 agent-gateway voice-edge tailscale traefik gitea; status=$$?; \
 	kill "$$tail_pid" 2>/dev/null || true; \
 	wait "$$tail_pid" 2>/dev/null || true; \
 	if [[ "$$interrupted" == 1 || "$$status" == 130 ]]; then exit 0; fi; \
@@ -106,9 +106,9 @@ check:
 	pnpm --dir ../.. --filter @agent-workload-platform/voice-pi-agent check
 	pnpm --dir ../.. --filter @agent-workload-platform/voice-pi-agent test
 	uv sync --project apps/broker --python 3.13
-	uv run --project apps/broker ruff check --config apps/broker/pyproject.toml apps/broker packages/telemetry deploy/test_prepare_compose.py
+	uv run --project apps/broker ruff check --config apps/broker/pyproject.toml apps/broker packages/telemetry deploy/test_prepare_compose.py deploy/test_finalize_edge.py
 	uv run --project apps/broker pyright --project apps/broker/pyproject.toml apps/broker packages/telemetry
-	PYTHONPATH=apps/broker/src:packages/telemetry/src uv run --project apps/broker pytest apps/broker/tests packages/telemetry/tests deploy/test_prepare_compose.py
+	PYTHONPATH=apps/broker/src:packages/telemetry/src uv run --project apps/broker pytest apps/broker/tests packages/telemetry/tests deploy/test_prepare_compose.py deploy/test_finalize_edge.py
 	uv sync --project apps/gateway --python 3.13
 	uv run --project apps/gateway ruff check --config apps/gateway/pyproject.toml apps/gateway packages/tasking
 	uv run --project apps/gateway pyright --project apps/gateway/pyproject.toml apps/gateway packages/tasking

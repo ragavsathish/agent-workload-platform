@@ -16,13 +16,16 @@ flowchart LR
             direction TB
             subgraph EDGE_NS["Shared Tailscale network namespace"]
                 direction LR
-                INGRESS["Container<br/><b>Tailnet Ingress</b><br/>Tailscale Serve"]
+                INGRESS["Container<br/><b>Tailnet Auth Ingress</b><br/>Tailscale Serve · HTTPS :443"]
+                ROUTER["Container<br/><b>Path Router</b><br/>Traefik · loopback :8080 · identity required"]
                 EDGE["Container<br/><b>Voice Edge</b><br/>Pipecat · RNNoise/VoxLock · read-only · non-root<br/>model in image · owner sample secret"]
-                INGRESS -->|"loopback proxy"| EDGE
+                INGRESS -->|"loopback HTTP<br/>injected identity"| ROUTER
+                ROUTER -->|"/ · WebSocket"| EDGE
             end
             GATEWAY["Container<br/><b>Agent Gateway</b><br/>read-only · non-root"]
             POSTGRES[("Container database<br/><b>PostgreSQL</b><br/>proposals · Absurd queue · checkpoints")]
             S3[("Container data store<br/><b>S3Mock</b><br/>immutable workspaces · bounded results")]
+            GITEA[("Container data store<br/><b>Gitea</b><br/>rootless · committed refs · named volumes")]
             OTEL["Container<br/><b>OTel LGTM</b><br/>metrics · traces · no logs"]
             GATEWAY -->|"private SQL"| POSTGRES
             GATEWAY -->|"private S3 API"| S3
@@ -41,7 +44,7 @@ flowchart LR
 
         subgraph ISOLATION["Agent tool isolation"]
             direction TB
-            VOICE_VM["Container<br/><b>Persistent Voice VM</b><br/>Gondolin · workspace RW · skills RO"]
+            VOICE_VM["Container<br/><b>Persistent Voice VM</b><br/>Gondolin · AWS/Git/Tea CLI · workspace RW"]
             TASK_VM["Container<br/><b>Per-task VM</b><br/>Gondolin · one workspace"]
             WASSETTE["Container<br/><b>Integration Runtime</b><br/>Wassette · declared permissions"]
             TASK_VM -->|"MCP"| WASSETTE
@@ -54,10 +57,13 @@ flowchart LR
         WORKER -->|"loopback :9090"| S3
         PI -->|"native tools"| VOICE_VM
         WORKER -->|"Pi extension"| TASK_VM
+        VOICE_VM -->|"synthetic HTTP allowlist<br/>restricted read token via loopback :3001"| GITEA
+        VOICE_VM -->|"synthetic HTTP allowlist<br/>host rewrite to loopback :9090"| S3
         EDGE -.->|"OTLP/HTTP"| OTEL
         GATEWAY -.->|"OTLP/HTTP"| OTEL
         BROKER -.->|"loopback OTLP/HTTP"| OTEL
-        INGRESS -->|"tailnet HTTPS :8443<br/>Tailscale identity"| OTEL
+        ROUTER -->|"/metrics/<br/>control network"| OTEL
+        ROUTER -->|"/git/<br/>strip prefix"| GITEA
     end
 
     USER -->|"talk · listen · review"| BROWSER
@@ -75,5 +81,5 @@ flowchart LR
     class USER person;
     class CONTROL,MODELS,EXTERNAL external;
     class BROWSER,BROKER,PI,WORKER,VOICE_VM,TASK_VM,WASSETTE,OTEL container;
-    class INGRESS,EDGE,GATEWAY security;
-    class POSTGRES,S3,RUNTIME data;
+    class INGRESS,ROUTER,EDGE,GATEWAY security;
+    class POSTGRES,S3,GITEA,RUNTIME data;

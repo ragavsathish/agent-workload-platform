@@ -57,15 +57,23 @@ operating system therefore describe that isolated workload, not macOS.
 The Compose gateway receives the database and approval secrets. The voice edge receives only the
 broker and gateway bearer tokens. Tailscale state and Postgres data use named Docker volumes.
 S3Mock artifacts use another named volume inside Docker Desktop and never bind-mount a host folder.
+Rootless Gitea also uses named volumes and receives a committed repository mirror during `make up`;
+it does not bind-mount a host repository. The persistent voice VM contains AWS CLI and Git and may
+reach only synthetic S3Mock and Gitea origins. A host network hook rewrites those origins to their
+configured loopback endpoints; direct VM internet access remains denied. The mock credentials do
+not grant access to real AWS S3. The VM's checksum-pinned Tea client receives only a restricted,
+public-read token; it never receives the Gitea publisher credential.
 
 ## Network contract
 
 | Address | Owner | Purpose |
 |---|---|---|
-| tailnet HTTPS 443 | Tailscale Serve | trusted HTTPS and private browser ingress |
+| tailnet HTTPS 443 | Tailscale Serve | authenticated HTTPS; `/`, `/metrics/`, and `/git/` only |
+| shared loopback `127.0.0.1:8080` | Traefik | identity-required path routing behind Tailscale Serve |
 | shared loopback `127.0.0.1:7860` | Pipecat voice edge | browser UI and WebSocket audio behind Serve |
 | `127.0.0.1:54329` | Docker Postgres | native Pi worker queue access |
 | `127.0.0.1:9090` | Docker S3Mock | native worker immutable inputs and task result artifacts |
+| `127.0.0.1:3001` | Docker Gitea | committed source mirror; anonymous read, bootstrap publisher writes |
 | `127.0.0.1:3300` | Docker Grafana | authenticated local metrics and traces UI |
 | `127.0.0.1:4318` | Docker OTel collector | OTLP/HTTP from the native MLX broker |
 | `127.0.0.1:9443` | native inference broker | authenticated STT, dialogue, and TTS |
@@ -81,13 +89,17 @@ The `otel-lgtm` bundle is connected to the private control network. Only Grafana
 published, both on loopback; collector and datastore ports are not exposed to the LAN or tailnet.
 Telemetry deliberately excludes logs and all user-controlled values. Its named volume contains
 only operation metrics and sanitized traces and can be removed separately if local telemetry must
-be erased. Tailscale Serve exposes Grafana separately on tailnet-only HTTPS port 8443 and injects
-the authenticated login; Grafana accepts that header only from the fixed Tailscale container IP.
-Direct loopback access continues to require the generated Grafana admin password.
+be erased. Tailscale Serve exposes Grafana at `/metrics/` on the single tailnet HTTPS origin and
+injects the authenticated login; Traefik accepts only shared-loopback traffic carrying that login,
+and Grafana accepts it only from the fixed Tailscale container IP. Direct loopback access continues
+to require the generated Grafana admin password.
 
-The phone must run Tailscale and join the same tailnet. Tailscale Serve terminates trusted HTTPS,
-adds the authenticated tailnet identity, and forwards HTTP and WebSocket traffic directly to
-Pipecat over shared loopback. The application requires the exact MagicDNS origin and a signed,
+The phone must run Tailscale and join the same tailnet. The tailnet policy must grant only the owner
+access to the voice node on TCP 443; use `deploy/tailscale-policy.hujson.example` as the minimum
+policy. Tailscale Serve terminates trusted HTTPS, strips client-supplied Tailscale identity headers,
+adds the authenticated tailnet identity, and forwards over shared loopback to Traefik. Traefik
+requires that identity before routing `/` to Pipecat, `/metrics/` to Grafana, or `/git/` to Gitea.
+The application requires the exact MagicDNS origin and a signed,
 one-use WebSocket path token. This is a single-user deployment: `make login` pins exactly one owner
 login, and tailnet ACLs authenticate the devices allowed to reach it. There is no fallback listener
 on the local Wi-Fi interface.

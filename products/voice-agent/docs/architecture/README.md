@@ -20,13 +20,17 @@ It owns WebRTC media orchestration, Silero VAD, Smart Turn v3, STT/LLM/TTS seque
 and pipeline metrics. Before turn detection, the edge applies exactly one server-side input filter:
 RNNoise by default or VoxLock when owner-voice isolation is enabled. The React client uses Pipecat
 RTVI, while Tailscale Serve is the only browser ingress. It exposes the voice UI on tailnet HTTPS
-and Grafana on tailnet-only port 8443; there is no Caddy or public/LAN application port.
+after tailnet authorization. Tailscale terminates TLS and supplies the authenticated identity to a
+localhost-only Traefik router. Traefik maps `/` to the Voice Edge, `/metrics/` to Grafana, and
+`/git/` to Gitea on one HTTPS origin; there is no Caddy or public/LAN application port.
 
 The active conversational backend is the native **Pi Voice Service**. The edge calls it through the
 capability-limited **Inference Broker**, which converts the streamed native Pi response into the
 OpenAI-compatible protocol consumed by Pipecat. The Pi service keeps the conversation session,
 public transcript projection, native Pi tools, and a persistent Gondolin voice VM. Ollama remains a
-configured fallback behind the broker; it is not the active production path.
+configured fallback behind the broker; it is not the active production path. The voice VM includes
+AWS CLI and has one explicit network capability: a synthetic S3Mock origin is rewritten to the
+mock's host-loopback endpoint, while other HTTP destinations are denied.
 
 Delegated work is separate. The **Agent Gateway** owns identity and task-lifecycle policy. PostgreSQL
 stores both the proposal records and Absurd durable queue schema. S3Mock stores immutable Git bundles
@@ -40,6 +44,7 @@ Wassette with explicit permissions.
 |---|---|
 | Browser Client | `apps/web/src/`; production assets copied by `apps/edge/Containerfile` |
 | Tailnet Ingress | `deploy/compose.yml`; `scripts/compose-login.sh` |
+| Path Router | `deploy/traefik/traefik.yml`; `deploy/traefik/routes.yml` |
 | Voice Edge | `apps/edge/bot.py`; `apps/edge/Containerfile` |
 | Input Audio Filter | `apps/edge/audio_filter.py`; `deploy/prepare_compose.py`; `apps/edge/Containerfile` |
 | Inference Broker | `apps/broker/src/voice_agent/speech/presentation/http.py`; broker LaunchAgent |
@@ -60,7 +65,9 @@ network namespace, while the gateway, Postgres, S3Mock, and OTel LGTM use explic
 Security-sensitive containers use read-only roots where supported, drop Linux capabilities, disable
 privilege escalation, and receive only narrowly scoped secrets. No service mounts the Docker socket.
 
-Tailscale authenticates the device, terminates trusted HTTPS, and injects the owner identity. The edge
+Tailscale authenticates the device, applies tailnet policy, terminates trusted HTTPS, strips spoofed
+identity headers, and injects the owner identity before its localhost Traefik target. Traefik rejects
+identity-free and non-loopback traffic before path routing. The edge
 requires the exact configured origin and single allowed tailnet login before accepting signaling or
 owner-scoped HTTP operations. Grafana accepts the injected login only from the fixed Tailscale
 container address; direct loopback access continues to require its generated administrator password.
@@ -70,6 +77,12 @@ provide those host capabilities directly. The broker exposes bounded STT, TTS, P
 transcript APIs to the edge; it does not expose a generic filesystem, shell, queue, session, or model
 selection API. Native Pi tools run inside Gondolin micro-VMs. Optional integration tools run through
 Wassette with declared network and secret permissions.
+
+The persistent voice VM receives writable runtime state at `/workspace` and read-only reusable
+skills at `/skills`. Source code is not mounted from the host. Deployment mirrors committed refs to
+a rootless Gitea container backed by named volumes. The VM receives anonymous clone access to that
+single synthetic HTTP origin, but no publisher credential; ignored files, local secrets, and
+uncommitted host changes are therefore outside the voice agent's boundary.
 
 OTel exports metrics and traces only. Application log export is disabled, Docker logging is disabled
 for content-bearing services, and voice content is deliberately excluded from telemetry. VoxLock's

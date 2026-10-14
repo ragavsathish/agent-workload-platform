@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -11,11 +11,16 @@ import {
   openVoiceSessionManager,
   parseEnvFile,
   PublicTranscript,
+  skillResourceLoader,
   splitConversation,
   submitAgentTask,
 } from "./dist/voice-agent-service.js";
 import {
+  createGondolinMounts,
+  createGondolinServiceAccess,
   createGondolinTools,
+  GUEST_GITEA_ENDPOINT,
+  GUEST_S3MOCK_ENDPOINT,
   GUEST_SKILLS,
   toGondolinPath,
 } from "./dist/gondolin-workspace.js";
@@ -39,6 +44,121 @@ test("Gondolin tool paths stay inside the mounted workspace", () => {
 
 test("reusable skills have a dedicated guest mount", () => {
   assert.equal(GUEST_SKILLS, "/skills");
+});
+
+test("Pi natively discovers mounted skills and exposes guest-readable paths", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-voice-skills-test-"));
+  const skills = join(root, "skills");
+  const skill = join(skills, "engineering", "diagnosing-bugs");
+  const agentDir = join(root, "agent");
+  const cwd = join(root, "workspace");
+  try {
+    await Promise.all([
+      mkdir(skill, { recursive: true }),
+      mkdir(agentDir),
+      mkdir(cwd),
+    ]);
+    await writeFile(
+      join(skill, "SKILL.md"),
+      "---\nname: diagnosing-bugs\ndescription: Diagnose difficult bugs.\n---\n\n# Diagnose\n",
+    );
+
+    const loader = await skillResourceLoader("Voice system prompt", {
+      agentDir,
+      cwd,
+      skillsDir: skills,
+    });
+    const result = loader.getSkills();
+
+    assert.deepEqual(result.diagnostics, []);
+    assert.equal(result.skills.length, 1);
+    assert.equal(result.skills[0].name, "diagnosing-bugs");
+    assert.equal(
+      result.skills[0].filePath,
+      "/skills/engineering/diagnosing-bugs/SKILL.md",
+    );
+    assert.equal(result.skills[0].baseDir, "/skills/engineering/diagnosing-bugs");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("Gondolin mounts only writable runtime state and read-only skills", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-voice-mount-test-"));
+  const workspace = join(root, "workspace");
+  const skills = join(root, "skills");
+  try {
+    await Promise.all([
+      mkdir(workspace),
+      mkdir(skills),
+    ]);
+    const mounts = createGondolinMounts({
+      giteaEndpointUrl: "http://127.0.0.1:3001",
+      giteaOwner: "source-publisher",
+      giteaToken: "read-only-token",
+      imagePath: join(root, "assets"),
+      localCwd: workspace,
+      skillsDir: skills,
+      s3MockAccessKey: "local-test",
+      s3MockBucket: "agent-artifacts",
+      s3MockEndpointUrl: "http://127.0.0.1:9090",
+      s3MockSecretKey: "local-test",
+    });
+    assert.equal(mounts["/workspace"].readonly, false);
+    assert.equal(mounts["/skills"].readonly, true);
+    assert.deepEqual(Object.keys(mounts).sort(), ["/skills", "/workspace"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("voice Gondolin exposes only loopback S3Mock and read-only Gitea", async () => {
+  const access = createGondolinServiceAccess({
+    giteaEndpointUrl: "http://127.0.0.1:3001",
+    giteaOwner: "source-publisher",
+    giteaToken: "read-only-token",
+    imagePath: "/host/assets",
+    localCwd: "/host/workspace",
+    skillsDir: "/host/skills",
+    s3MockAccessKey: "local-test",
+    s3MockBucket: "agent-artifacts",
+    s3MockEndpointUrl: "http://127.0.0.1:9090",
+    s3MockSecretKey: "local-secret",
+  });
+  assert.equal(GUEST_S3MOCK_ENDPOINT, "http://s3mock.local:9090");
+  assert.equal(access.env.S3_ENDPOINT_URL, GUEST_S3MOCK_ENDPOINT);
+  assert.equal(access.env.S3_BUCKET, "agent-artifacts");
+  assert.equal(access.env.GITEA_BASE_URL, GUEST_GITEA_ENDPOINT);
+  assert.equal(access.env.GITEA_OWNER, "source-publisher");
+
+  const rewritten = await access.httpHooks.onRequest(
+    new Request("http://s3mock.local:9090/agent-artifacts"),
+  );
+  assert.equal(rewritten.url, "http://127.0.0.1:9090/agent-artifacts");
+  const gitea = await access.httpHooks.onRequest(
+    new Request("http://gitea.local:3001/source-publisher/repository.git/info/refs"),
+  );
+  assert.equal(
+    gitea.url,
+    "http://127.0.0.1:3001/source-publisher/repository.git/info/refs",
+  );
+  const denied = await access.httpHooks.onRequest(new Request("http://example.com/"));
+  assert.equal(denied.status, 403);
+  assert.throws(
+    () => createGondolinServiceAccess({
+      giteaEndpointUrl: "http://127.0.0.1:3001",
+      giteaOwner: "source-publisher",
+      giteaToken: "read-only-token",
+      imagePath: "/host/assets",
+      localCwd: "/host/workspace",
+      skillsDir: "/host/skills",
+      s3MockAccessKey: "local-test",
+      s3MockBucket: "agent-artifacts",
+      s3MockEndpointUrl: "https://s3.example.com",
+      s3MockSecretKey: "local-secret",
+    }),
+    /HTTP loopback origin/,
+  );
 });
 
 test("voice Pi can submit durable work directly to another Pi worker", async () => {

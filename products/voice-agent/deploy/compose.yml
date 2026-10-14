@@ -1,6 +1,51 @@
 name: pipecat-mlx-voice
 
 services:
+  gitea:
+    image: docker.gitea.com/gitea:28.1.0-rootless@sha256:b1a90409ae9afcd5a5725404c3639da7245248848b99e35332968891290b953e
+    restart: unless-stopped
+    environment:
+      GITEA__actions__ENABLED: "false"
+      GITEA__database__DB_TYPE: sqlite3
+      GITEA__database__PATH: /var/lib/gitea/data/gitea.db
+      GITEA__packages__ENABLED: "false"
+      GITEA__security__INSTALL_LOCK: "true"
+      GITEA__server__DISABLE_SSH: "true"
+      GITEA__server__DOMAIN: 127.0.0.1
+      GITEA__server__HTTP_ADDR: 0.0.0.0
+      GITEA__server__LOCAL_ROOT_URL: http://gitea:3000/
+      GITEA__server__PUBLIC_URL_DETECTION: auto
+      GITEA__server__ROOT_URL: ${GITEA_ROOT_URL:-http://127.0.0.1:3001/}
+      GITEA__service__DISABLE_REGISTRATION: "true"
+      GITEA__service__REQUIRE_SIGNIN_VIEW: "false"
+    ports: ["127.0.0.1:3001:3000"]
+    volumes:
+      - gitea-data:/var/lib/gitea
+      - gitea-config:/etc/gitea
+    networks:
+      control:
+        ipv4_address: 172.30.90.5
+      data:
+      host-access:
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=64m,uid=1000,gid=1000"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   s3mock-init:
     image: adobe/s3mock:5.0.0@sha256:c461c8f4234bd63540d2f3a3cabce69d814c78dc890a5af08727525a028e23da
     entrypoint: ["/bin/sh", "-c"]
@@ -77,6 +122,8 @@ services:
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://127.0.0.1:3300/}
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
       GF_USERS_AUTO_ASSIGN_ORG_ROLE: Viewer
       GF_USERS_ALLOW_SIGN_UP: "false"
       PROMETHEUS_EXTRA_ARGS: --storage.tsdb.retention.time=7d
@@ -183,6 +230,7 @@ services:
       - "inference-broker:host-gateway"
       - "agent-gateway:172.30.90.3"
       - "otel-lgtm:172.30.90.4"
+      - "gitea:172.30.90.5"
     networks:
       control:
         ipv4_address: 172.30.90.2
@@ -196,6 +244,42 @@ services:
     pids_limit: 128
     mem_limit: 256m
     cpus: 1
+
+  traefik:
+    image: traefik:3.7.13@sha256:24841fe2de7304c149343d877d2923b4c8800a38ba015dea9174c23b20e344a0
+    restart: unless-stopped
+    depends_on:
+      gitea:
+        condition: service_healthy
+      otel-lgtm:
+        condition: service_healthy
+      tailscale:
+        condition: service_started
+      voice-edge:
+        condition: service_healthy
+    network_mode: service:tailscale
+    command: ["--configFile=/etc/traefik/traefik.yml"]
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/routes.yml:/etc/traefik/routes.yml:ro
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=16m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    user: "65532:65532"
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.25
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   voice-edge:
     image: local/pipecat-edge:compose
@@ -239,6 +323,8 @@ services:
         max-file: "3"
 
 volumes:
+  gitea-config:
+  gitea-data:
   otel-lgtm-data:
   s3mock-data:
   postgres-data:

@@ -16,6 +16,7 @@ C4_GONDOLIN_CONFIG := products/architecture-visualization/integrations/gondolin/
 C4_GONDOLIN ?= npx --yes @earendil-works/gondolin@0.12.0
 GONDOLIN_BROWSER_ASSETS := artifacts/gondolin-browser/$(C4_GONDOLIN_ARCH)
 GONDOLIN_BROWSER_CONFIG := platform/agent-execution/gondolin-session/gondolin/playwright-mcp.$(C4_GONDOLIN_ARCH).json
+GONDOLIN_BROWSER_SERVICE := voice-runtime-$(C4_GONDOLIN_PROFILE)
 C4_OCI_REPOSITORY ?= ghcr.io/ragavsathish/agent-workload-platform/c4-suite
 C4_OCI_VERSION ?= $(shell node -p "require('./$(C4_WORKLOAD)/components/package.json').version")
 C4_OCI_REVISION := $(shell git rev-parse HEAD)
@@ -39,6 +40,7 @@ c4-gondolin-build:
 	$(C4_GONDOLIN) build --config $(C4_GONDOLIN_CONFIG) --output $(C4_GONDOLIN_ASSETS)
 
 gondolin-session-build:
+	docker compose --profile $(C4_GONDOLIN_PROFILE) -f platform/agent-execution/gondolin-session/gondolin/compose.yaml build $(GONDOLIN_BROWSER_SERVICE)
 	mkdir -p $(GONDOLIN_BROWSER_ASSETS)
 	$(C4_GONDOLIN) build --config $(GONDOLIN_BROWSER_CONFIG) --output $(GONDOLIN_BROWSER_ASSETS)
 

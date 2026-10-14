@@ -27,8 +27,10 @@ ownership and planned extractions are documented in
 
 ## Trust model
 
-- Tailscale Serve terminates trusted tailnet HTTPS and proxies HTTP and WebSocket traffic directly
-  to Pipecat over shared loopback. Funnel and public Docker ports are not enabled.
+- Tailscale Serve terminates trusted tailnet HTTPS, enforces tailnet access, strips spoofed
+  identity headers, and injects the authenticated login before forwarding to Traefik over shared
+  loopback. Traefik rejects identity-free traffic and routes `/` to Pipecat, `/metrics/` to
+  Grafana, and `/git/` to Gitea. Funnel and public Docker ports are not enabled.
 - Browser sessions require an exact HTTPS origin and a signed, one-use token in the WebSocket path.
   The current deployment is deliberately single-user: login pins exactly one owner identity during
   setup, while tailnet ACLs authenticate which devices can reach the listener.
@@ -76,7 +78,8 @@ stdout; `Ctrl-C` stops following output but leaves the services running. Use
 `make logs` to follow an already-running deployment.
 
 `make login` performs interactive Tailscale authentication when needed, binds the exact login and
-MagicDNS origin, enables the tailnet-only HTTPS proxy on port 443, and prints the browser URL.
+MagicDNS origin, enables one tailnet-only HTTPS origin on port 443, and prints the voice, metrics,
+and Git URLs.
 
 ## Browser URL
 
@@ -87,9 +90,9 @@ tailnet at:
 
 The MagicDNS name and TLS certificate belong to the Tailscale node, so the URL
 can remain configured while the application is unavailable. A `tailscale
-serve status` result such as `proxy http://127.0.0.1:7860` proves only that the
+serve status` result such as `proxy http://127.0.0.1:8080` proves only that the
 HTTPS route exists. The `voice-edge` container must also be running in the same
-network namespace and listening on port 7860.
+network namespace and listening on port 7860, and Traefik must be listening on port 8080.
 
 Check the complete path with:
 
@@ -172,8 +175,9 @@ audio or transcript text.
 
 The pinned `grafana/otel-lgtm` development bundle provides Grafana, Prometheus, Tempo, and an OTLP
 collector. From an authenticated tailnet device, open
-<https://pipecat-edge.tailf6d713.ts.net:8443>; Grafana trusts only the identity header injected by
-the Tailscale proxy and does not ask for another password. Direct Mac-loopback access at
+<https://pipecat-edge.tailf6d713.ts.net/metrics/>; Grafana trusts only the identity header injected
+by Tailscale through the localhost-only Traefik ingress and does not ask for another password.
+Direct Mac-loopback access at
 <http://127.0.0.1:3300> still requires user `admin`; obtain its generated password with
 `make grafana-password`. The provisioned **Voice Product Health** dashboard follows the product
 journey from detected speech through transcript, Pi inference, and reply audio. It also shows turn
@@ -185,6 +189,11 @@ published. Gateway and edge stdout is retained only in bounded local Docker logs
 applications do not send the OpenTelemetry logs signal. Telemetry is stored in the
 `otel-lgtm-data` Docker volume; Prometheus retention is seven days. This all-in-one bundle is for
 private local monitoring, not production.
+
+The same authenticated origin serves the voice UI at `/` and the committed source mirror at
+`/git/`. Tailscale performs authentication and authorization before Traefik sees a request;
+Traefik is a path router, not a replacement identity provider. Prometheus, OTLP, the Agent Gateway,
+S3Mock, Postgres, and the Traefik dashboard have no tailnet route.
 
 The black-box runner synthesizes speech with Kokoro, streams it through the same authenticated
 WebSocket used by the browser, transcribes it with MLX Whisper, and exercises the LLM/tool path.
@@ -198,9 +207,28 @@ Pi voice uses a dedicated long-running Node service built on Pi's `createAgentSe
 service keeps conversation state between turns, reconciles a restarted or reset Pipecat transcript,
 and owns the product's proposal, submission, status, approval, and cancellation tools. Its native
 read, write, edit, and bash operations run only inside the persistent Gondolin Voice Workspace;
-reusable skills are mounted there read-only. It disables discovered host extensions, prompt
-templates, themes, and context files. Kokoro speaks the final text produced by Pi after any tool
-calls complete. `PI_VOICE_MODEL` selects the model; when blank, Pi uses its configured default.
+reusable skills are mounted read-only at `/skills`. Committed source is published to the private,
+loopback-only Gitea service during `make start`; the VM may anonymously clone that public-in-Gitea
+mirror into `/workspace`, but receives no publisher credential. No host Git directory is mounted, so
+ignored files, local secrets, and uncommitted changes are not exposed. It disables discovered
+host extensions, prompt templates, themes, and context files. Kokoro speaks the final text produced
+by Pi after any tool calls complete. `PI_VOICE_MODEL` selects the model; when blank, Pi uses its
+configured default. The VM image includes AWS CLI and receives mock-only credentials plus a
+synthetic `S3_ENDPOINT_URL`. Gondolin denies general egress and rewrites only that synthetic origin
+to loopback-published S3Mock, allowing Pi to inspect `s3://$S3_BUCKET` without general network
+access.
+
+Gitea uses rootless mode, SQLite, and named Docker volumes. Registration, SSH, Actions, and packages
+are disabled. `scripts/gitea-sync.sh` creates the publisher account and repository idempotently, then
+mirrors only committed refs from this repository. Gitea is reachable from macOS only on
+`http://127.0.0.1:3001`; Gondolin can reach only its synthetic read endpoint and S3Mock, with all
+other VM network destinations denied.
+
+The VM image includes the checksum-verified `tea` CLI. Deployment provisions a separate restricted
+`voice-agent` account and a
+`public-only,read:repository,read:issue,read:user,read:organization` token. The persistent
+VM configures that token as Tea login `local`; it cannot publish code or mutate issues and pull
+requests. The deployment-only `source-publisher` credential never enters the VM.
 
 See [BENCHMARKS.md](BENCHMARKS.md) for the measured M4 Pro CPU, unified-memory, LLM throughput,
 and speech realtime factors, plus the reproducible benchmark command.
