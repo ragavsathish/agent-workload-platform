@@ -29,8 +29,9 @@ ownership and planned extractions are documented in
 
 - Tailscale Serve terminates trusted tailnet HTTPS, enforces tailnet access, strips spoofed
   identity headers, and injects the authenticated login before forwarding to Traefik over shared
-  loopback. Traefik rejects identity-free traffic and routes `/` to Pipecat, `/metrics/` to
-  Grafana, and `/git/` to Gitea. Funnel and public Docker ports are not enabled.
+  loopback. Before routing, Traefik asks the edge to match that login against the configured owner.
+  It routes `/` to Pipecat, `/metrics/` to Grafana, `/git/` to Gitea, and `/queue/` to the
+  upstream Absurd Habitat operator UI. Funnel and public Docker ports are not enabled.
 - Browser sessions require an exact HTTPS origin and a signed, one-use token in the WebSocket path.
   The current deployment is deliberately single-user: login pins exactly one owner identity during
   setup, while tailnet ACLs authenticate which devices can reach the listener.
@@ -79,7 +80,7 @@ stdout; `Ctrl-C` stops following output but leaves the services running. Use
 
 `make login` performs interactive Tailscale authentication when needed, binds the exact login and
 MagicDNS origin, enables one tailnet-only HTTPS origin on port 443, and prints the voice, metrics,
-and Git URLs.
+Git, and durable-queue URLs.
 
 ## Browser URL
 
@@ -184,16 +185,43 @@ journey from detected speech through transcript, Pi inference, and reply audio. 
 outcomes, voice-filter pass rate, user-perceived and inference-stage latency, task activity,
 failures, and recent payload-free traces.
 
+The provisioned **Platform Resources** dashboard separates three resource layers: the physical Mac,
+the Docker Desktop Linux VM, and each running Gondolin QEMU runner. Native Fluent Bit reports macOS
+CPU, active+wired memory, load, disk, and network metrics. The Compose Fluent Bit instance reads the
+Docker VM's `/proc` and `/sys` read-only. A small loopback-only host exporter reports CPU, resident
+memory, uptime, and configured limits for every registered voice or task Gondolin VM. It exports no
+process command lines, guest data, audio, or transcript content.
+
+CPU busy is average non-idle time across a system's logical CPUs. Docker memory uses `MemAvailable`;
+the Mac panel uses active plus wired memory and is deliberately labelled as an approximation, not
+Apple's Memory Pressure indicator. Load per CPU near 100% means roughly one runnable job per logical
+CPU; a sustained higher value means work is queueing. Disk and network panels are throughput, not
+latency. A Gondolin VM's resident memory is the host QEMU process RSS, not guest-visible used memory.
+Task VMs appear only while a task is executing.
+
+Mac and Docker measurements are nested: Docker activity is already part of the physical Mac total,
+so never add those lines together. Similarly, use the product dashboard and traces to correlate a
+resource spike with a voice operation rather than attributing every system-wide spike to voice.
+Both native endpoints bind only to Mac loopback; OTel reaches them through Docker's host gateway.
+
+The upstream Absurd **Habitat** operator UI is available at
+<https://pipecat-edge.tailf6d713.ts.net/queue/>. It reads queue, task, run, event, and checkpoint
+state directly from Postgres and can perform native queue operations such as retry. Habitat has no
+published Docker port and receives a separate `habitat_operator` credential whose grants are
+limited to the Absurd schema; it cannot read voice task proposals. This operational view does not
+replace the gateway's proposal, approval, or tenant-policy boundary.
+
 Grafana and OTLP/HTTP bind only to Mac loopback. OTLP/gRPC, Prometheus, Tempo, and Loki ports are not
 published. Gateway and edge stdout is retained only in bounded local Docker logs for `make logs`;
 applications do not send the OpenTelemetry logs signal. Telemetry is stored in the
 `otel-lgtm-data` Docker volume; Prometheus retention is seven days. This all-in-one bundle is for
 private local monitoring, not production.
 
-The same authenticated origin serves the voice UI at `/` and the committed source mirror at
-`/git/`. Tailscale performs authentication and authorization before Traefik sees a request;
-Traefik is a path router, not a replacement identity provider. Prometheus, OTLP, the Agent Gateway,
-S3Mock, Postgres, and the Traefik dashboard have no tailnet route.
+The same authenticated origin serves the voice UI at `/`, the committed source mirror at `/git/`,
+and Habitat at `/queue/`. Tailscale authenticates the connection and strips spoofed identity
+headers; Traefik then uses the edge's forward-auth endpoint to require the exact configured owner
+before any route is served. Prometheus, OTLP, the Agent Gateway, S3Mock, Postgres, and the Traefik
+dashboard have no tailnet route.
 
 The black-box runner synthesizes speech with Kokoro, streams it through the same authenticated
 WebSocket used by the browser, transcribes it with MLX Whisper, and exercises the LLM/tool path.

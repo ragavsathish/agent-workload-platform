@@ -17,17 +17,20 @@ flowchart LR
             subgraph EDGE_NS["Shared Tailscale network namespace"]
                 direction LR
                 INGRESS["Container<br/><b>Tailnet Auth Ingress</b><br/>Tailscale Serve · HTTPS :443"]
-                ROUTER["Container<br/><b>Path Router</b><br/>Traefik · loopback :8080 · identity required"]
+                ROUTER["Container<br/><b>Path Router</b><br/>Traefik · loopback :8080 · exact-owner forward-auth"]
                 EDGE["Container<br/><b>Voice Edge</b><br/>Pipecat · RNNoise/VoxLock · read-only · non-root<br/>model in image · owner sample secret"]
                 INGRESS -->|"loopback HTTP<br/>injected identity"| ROUTER
                 ROUTER -->|"/ · WebSocket"| EDGE
             end
             GATEWAY["Container<br/><b>Agent Gateway</b><br/>read-only · non-root"]
             POSTGRES[("Container database<br/><b>PostgreSQL</b><br/>proposals · Absurd queue · checkpoints")]
+            HABITAT["Container<br/><b>Queue Dashboard</b><br/>Absurd Habitat · read-only root · non-root"]
             S3[("Container data store<br/><b>S3Mock</b><br/>immutable workspaces · bounded results")]
             GITEA[("Container data store<br/><b>Gitea</b><br/>rootless · committed refs · named volumes")]
+            DOCKER_METRICS["Container<br/><b>Docker VM Metrics</b><br/>Fluent Bit · /proc + /sys read-only · no Docker socket"]
             OTEL["Container<br/><b>OTel LGTM</b><br/>metrics · traces · no logs"]
             GATEWAY -->|"private SQL"| POSTGRES
+            HABITAT -->|"scoped Absurd SQL<br/>no proposal access"| POSTGRES
             GATEWAY -->|"private S3 API"| S3
         end
 
@@ -36,6 +39,7 @@ flowchart LR
             BROKER["Container<br/><b>Inference Broker</b><br/>FastAPI · MLX Whisper · MLX Kokoro"]
             PI["Container<br/><b>Pi Voice Service</b><br/>Node.js · persistent Pi session"]
             WORKER["Container<br/><b>Pi Task Worker</b><br/>Python · concurrency one"]
+            HOST_METRICS["Container<br/><b>Host Observability</b><br/>Fluent Bit + Gondolin exporter<br/>loopback only · no guest credentials"]
             RUNTIME[("Private data store<br/><b>Runtime Data</b><br/>copied runtimes · secrets · sessions · scratch")]
             BROKER -->|"bearer HTTP :9446"| PI
             PI -->|"sessions · workspace · skills"| RUNTIME
@@ -62,8 +66,13 @@ flowchart LR
         EDGE -.->|"OTLP/HTTP"| OTEL
         GATEWAY -.->|"OTLP/HTTP"| OTEL
         BROKER -.->|"loopback OTLP/HTTP"| OTEL
+        PI -.->|"register voice QEMU PID"| HOST_METRICS
+        WORKER -.->|"register task QEMU PID"| HOST_METRICS
+        DOCKER_METRICS -->|"Prometheus metrics<br/>internal network"| OTEL
+        HOST_METRICS -->|"Mac + registered QEMU metrics<br/>host gateway :2022 · :9465"| OTEL
         ROUTER -->|"/metrics/<br/>control network"| OTEL
         ROUTER -->|"/git/<br/>strip prefix"| GITEA
+        ROUTER -->|"/queue/<br/>owner only"| HABITAT
     end
 
     USER -->|"talk · listen · review"| BROWSER
@@ -80,6 +89,6 @@ flowchart LR
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
     class USER person;
     class CONTROL,MODELS,EXTERNAL external;
-    class BROWSER,BROKER,PI,WORKER,VOICE_VM,TASK_VM,WASSETTE,OTEL container;
+    class BROWSER,BROKER,PI,WORKER,HOST_METRICS,VOICE_VM,TASK_VM,WASSETTE,HABITAT,DOCKER_METRICS,OTEL container;
     class INGRESS,ROUTER,EDGE,GATEWAY security;
     class POSTGRES,S3,GITEA,RUNTIME data;

@@ -1,0 +1,19 @@
+service:
+  flush: 1
+  log_level: info
+
+pipeline:
+  inputs:
+    - name: node_exporter_metrics
+      tag: host_metrics
+      scrape_interval: 5
+      metrics: cpu,meminfo,loadavg,diskstats,netdev,uname
+
+  outputs:
+    - name: prometheus_exporter
+      match: host_metrics
+      host: 127.0.0.1
+      port: 2022
+      add_label:
+        - system macos-host
+        - layer host

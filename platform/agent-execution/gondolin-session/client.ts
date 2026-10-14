@@ -161,6 +161,7 @@ export class GondolinPlaywrightMcp {
   private transport?: GondolinStdioTransport;
   private client?: Client;
   private sidecarProcesses: ExecProcess[] = [];
+  private metricsRegistration?: string;
   private readonly outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "gondolin-browser-output-"));
 
   constructor(private readonly options: GondolinBrowserOptions) {}
@@ -188,6 +189,30 @@ export class GondolinPlaywrightMcp {
         cpus: 2,
         sessionLabel: this.options.sessionLabel ?? "pi-playwright-mcp",
       });
+      await vm.start();
+      const metricsDirectory = process.env.GONDOLIN_METRICS_DIR;
+      if (metricsDirectory) {
+        const pid = vm.getHostPid();
+        if (pid === null) {
+          await vm.close();
+          throw new Error("Gondolin VM runner PID is unavailable");
+        }
+        fs.mkdirSync(metricsDirectory, { recursive: true, mode: 0o700 });
+        fs.chmodSync(metricsDirectory, 0o700);
+        const safeId = vm.id.replace(/[^a-zA-Z0-9_-]/g, "_");
+        const target = path.join(metricsDirectory, `${safeId}.json`);
+        const temporary = `${target}.${process.pid}.tmp`;
+        fs.writeFileSync(temporary, `${JSON.stringify({
+          id: vm.id,
+          label: this.options.sessionLabel ?? "pi-playwright-mcp",
+          pid,
+          ownerPid: process.pid,
+          cpus: 2,
+          memoryBytes: 2 * 1024 * 1024 * 1024,
+        })}\n`, { mode: 0o600 });
+        fs.renameSync(temporary, target);
+        this.metricsRegistration = target;
+      }
       this.vm = vm;
       return vm;
     })();
@@ -268,6 +293,10 @@ export class GondolinPlaywrightMcp {
       try {
         await vm?.close();
       } finally {
+        if (this.metricsRegistration) {
+          fs.rmSync(this.metricsRegistration, { force: true });
+          this.metricsRegistration = undefined;
+        }
         fs.rmSync(this.outputDirectory, { recursive: true, force: true });
       }
     }

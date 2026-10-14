@@ -1,0 +1,145 @@
+{
+  "annotations": {"list": []},
+  "description": "Three-layer resource health: physical macOS, the Docker Desktop Linux VM, and every registered Gondolin VM runner. Host and Docker values are system-wide; Gondolin values are host-side QEMU process usage.",
+  "editable": false,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Average non-idle time across the physical Mac's logical CPUs.",
+      "fieldConfig": {"defaults": {"decimals": 1, "max": 100, "min": 0, "unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 4, "x": 0, "y": 0}, "id": 1,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+      "targets": [{"expr": "100 * (1 - avg(rate(node_cpu_seconds_total{system=\"macos-host\",layer=\"host\",mode=\"idle\"}[$__rate_interval])))", "instant": true, "legendFormat": "macOS", "range": false, "refId": "A"}],
+      "title": "Mac CPU busy", "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Average non-idle time across Docker Desktop's Linux VM CPUs. This includes every container.",
+      "fieldConfig": {"defaults": {"decimals": 1, "max": 100, "min": 0, "unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 4, "x": 4, "y": 0}, "id": 2,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+      "targets": [{"expr": "100 * (1 - avg(rate(node_cpu_seconds_total{system=\"docker-desktop-vm\",layer=\"vm\",mode=\"idle\"}[$__rate_interval])))", "instant": true, "legendFormat": "Docker VM", "range": false, "refId": "A"}],
+      "title": "Docker VM CPU busy", "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Approximate macOS working memory: active plus wired bytes divided by physical memory. Inactive cache is excluded. This is not Apple's Memory Pressure indicator.",
+      "fieldConfig": {"defaults": {"decimals": 1, "max": 100, "min": 0, "unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 4, "x": 8, "y": 0}, "id": 3,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+      "targets": [{"expr": "100 * (node_meminfo_active_bytes{system=\"macos-host\",layer=\"host\"} + node_meminfo_wired_bytes{system=\"macos-host\",layer=\"host\"}) / node_meminfo_bytes_total{system=\"macos-host\",layer=\"host\"}", "instant": true, "legendFormat": "Active + wired", "range": false, "refId": "A"}],
+      "title": "Mac working memory", "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Docker VM memory not available to new work. MemAvailable accounts for reclaimable cache.",
+      "fieldConfig": {"defaults": {"decimals": 1, "max": 100, "min": 0, "unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 4, "x": 12, "y": 0}, "id": 4,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+      "targets": [{"expr": "100 * (1 - node_memory_MemAvailable_bytes{system=\"docker-desktop-vm\",layer=\"vm\"} / node_memory_MemTotal_bytes{system=\"docker-desktop-vm\",layer=\"vm\"})", "instant": true, "legendFormat": "Docker VM", "range": false, "refId": "A"}],
+      "title": "Docker VM memory", "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Registered Gondolin VM runners currently alive. Task VMs appear only while their tasks execute.",
+      "fieldConfig": {"defaults": {"decimals": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 4, "x": 16, "y": 0}, "id": 5,
+      "options": {"colorMode": "value", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+      "targets": [{"expr": "gondolin_vm_count", "instant": true, "legendFormat": "VMs", "range": false, "refId": "A"}],
+      "title": "Active Gondolin VMs", "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Resident host memory used by all active Gondolin QEMU runners. This differs from configured guest-memory ceilings.",
+      "fieldConfig": {"defaults": {"decimals": 2, "unit": "bytes"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 4, "x": 20, "y": 0}, "id": 6,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+      "targets": [{"expr": "sum(gondolin_vm_resident_memory_bytes)", "instant": true, "legendFormat": "VM RSS", "range": false, "refId": "A"}],
+      "title": "Gondolin resident memory", "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Mac and Docker CPU on the same scale. Docker activity is already included in the Mac total; never add the lines together.",
+      "fieldConfig": {"defaults": {"decimals": 1, "min": 0, "unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5}, "id": 7,
+      "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "100 * (1 - avg by (system) (rate(node_cpu_seconds_total{layer=~\"host|vm\",system=~\"macos-host|docker-desktop-vm\",mode=\"idle\"}[$__rate_interval])))", "legendFormat": "{{system}}", "range": true, "refId": "A"}],
+      "title": "CPU busy by system", "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Mac uses active+wired memory; Docker uses total minus MemAvailable. Compare trends rather than treating them as identical pressure scores.",
+      "fieldConfig": {"defaults": {"decimals": 1, "max": 100, "min": 0, "unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5}, "id": 8,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "100 * (node_meminfo_active_bytes{system=\"macos-host\",layer=\"host\"} + node_meminfo_wired_bytes{system=\"macos-host\",layer=\"host\"}) / node_meminfo_bytes_total{system=\"macos-host\",layer=\"host\"}", "legendFormat": "macOS active + wired", "range": true, "refId": "A"},
+        {"expr": "100 * (1 - node_memory_MemAvailable_bytes{system=\"docker-desktop-vm\",layer=\"vm\"} / node_memory_MemTotal_bytes{system=\"docker-desktop-vm\",layer=\"vm\"})", "legendFormat": "Docker unavailable", "range": true, "refId": "B"}
+      ],
+      "title": "Memory utilization by system", "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "One-minute runnable load divided by logical CPUs. Near 100% means about one runnable job per CPU; sustained values above 100% mean queueing.",
+      "fieldConfig": {"defaults": {"decimals": 1, "min": 0, "unit": "percentunit"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 13}, "id": 9,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "node_load1{layer=~\"host|vm\",system=~\"macos-host|docker-desktop-vm\"} / on(system) count by (system) (node_cpu_seconds_total{layer=~\"host|vm\",system=~\"macos-host|docker-desktop-vm\",mode=\"idle\"})", "legendFormat": "{{system}}", "range": true, "refId": "A"}],
+      "title": "Load per CPU", "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Physical and virtual disk bytes per second. Throughput is not latency.",
+      "fieldConfig": {"defaults": {"min": 0, "unit": "Bps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 13}, "id": 10,
+      "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "sum by (system) (rate(node_disk_read_bytes_total{layer=~\"host|vm\",system=~\"macos-host|docker-desktop-vm\",device!~\"loop.*|ram.*|nbd.*\"}[$__rate_interval]))", "legendFormat": "{{system}} read", "range": true, "refId": "A"},
+        {"expr": "sum by (system) (rate(node_disk_written_bytes_total{layer=~\"host|vm\",system=~\"macos-host|docker-desktop-vm\",device!~\"loop.*|ram.*|nbd.*\"}[$__rate_interval]))", "legendFormat": "{{system}} write", "range": true, "refId": "B"}
+      ],
+      "title": "Disk throughput by system", "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "External-interface bandwidth: en0 on macOS and eth0 inside Docker Desktop.",
+      "fieldConfig": {"defaults": {"min": 0, "unit": "Bps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 13}, "id": 11,
+      "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "rate(node_network_receive_bytes{system=\"macos-host\",layer=\"host\",device=\"en0\"}[$__rate_interval])", "legendFormat": "macOS receive", "range": true, "refId": "A"},
+        {"expr": "rate(node_network_transmit_bytes{system=\"macos-host\",layer=\"host\",device=\"en0\"}[$__rate_interval])", "legendFormat": "macOS transmit", "range": true, "refId": "B"},
+        {"expr": "rate(node_network_receive_bytes_total{system=\"docker-desktop-vm\",layer=\"vm\",device=\"eth0\"}[$__rate_interval])", "legendFormat": "Docker receive", "range": true, "refId": "C"},
+        {"expr": "rate(node_network_transmit_bytes_total{system=\"docker-desktop-vm\",layer=\"vm\",device=\"eth0\"}[$__rate_interval])", "legendFormat": "Docker transmit", "range": true, "refId": "D"}
+      ],
+      "title": "External network throughput", "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Host CPU consumed by each QEMU runner divided by that VM's configured vCPU capacity. 100% means all assigned CPU capacity is in use.",
+      "fieldConfig": {"defaults": {"decimals": 1, "min": 0, "unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 21}, "id": 12,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "100 * gondolin_vm_cpu_allocation_ratio", "legendFormat": "{{vm_label}} · {{vm_id}}", "range": true, "refId": "A"}],
+      "title": "Gondolin CPU by VM", "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Resident host memory for each QEMU runner as a percentage of configured guest memory. QEMU RSS and guest-visible used memory differ.",
+      "fieldConfig": {"defaults": {"decimals": 1, "min": 0, "unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 21}, "id": 13,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "100 * gondolin_vm_resident_memory_bytes / on(vm_id, vm_label) gondolin_vm_configured_memory_bytes", "legendFormat": "{{vm_label}} · {{vm_id}}", "range": true, "refId": "A"}],
+      "title": "Gondolin resident memory by VM", "type": "timeseries"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 41,
+  "tags": ["voice", "system", "macos", "docker", "gondolin", "fluent-bit", "prometheus"],
+  "templating": {"list": []},
+  "time": {"from": "now-30m", "to": "now"},
+  "timezone": "browser",
+  "title": "Platform Resources",
+  "uid": "voice-system-resources",
+  "version": 2
+}

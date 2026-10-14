@@ -12,7 +12,7 @@ flowchart LR
             direction LR
             BROWSER["Container<br/><b>Browser Client</b><br/>React · Pipecat RTVI"]
             INGRESS["Container<br/><b>Tailnet Ingress</b><br/>Tailscale Serve"]
-            ROUTER["Container<br/><b>Path Router</b><br/>Traefik · identity required"]
+            ROUTER["Container<br/><b>Path Router</b><br/>Traefik · exact-owner forward-auth"]
             EDGE["Container<br/><b>Voice Edge</b><br/>Python · Pipecat · RNNoise/VoxLock · FastAPI"]
             BROKER["Container<br/><b>Inference Broker</b><br/>Python · FastAPI · MLX"]
             PI["Container<br/><b>Pi Voice Service</b><br/>TypeScript · Pi coding agent"]
@@ -29,9 +29,11 @@ flowchart LR
             direction LR
             GATEWAY["Container<br/><b>Agent Gateway</b><br/>Python · FastAPI"]
             TASKS[("Container database<br/><b>Task Database and Queue</b><br/>PostgreSQL · Absurd schema")]
+            HABITAT["Container<br/><b>Durable Queue Dashboard</b><br/>Go · Absurd Habitat"]
             WORKER["Container<br/><b>Pi Task Worker</b><br/>Python · Pi coding agent"]
             TASK_TOOLS["Container<br/><b>Task Tool Runtime</b><br/>Gondolin · optional Wassette"]
             GATEWAY -->|"persist · enqueue"| TASKS
+            HABITAT -->|"inspect · retry<br/>scoped SQL"| TASKS
             TASKS -->|"claim · checkpoint"| WORKER
             WORKER -->|"isolated tools"| TASK_TOOLS
         end
@@ -41,6 +43,8 @@ flowchart LR
             VOICE_DATA[("Container data store<br/><b>Voice Runtime Data</b><br/>sessions · workspace · skills")]
             GITEA[("Container data store<br/><b>Source Mirror</b><br/>rootless Gitea · committed refs")]
             ARTIFACTS[("Container data store<br/><b>Workspace and Result Store</b><br/>S3-compatible object storage")]
+            DOCKER_METRICS["Container<br/><b>Docker VM Metrics</b><br/>Fluent Bit · Linux VM aggregate"]
+            HOST_METRICS["Container<br/><b>Host and Gondolin Metrics</b><br/>Fluent Bit · QEMU process exporter"]
             OTEL["Container<br/><b>Metrics and Traces</b><br/>OpenTelemetry LGTM"]
         end
 
@@ -54,8 +58,13 @@ flowchart LR
         EDGE -.->|"metrics · traces"| OTEL
         BROKER -.->|"metrics · traces"| OTEL
         GATEWAY -.->|"metrics · traces"| OTEL
+        PI -.->|"register voice VM PID"| HOST_METRICS
+        WORKER -.->|"register task VM PID"| HOST_METRICS
+        DOCKER_METRICS -->|"private scrape<br/>Docker VM resources"| OTEL
+        HOST_METRICS -->|"loopback scrape<br/>Mac · each Gondolin VM"| OTEL
         ROUTER -->|"/metrics/"| OTEL
         ROUTER -->|"/git/"| GITEA
+        ROUTER -->|"/queue/"| HABITAT
     end
 
     USER -->|"tailnet HTTPS · WebRTC"| BROWSER
@@ -70,5 +79,5 @@ flowchart LR
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
     class USER person;
     class TSC,MODELS,INTEGRATIONS external;
-    class BROWSER,INGRESS,ROUTER,EDGE,BROKER,PI,VOICE_VM,GATEWAY,WORKER,TASK_TOOLS,OTEL container;
+    class BROWSER,INGRESS,ROUTER,EDGE,BROKER,PI,VOICE_VM,GATEWAY,HABITAT,WORKER,TASK_TOOLS,DOCKER_METRICS,HOST_METRICS,OTEL container;
     class TASKS,VOICE_DATA,GITEA,ARTIFACTS data;

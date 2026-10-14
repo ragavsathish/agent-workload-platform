@@ -1,4 +1,12 @@
-import { constants as fsConstants, existsSync } from "node:fs";
+import {
+  chmodSync,
+  constants as fsConstants,
+  existsSync,
+  mkdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 
 import {
@@ -22,6 +30,31 @@ const GUEST_WORKSPACE = "/workspace";
 export const GUEST_SKILLS = "/skills";
 export const GUEST_S3MOCK_ENDPOINT = "http://s3mock.local:9090";
 export const GUEST_GITEA_ENDPOINT = "http://gitea.local:3001";
+
+export function registerGondolinMetrics(
+  vm: VM,
+  label: string,
+  directory = process.env.GONDOLIN_METRICS_DIR,
+): () => void {
+  if (!directory) return () => {};
+  const pid = vm.getHostPid();
+  if (pid === null) throw new Error("Gondolin VM runner PID is unavailable");
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  chmodSync(directory, 0o700);
+  const safeId = vm.id.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const target = path.join(directory, `${safeId}.json`);
+  const temporary = `${target}.${process.pid}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify({
+    id: vm.id,
+    label,
+    pid,
+    ownerPid: process.pid,
+    cpus: 2,
+    memoryBytes: 2 * 1024 * 1024 * 1024,
+  })}\n`, { mode: 0o600 });
+  renameSync(temporary, target);
+  return () => rmSync(target, { force: true });
+}
 
 function shQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
@@ -212,6 +245,7 @@ export class GondolinWorkspace {
   private constructor(
     private readonly vm: VM,
     private readonly localCwd: string,
+    private readonly unregisterMetrics: () => void,
   ) {}
 
   static async create(options: GondolinWorkspaceOptions): Promise<GondolinWorkspace> {
@@ -250,7 +284,17 @@ export class GondolinWorkspace {
       await vm.close();
       throw new Error("Could not configure the scoped Gitea CLI login");
     }
-    return new GondolinWorkspace(vm, options.localCwd);
+    let unregisterMetrics: () => void;
+    try {
+      unregisterMetrics = registerGondolinMetrics(
+        vm,
+        options.sessionLabel ?? "pi-voice",
+      );
+    } catch (error) {
+      await vm.close();
+      throw error;
+    }
+    return new GondolinWorkspace(vm, options.localCwd, unregisterMetrics);
   }
 
   tools() {
@@ -258,6 +302,10 @@ export class GondolinWorkspace {
   }
 
   async close(): Promise<void> {
-    await this.vm.close();
+    try {
+      await this.vm.close();
+    } finally {
+      this.unregisterMetrics();
+    }
   }
 }

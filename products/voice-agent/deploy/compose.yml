@@ -102,6 +102,73 @@ services:
       retries: 20
     security_opt: [no-new-privileges:true]
 
+  habitat:
+    image: local/absurd-habitat:0.5.0
+    pull_policy: never
+    build:
+      context: ..
+      dockerfile: deploy/habitat/Containerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      HABITAT_LISTEN: 0.0.0.0:7890
+      HABITAT_BASE_PATH: /queue
+      HABITAT_DB_HOST: postgres
+      HABITAT_DB_PORT: "5432"
+      HABITAT_DB_NAME: voice_agents
+      HABITAT_DB_USER: habitat_operator
+      HABITAT_DB_PASSWORD_FILE: /run/secrets/habitat-database-password
+      HABITAT_DB_SSLMODE: disable
+    secrets: [habitat-database-password]
+    networks:
+      control:
+        ipv4_address: 172.30.90.6
+      data:
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    user: "65532:65532"
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.25
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:7890/queue/_healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  fluent-bit:
+    image: fluent/fluent-bit:4.2.0@sha256:aff743e1a5e61d036d10a4472d67cdd7a6b408c92218eb86e3f301e2bac7817a
+    restart: unless-stopped
+    command: ["--config=/fluent-bit/etc/fluent-bit.yaml"]
+    volumes:
+      - ./observability/fluent-bit.yaml:/fluent-bit/etc/fluent-bit.yaml:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    networks: [monitoring]
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.25
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   otel-lgtm:
     image: grafana/otel-lgtm:0.30.1@sha256:bb182ac3174a20923fa58f00d1790fa71eb06cc0150078c0b0e8feb9e6611492
     entrypoint: ["/bin/bash", "-c"]
@@ -135,9 +202,12 @@ services:
       - otel-lgtm-data:/data
       - ./observability/dashboards.yml:/otel-lgtm/grafana/conf/provisioning/dashboards/pipecat.yml:ro
       - ./observability/pipecat-overview.json:/otel-lgtm/grafana/conf/provisioning/dashboards/pipecat/pipecat-overview.json:ro
+      - ./observability/system-overview.json:/otel-lgtm/grafana/conf/provisioning/dashboards/pipecat/system-overview.json:ro
+      - ./observability/otelcol-config.yaml:/otel-lgtm/otelcol-config.yaml:ro
     networks:
       control:
         ipv4_address: 172.30.90.4
+      monitoring:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     pids_limit: 512
@@ -231,6 +301,7 @@ services:
       - "agent-gateway:172.30.90.3"
       - "otel-lgtm:172.30.90.4"
       - "gitea:172.30.90.5"
+      - "habitat:172.30.90.6"
     networks:
       control:
         ipv4_address: 172.30.90.2
@@ -250,6 +321,8 @@ services:
     restart: unless-stopped
     depends_on:
       gitea:
+        condition: service_healthy
+      habitat:
         condition: service_healthy
       otel-lgtm:
         condition: service_healthy
@@ -338,6 +411,8 @@ networks:
         - subnet: 172.30.90.0/24
   data:
     internal: true
+  monitoring:
+    internal: true
   host-access:
 
 secrets:
@@ -349,6 +424,8 @@ secrets:
     file: ./secrets/postgres-password
   database-url:
     file: ./secrets/database-url
+  habitat-database-password:
+    file: ./secrets/habitat-database-password
   approval-secret:
     file: ./secrets/approval-secret
   grafana-admin-password:

@@ -5,6 +5,10 @@ http:
         sourceRange:
           - "127.0.0.1/32"
         rejectStatusCode: 404
+    owner-only:
+      forwardAuth:
+        address: http://127.0.0.1:7860/api/ingress-auth
+        trustForwardHeader: false
     git-prefix:
       stripPrefix:
         prefixes:
@@ -24,35 +28,41 @@ http:
         permanent: true
 
   routers:
+    queue:
+      entryPoints: [tailnet]
+      rule: "HeaderRegexp(`Tailscale-User-Login`, `.+`) && PathPrefix(`/queue`)"
+      priority: 400
+      middlewares: [tailnet-loopback-only, owner-only]
+      service: habitat
     metrics-root:
       entryPoints: [tailnet]
       rule: "HeaderRegexp(`Tailscale-User-Login`, `.+`) && Path(`/metrics`)"
       priority: 310
-      middlewares: [tailnet-loopback-only, metrics-slash]
+      middlewares: [tailnet-loopback-only, owner-only, metrics-slash]
       service: noop@internal
     metrics:
       entryPoints: [tailnet]
       rule: "HeaderRegexp(`Tailscale-User-Login`, `.+`) && PathPrefix(`/metrics/`)"
       priority: 300
-      middlewares: [tailnet-loopback-only]
+      middlewares: [tailnet-loopback-only, owner-only]
       service: grafana
     git-root:
       entryPoints: [tailnet]
       rule: "HeaderRegexp(`Tailscale-User-Login`, `.+`) && Path(`/git`)"
       priority: 210
-      middlewares: [tailnet-loopback-only, git-slash]
+      middlewares: [tailnet-loopback-only, owner-only, git-slash]
       service: noop@internal
     git:
       entryPoints: [tailnet]
       rule: "HeaderRegexp(`Tailscale-User-Login`, `.+`) && PathPrefix(`/git/`)"
       priority: 200
-      middlewares: [tailnet-loopback-only, git-encoded-paths, git-prefix]
+      middlewares: [tailnet-loopback-only, owner-only, git-encoded-paths, git-prefix]
       service: gitea
     live:
       entryPoints: [tailnet]
       rule: "HeaderRegexp(`Tailscale-User-Login`, `.+`) && PathPrefix(`/`)"
       priority: 1
-      middlewares: [tailnet-loopback-only]
+      middlewares: [tailnet-loopback-only, owner-only]
       service: voice-edge
 
   services:
@@ -68,3 +78,7 @@ http:
       loadBalancer:
         servers:
           - url: http://gitea:3000
+    habitat:
+      loadBalancer:
+        servers:
+          - url: http://habitat:7890

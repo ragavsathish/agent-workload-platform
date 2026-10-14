@@ -24,6 +24,7 @@ gitea_agent_token_file="$repo_dir/deploy/secrets/gitea-agent-token"
 
 [[ -d "$skills_dir" ]] || { echo "Missing skills directory: $skills_dir" >&2; exit 1; }
 [[ -s "$gitea_agent_token_file" ]] || { echo "Missing Gitea agent token; run the Compose bootstrap first" >&2; exit 1; }
+[[ -x /opt/homebrew/bin/fluent-bit ]] || { echo "Missing Fluent Bit; run: brew install fluent-bit" >&2; exit 1; }
 
 mkdir -p \
   "$agents_dir" \
@@ -31,6 +32,9 @@ mkdir -p \
   "$runtime_dir/scripts" \
   "$runtime_dir/apps/broker/src" \
   "$runtime_dir/apps/worker/src" \
+  "$runtime_dir/apps/host-observability" \
+  "$runtime_dir/observability" \
+  "$runtime_dir/gondolin-metrics" \
   "$runtime_dir/packages/tasking/src" \
   "$runtime_dir/packages/tasking/migrations" \
   "$runtime_dir/packages/telemetry/src" \
@@ -41,14 +45,22 @@ mkdir -p \
   "$skills_runtime" \
   "$runtime_dir/voice-workspace"
 chmod 700 "$runtime_dir/runtime-home"
+chmod 700 "$runtime_dir/gondolin-metrics"
 chmod 700 "$logs_dir"
-touch "$logs_dir/broker.log" "$logs_dir/pi-voice.log" "$logs_dir/worker.log"
+touch "$logs_dir/broker.log" "$logs_dir/pi-voice.log" "$logs_dir/worker.log" "$logs_dir/host-observability.log"
 chmod 600 "$logs_dir"/*.log
 install -m 700 \
   "$repo_dir/deploy/launchd/run-broker.sh" \
+  "$repo_dir/deploy/launchd/run-host-observability.sh" \
   "$repo_dir/deploy/launchd/run-pi-agent.sh" \
   "$repo_dir/deploy/launchd/run-worker.sh" \
   "$runtime_dir/scripts/"
+install -m 600 \
+  "$repo_dir/apps/host-observability/gondolin-exporter.mjs" \
+  "$runtime_dir/apps/host-observability/"
+install -m 600 \
+  "$repo_dir/deploy/observability/fluent-bit-host.yaml" \
+  "$runtime_dir/observability/"
 rm -f \
   "$runtime_dir/scripts/host-broker.sh" \
   "$runtime_dir/scripts/host-pi-voice.sh" \
@@ -102,6 +114,7 @@ printf 'AGENT_GATEWAY_BASE_URL="http://127.0.0.1:9444/v1"\nGONDOLIN_BROWSER_ASSE
   "$runtime_dir/pi-voice-sessions" \
   "$skills_runtime" \
   >> "$runtime_dir/apps/broker/broker.env"
+printf 'GONDOLIN_METRICS_DIR="%s"\n' "$runtime_dir/gondolin-metrics" >> "$runtime_dir/apps/broker/broker.env"
 printf 'GITEA_TOKEN="%s"\n' "$(<"$gitea_agent_token_file")" >> "$runtime_dir/apps/broker/broker.env"
 chmod 600 "$runtime_dir/apps/broker/broker.env"
 awk -F= '/^(DATABASE_URL|ABSURD_QUEUE|ORCHESTRATOR_APPROVAL_SECRET|ORCHESTRATOR_APPROVAL_TTL_SECONDS|ORCHESTRATOR_ALLOWED_USERS|ORCHESTRATOR_WORKSPACE_ROOTS|ORCHESTRATOR_ALLOWED_WORKSPACES|ARTIFACT_ENDPOINT_URL|ARTIFACT_BUCKET|ARTIFACT_ACCESS_KEY|ARTIFACT_SECRET_KEY|WORKER_SCRATCH_ROOT|WORKER_MAX_ARTIFACT_BYTES|PI_BINARY|PI_MODEL|PI_THINKING|PI_SESSION_DIR|WORKER_ALLOW_UNSANDBOXED|WORKER_TASK_TIMEOUT_SECONDS|WORKER_MAX_OUTPUT_BYTES|GITHUB_TOKEN|WASSETTE_BIN|WASSETTE_COMPONENT_DIR|WASSETTE_GITHUB_COMPONENT|WASSETTE_GITHUB_WRITE|MEMORY_FILE_PATH)=/ {print}' \
@@ -111,6 +124,7 @@ printf 'PI_GONDOLIN_EXTENSION="%s"\nGONDOLIN_BROWSER_ASSETS="%s"\nGONDOLIN_BROWS
   "$gondolin_assets_runtime" \
   "$HOME/.pi/agent" \
   >> "$runtime_dir/apps/worker/worker.env"
+printf 'GONDOLIN_METRICS_DIR="%s"\n' "$runtime_dir/gondolin-metrics" >> "$runtime_dir/apps/worker/worker.env"
 chmod 600 "$runtime_dir/apps/worker/worker.env"
 /opt/homebrew/bin/uv sync --project "$runtime_dir/apps/broker" --frozen --no-dev
 /opt/homebrew/bin/uv sync --project "$runtime_dir/apps/worker" --frozen --no-dev
@@ -121,6 +135,7 @@ for label in com.sathish.pipecat-agent-gateway com.sathish.pipecat-edge-machine 
 done
 
 for source in \
+  "$repo_dir/deploy/launchd/com.sathish.pipecat-host-observability.plist" \
   "$repo_dir/deploy/launchd/com.sathish.pipecat-pi-voice.plist" \
   "$repo_dir/deploy/launchd/com.sathish.pipecat-broker.plist" \
   "$repo_dir/deploy/launchd/com.sathish.pipecat-worker.plist"; do
@@ -145,6 +160,8 @@ done
 for _ in {1..30}; do
   if [[ "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:9443/health 2>/dev/null || true)" == 401 ]] \
     && [[ "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:9446/health 2>/dev/null || true)" == 401 ]] \
+    && curl -fsS http://127.0.0.1:2022/metrics | grep -q 'node_uname_info{system="macos-host"' \
+    && curl -fsS http://127.0.0.1:9465/metrics | grep -q '^gondolin_vm_count ' \
     && launchctl print "$domain/com.sathish.pipecat-worker" >/dev/null 2>&1; then
     # The new app runtimes are healthy, so remove the superseded tree and its
     # copied environment files instead of retaining stale capabilities.

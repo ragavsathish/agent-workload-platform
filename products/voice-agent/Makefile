@@ -25,12 +25,12 @@ start:
 
 logs:
 	@mkdir -p "$$HOME/Library/Logs/PipecatEdge"
-	@touch "$$HOME/Library/Logs/PipecatEdge/broker.log" "$$HOME/Library/Logs/PipecatEdge/pi-voice.log" "$$HOME/Library/Logs/PipecatEdge/worker.log"
+	@touch "$$HOME/Library/Logs/PipecatEdge/broker.log" "$$HOME/Library/Logs/PipecatEdge/pi-voice.log" "$$HOME/Library/Logs/PipecatEdge/worker.log" "$$HOME/Library/Logs/PipecatEdge/host-observability.log"
 	@chmod 600 "$$HOME/Library/Logs/PipecatEdge/"*.log
 	@interrupted=0; \
 	tail -n 100 -F "$$HOME/Library/Logs/PipecatEdge/"*.log & tail_pid=$$!; \
 	trap 'interrupted=1' INT TERM; \
-	$(COMPOSE) logs -f --tail=100 agent-gateway voice-edge tailscale traefik gitea; status=$$?; \
+	$(COMPOSE) logs -f --tail=100 agent-gateway voice-edge tailscale traefik gitea habitat; status=$$?; \
 	kill "$$tail_pid" 2>/dev/null || true; \
 	wait "$$tail_pid" 2>/dev/null || true; \
 	if [[ "$$interrupted" == 1 || "$$status" == 130 ]]; then exit 0; fi; \
@@ -56,6 +56,7 @@ status:
 	$(COMPOSE) ps
 	$(COMPOSE) exec -T tailscale tailscale --socket=/tmp/tailscaled.sock status || true
 	launchctl print "gui/$$UID/com.sathish.pipecat-broker" | sed -n '1,20p'
+	launchctl print "gui/$$UID/com.sathish.pipecat-host-observability" | sed -n '1,20p'
 	launchctl print "gui/$$UID/com.sathish.pipecat-worker" | sed -n '1,20p'
 
 grafana-password:

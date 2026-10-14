@@ -6,7 +6,7 @@
 - 8 GiB RAM minimum; 16 GiB recommended
 - 20 GiB free disk minimum; 40 GiB recommended for images, telemetry, and model caches
 - Docker Desktop with Docker Compose
-- uv with Python 3.13, Node.js/npm, Ollama, curl, and Homebrew `libpq`
+- uv with Python 3.13, Node.js/npm, Ollama, curl, and Homebrew `libpq` and `fluent-bit`
 - Pi plus the repository's built Gondolin agent extension and any approved Wassette components
 - A Tailscale account shared with the browser device
 
@@ -41,10 +41,11 @@ Voice Service into `voice-pi-agent`, and the pinned VM image into
 permission.
 
 `make up` derives root-only Compose secret files under ignored `deploy/secrets/`; no secret is baked
-into an image. It also installs three LaunchAgents in
+into an image. It also installs four LaunchAgents in
 `~/Library/Application Support/PipecatEdge`:
 
 - inference broker: local MLX Whisper, Ollama, and Kokoro capability on `127.0.0.1:9443`;
+- host observability: macOS and registered Gondolin VM metrics on `127.0.0.1:2022` and `:9465`;
 - Pi Voice Service: persistent owner conversation and Gondolin-isolated native tools on
   `127.0.0.1:9446`;
 - Pi worker: consumes approved tasks from Postgres and invokes Gondolin/Wassette.
@@ -68,8 +69,8 @@ public-read token; it never receives the Gitea publisher credential.
 
 | Address | Owner | Purpose |
 |---|---|---|
-| tailnet HTTPS 443 | Tailscale Serve | authenticated HTTPS; `/`, `/metrics/`, and `/git/` only |
-| shared loopback `127.0.0.1:8080` | Traefik | identity-required path routing behind Tailscale Serve |
+| tailnet HTTPS 443 | Tailscale Serve | owner-only HTTPS; `/`, `/metrics/`, `/git/`, and `/queue/` only |
+| shared loopback `127.0.0.1:8080` | Traefik | exact-owner forward-auth and path routing behind Tailscale Serve |
 | shared loopback `127.0.0.1:7860` | Pipecat voice edge | browser UI and WebSocket audio behind Serve |
 | `127.0.0.1:54329` | Docker Postgres | native Pi worker queue access |
 | `127.0.0.1:9090` | Docker S3Mock | native worker immutable inputs and task result artifacts |
@@ -87,18 +88,31 @@ route/model limits are therefore part of the security boundary.
 
 The `otel-lgtm` bundle is connected to the private control network. Only Grafana and OTLP/HTTP are
 published, both on loopback; collector and datastore ports are not exposed to the LAN or tailnet.
+Fluent Bit collects aggregate Docker Desktop VM system metrics through read-only `/proc` and `/sys`
+mounts and exports them only on an internal Compose monitoring network. It has no Docker socket and
+publishes no host port. Homebrew Fluent Bit is also required on macOS. The host-observability
+LaunchAgent exposes macOS node metrics on `127.0.0.1:2022` and host-side Gondolin QEMU runner metrics
+on `127.0.0.1:9465`; both are scraped through Docker's host gateway and are unavailable on the LAN.
+VM owners register only an opaque VM ID, role label, QEMU PID, and configured limits in the private
+runtime directory. No guest agent or telemetry credential is installed in a Gondolin VM.
 Telemetry deliberately excludes logs and all user-controlled values. Its named volume contains
 only operation metrics and sanitized traces and can be removed separately if local telemetry must
 be erased. Tailscale Serve exposes Grafana at `/metrics/` on the single tailnet HTTPS origin and
-injects the authenticated login; Traefik accepts only shared-loopback traffic carrying that login,
+injects the authenticated login; Traefik accepts only shared-loopback traffic whose login matches
+the configured owner through the edge forward-auth endpoint,
 and Grafana accepts it only from the fixed Tailscale container IP. Direct loopback access continues
 to require the generated Grafana admin password.
+
+Absurd Habitat is reachable only through `/queue/`; it has no published host port. It connects to
+Postgres over the private data network with a dedicated operator role limited to the Absurd queue
+schema. That role can inspect and operate durable queue state but cannot read task proposals.
 
 The phone must run Tailscale and join the same tailnet. The tailnet policy must grant only the owner
 access to the voice node on TCP 443; use `deploy/tailscale-policy.hujson.example` as the minimum
 policy. Tailscale Serve terminates trusted HTTPS, strips client-supplied Tailscale identity headers,
 adds the authenticated tailnet identity, and forwards over shared loopback to Traefik. Traefik
-requires that identity before routing `/` to Pipecat, `/metrics/` to Grafana, or `/git/` to Gitea.
+requires the exact configured owner before routing `/` to Pipecat, `/metrics/` to Grafana, `/git/`
+to Gitea, or `/queue/` to Habitat.
 The application requires the exact MagicDNS origin and a signed,
 one-use WebSocket path token. This is a single-user deployment: `make login` pins exactly one owner
 login, and tailnet ACLs authenticate the devices allowed to reach it. There is no fallback listener

@@ -8,10 +8,10 @@ pass() { printf 'PASS  %s\n' "$*"; }
 warn() { printf 'WARN  %s\n' "$*"; }
 fail() { printf 'FAIL  %s\n' "$*"; failures=$((failures + 1)); }
 
-services=(gitea s3mock postgres otel-lgtm agent-gateway tailscale voice-edge traefik)
-secure_services=(gitea s3mock agent-gateway tailscale voice-edge traefik)
+services=(gitea habitat s3mock postgres fluent-bit otel-lgtm agent-gateway tailscale voice-edge traefik)
+secure_services=(gitea habitat s3mock fluent-bit agent-gateway tailscale voice-edge traefik)
 no_log_services=(otel-lgtm)
-bounded_log_services=(gitea agent-gateway voice-edge traefik)
+bounded_log_services=(gitea habitat fluent-bit agent-gateway voice-edge traefik)
 
 for service in "${services[@]}"; do
   cid="$("${compose[@]}" ps -q "$service")"
@@ -91,6 +91,18 @@ if [[ "$gitea_ports" == *'"3000/tcp":[{"HostIp":"127.0.0.1","HostPort":"3001"'* 
 else
   fail "Gitea loopback publication is missing"
 fi
+habitat_cid="$("${compose[@]}" ps -q habitat)"
+[[ -z "$(docker port "$habitat_cid" 2>/dev/null)" ]] \
+  && pass "Habitat publishes no Docker port" \
+  || fail "Habitat publishes a Docker port"
+habitat_password="$(<"$root/deploy/secrets/habitat-database-password")"
+habitat_privileges="$(docker exec -e PGPASSWORD="$habitat_password" \
+  "$("${compose[@]}" ps -q postgres)" \
+  psql -h 127.0.0.1 -U habitat_operator -d voice_agents -Atc \
+  "SELECT has_schema_privilege(current_user, 'absurd', 'USAGE'), has_table_privilege(current_user, 'absurd.queues', 'SELECT'), has_table_privilege(current_user, 'voice_task_proposals', 'SELECT')")"
+[[ "$habitat_privileges" == "t|t|f" ]] \
+  && pass "Habitat can operate the Absurd schema without reading proposal records" \
+  || fail "Habitat database privileges exceed or miss the intended queue scope"
 if docker inspect -f '{{range .Mounts}}{{println .Type " " .Source " -> " .Destination}}{{end}}' "$gitea_cid" | grep -q ' bind '; then
   fail "Gitea uses a host bind mount"
 else
@@ -134,6 +146,50 @@ else
   fail "observability loopback publications are missing"
 fi
 [[ "$otel_ports" != *'4317/tcp":[* && "$otel_ports" != *'9090/tcp":[* && "$otel_ports" != *'3100/tcp":[* ]] && pass "collector backends publish no extra host ports" || fail "collector backend ports are exposed"
+fluent_bit_cid="$("${compose[@]}" ps -q fluent-bit)"
+[[ -z "$(docker port "$fluent_bit_cid" 2>/dev/null)" ]] \
+  && pass "Fluent Bit publishes no Docker port" \
+  || fail "Fluent Bit publishes a Docker port"
+fluent_bit_mounts="$(docker inspect -f '{{range .Mounts}}{{println .Source " -> " .Destination " writable=" .RW}}{{end}}' "$fluent_bit_cid")"
+if grep -Eq '^/proc +-> +/host/proc +writable= false$' <<<"$fluent_bit_mounts" \
+  && grep -Eq '^/sys +-> +/host/sys +writable= false$' <<<"$fluent_bit_mounts"; then
+  pass "Fluent Bit reads Docker VM procfs and sysfs read-only"
+else
+  fail "Fluent Bit system metric mounts are missing or writable"
+fi
+if "${compose[@]}" exec -T otel-lgtm sh -lc \
+  'curl -fsS http://fluent-bit:2021/metrics | grep -q node_memory_MemTotal_bytes'; then
+  pass "Fluent Bit exports Docker VM system metrics on the private network"
+else
+  fail "Fluent Bit system metrics endpoint is unavailable"
+fi
+if "${compose[@]}" exec -T otel-lgtm sh -lc \
+  'curl -fsS '\''http://127.0.0.1:9090/api/v1/query?query=node_memory_MemTotal_bytes%7Bsystem%3D%22docker-desktop-vm%22%7D'\'' | grep -Fq '\''"result":[{'\'''; then
+  pass "Prometheus ingests Fluent Bit system metrics"
+else
+  fail "Prometheus has not ingested Fluent Bit system metrics"
+fi
+for port in 2022 9465; do
+  if lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | grep -Fq '127.0.0.1:'; then
+    pass "native metrics port $port listens only on host loopback"
+  else
+    fail "native metrics port $port is unavailable or not loopback-only"
+  fi
+done
+curl -fsS http://127.0.0.1:2022/metrics | grep -q 'node_uname_info{system="macos-host"' \
+  && pass "native Fluent Bit exports macOS system metrics" \
+  || fail "native macOS system metrics endpoint is unavailable"
+curl -fsS http://127.0.0.1:9465/metrics | grep -q '^gondolin_vm_count ' \
+  && pass "host exporter reports registered Gondolin VMs" \
+  || fail "Gondolin VM metrics endpoint is unavailable"
+if "${compose[@]}" exec -T otel-lgtm sh -lc \
+  'curl -fsS '\''http://127.0.0.1:9090/api/v1/query?query=node_uname_info%7Bsystem%3D%22macos-host%22%7D'\'' | grep -Fq '\''"result":[{'\''' \
+  && "${compose[@]}" exec -T otel-lgtm sh -lc \
+  'curl -fsS '\''http://127.0.0.1:9090/api/v1/query?query=gondolin_vm_count'\'' | grep -Fq '\''"result":[{'\'''; then
+  pass "Prometheus ingests macOS and Gondolin VM metrics"
+else
+  fail "Prometheus has not ingested every host metric source"
+fi
 [[ "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3300/api/user || true)" == 401 ]] && pass "Grafana requires authentication" || fail "Grafana authentication check failed"
 grafana_env="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$otel_cid")"
 if grep -Fxq 'GF_AUTH_PROXY_ENABLED=true' <<<"$grafana_env" \
@@ -157,14 +213,28 @@ else:
 else
   fail "Traefik forwarded a request without a Tailscale identity"
 fi
+if "${compose[@]}" exec -T voice-edge python -c 'import urllib.error,urllib.request
+request=urllib.request.Request("http://127.0.0.1:8080/",headers={"Tailscale-User-Login":"attacker@example.invalid"})
+try:
+    urllib.request.urlopen(request, timeout=5)
+except urllib.error.HTTPError as exc:
+    assert exc.code == 403
+else:
+    raise AssertionError("non-owner ingress request was forwarded")'; then
+  pass "Traefik requires the exact configured owner identity"
+else
+  fail "Traefik accepted a non-owner Tailscale identity"
+fi
 if [[ -n "$tailscale_login" ]] \
   && "${compose[@]}" exec -T tailscale wget -q -O /dev/null \
     --header="Tailscale-User-Login: $tailscale_login" http://127.0.0.1:8080/api/features \
   && "${compose[@]}" exec -T tailscale wget -q -O /dev/null \
     --header="Tailscale-User-Login: $tailscale_login" http://127.0.0.1:8080/metrics/api/user \
   && "${compose[@]}" exec -T tailscale wget -q -O /dev/null \
-    --header="Tailscale-User-Login: $tailscale_login" http://127.0.0.1:8080/git/api/v1/version; then
-  pass "Traefik routes authenticated live, metrics, and Git requests"
+    --header="Tailscale-User-Login: $tailscale_login" http://127.0.0.1:8080/git/api/v1/version \
+  && "${compose[@]}" exec -T tailscale wget -q -O /dev/null \
+    --header="Tailscale-User-Login: $tailscale_login" http://127.0.0.1:8080/queue/api/queues; then
+  pass "Traefik routes owner-authenticated live, metrics, Git, and queue requests"
 else
   fail "Traefik path routing or Tailscale identity forwarding failed"
 fi
@@ -246,7 +316,7 @@ else
   fail "gateway cannot reach the private artifact bucket"
 fi
 
-for label in com.sathish.pipecat-broker com.sathish.pipecat-pi-voice com.sathish.pipecat-worker; do
+for label in com.sathish.pipecat-broker com.sathish.pipecat-host-observability com.sathish.pipecat-pi-voice com.sathish.pipecat-worker; do
   launchctl print "gui/$UID/$label" >/dev/null 2>&1 && pass "$label is loaded" || fail "$label is not loaded"
 done
 

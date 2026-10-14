@@ -174,6 +174,16 @@ def validate_http_identity(request: Request) -> str:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
 
+def validate_ingress_identity(request: Request) -> str:
+    """Authorize Traefik's owner-only forward-auth request."""
+    try:
+        return validate_identity(
+            request.headers.get("tailscale-user-login", "").strip().lower()
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+
 async def broker_transcript_request() -> dict[str, object]:
     headers = {"Authorization": f"Bearer {required_env('INFERENCE_BROKER_TOKEN')}"}
     async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
@@ -660,6 +670,11 @@ if __name__ == "__main__":
             "defaultWorkspace": required_env("VOICE_DEFAULT_WORKSPACE"),
             "audioFilter": audio_filter_readiness(),
         }
+
+    @app.get("/api/ingress-auth", include_in_schema=False)
+    async def ingress_auth(request: Request):
+        validate_ingress_identity(request)
+        return Response(status_code=204)
 
     @app.get("/api/tasks")
     async def list_browser_tasks(request: Request):

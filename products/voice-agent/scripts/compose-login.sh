@@ -23,10 +23,11 @@ done
 
 url="$(uv run --project "$root/apps/gateway" python "$root/deploy/finalize_edge.py" "$root/apps/edge/.env" "$status_file" "$root/deploy/.env")"
 uv run --project "$root/apps/gateway" python "$root/deploy/prepare_compose.py" "$root"
-"${compose[@]}" up -d --wait --force-recreate gitea otel-lgtm agent-gateway voice-edge traefik
+"${compose[@]}" up -d --wait --force-recreate gitea habitat otel-lgtm agent-gateway voice-edge traefik
 "${compose[@]}" exec -T tailscale tailscale --socket=/tmp/tailscaled.sock serve reset
 "${compose[@]}" exec -T tailscale tailscale --socket=/tmp/tailscaled.sock serve \
   --bg --https=443 http://127.0.0.1:8080
 echo "Voice UI: $url"
 echo "Grafana: ${url}/metrics/"
 echo "Gitea: ${url}/git/"
+echo "Durable queue: ${url}/queue/"
