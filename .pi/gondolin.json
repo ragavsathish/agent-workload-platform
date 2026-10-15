@@ -3,7 +3,8 @@
   "build": {
     "context": ".",
     "dockerfile": "platform/agent-execution/gondolin-session/gondolin/Dockerfile.voice",
-    "assetConfig": "platform/agent-execution/gondolin-session/gondolin/playwright-mcp.aarch64.json"
+    "assetConfig": "platform/agent-execution/gondolin-session/gondolin/playwright-mcp.aarch64.json",
+    "publish": false
   },
   "memory": "2G",
   "cpus": 2

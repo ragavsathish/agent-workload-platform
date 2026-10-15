@@ -10,6 +10,7 @@ type GuestPlan = {
   dockerfile: string;
   imageRef: string;
   namedContexts: Record<string, string>;
+  publish: boolean;
   registryRef: string;
   target?: string;
 };
@@ -99,13 +100,25 @@ for (const [name, relative] of Object.entries(plan.namedContexts).sort()) {
 }
 buildArgs.push(workspacePath(plan.context));
 await run("docker", buildArgs);
-await run("docker", ["tag", localTag, plan.registryRef]);
-const pushed = await run("docker", ["push", plan.registryRef]);
-const digest = pushed.match(/digest:\s+(sha256:[a-f0-9]{64})\b/)?.[1];
-if (!digest) throw new Error("docker push did not report an OCI digest");
+await run("docker", ["tag", localTag, plan.imageRef]);
+let digest: string;
+let registryRepository: string | null = null;
+if (plan.publish) {
+  await run("docker", ["tag", localTag, plan.registryRef]);
+  const pushed = await run("docker", ["push", plan.registryRef]);
+  const pushedDigest = pushed.match(/digest:\s+(sha256:[a-f0-9]{64})\b/)?.[1];
+  if (!pushedDigest) throw new Error("docker push did not report an OCI digest");
+  digest = pushedDigest;
+  registryRepository = "image-builder/execution-images";
+} else {
+  digest = await run("docker", ["image", "inspect", "--format", "{{.Id}}", localTag]);
+  if (!/^sha256:[a-f0-9]{64}$/.test(digest)) throw new Error("docker build did not report an image digest");
+}
 fs.writeFileSync("/output/result.json", `${JSON.stringify({
   artifactVersion: plan.artifactVersion,
+  cacheReference: localTag,
   digest,
   imageRef: plan.imageRef,
-  registryRepository: "image-builder/execution-images",
+  publication: plan.publish ? "registry" : "builder-cache",
+  registryRepository,
 })}\n`, { mode: 0o600 });
