@@ -89,7 +89,7 @@ trap 'rm -rf "$gondolin_deploy"' EXIT
   --config.inject-workspace-packages=true \
   --filter @agent-workload-platform/gondolin-session \
   deploy --prod --ignore-scripts "$gondolin_deploy"
-rsync -a --delete "$gondolin_deploy/" "$gondolin_runtime/"
+rsync -a --delete --exclude='image-cache/' "$gondolin_deploy/" "$gondolin_runtime/"
 rm -rf "$gondolin_deploy"
 trap - EXIT
 voice_agent_deploy="$(mktemp -d "$runtime_dir/voice-pi-agent.deploy.XXXXXX")"
