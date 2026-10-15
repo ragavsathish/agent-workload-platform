@@ -17,6 +17,8 @@ type GuestPlan = {
   target?: string;
 };
 
+const trustedImageCache = "/runner/image-cache";
+
 function run(
   command: string,
   args: string[],
@@ -53,6 +55,24 @@ async function sha256(file: string): Promise<string> {
   const hash = createHash("sha256");
   for await (const chunk of fs.createReadStream(file)) hash.update(chunk);
   return `sha256:${hash.digest("hex")}`;
+}
+
+async function importTrustedBaseImages(): Promise<void> {
+  if (!fs.existsSync(trustedImageCache)) return;
+  for (const entry of fs.readdirSync(trustedImageCache, { withFileTypes: true })
+    .filter((candidate) => candidate.isFile() && candidate.name.endsWith(".tar"))
+    .sort((left, right) => left.name.localeCompare(right.name))) {
+    const archive = path.join(trustedImageCache, entry.name);
+    const referenceFile = archive.replace(/\.tar$/, ".ref");
+    const reference = fs.readFileSync(referenceFile, "utf8").trim();
+    if (!reference.startsWith("gitea.local:3001/image-builder/") || /\s/.test(reference)) {
+      throw new Error(`invalid trusted base-image reference: ${reference}`);
+    }
+    const cached = await run("docker", ["image", "inspect", "--format", "{{.Id}}", reference])
+      .then(() => true, () => false);
+    if (cached) continue;
+    await run("docker", ["load", "--input", archive]);
+  }
 }
 
 async function exportDockerArchive(image: string, destination: string): Promise<void> {
@@ -249,6 +269,7 @@ await run(
   ["login", "--username", "image-builder", "--password-stdin", registry],
   `${token}\n`,
 );
+await importTrustedBaseImages();
 const localTag = `local/task-image:${createHash("sha256").update(plan.artifactVersion).digest("hex").slice(0, 20)}`;
 const buildArgs = [
   "build",
