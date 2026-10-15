@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1.7
 
 ARG PLAYWRIGHT_MCP_IMAGE=mcr.microsoft.com/playwright/mcp:v0.0.79@sha256:2f69a7a48fb9e5eea360f8f160192b11241e6e7d124389c103164f39e6fd2f8d
-FROM grafana/otel-lgtm:0.30.1@sha256:bb182ac3174a20923fa58f00d1790fa71eb06cc0150078c0b0e8feb9e6611492 AS otel-lgtm
+FROM prom/prometheus:v3.13.2@sha256:508729e0e2d18e11fd742a5a5ca70e557b940a93948c3c95fd0123a6fd538b69 AS prometheus
 FROM ${PLAYWRIGHT_MCP_IMAGE}
 
 ARG TARGETARCH
 ARG TEA_VERSION=0.15.1
 USER root
-COPY --from=otel-lgtm /otel-lgtm/prometheus/promtool /usr/local/bin/promtool
+COPY --from=prometheus /bin/promtool /usr/local/bin/promtool
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update \
@@ -22,5 +22,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
        --output /tmp/tea \
     && echo "$tea_sha256  /tmp/tea" | sha256sum --check --strict \
     && install -m 0555 /tmp/tea /usr/local/bin/tea \
-    && rm /tmp/tea
+    && rm /tmp/tea \
+    && promtool --version
 USER node
