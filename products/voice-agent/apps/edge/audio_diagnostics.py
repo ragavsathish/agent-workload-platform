@@ -1,4 +1,4 @@
-"""Bounded, local-only replay storage for input-filter comparisons."""
+"""Bounded, local-only replay storage for the selected input filter."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from uuid import UUID, uuid4
 
 import numpy as np
 
-DIAGNOSTIC_VARIANTS: Final = frozenset({"raw", "voxlock", "rnnoise"})
+KNOWN_DIAGNOSTIC_VARIANTS: Final = frozenset({"raw", "voxlock", "rnnoise"})
 _SENTINEL: Final = object()
 
 
@@ -35,6 +35,7 @@ class AudioDiagnosticSession:
     selected_filter: str
     dropped_chunks: int
     truncated: bool
+    variants: tuple[str, ...]
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -46,13 +47,13 @@ class AudioDiagnosticSession:
             "selectedFilter": self.selected_filter,
             "droppedChunks": self.dropped_chunks,
             "truncated": self.truncated,
-            "variants": sorted(DIAGNOSTIC_VARIANTS),
+            "variants": list(self.variants),
             "metricsAvailable": True,
         }
 
 
 class SessionAudioRecorder:
-    """Write comparison WAVs off the real-time audio path."""
+    """Write raw and selected-filter WAVs off the real-time audio path."""
 
     def __init__(
         self,
@@ -66,6 +67,9 @@ class SessionAudioRecorder:
         self.id = str(uuid4())
         self.sample_rate = sample_rate
         self.selected_filter = selected_filter
+        if selected_filter not in KNOWN_DIAGNOSTIC_VARIANTS - {"raw"}:
+            raise ValueError("unknown selected audio filter")
+        self.variants = ("raw", selected_filter)
         self.started_at = _utc_now()
         self._max_frames = sample_rate * max_seconds
         self._raw_frames = 0
@@ -89,7 +93,7 @@ class SessionAudioRecorder:
     def _write_loop(self) -> None:
         writers: dict[str, wave.Wave_write] = {}
         try:
-            for variant in DIAGNOSTIC_VARIANTS:
+            for variant in self.variants:
                 target = self._temporary / f"{variant}.wav"
                 writer = wave.open(str(target), "wb")
                 writer.setnchannels(1)
@@ -115,8 +119,7 @@ class SessionAudioRecorder:
         self,
         *,
         raw: bytes,
-        voxlock: bytes,
-        rnnoise: bytes,
+        filtered: bytes,
         metrics: dict[str, object] | None,
     ) -> None:
         if self._closed or self._truncated:
@@ -131,7 +134,7 @@ class SessionAudioRecorder:
                 self._metrics.append(metrics)
             self._latest_waveform = _waveform_envelope(raw)
         try:
-            self._queue.put_nowait({"raw": raw, "voxlock": voxlock, "rnnoise": rnnoise})
+            self._queue.put_nowait({"raw": raw, self.selected_filter: filtered})
         except queue.Full:
             self._dropped_chunks += 1
 
@@ -158,6 +161,7 @@ class SessionAudioRecorder:
             selected_filter=self.selected_filter,
             dropped_chunks=self._dropped_chunks,
             truncated=self._truncated,
+            variants=self.variants,
         )
         metadata = self._temporary / "metadata.json"
         metadata.write_text(json.dumps(session.as_dict(), sort_keys=True), encoding="utf-8")
@@ -170,7 +174,7 @@ class SessionAudioRecorder:
             encoding="utf-8",
         )
         metrics_path.chmod(0o600)
-        for variant in DIAGNOSTIC_VARIANTS:
+        for variant in self.variants:
             (self._temporary / f"{variant}.wav").chmod(0o600)
         os.replace(self._temporary, self._store.root / self.id)
         self._store.deactivate(self.id)
@@ -251,7 +255,7 @@ class AudioDiagnosticStore:
                 shutil.rmtree(directory)
 
     def audio_path(self, session_id: str, variant: str) -> Path:
-        if variant not in DIAGNOSTIC_VARIANTS:
+        if variant not in KNOWN_DIAGNOSTIC_VARIANTS:
             raise ValueError("unknown audio diagnostic variant")
         canonical_id = str(UUID(session_id))
         target = self.root / canonical_id / f"{variant}.wav"

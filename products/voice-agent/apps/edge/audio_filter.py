@@ -151,28 +151,27 @@ def _voxlock_filter(telemetry: Telemetry) -> InstrumentedAudioFilter:
     )
 
 
-class ComparingReplayAudioFilter(BaseAudioFilter):
-    """Run both filters on identical input and retain five replayable sessions."""
+class SelectedReplayAudioFilter(BaseAudioFilter):
+    """Run only the selected filter and retain its bounded diagnostics."""
 
     def __init__(self, selected: str, telemetry: Telemetry) -> None:
         self.name = selected
         self._telemetry = telemetry
-        self._filters = {
-            "voxlock": _voxlock_filter(telemetry),
-            "rnnoise": InstrumentedAudioFilter("rnnoise", RNNoiseFilter(), telemetry),
-        }
+        self._filter = (
+            _voxlock_filter(telemetry)
+            if selected == "voxlock"
+            else InstrumentedAudioFilter("rnnoise", RNNoiseFilter(), telemetry)
+        )
         self._recorder: SessionAudioRecorder | None = None
         self._sample_rate = 0
         self._input_frames = 0
         self._metric_raw_pending = b""
-        self._metric_rnnoise_pending = b""
 
     async def start(self, sample_rate: int):
-        await asyncio.gather(*(audio_filter.start(sample_rate) for audio_filter in self._filters.values()))
+        await self._filter.start(sample_rate)
         self._sample_rate = sample_rate
         self._input_frames = 0
         self._metric_raw_pending = b""
-        self._metric_rnnoise_pending = b""
         self._recorder = audio_diagnostic_store().begin(
             sample_rate=sample_rate,
             selected_filter=self.name,
@@ -180,62 +179,45 @@ class ComparingReplayAudioFilter(BaseAudioFilter):
 
     async def stop(self):
         try:
-            await asyncio.gather(*(audio_filter.stop() for audio_filter in self._filters.values()))
+            await self._filter.stop()
         finally:
             recorder, self._recorder = self._recorder, None
             if recorder is not None:
                 await asyncio.to_thread(recorder.close)
 
     async def process_frame(self, frame: FilterControlFrame):
-        await asyncio.gather(
-            *(audio_filter.process_frame(frame) for audio_filter in self._filters.values())
-        )
+        await self._filter.process_frame(frame)
 
     async def filter(self, audio: bytes) -> bytes:
-        voxlock, rnnoise = await asyncio.gather(
-            self._filters["voxlock"].filter(audio),
-            self._filters["rnnoise"].filter(audio),
-        )
+        filtered = await self._filter.filter(audio)
         self._input_frames += len(audio) // 2
         self._metric_raw_pending += audio
-        self._metric_rnnoise_pending += rnnoise
         if self._recorder is not None:
-            voxlock_delegate = self._filters["voxlock"]._delegate
+            delegate = self._filter._delegate
             model_state = (
-                voxlock_delegate.diagnostic_state()
-                if voxlock and isinstance(voxlock_delegate, DiagnosticVoxLockFilter)
+                delegate.diagnostic_state()
+                if filtered and isinstance(delegate, DiagnosticVoxLockFilter)
                 else {}
             )
             metrics = None
-            if voxlock:
+            if filtered:
                 metrics = {
                     "timeSeconds": round(self._input_frames / self._sample_rate, 3),
                     "rawDbfs": _dbfs(self._metric_raw_pending),
-                    "voxlockDbfs": _dbfs(voxlock),
-                    "rnnoiseDbfs": _dbfs(self._metric_rnnoise_pending),
-                    "voxlockSuppressionDb": _suppression_db(
-                        self._metric_raw_pending, voxlock
+                    f"{self.name}Dbfs": _dbfs(filtered),
+                    f"{self.name}SuppressionDb": _suppression_db(
+                        self._metric_raw_pending, filtered
                     ),
-                    "rnnoiseSuppressionDb": _suppression_db(
-                        self._metric_raw_pending, self._metric_rnnoise_pending
-                    ),
-                    "voxlockLatencyMs": round(
-                        self._filters["voxlock"].last_duration_ms, 3
-                    ),
-                    "rnnoiseLatencyMs": round(
-                        self._filters["rnnoise"].last_duration_ms, 3
-                    ),
+                    f"{self.name}LatencyMs": round(self._filter.last_duration_ms, 3),
                     **model_state,
                 }
                 self._metric_raw_pending = b""
-                self._metric_rnnoise_pending = b""
             self._recorder.record(
                 raw=audio,
-                voxlock=voxlock,
-                rnnoise=rnnoise,
+                filtered=filtered,
                 metrics=metrics,
             )
-        return voxlock if self.name == "voxlock" else rnnoise
+        return filtered
 
 
 def _dbfs(audio: bytes) -> float | None:
@@ -254,14 +236,15 @@ def _suppression_db(input_audio: bytes, output_audio: bytes) -> float | None:
     return round(input_dbfs - output_dbfs, 3)
 
 
-def create_audio_filter(telemetry: Telemetry) -> ComparingReplayAudioFilter:
-    return ComparingReplayAudioFilter(selected_filter_name(), telemetry)
+def create_audio_filter(telemetry: Telemetry) -> SelectedReplayAudioFilter:
+    return SelectedReplayAudioFilter(selected_filter_name(), telemetry)
 
 
 def audio_filter_readiness() -> dict[str, object]:
     name = selected_filter_name()
-    required_models = ("enroll.onnx", "chunk_int8.onnx", "provenance.json")
-    if any(not (VOXLOCK_MODEL_PATH / model).is_file() for model in required_models):
-        raise RuntimeError("VoxLock model files are missing")
-    load_owner_voice_sample()
-    return {"name": name, "comparison": "voxlock+rnnoise", "ready": True}
+    if name == "voxlock":
+        required_models = ("enroll.onnx", "chunk_int8.onnx", "provenance.json")
+        if any(not (VOXLOCK_MODEL_PATH / model).is_file() for model in required_models):
+            raise RuntimeError("VoxLock model files are missing")
+        load_owner_voice_sample()
+    return {"name": name, "ready": True}

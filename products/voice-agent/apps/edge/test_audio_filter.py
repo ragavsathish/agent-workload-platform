@@ -3,11 +3,11 @@ import tempfile
 import unittest
 import wave
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 
-from audio_filter import load_owner_voice_sample, selected_filter_name
+from audio_filter import SelectedReplayAudioFilter, load_owner_voice_sample, selected_filter_name
 
 
 def write_sample(path: Path, seconds: float, amplitude: int = 2_000) -> None:
@@ -30,6 +30,25 @@ class AudioFilterTest(unittest.TestCase):
         with patch.dict(os.environ, {"VOICE_INPUT_FILTER": "unknown"}):
             with self.assertRaisesRegex(RuntimeError, "must be one of"):
                 selected_filter_name()
+
+    def test_selected_filter_does_not_initialize_the_other_filter(self):
+        telemetry = Mock()
+        with (
+            patch("audio_filter._voxlock_filter") as voxlock_filter,
+            patch("audio_filter.RNNoiseFilter") as rnnoise_filter,
+            patch("audio_filter.InstrumentedAudioFilter"),
+        ):
+            SelectedReplayAudioFilter("rnnoise", telemetry)
+            rnnoise_filter.assert_called_once_with()
+            voxlock_filter.assert_not_called()
+
+        with (
+            patch("audio_filter._voxlock_filter") as voxlock_filter,
+            patch("audio_filter.RNNoiseFilter") as rnnoise_filter,
+        ):
+            SelectedReplayAudioFilter("voxlock", telemetry)
+            voxlock_filter.assert_called_once_with(telemetry)
+            rnnoise_filter.assert_not_called()
 
     def test_owner_sample_is_reduced_to_three_seconds(self):
         with tempfile.TemporaryDirectory() as directory:

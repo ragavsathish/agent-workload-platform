@@ -6,7 +6,7 @@ flowchart LR
         direction TB
         PAGE["Component<br/><b>Diagnostics Page</b><br/>loads the latest five completed voice sessions"]
         LIVE["Component<br/><b>Live Input Monitor</b><br/>polls and plots the active microphone envelope"]
-        REPLAY["Component<br/><b>Replay Comparison</b><br/>plays raw, RNNoise, and VoxLock audio"]
+        REPLAY["Component<br/><b>Session Replay</b><br/>plays raw and selected-filter audio"]
         CHARTS["Component<br/><b>Model Charts</b><br/>plots energy, suppression, latency, LSTM state, and masks"]
         API["Component<br/><b>Diagnostics API Adapter</b><br/>same-origin fetch with runtime validation"]
 
@@ -15,7 +15,7 @@ flowchart LR
         PAGE -->|"selects a session"| REPLAY
         PAGE -->|"selects a session"| CHARTS
         LIVE -->|"polls live envelope"| API
-        REPLAY -->|"streams WAV variants"| API
+        REPLAY -->|"streams raw and selected WAV"| API
         CHARTS -->|"loads metric series"| API
     end
 

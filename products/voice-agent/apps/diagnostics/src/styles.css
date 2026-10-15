@@ -54,7 +54,7 @@ button, a { font: inherit; }
 .header-actions { display: flex; gap: 0.5rem; }
 .header-actions a,
 .header-actions button,
-.audio-comparison-load,
+.audio-session-load,
 .audio-waveform-controls button {
   border: 1px solid #365044;
   border-radius: 7px;

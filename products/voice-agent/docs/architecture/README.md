@@ -11,7 +11,7 @@ notation is used for runtime views because it preserves order without crossing r
 | C1 system context | Who uses the Voice Agent and which external systems does it depend on? | [c1-system-context.mmd](c1-system-context.mmd) | [PNG](c1-system-context.png) |
 | C2 containers | Which independently running parts own voice, Pi, task, artifact, and telemetry responsibilities? | [c2-container.mmd](c2-container.mmd) | [PNG](c2-container.png) |
 | C3 Browser Voice Client | Which Flutter components own conversation control, diagrams, tasks, and transcript? | [c3-browser-client.mmd](c3-browser-client.mmd) | [PNG](c3-browser-client.png) |
-| C3 Input Diagnostics | Which React components own live input monitoring, replay comparison, and model charts? | [c3-input-diagnostics.mmd](c3-input-diagnostics.mmd) | [PNG](c3-input-diagnostics.png) |
+| C3 Input Diagnostics | Which React components own live input monitoring, selected-filter replay, and model charts? | [c3-input-diagnostics.mmd](c3-input-diagnostics.mmd) | [PNG](c3-input-diagnostics.png) |
 | C3 Voice Edge | How does Pipecat turn browser audio into an authenticated, observable voice pipeline? | [c3-voice-edge.mmd](c3-voice-edge.mmd) | [PNG](c3-voice-edge.png) |
 | C3 Inference Broker | Which narrow adapters expose native STT, TTS, Pi streaming, context, and fallback inference? | [c3-inference-broker.mmd](c3-inference-broker.mmd) | [PNG](c3-inference-broker.png) |
 | C3 Pi Voice Service | How are persistent Pi turns, tools, transcript, context, skills, and the voice VM coordinated? | [c3-pi-voice-service.mmd](c3-pi-voice-service.mmd) | [PNG](c3-pi-voice-service.png) |

@@ -8,14 +8,13 @@ from audio_diagnostics import AudioDiagnosticStore
 
 
 class AudioDiagnosticStoreTest(unittest.TestCase):
-    def test_writes_three_replayable_wavs(self):
+    def test_writes_raw_and_selected_filter_wavs(self):
         with tempfile.TemporaryDirectory() as directory:
             store = AudioDiagnosticStore(Path(directory), max_sessions=5, max_seconds=10)
             recorder = store.begin(sample_rate=16_000, selected_filter="voxlock")
             recorder.record(
                 raw=b"\x01\x00" * 160,
-                voxlock=b"\x02\x00" * 80,
-                rnnoise=b"\x03\x00" * 160,
+                filtered=b"\x02\x00" * 80,
                 metrics={"timeSeconds": 0.01, "voxlockLatencyMs": 2.5},
             )
 
@@ -25,7 +24,8 @@ class AudioDiagnosticStoreTest(unittest.TestCase):
             self.assertEqual(len(store.list()), 1)
             points = cast(list[dict[str, object]], store.metrics(recorder.id)["points"])
             self.assertEqual(points[0]["voxlockLatencyMs"], 2.5)
-            for variant, expected_frames in (("raw", 160), ("voxlock", 80), ("rnnoise", 160)):
+            self.assertEqual(store.list()[0]["variants"], ["raw", "voxlock"])
+            for variant, expected_frames in (("raw", 160), ("voxlock", 80)):
                 with wave.open(str(store.audio_path(recorder.id, variant)), "rb") as replay:
                     self.assertEqual(replay.getnchannels(), 1)
                     self.assertEqual(replay.getsampwidth(), 2)
@@ -40,8 +40,7 @@ class AudioDiagnosticStoreTest(unittest.TestCase):
                 recorder = store.begin(sample_rate=16_000, selected_filter="rnnoise")
                 recorder.record(
                     raw=index.to_bytes(2, "little") * 10,
-                    voxlock=b"\x00\x00" * 10,
-                    rnnoise=b"\x00\x00" * 10,
+                    filtered=b"\x00\x00" * 10,
                     metrics={"timeSeconds": index / 10},
                 )
                 self.assertIsNotNone(recorder.close())
@@ -59,14 +58,12 @@ class AudioDiagnosticStoreTest(unittest.TestCase):
             recorder = store.begin(sample_rate=10, selected_filter="voxlock")
             recorder.record(
                 raw=b"\x00\x00" * 10,
-                voxlock=b"",
-                rnnoise=b"",
+                filtered=b"",
                 metrics={"timeSeconds": 1},
             )
             recorder.record(
                 raw=b"\x00\x00",
-                voxlock=b"",
-                rnnoise=b"",
+                filtered=b"",
                 metrics={"timeSeconds": 1.1},
             )
             session = recorder.close()
@@ -85,8 +82,7 @@ class AudioDiagnosticStoreTest(unittest.TestCase):
             recorder = store.begin(sample_rate=16_000, selected_filter="voxlock")
             recorder.record(
                 raw=b"\x00\x80\xff\x7f" * 64,
-                voxlock=b"",
-                rnnoise=b"",
+                filtered=b"",
                 metrics={"timeSeconds": 0.1, "rawDbfs": -3.0},
             )
 

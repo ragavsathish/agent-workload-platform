@@ -252,15 +252,20 @@ const main = async () => {
   }, result.replaySession.id);
   const metricPoints = Array.isArray(metrics?.points) ? metrics.points : [];
   result.replayMetricPoints = metricPoints.length;
+  const selectedFilter = result.replaySession.selectedFilter;
+  const latencyKey = `${selectedFilter}LatencyMs`;
   if (
     metricPoints.length === 0 ||
-    !metricPoints.some((point) => Array.isArray(point?.lstmHiddenRms)) ||
-    !metricPoints.some((point) => Array.isArray(point?.maskMagnitude))
+    !metricPoints.some((point) => typeof point?.[latencyKey] === 'number') ||
+    (selectedFilter === 'voxlock' && (
+      !metricPoints.some((point) => Array.isArray(point?.lstmHiddenRms)) ||
+      !metricPoints.some((point) => Array.isArray(point?.maskMagnitude))
+    ))
   ) {
-    throw new Error('VoxLock model diagnostics were not retained');
+    throw new Error('Selected-filter diagnostics were not retained');
   }
-  const replayChecks = await page.evaluate(async (sessionId) => {
-    const variants = ['raw', 'voxlock', 'rnnoise'];
+  const replayChecks = await page.evaluate(async ({ sessionId, selectedFilter: filter }) => {
+    const variants = ['raw', filter];
     return Promise.all(variants.map(async (variant) => {
       const response = await fetch(
         `/api/audio-diagnostics/${encodeURIComponent(sessionId)}/${variant}.wav`,
@@ -273,7 +278,7 @@ const main = async () => {
         bytes: (await response.arrayBuffer()).byteLength,
       };
     }));
-  }, result.replaySession.id);
+  }, { sessionId: result.replaySession.id, selectedFilter });
   result.replayVariants = replayChecks;
   if (replayChecks.some((replay) => !replay.ok || replay.contentType !== 'audio/wav' || replay.bytes <= 44)) {
     throw new Error(`Invalid audio replay response: ${JSON.stringify(replayChecks)}`);

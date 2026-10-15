@@ -89,7 +89,7 @@ export const AudioDiagnosticsView = () => {
         <div>
           <p className="eyebrow">INPUT DIAGNOSTICS</p>
           <h1>Last five conversations</h1>
-          <p>Replay the same microphone input before and after each server-side filter.</p>
+          <p>Replay microphone input before and after the selected server-side filter.</p>
         </div>
         <div className="header-actions">
           <a href="/">Voice</a>
@@ -117,15 +117,17 @@ export const AudioDiagnosticsView = () => {
             </header>
             {selectedSession !== session.id ? (
               <button
-                className="audio-comparison-load"
+                className="audio-session-load"
                 type="button"
                 onClick={() => setSelectedSession(session.id)}
               >
-                Load waveform comparison
+                Load session diagnostics
               </button>
             ) : (
               <div className="audio-variant-grid">
-                {session.variants.map((variant) => (
+                {session.variants
+                  .filter((variant) => variant === 'raw' || variant === session.selectedFilter)
+                  .map((variant) => (
                   <section className="audio-variant" key={variant}>
                     <div className="audio-variant-header">
                       <strong>{LABELS[variant] ?? variant}</strong>
@@ -141,7 +143,12 @@ export const AudioDiagnosticsView = () => {
                 ))}
               </div>
             )}
-            {selectedSession === session.id && <AudioDiagnosticsCharts sessionId={session.id} />}
+            {selectedSession === session.id && (
+              <AudioDiagnosticsCharts
+                sessionId={session.id}
+                selectedFilter={session.selectedFilter}
+              />
+            )}
             {(session.droppedChunks > 0 || session.truncated) && (
               <p className="audio-session-warning">
                 {session.droppedChunks > 0 && `${session.droppedChunks} chunks were not recorded. `}

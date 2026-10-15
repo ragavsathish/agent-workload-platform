@@ -140,9 +140,9 @@ bind-mounts `~/Documents`. Each task verifies the bundle digest, expands it bene
 the scratch directory. The mock validates the local artifact contract, not production IAM or
 durability; swap its endpoint for a real S3-compatible service before relying on those guarantees.
 
-Raw microphone input and the VoxLock/RNNoise comparison outputs are retained as WAV files for the
-five most recent completed conversations in the private `voice-diagnostics` Docker volume. The
-tailnet-authenticated **Replays** page exposes all three versions for listening; the oldest session
+Raw microphone input and the selected filter output are retained as WAV files for the five most
+recent completed conversations in the private `voice-diagnostics` Docker volume. The
+tailnet-authenticated **Replays** page exposes those two versions for listening; the oldest session
 is deleted after the sixth completes. Recording stops at `VOICE_DIAGNOSTIC_MAX_SECONDS` per session,
 and audio is never exported to OpenTelemetry. The same page uses WaveSurfer for replay waveforms
 and raw/VoxLock spectrograms, and Recharts for input/output energy, suppression, per-filter
@@ -157,8 +157,8 @@ launch services write stdout and stderr to `/dev/null`, so agent conversations a
 Pi session JSONL. The synthetic black-box runner reports event counts, never transcript text.
 
 The server-side microphone filter is selected with `VOICE_INPUT_FILTER=rnnoise|voxlock`; RNNoise
-is the rollback default. Both filters process the same input so their last-five replay files are
-directly comparable, while only the selected filter continues to VAD and transcription. VoxLock
+is the rollback default. Only the selected filter is initialized and executed; its output continues
+to VAD and transcription and is retained beside the raw input for diagnostics. VoxLock
 uses the host WAV named by `VOXLOCK_VOICE_SAMPLE_SOURCE`.
 `make up` validates mono 16 kHz PCM16 input, extracts the strongest three seconds from its first
 15 seconds, and writes only that derived sample to an ignored mode-0600 Compose secret. The edge

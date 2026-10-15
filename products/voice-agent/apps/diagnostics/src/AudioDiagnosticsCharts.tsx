@@ -43,17 +43,25 @@ export const LiveAudioDiagnostics = () => {
   const [waveform, setWaveform] = useState<WaveformPoint[]>([]);
   const [active, setActive] = useState(false);
   const [latency, setLatency] = useState<number | null>(null);
+  const [filterLabel, setFilterLabel] = useState('Filter');
 
   const refresh = useCallback(async () => {
     try {
       const response = await fetch('/api/audio-diagnostics/live', { cache: 'no-store' });
       const payload: unknown = await response.json();
       if (!response.ok || typeof payload !== 'object' || payload === null) return;
-      const live = payload as { active?: unknown; waveform?: unknown; point?: unknown };
+      const live = payload as {
+        active?: unknown;
+        waveform?: unknown;
+        point?: unknown;
+        selectedFilter?: unknown;
+      };
       setActive(live.active === true);
       if (Array.isArray(live.waveform)) setWaveform(live.waveform as WaveformPoint[]);
       if (typeof live.point === 'object' && live.point !== null) {
-        const value = (live.point as MetricPoint).voxlockLatencyMs;
+        const filter = typeof live.selectedFilter === 'string' ? live.selectedFilter : '';
+        const value = (live.point as Record<string, unknown>)[`${filter}LatencyMs`];
+        setFilterLabel(filter === 'rnnoise' ? 'RNNoise' : filter === 'voxlock' ? 'VoxLock' : 'Filter');
         setLatency(typeof value === 'number' ? value : null);
       }
     } catch {
@@ -77,7 +85,7 @@ export const LiveAudioDiagnostics = () => {
           <p className="eyebrow">LIVE INPUT</p>
           <h2>{active ? 'Microphone envelope' : 'Waiting for a conversation'}</h2>
         </div>
-        {latency !== null && <span>{latency.toFixed(1)} ms VoxLock</span>}
+        {latency !== null && <span>{latency.toFixed(1)} ms {filterLabel}</span>}
       </header>
       <div className="live-waveform" aria-label="Live microphone waveform envelope">
         <ResponsiveContainer width="100%" height="100%">
@@ -93,7 +101,13 @@ export const LiveAudioDiagnostics = () => {
   );
 };
 
-export const AudioDiagnosticsCharts = ({ sessionId }: { sessionId: string }) => {
+export const AudioDiagnosticsCharts = ({
+  sessionId,
+  selectedFilter,
+}: {
+  sessionId: string;
+  selectedFilter: string;
+}) => {
   const [points, setPoints] = useState<MetricPoint[]>([]);
   const [error, setError] = useState('');
 
@@ -133,6 +147,12 @@ export const AudioDiagnosticsCharts = ({ sessionId }: { sessionId: string }) => 
   if (error) return <p className="audio-session-warning">{error}</p>;
   if (!points.length) return <p className="audio-diagnostics-empty">Loading diagnostics…</p>;
 
+  const filterLabel = selectedFilter === 'rnnoise' ? 'RNNoise' : 'VoxLock';
+  const filterColor = selectedFilter === 'rnnoise' ? '#72b7ef' : '#56e39f';
+  const energyKey = `${selectedFilter}Dbfs`;
+  const suppressionKey = `${selectedFilter}SuppressionDb`;
+  const latencyKey = `${selectedFilter}LatencyMs`;
+
   const lineChart = (lines: ReactNode) => (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={chartPoints}>
@@ -151,39 +171,38 @@ export const AudioDiagnosticsCharts = ({ sessionId }: { sessionId: string }) => 
       <ChartFrame title="Input and output energy · dBFS">
         {lineChart(<>
           <Line name="Raw" dataKey="rawDbfs" stroke="#89949f" dot={false} isAnimationActive={false} />
-          <Line name="VoxLock" dataKey="voxlockDbfs" stroke="#56e39f" dot={false} isAnimationActive={false} />
-          <Line name="RNNoise" dataKey="rnnoiseDbfs" stroke="#72b7ef" dot={false} isAnimationActive={false} />
+          <Line name={filterLabel} dataKey={energyKey} stroke={filterColor} dot={false} isAnimationActive={false} />
         </>)}
       </ChartFrame>
       <ChartFrame title="Suppression · dB">
         {lineChart(<>
-          <Line name="VoxLock" dataKey="voxlockSuppressionDb" stroke="#56e39f" dot={false} isAnimationActive={false} />
-          <Line name="RNNoise" dataKey="rnnoiseSuppressionDb" stroke="#72b7ef" dot={false} isAnimationActive={false} />
+          <Line name={filterLabel} dataKey={suppressionKey} stroke={filterColor} dot={false} isAnimationActive={false} />
         </>)}
       </ChartFrame>
       <ChartFrame title="Filter inference latency · ms">
         {lineChart(<>
-          <Line name="VoxLock" dataKey="voxlockLatencyMs" stroke="#56e39f" dot={false} isAnimationActive={false} />
-          <Line name="RNNoise" dataKey="rnnoiseLatencyMs" stroke="#72b7ef" dot={false} isAnimationActive={false} />
+          <Line name={filterLabel} dataKey={latencyKey} stroke={filterColor} dot={false} isAnimationActive={false} />
         </>)}
       </ChartFrame>
-      <ChartFrame title="LSTM-state RMS activity">
-        {lineChart(<>
-          <Line name="Hidden state" dataKey="lstmHiddenActivity" stroke="#c792ea" dot={false} isAnimationActive={false} />
-          <Line name="Cell state" dataKey="lstmCellActivity" stroke="#ffb86c" dot={false} isAnimationActive={false} />
-        </>)}
-      </ChartFrame>
-      <ChartFrame title="Mean predicted complex-mask magnitude · model band">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={maskProfile}>
-            <CartesianGrid stroke="#273039" vertical={false} />
-            <XAxis dataKey="band" tick={{ fill: '#89949f', fontSize: 11 }} />
-            <YAxis tick={{ fill: '#89949f', fontSize: 11 }} width={48} />
-            <Tooltip />
-            <Bar dataKey="magnitude" name="Mask magnitude" fill="#56e39f" isAnimationActive={false} />
-          </BarChart>
-        </ResponsiveContainer>
-      </ChartFrame>
+      {selectedFilter === 'voxlock' && <>
+        <ChartFrame title="LSTM-state RMS activity">
+          {lineChart(<>
+            <Line name="Hidden state" dataKey="lstmHiddenActivity" stroke="#c792ea" dot={false} isAnimationActive={false} />
+            <Line name="Cell state" dataKey="lstmCellActivity" stroke="#ffb86c" dot={false} isAnimationActive={false} />
+          </>)}
+        </ChartFrame>
+        <ChartFrame title="Mean predicted complex-mask magnitude · model band">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={maskProfile}>
+              <CartesianGrid stroke="#273039" vertical={false} />
+              <XAxis dataKey="band" tick={{ fill: '#89949f', fontSize: 11 }} />
+              <YAxis tick={{ fill: '#89949f', fontSize: 11 }} width={48} />
+              <Tooltip />
+              <Bar dataKey="magnitude" name="Mask magnitude" fill="#56e39f" isAnimationActive={false} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartFrame>
+      </>}
     </div>
   );
 };

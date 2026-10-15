@@ -30,7 +30,7 @@ const main = async () => {
     await page.goto(`${baseUrl}/diagnostics/`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
     await page.getByRole('heading', { name: 'Last five conversations' }).waitFor();
     if (await page.locator('flt-glass-pane').count()) throw new Error('Diagnostics loaded Flutter');
-    const load = page.getByRole('button', { name: 'Load waveform comparison' }).first();
+    const load = page.getByRole('button', { name: 'Load session diagnostics' }).first();
     await load.waitFor({ timeout: 10_000 });
     await load.click();
     await page.getByRole('button', { name: 'Play Raw microphone' }).waitFor({ timeout: 30_000 });

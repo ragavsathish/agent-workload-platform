@@ -10,7 +10,7 @@ flowchart TB
         HTTP["Component<br/><b>Owner HTTP Boundary</b><br/>origin and exact tailnet-identity checks"]
         API["Component<br/><b>Browser API</b><br/>features, tasks, transcript, context, diagnostics"]
         TRANSPORT["Component<br/><b>SmallWebRTC Transport</b><br/>bidirectional 16/24 kHz audio"]
-        FILTER["Component<br/><b>Input Filter and Recorder</b><br/>RNNoise or VoxLock plus comparable replays"]
+        FILTER["Component<br/><b>Input Filter and Recorder</b><br/>one selected filter plus bounded replay"]
         TURN["Component<br/><b>Turn Detector</b><br/>Silero VAD and Smart Turn v3"]
         STT["Component<br/><b>STT Adapter</b><br/>OpenAI-compatible audio request"]
         CONTEXT["Component<br/><b>Conversation Aggregators</b><br/>user and assistant context frames"]
