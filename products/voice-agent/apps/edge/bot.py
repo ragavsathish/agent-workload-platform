@@ -1,7 +1,9 @@
 """Tailnet-facing Pipecat process for the isolated Linux VM."""
 
 import os
+import tomllib
 import wave
+from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 
@@ -199,6 +201,59 @@ async def broker_transcript_request() -> dict[str, object]:
     return payload
 
 
+@lru_cache(maxsize=1)
+def voice_prompt_template() -> str:
+    """Load and validate the versioned model instruction."""
+    prompt_path = Path(__file__).with_name("prompt.toml")
+    with prompt_path.open("rb") as source:
+        prompt = tomllib.load(source).get("system_prompt")
+    marker = "{{DEFAULT_WORKSPACE}}"
+    if not isinstance(prompt, str) or not prompt.strip() or prompt.count(marker) != 1:
+        raise RuntimeError("prompt.toml must define one default-workspace placeholder")
+    return prompt.strip()
+
+
+def voice_system_instruction(default_workspace: str) -> str:
+    """Render the one stable Pi instruction shared by voice and typed turns."""
+    workspace = default_workspace.strip()
+    if not workspace or len(workspace) > 256 or any(char in workspace for char in "\r\n"):
+        raise RuntimeError("VOICE_DEFAULT_WORKSPACE is invalid")
+    return voice_prompt_template().replace("{{DEFAULT_WORKSPACE}}", workspace)
+
+
+async def broker_pi_message(message: str):
+    """Send one typed turn through the same persistent Pi session as voice."""
+    timeout = float(os.getenv("PI_VOICE_TIMEOUT_SECONDS", "120")) + 10
+    headers = {"Authorization": f"Bearer {required_env('INFERENCE_BROKER_TOKEN')}"}
+    payload = {
+        "model": "pi-agent",
+        "stream": False,
+        "messages": [
+            {
+                "role": "system",
+                "content": voice_system_instruction(required_env("VOICE_DEFAULT_WORKSPACE")),
+            },
+            {"role": "user", "content": message},
+        ],
+    }
+    with telemetry.observe("browser.pi.turn"):
+        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=5.0)) as client:
+            response = await client.post(
+                f"{required_env('INFERENCE_BROKER_BASE_URL').rstrip('/')}/pi/chat/completions",
+                headers=headers,
+                json=payload,
+            )
+    if response.is_error:
+        raise HTTPException(status_code=502, detail="Pi response is unavailable")
+    try:
+        raw = response.json()["choices"][0]["message"]["content"]
+    except (ValueError, KeyError, IndexError, TypeError) as exc:
+        raise HTTPException(status_code=502, detail="Pi returned an invalid response") from exc
+    if not isinstance(raw, str) or not raw.strip():
+        raise HTTPException(status_code=502, detail="Pi returned an empty response")
+    return parse_visual_response(raw)
+
+
 async def broker_context_request(method: str, path: str) -> dict[str, object]:
     headers = {"Authorization": f"Bearer {required_env('INFERENCE_BROKER_TOKEN')}"}
     timeout = float(os.getenv("PI_VOICE_TIMEOUT_SECONDS", "120")) + 10
@@ -274,6 +329,27 @@ def pcm_wave(pcm: bytes) -> bytes:
     return output.getvalue()
 
 
+async def broker_speech(spoken: str) -> bytes:
+    """Synthesize bounded speech and return a browser-playable WAV."""
+    headers = {"Authorization": f"Bearer {required_env('INFERENCE_BROKER_TOKEN')}"}
+    with telemetry.observe("browser.pi.speech"):
+        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=5.0)) as client:
+            response = await client.post(
+                f"{required_env('INFERENCE_BROKER_BASE_URL').rstrip('/')}/audio/speech",
+                headers=headers,
+                json={
+                    "model": "kokoro",
+                    "input": spoken,
+                    "voice": "alloy",
+                    "response_format": "pcm",
+                    "speed": 1.0,
+                },
+            )
+    if response.is_error or len(response.content) > 50_000_000:
+        raise HTTPException(status_code=502, detail="Pi speech is unavailable")
+    return pcm_wave(response.content)
+
+
 async def run_bot(transport: BaseTransport, identity: str):
     broker_url = required_env("INFERENCE_BROKER_BASE_URL")
     broker_token = required_env("INFERENCE_BROKER_TOKEN")
@@ -296,57 +372,7 @@ async def run_bot(transport: BaseTransport, identity: str):
         base_url=llm_base_url,
         settings=OpenAILLMService.Settings(
             model=model,
-            system_instruction=(
-                "You are a precise, voice-operated coding agent. "
-                "Every final response must be exactly one JSON object with two string fields: "
-                '"spoken" and "mermaid". Do not wrap the JSON or Mermaid in code fences. The '
-                '"spoken" value is the shortest complete natural-language answer and is the only '
-                'text that will be read aloud. The "mermaid" value is a valid Mermaid diagram '
-                "that visually captures the current result, state, action, or flow. Prefer a small "
-                "flowchart TD unless sequence or state notation explains the answer better. Use "
-                "short labels and meaningful directed relationships. Never put Mermaid syntax in "
-                'the "spoken" value. '
-                "Answer only what the user asked, using the shortest complete response. Lead with "
-                "the result or current status. Do not use greetings, filler, praise, repetition, "
-                "or unsupported speculation. Prefer concrete names, identifiers, states, and "
-                "numbers. Ask one short clarification only when missing information prevents a "
-                "correct action. Clearly distinguish requested, pending, completed, failed, and "
-                "cancelled actions. Never say an action succeeded until its tool result confirms "
-                "success. Report only the relevant facts returned by tools and do not embellish "
-                'them. Keep "spoken" in plain sentences without visual formatting. '
-                "For ordinary coding, inspection, testing, package installation, and shell work, "
-                "act immediately with the native read, write, edit, and bash tools. Do not ask "
-                "for confirmation and do not create a task proposal. All four tools run inside "
-                "one persistent Gondolin voice VM with a writable dedicated voice workspace at "
-                "/workspace. Committed source repositories are served read-only from Gitea. Clone "
-                "one into /workspace with `git clone \"$GITEA_BASE_URL/$GITEA_OWNER/<repo>.git\"`. "
-                "Use the preconfigured `tea` CLI login named `local` to inspect Gitea repositories, "
-                "issues, and pull requests. Its restricted token is read-only. "
-                "No host Git directory is mounted, and uncommitted host state is unavailable. Reusable "
-                "skills are mounted separately and read-only at /skills. "
-                "S3Mock is available only through the AWS CLI. Use "
-                "`aws --endpoint-url \"$S3_ENDPOINT_URL\" s3 ...` and the configured "
-                "`$S3_BUCKET`; never print AWS credentials. "
-                "Pi exposes the available skills in its native system-prompt catalog. When a "
-                "request matches a skill, read its complete SKILL.md before acting and follow it "
-                "while it remains relevant. Never attempt to modify /skills. "
-                "Never describe VM state as Mac host state. You may "
-                "make any change the user requests inside that VM and workspace. "
-                "Use submit_agent_task when work should continue asynchronously, must target a "
-                "durable project workspace, or is better handled by another Pi worker. You may "
-                "submit that work yourself without asking for approval. State the exact delegated "
-                "instruction and returned task ID. You can also propose, inspect, approve, and "
-                "cancel queued tasks with the available tools. Creating a proposal never runs it, "
-                "while submit_agent_task creates and immediately queues the task. "
-                "After proposing, read back the exact instruction and workspace. Approval is "
-                "allowed only in a later user turn when the user explicitly asks to approve that "
-                "pending task. Never approve in the same turn as proposal creation and never infer "
-                "approval from unrelated speech. Approved durable work runs separately through "
-                "Gondolin and Wassette MCP. "
-                f"The configured default workspace is exactly {default_workspace}. When the user "
-                "says the default or current workspace, use that exact logical name without "
-                "rewriting it."
-            ),
+            system_instruction=voice_system_instruction(default_workspace),
         ),
     )
     tts = OpenAITTSService(
@@ -721,23 +747,8 @@ if __name__ == "__main__":
     async def task_speech(proposal_id: str, request: Request):
         task = await owner_gateway_request(request, "GET", f"/tasks/{proposal_id}")
         spoken = task_spoken_text(task)
-        headers = {"Authorization": f"Bearer {required_env('INFERENCE_BROKER_TOKEN')}"}
-        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=5.0)) as client:
-            response = await client.post(
-                f"{required_env('INFERENCE_BROKER_BASE_URL').rstrip('/')}/audio/speech",
-                headers=headers,
-                json={
-                    "model": "kokoro",
-                    "input": spoken,
-                    "voice": "alloy",
-                    "response_format": "pcm",
-                    "speed": 1.0,
-                },
-            )
-        if response.is_error or len(response.content) > 50_000_000:
-            raise HTTPException(status_code=502, detail="task speech is unavailable")
         return Response(
-            content=pcm_wave(response.content),
+            content=await broker_speech(spoken),
             media_type="audio/wav",
             headers={"Cache-Control": "no-store"},
         )
@@ -747,6 +758,44 @@ if __name__ == "__main__":
         validate_http_identity(request)
         return JSONResponse(
             await broker_transcript_request(),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/pi-message")
+    async def send_pi_message(request: Request):
+        validate_http_identity(request)
+        try:
+            payload = await request.json()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="invalid message request") from exc
+        message = payload.get("message") if isinstance(payload, dict) else None
+        if not isinstance(message, str) or not message.strip():
+            raise HTTPException(status_code=400, detail="message is required")
+        message = message.strip()
+        if len(message) > 8_000:
+            raise HTTPException(status_code=413, detail="message is too large")
+        result = await broker_pi_message(message)
+        return JSONResponse(
+            {"spoken": result.spoken, "mermaid": result.mermaid},
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/pi-speech")
+    async def pi_speech(request: Request):
+        validate_http_identity(request)
+        try:
+            payload = await request.json()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="invalid speech request") from exc
+        spoken = payload.get("spoken") if isinstance(payload, dict) else None
+        if not isinstance(spoken, str) or not spoken.strip():
+            raise HTTPException(status_code=400, detail="spoken text is required")
+        spoken = spoken.strip()
+        if len(spoken) > 2_000:
+            raise HTTPException(status_code=413, detail="spoken text is too large")
+        return Response(
+            content=await broker_speech(spoken),
+            media_type="audio/wav",
             headers={"Cache-Control": "no-store"},
         )
 

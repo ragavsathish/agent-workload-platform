@@ -11,7 +11,6 @@ import {
 import type { TransportType } from '../config';
 import { MermaidDiagram } from './MermaidDiagram';
 import { AudioVisualizerRadial } from './pipecat/AudioVisualizerRadial';
-import { TaskPanel } from './TaskPanel';
 import { TransportSelect } from './TransportSelect';
 
 interface AppProps extends PipecatBaseChildProps {
@@ -79,9 +78,6 @@ export const App = ({
   onTransportChange,
   availableTransports,
 }: AppProps) => {
-  const [tasksEnabled, setTasksEnabled] = useState(false);
-  const [defaultWorkspace, setDefaultWorkspace] = useState('');
-  const [tasksOpen, setTasksOpen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isBotThinking, setIsBotThinking] = useState(false);
   const [isBotSpeaking, setIsBotSpeaking] = useState(false);
@@ -174,24 +170,6 @@ export const App = ({
       client.off(RTVIEvent.Disconnected, handleDisconnected);
     };
   }, [client]);
-
-  useEffect(() => {
-    let active = true;
-    void fetch('/api/features')
-      .then((response) => response.json())
-      .then((features: { tasks?: boolean; defaultWorkspace?: string }) => {
-        if (active) {
-          setTasksEnabled(features.tasks === true);
-          setDefaultWorkspace(features.defaultWorkspace || '');
-        }
-      })
-      .catch(() => {
-        if (active) setTasksEnabled(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   useEffect(() => {
     let active = true;
@@ -290,18 +268,8 @@ export const App = ({
               size="sm"
               variant="outline"
               onClick={() => window.open('/?view=transcript', '_blank', 'noopener,noreferrer')}>
-              Transcript
+              Chat
             </Button>
-            {tasksEnabled && (
-              <Button
-                className="tasks-launch"
-                size="sm"
-                variant="outline"
-                aria-expanded={tasksOpen}
-                onClick={() => setTasksOpen(true)}>
-                Tasks
-              </Button>
-            )}
           </div>
         </header>
 
@@ -426,20 +394,6 @@ export const App = ({
         </details>
       </main>
 
-      {tasksEnabled && tasksOpen && (
-        <>
-          <button
-            className="task-backdrop"
-            aria-label="Close tasks"
-            onClick={() => setTasksOpen(false)}
-          />
-          <TaskPanel
-            defaultWorkspace={defaultWorkspace}
-            onClose={() => setTasksOpen(false)}
-            onDiagram={setDiagram}
-          />
-        </>
-      )}
     </div>
   );
 };

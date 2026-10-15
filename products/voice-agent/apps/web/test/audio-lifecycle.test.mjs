@@ -32,8 +32,8 @@ test('conversation controls mute capture without ending the voice session', asyn
   );
   assert.match(appSource, /End conversation/);
   assert.match(appSource, /className="conversation-dock"/);
-  assert.match(appSource, /<TaskPanel[\s\S]*onClose=/);
   assert.doesNotMatch(appSource, /<ConversationPanel/);
+  assert.doesNotMatch(appSource, /<TaskPanel/);
 });
 
 test('context usage is visible and can be compacted without redundant audio controls', async () => {
@@ -51,14 +51,20 @@ test('context usage is visible and can be compacted without redundant audio cont
   assert.doesNotMatch(appSource, /Enable sound/);
 });
 
-test('completed task responses render Mermaid and use server-side speech', async () => {
+test('durable tasks are merged into chat with actions, audio, and optional Mermaid', async () => {
   const taskSource = await readFile(
-    new URL('../src/components/TaskPanel.tsx', import.meta.url),
+    new URL('../src/components/TranscriptView.tsx', import.meta.url),
     'utf8'
   );
 
-  assert.match(taskSource, /<MermaidDiagram diagram=/);
-  assert.match(taskSource, /\/api\/tasks\/\$\{encodeURIComponent\(task\.id\)\}\/speech/);
+  assert.match(taskSource, /fetch\('\/api\/tasks'/);
+  assert.match(taskSource, /kind: 'task'/);
+  assert.match(taskSource, /aria-label="Timeline filter"/);
+  assert.match(taskSource, /Tasks <span>\{visibleTasks\.length\}<\/span>/);
+  assert.match(taskSource, /Approve/);
+  assert.match(taskSource, /Cancel/);
+  assert.match(taskSource, /<MermaidDiagram diagram=\{response\.mermaid\}/);
+  assert.match(taskSource, /\/api\/tasks\/\$\{encodeURIComponent\(taskId\)\}\/speech/);
   assert.match(taskSource, /new Audio\(url\)/);
   assert.doesNotMatch(taskSource, /speechSynthesis/);
 });
