@@ -26,7 +26,7 @@ flowchart LR
             POSTGRES[("Container database<br/><b>PostgreSQL</b><br/>proposals · Absurd queue · checkpoints")]
             HABITAT["Container<br/><b>Queue Dashboard</b><br/>Absurd Habitat · read-only root · non-root"]
             S3[("Container data store<br/><b>S3Mock</b><br/>immutable workspaces · bounded results")]
-            GITEA[("Container data store<br/><b>Gitea</b><br/>rootless · committed refs · named volumes")]
+            GITEA[("Container data store<br/><b>Gitea</b><br/>rootless · Git refs + image packages · named volumes")]
             DOCKER_METRICS["Container<br/><b>Docker VM Metrics</b><br/>Fluent Bit · /proc + /sys read-only · no Docker socket"]
             OTEL["Container<br/><b>OTel LGTM</b><br/>metrics · traces · no logs"]
             GATEWAY -->|"private SQL"| POSTGRES
@@ -36,9 +36,10 @@ flowchart LR
 
         subgraph NATIVE["Native macOS services · launchd · loopback only"]
             direction TB
-            BROKER["Container<br/><b>Inference Broker</b><br/>FastAPI · MLX Whisper · MLX Kokoro"]
+            BROKER["Container<br/><b>Inference Broker</b><br/>FastAPI · Parakeet v3 MLX · MLX Kokoro"]
             PI["Container<br/><b>Pi Voice Service</b><br/>Node.js · persistent Pi session"]
             WORKER["Container<br/><b>Pi Task Worker</b><br/>Python · concurrency one"]
+            BUILDER_MANAGER["Container<br/><b>Builder VM Manager</b><br/>Node.js · launchd · runner credential"]
             HOST_METRICS["Container<br/><b>Host Observability</b><br/>Fluent Bit + Gondolin exporter<br/>loopback only · no guest credentials"]
             RUNTIME[("Private data store<br/><b>Runtime Data</b><br/>copied runtimes · secrets · sessions · scratch")]
             BROKER -->|"bearer HTTP :9446"| PI
@@ -50,6 +51,7 @@ flowchart LR
             direction TB
             VOICE_VM["Container<br/><b>Persistent Voice VM</b><br/>Gondolin · AWS/Git/Tea CLI · workspace RW"]
             TASK_VM["Container<br/><b>Per-task VM</b><br/>Gondolin · one workspace"]
+            BUILDER_VM["Container<br/><b>Shared Builder VM</b><br/>Gondolin · Gitea Runner · private Docker · no host socket"]
             WASSETTE["Container<br/><b>Integration Runtime</b><br/>Wassette · declared permissions"]
             TASK_VM -->|"MCP"| WASSETTE
         end
@@ -59,6 +61,9 @@ flowchart LR
         PI -->|"loopback :9444"| GATEWAY
         WORKER -->|"loopback :54329"| POSTGRES
         WORKER -->|"loopback :9090"| S3
+        BUILDER_MANAGER -->|"resume and checkpoint warm VM"| BUILDER_VM
+        BUILDER_VM -->|"synthetic Gitea route :3001<br/>workflow jobs and package upload"| GITEA
+        WORKER -->|"verified package download :3001"| GITEA
         PI -->|"native tools"| VOICE_VM
         WORKER -->|"Pi extension"| TASK_VM
         VOICE_VM -->|"synthetic HTTP allowlist<br/>restricted read token via loopback :3001"| GITEA
@@ -89,6 +94,6 @@ flowchart LR
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
     class USER person;
     class CONTROL,MODELS,EXTERNAL external;
-    class BROWSER,BROKER,PI,WORKER,HOST_METRICS,VOICE_VM,TASK_VM,WASSETTE,HABITAT,DOCKER_METRICS,OTEL container;
+    class BROWSER,BROKER,PI,WORKER,BUILDER_MANAGER,HOST_METRICS,VOICE_VM,TASK_VM,BUILDER_VM,WASSETTE,HABITAT,DOCKER_METRICS,OTEL container;
     class INGRESS,ROUTER,EDGE,GATEWAY security;
     class POSTGRES,S3,GITEA,RUNTIME data;

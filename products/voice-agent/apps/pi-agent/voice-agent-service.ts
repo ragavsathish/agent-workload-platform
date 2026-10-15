@@ -36,6 +36,7 @@ type ServiceSettings = {
   listenHost: string;
   listenPort: number;
   model?: string;
+  prometheusEndpointUrl: string;
   sessionDir: string;
   serviceToken: string;
   skillsDir: string;
@@ -421,6 +422,7 @@ class VoiceAgent {
       giteaToken: settings.giteaToken,
       imagePath: settings.gondolinAssets,
       localCwd: settings.cwd,
+      prometheusEndpointUrl: settings.prometheusEndpointUrl,
       skillsDir: settings.skillsDir,
       s3MockAccessKey: settings.s3MockAccessKey,
       s3MockBucket: settings.s3MockBucket,
@@ -787,6 +789,7 @@ async function loadSettings(): Promise<ServiceSettings> {
     listenHost: process.env.PI_VOICE_SERVICE_HOST || "127.0.0.1",
     listenPort: Number.parseInt(process.env.PI_VOICE_SERVICE_PORT || "9446", 10),
     model: process.env.PI_VOICE_MODEL?.trim() || process.env.PI_MODEL?.trim() || undefined,
+    prometheusEndpointUrl: process.env.PROMETHEUS_ENDPOINT_URL || "http://127.0.0.1:9091",
     sessionDir,
     serviceToken: requiredEnv("INFERENCE_BROKER_TOKEN"),
     skillsDir,

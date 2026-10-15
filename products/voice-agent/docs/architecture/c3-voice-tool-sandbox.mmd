@@ -1,0 +1,42 @@
+flowchart LR
+    PI[External container<br/><b>Pi Voice Service</b><br/>owns VM lifecycle and invokes tools]
+    S3[(External data store<br/><b>S3Mock</b><br/>scoped artifacts)]
+    GITEA[(External data store<br/><b>Gitea</b><br/>scoped repository access)]
+    REGISTRY[(External data<br/><b>VM Metrics Registry</b><br/>host PID registration files)]
+    DATA[(External data<br/><b>Voice Runtime Data</b><br/>workspace RW · skills RO)]
+
+    subgraph VM["Container: Voice Tool Sandbox · Gondolin micro-VM boundary"]
+        direction TB
+        LIFECYCLE["Component<br/><b>VM Lifecycle</b><br/>fixed image, 2 CPU, 2 GiB, synthetic DNS"]
+        PATHS["Component<br/><b>Workspace Path Guard</b><br/>maps host paths under /workspace only"]
+        FILES["Component<br/><b>File Tool Adapters</b><br/>read, write, and edit through VM filesystem"]
+        SHELL["Component<br/><b>Bash Tool Adapter</b><br/>streamed output, timeout, and abort"]
+        MOUNTS["Component<br/><b>Mount Policy</b><br/>workspace read-write and skills read-only"]
+        EGRESS["Component<br/><b>Service Egress Gate</b><br/>deny-by-default URL rewrite to two loopback services"]
+        TEA["Component<br/><b>Scoped Tea Provisioner</b><br/>configures one Gitea login inside the guest"]
+        METRICS["Component<br/><b>VM Registration</b><br/>publishes runner PID and resource allocation"]
+
+        LIFECYCLE --> MOUNTS
+        LIFECYCLE --> EGRESS
+        LIFECYCLE --> METRICS
+        PATHS --> FILES
+        PATHS --> SHELL
+        MOUNTS --> FILES
+        MOUNTS --> SHELL
+        EGRESS --> TEA
+    end
+
+    PI -->|"create, execute, close"| LIFECYCLE
+    PI -->|"tool calls"| FILES
+    PI -->|"commands"| SHELL
+    MOUNTS -->|"VFS providers"| DATA
+    EGRESS -->|"synthetic s3mock.local only"| S3
+    EGRESS -->|"synthetic gitea.local only"| GITEA
+    METRICS -->|"0600 registration"| REGISTRY
+
+    classDef component fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
+    classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
+    classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
+    class LIFECYCLE,PATHS,FILES,SHELL,MOUNTS,EGRESS,TEA,METRICS component;
+    class PI external;
+    class S3,GITEA,REGISTRY,DATA data;

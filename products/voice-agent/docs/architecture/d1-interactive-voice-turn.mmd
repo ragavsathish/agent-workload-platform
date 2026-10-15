@@ -14,7 +14,7 @@ sequenceDiagram
     Ingress->>Edge: Proxy the authenticated session
     Edge->>Edge: Apply selected RNNoise or VoxLock input filter
     Edge->>Edge: Detect the completed turn with VAD and Smart Turn
-    Edge->>Broker: Transcribe the completed turn with MLX Whisper
+    Edge->>Broker: Transcribe the completed turn with Parakeet v3 on MLX
     Broker-->>Edge: Transcript
     Edge->>Broker: Start an OpenAI-compatible Pi completion stream
     Broker->>Pi: Forward the new conversational turn over loopback

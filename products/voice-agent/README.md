@@ -166,7 +166,7 @@ loads hash-verified ONNX models baked into its image and runs with Hugging Face 
 VoxLock is target-speaker isolation, not authentication or liveness detection. See the
 [VoxLock implementation and validation guide](../../docs/research/voxlock-pipecat-integration.md).
 Silero VAD keeps Pipecat's recommended `stop_secs=0.2`; `LocalSmartTurnAnalyzerV3` decides when a
-spoken turn is complete. MLX Whisper receives every completed audio segment directly—there is no
+spoken turn is complete. Parakeet TDT 0.6B v3 on MLX receives every completed audio segment directly—there is no
 speaker-authentication gate. The selected input filter runs before VAD and transcription.
 Payload-free metrics distinguish accepted audio, emitted or empty
 transcripts, Smart Turn inference triggers, completed turns, and stop timeouts without exporting
@@ -224,13 +224,13 @@ before any route is served. Prometheus, OTLP, the Agent Gateway, S3Mock, Postgre
 dashboard have no tailnet route.
 
 The black-box runner synthesizes speech with Kokoro, streams it through the same authenticated
-WebSocket used by the browser, transcribes it with MLX Whisper, and exercises the LLM/tool path.
+WebSocket used by the browser, transcribes it with Parakeet v3 on MLX, and exercises the LLM/tool path.
 Before Tailscale login it uses `deploy/compose.local-test.yml` as a non-listening network anchor;
 set `BLACKBOX_USE_TAILSCALE=true` to test an authenticated tunnel namespace. See
 [TESTING.md](TESTING.md) for assertions and failure interpretation.
 
 Set `VOICE_LLM_BACKEND=pi` in `apps/edge/.env` to select the alternate
-`Whisper -> Pi agent -> restricted Pi task tools -> Kokoro` path. The default remains `ollama`.
+`Parakeet v3 -> Pi agent -> restricted Pi task tools -> Kokoro` path. The default remains `ollama`.
 Pi voice uses a dedicated long-running Node service built on Pi's `createAgentSession()` SDK. The
 service keeps conversation state between turns, reconciles a restarted or reset Pipecat transcript,
 and owns the product's proposal, submission, status, approval, and cancellation tools. Its native
@@ -244,10 +244,13 @@ by Pi after any tool calls complete. `PI_VOICE_MODEL` selects the model; when bl
 configured default. The VM image includes AWS CLI and receives mock-only credentials plus a
 synthetic `S3_ENDPOINT_URL`. Gondolin denies general egress and rewrites only that synthetic origin
 to loopback-published S3Mock, allowing Pi to inspect `s3://$S3_BUCKET` without general network
-access.
+access. The image also includes `promtool`; `PROMETHEUS_URL` points to a separately allowlisted
+synthetic origin backed by Prometheus's loopback-only host port, so Pi can query telemetry without
+receiving access to Grafana credentials or the Docker monitoring network.
 
-Gitea uses rootless mode, SQLite, and named Docker volumes. Registration, SSH, Actions, and packages
-are disabled. `scripts/gitea-sync.sh` creates the publisher account and repository idempotently, then
+Gitea uses rootless mode, SQLite, and named Docker volumes. Registration and SSH are disabled.
+Actions schedule trusted image builds, while Packages store immutable project-image artifacts. `scripts/gitea-sync.sh`
+creates the publisher account and repository idempotently, then
 mirrors only committed refs from this repository. Gitea is reachable from macOS only on
 `http://127.0.0.1:3001`; Gondolin can reach only its synthetic read endpoint and S3Mock, with all
 other VM network destinations denied.
@@ -257,6 +260,14 @@ The VM image includes the checksum-verified `tea` CLI. Deployment provisions a s
 `public-only,read:repository,read:issue,read:user,read:organization` token. The persistent
 VM configures that token as Tea login `local`; it cannot publish code or mutate issues and pull
 requests. The deployment-only `source-publisher` credential never enters the VM.
+
+Project-specific task images are declared in `.pi/gondolin.json`. On a cache miss, the task worker
+dispatches the repository's fixed Gitea workflow and checkpoints its run ID. One shared, capacity-one
+Gitea Runner executes trusted repository workflows inside a warm Gondolin builder VM. Its private
+Docker daemon keeps an `overlay2` layer cache; it never receives the macOS Docker socket. The VM
+publishes a checksummed archive and manifest to Gitea Generic Packages. The task worker verifies the
+manifest and digest before registering the requested Gondolin image reference. The builder VM is a
+shared trust domain, so only administrator-approved repositories may use its runner label.
 
 See [BENCHMARKS.md](BENCHMARKS.md) for the measured M4 Pro CPU, unified-memory, LLM throughput,
 and speech realtime factors, plus the reproducible benchmark command.

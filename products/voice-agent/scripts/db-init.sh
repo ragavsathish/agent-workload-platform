@@ -8,9 +8,13 @@ export PATH="/opt/homebrew/opt/libpq/bin:$PATH"
 if ! uv run dotenv -f ../../deploy/.env run -- sh -c 'ABSURD_DATABASE_URL="$DATABASE_URL" uvx absurdctl schema-version' >/dev/null 2>&1; then
   uv run dotenv -f ../../deploy/.env run -- sh -c 'ABSURD_DATABASE_URL="$DATABASE_URL" uvx absurdctl init'
 fi
-if ! uv run dotenv -f ../../deploy/.env run -- sh -c 'ABSURD_DATABASE_URL="$DATABASE_URL" uvx absurdctl list-queues' | grep -Eq '(^|[[:space:]])agents($|[[:space:]])'; then
-  uv run dotenv -f ../../deploy/.env run -- sh -c 'ABSURD_DATABASE_URL="$DATABASE_URL" uvx absurdctl create-queue "${ABSURD_QUEUE:-agents}"'
-fi
+for queue in "${ABSURD_QUEUE:-agents}"; do
+  if ! uv run dotenv -f ../../deploy/.env run -- sh -c 'ABSURD_DATABASE_URL="$DATABASE_URL" uvx absurdctl list-queues' \
+    | grep -Eq "(^|[[:space:]])${queue}($|[[:space:]])"; then
+    uv run dotenv -f ../../deploy/.env run -- sh -c \
+      'ABSURD_DATABASE_URL="$DATABASE_URL" uvx absurdctl create-queue "$1"' sh "$queue"
+  fi
+done
 PYTHONPATH=../../packages/tasking/src uv run --env-file ../../deploy/.env python -m voice_agent.tasking.infrastructure.schema
 
 habitat_password="$(<"$root/deploy/secrets/habitat-database-password")"

@@ -19,11 +19,31 @@ import {
   createGondolinMounts,
   createGondolinServiceAccess,
   createGondolinTools,
+  createGondolinVmOptions,
   GUEST_GITEA_ENDPOINT,
+  GUEST_PROMETHEUS_ENDPOINT,
   GUEST_S3MOCK_ENDPOINT,
   GUEST_SKILLS,
   toGondolinPath,
 } from "./dist/gondolin-workspace.js";
+
+test("persistent voice VM disables broken macOS QEMU idle resume", () => {
+  const options = createGondolinVmOptions({
+    giteaEndpointUrl: "http://127.0.0.1:3001",
+    giteaOwner: "source-publisher",
+    giteaToken: "read-only-token",
+    imagePath: "/host/assets",
+    localCwd: "/host/workspace",
+    prometheusEndpointUrl: "http://127.0.0.1:9091",
+    skillsDir: "/host/skills",
+    s3MockAccessKey: "local-test",
+    s3MockBucket: "agent-artifacts",
+    s3MockEndpointUrl: "http://127.0.0.1:9090",
+    s3MockSecretKey: "local-secret",
+  });
+
+  assert.equal(options.sandbox.qemuIdlePauseMs, 0);
+});
 
 test("voice Pi exposes its native coding tools through Gondolin", () => {
   const tools = createGondolinTools({ fs: {} }, "/host/workspace");
@@ -98,6 +118,7 @@ test("Gondolin mounts only writable runtime state and read-only skills", async (
       giteaToken: "read-only-token",
       imagePath: join(root, "assets"),
       localCwd: workspace,
+      prometheusEndpointUrl: "http://127.0.0.1:9091",
       skillsDir: skills,
       s3MockAccessKey: "local-test",
       s3MockBucket: "agent-artifacts",
@@ -119,6 +140,7 @@ test("voice Gondolin exposes only loopback S3Mock and read-only Gitea", async ()
     giteaToken: "read-only-token",
     imagePath: "/host/assets",
     localCwd: "/host/workspace",
+    prometheusEndpointUrl: "http://127.0.0.1:9091",
     skillsDir: "/host/skills",
     s3MockAccessKey: "local-test",
     s3MockBucket: "agent-artifacts",
@@ -130,6 +152,7 @@ test("voice Gondolin exposes only loopback S3Mock and read-only Gitea", async ()
   assert.equal(access.env.S3_BUCKET, "agent-artifacts");
   assert.equal(access.env.GITEA_BASE_URL, GUEST_GITEA_ENDPOINT);
   assert.equal(access.env.GITEA_OWNER, "source-publisher");
+  assert.equal(access.env.PROMETHEUS_URL, GUEST_PROMETHEUS_ENDPOINT);
 
   const rewritten = await access.httpHooks.onRequest(
     new Request("http://s3mock.local:9090/agent-artifacts"),
@@ -141,6 +164,13 @@ test("voice Gondolin exposes only loopback S3Mock and read-only Gitea", async ()
   assert.equal(
     gitea.url,
     "http://127.0.0.1:3001/source-publisher/repository.git/info/refs",
+  );
+  const prometheus = await access.httpHooks.onRequest(
+    new Request("http://prometheus.local:9091/api/v1/query?query=up"),
+  );
+  assert.equal(
+    prometheus.url,
+    "http://127.0.0.1:9091/api/v1/query?query=up",
   );
   const denied = await access.httpHooks.onRequest(new Request("http://example.com/"));
   assert.equal(denied.status, 403);

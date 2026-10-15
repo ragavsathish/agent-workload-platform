@@ -25,7 +25,7 @@ start:
 
 logs:
 	@mkdir -p "$$HOME/Library/Logs/PipecatEdge"
-	@touch "$$HOME/Library/Logs/PipecatEdge/broker.log" "$$HOME/Library/Logs/PipecatEdge/pi-voice.log" "$$HOME/Library/Logs/PipecatEdge/worker.log" "$$HOME/Library/Logs/PipecatEdge/host-observability.log"
+	@touch "$$HOME/Library/Logs/PipecatEdge/broker.log" "$$HOME/Library/Logs/PipecatEdge/pi-voice.log" "$$HOME/Library/Logs/PipecatEdge/worker.log" "$$HOME/Library/Logs/PipecatEdge/image-builder.log" "$$HOME/Library/Logs/PipecatEdge/host-observability.log"
 	@chmod 600 "$$HOME/Library/Logs/PipecatEdge/"*.log
 	@interrupted=0; \
 	tail -n 100 -F "$$HOME/Library/Logs/PipecatEdge/"*.log & tail_pid=$$!; \
@@ -58,6 +58,7 @@ status:
 	launchctl print "gui/$$UID/com.sathish.pipecat-broker" | sed -n '1,20p'
 	launchctl print "gui/$$UID/com.sathish.pipecat-host-observability" | sed -n '1,20p'
 	launchctl print "gui/$$UID/com.sathish.pipecat-worker" | sed -n '1,20p'
+	launchctl print "gui/$$UID/com.sathish.pipecat-image-builder" | sed -n '1,20p'
 
 grafana-password:
 	@test -s deploy/secrets/grafana-admin-password || { echo "Run make up first" >&2; exit 1; }

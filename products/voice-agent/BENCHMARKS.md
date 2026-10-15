@@ -1,4 +1,7 @@
-# MLX benchmark
+# Previous MLX Whisper benchmark
+
+This is the pre-Parakeet baseline. The live broker now uses Parakeet TDT 0.6B v3 on MLX; rerun the
+benchmark before using these STT numbers for current capacity planning.
 
 Measured on 2026-10-10 after model warm-up:
 

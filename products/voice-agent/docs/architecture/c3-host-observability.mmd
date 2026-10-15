@@ -1,0 +1,31 @@
+flowchart LR
+    MAC[External system<br/><b>macOS</b><br/>host CPU, memory, disk, and process table]
+    REGISTRY[(External data<br/><b>VM Metrics Registry</b><br/>0600 lifecycle records)]
+    OTEL[External container<br/><b>OTel LGTM</b><br/>Prometheus-compatible ingestion]
+
+    subgraph OBS["Container: Host and Gondolin Metrics · native Node.js + Fluent Bit"]
+        direction TB
+        SUPERVISOR["Component<br/><b>Collector Supervisor</b><br/>starts Fluent Bit and coordinates shutdown"]
+        HOSTCOLLECTOR["Component<br/><b>Host Metrics Collector</b><br/>Fluent Bit host metrics configuration"]
+        REGREAD["Component<br/><b>Registration Reader</b><br/>ignores partial and malformed VM records"]
+        PROCESSES["Component<br/><b>Process Sampler</b><br/>parses ps CPU, RSS, and elapsed time"]
+        RENDER["Component<br/><b>VM Metric Renderer</b><br/>safe labels, liveness, allocation ratios"]
+        ENDPOINT["Component<br/><b>Loopback Metrics Endpoint</b><br/>serves Prometheus text at /metrics"]
+
+        SUPERVISOR --> HOSTCOLLECTOR
+        REGREAD --> RENDER
+        PROCESSES --> RENDER --> ENDPOINT
+    end
+
+    MAC -->|"host metrics"| HOSTCOLLECTOR
+    MAC -->|"ps process table"| PROCESSES
+    REGISTRY -->|"VM IDs, labels, PIDs, allocations"| REGREAD
+    HOSTCOLLECTOR -->|"OTLP metrics"| OTEL
+    OTEL -->|"loopback scrape"| ENDPOINT
+
+    classDef component fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
+    classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
+    classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
+    class SUPERVISOR,HOSTCOLLECTOR,REGREAD,PROCESSES,RENDER,ENDPOINT component;
+    class MAC,OTEL external;
+    class REGISTRY data;

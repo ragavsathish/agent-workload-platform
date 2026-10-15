@@ -1,4 +1,20 @@
 services:
+  image-builder-amd64:
+    profiles: [amd64]
+    image: agent-image-builder:29.5.2-amd64
+    platform: linux/amd64
+    build:
+      context: ../../../..
+      dockerfile: platform/agent-execution/gondolin-session/gondolin/Dockerfile.builder
+
+  image-builder-arm64:
+    profiles: [arm64]
+    image: agent-image-builder:29.5.2-arm64
+    platform: linux/arm64
+    build:
+      context: ../../../..
+      dockerfile: platform/agent-execution/gondolin-session/gondolin/Dockerfile.builder
+
   voice-runtime-amd64:
     profiles: [amd64]
     image: voice-agent-gondolin:playwright-mcp-0.0.79-amd64

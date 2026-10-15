@@ -44,7 +44,7 @@ permission.
 into an image. It also installs four LaunchAgents in
 `~/Library/Application Support/PipecatEdge`:
 
-- inference broker: local MLX Whisper, Ollama, and Kokoro capability on `127.0.0.1:9443`;
+- inference broker: local Parakeet v3 MLX, Ollama, and Kokoro capability on `127.0.0.1:9443`;
 - host observability: macOS and registered Gondolin VM metrics on `127.0.0.1:2022` and `:9465`;
 - Pi Voice Service: persistent owner conversation and Gondolin-isolated native tools on
   `127.0.0.1:9446`;

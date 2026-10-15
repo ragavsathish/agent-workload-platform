@@ -63,7 +63,7 @@ form = (
 with request("/v1/audio/transcriptions", form, f"multipart/form-data; boundary={boundary}") as response:
     transcription = json.load(response)
 assert isinstance(transcription.get("text"), str), transcription
-print("PASS  MLX Whisper STT")
+print("PASS  Parakeet v3 MLX STT")
 PY
 
 echo "All configured inference models are cached and reachable through the isolated edge."

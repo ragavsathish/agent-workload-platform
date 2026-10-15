@@ -30,6 +30,7 @@ const GUEST_WORKSPACE = "/workspace";
 export const GUEST_SKILLS = "/skills";
 export const GUEST_S3MOCK_ENDPOINT = "http://s3mock.local:9090";
 export const GUEST_GITEA_ENDPOINT = "http://gitea.local:3001";
+export const GUEST_PROMETHEUS_ENDPOINT = "http://prometheus.local:9091";
 
 export function registerGondolinMetrics(
   vm: VM,
@@ -176,6 +177,7 @@ type GondolinWorkspaceOptions = {
   giteaToken: string;
   imagePath: string;
   localCwd: string;
+  prometheusEndpointUrl: string;
   skillsDir: string;
   s3MockAccessKey: string;
   s3MockBucket: string;
@@ -196,10 +198,13 @@ function loopbackOrigin(value: string, service: string): URL {
 export function createGondolinServiceAccess(options: GondolinWorkspaceOptions) {
   const s3Upstream = loopbackOrigin(options.s3MockEndpointUrl, "S3Mock");
   const giteaUpstream = loopbackOrigin(options.giteaEndpointUrl, "Gitea");
+  const prometheusUpstream = loopbackOrigin(options.prometheusEndpointUrl, "Prometheus");
   const s3Guest = new URL(GUEST_S3MOCK_ENDPOINT);
   s3Guest.port = s3Upstream.port;
   const giteaGuest = new URL(GUEST_GITEA_ENDPOINT);
   giteaGuest.port = giteaUpstream.port;
+  const prometheusGuest = new URL(GUEST_PROMETHEUS_ENDPOINT);
+  prometheusGuest.port = prometheusUpstream.port;
   const { httpHooks, env } = createHttpHooks({
     allowedHosts: [],
     allowedInternalHosts: [s3Upstream.hostname],
@@ -208,6 +213,7 @@ export function createGondolinServiceAccess(options: GondolinWorkspaceOptions) {
       const route = [
         { guest: s3Guest, upstream: s3Upstream },
         { guest: giteaGuest, upstream: giteaUpstream },
+        { guest: prometheusGuest, upstream: prometheusUpstream },
       ].find(({ guest }) => requested.hostname === guest.hostname && requested.port === guest.port);
       if (!route) {
         return new Response("network destination denied", { status: 403 });
@@ -230,6 +236,7 @@ export function createGondolinServiceAccess(options: GondolinWorkspaceOptions) {
       S3_ENDPOINT_URL: s3Guest.origin,
       GITEA_BASE_URL: giteaGuest.origin,
       GITEA_OWNER: options.giteaOwner,
+      PROMETHEUS_URL: prometheusGuest.origin,
     },
   };
 }
@@ -238,6 +245,27 @@ export function createGondolinMounts(options: GondolinWorkspaceOptions) {
   return {
     [GUEST_WORKSPACE]: new RealFSProvider(options.localCwd),
     [GUEST_SKILLS]: new ReadonlyProvider(new RealFSProvider(options.skillsDir)),
+  };
+}
+
+export function createGondolinVmOptions(options: GondolinWorkspaceOptions) {
+  const serviceAccess = createGondolinServiceAccess(options);
+  return {
+    sandbox: {
+      imagePath: options.imagePath,
+      // Gondolin 0.13's macOS/HVF resume clock sync is incompatible with the
+      // sandbox helper in the deployed image: https://github.com/earendil-works/gondolin/issues/167
+      qemuIdlePauseMs: 0,
+    },
+    dns: { mode: "synthetic" as const, syntheticHostMapping: "per-host" as const },
+    env: serviceAccess.env,
+    httpHooks: serviceAccess.httpHooks,
+    vfs: {
+      mounts: createGondolinMounts(options),
+    },
+    memory: "2G",
+    cpus: 2,
+    sessionLabel: options.sessionLabel ?? "pi-voice",
   };
 }
 
@@ -255,19 +283,7 @@ export class GondolinWorkspace {
     if (!existsSync(options.skillsDir)) {
       throw new Error(`Missing skills directory: ${options.skillsDir}`);
     }
-    const serviceAccess = createGondolinServiceAccess(options);
-    const vm = await VM.create({
-      sandbox: { imagePath: options.imagePath },
-      dns: { mode: "synthetic", syntheticHostMapping: "per-host" },
-      env: serviceAccess.env,
-      httpHooks: serviceAccess.httpHooks,
-      vfs: {
-        mounts: createGondolinMounts(options),
-      },
-      memory: "2G",
-      cpus: 2,
-      sessionLabel: options.sessionLabel ?? "pi-voice",
-    });
+    const vm = await VM.create(createGondolinVmOptions(options));
     const teaLogin = await vm.exec([
       "/usr/local/bin/tea",
       "login",

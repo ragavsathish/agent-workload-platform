@@ -1,4 +1,4 @@
-flowchart LR
+flowchart TB
     %% C4 container view. Each blue node is an independently running application or data store.
     USER(["Person<br/><b>Tailnet User</b><br/>talks, listens, reviews, delegates"])
     TSC["External system<br/><b>Tailscale Control Plane</b><br/>device and network authority"]
@@ -31,17 +31,22 @@ flowchart LR
             TASKS[("Container database<br/><b>Task Database and Queue</b><br/>PostgreSQL · Absurd schema")]
             HABITAT["Container<br/><b>Durable Queue Dashboard</b><br/>Go · Absurd Habitat"]
             WORKER["Container<br/><b>Pi Task Worker</b><br/>Python · Pi coding agent"]
+            BUILDER_MANAGER["Container<br/><b>Builder VM Manager</b><br/>Node.js · launchd"]
+            BUILDER_VM["Container<br/><b>Shared Image Builder</b><br/>Gondolin · Gitea Runner · private Docker"]
             TASK_TOOLS["Container<br/><b>Task Tool Runtime</b><br/>Gondolin · optional Wassette"]
             GATEWAY -->|"persist · enqueue"| TASKS
             HABITAT -->|"inspect · retry<br/>scoped SQL"| TASKS
             TASKS -->|"claim · checkpoint"| WORKER
+            WORKER -->|"dispatch · observe · cancel image workflow"| GITEA
+            GITEA -->|"assign trusted workflow job"| BUILDER_VM
+            BUILDER_MANAGER -->|"resume · checkpoint"| BUILDER_VM
             WORKER -->|"isolated tools"| TASK_TOOLS
         end
 
         subgraph DATA["Runtime data and operations"]
             direction LR
             VOICE_DATA[("Container data store<br/><b>Voice Runtime Data</b><br/>sessions · workspace · skills")]
-            GITEA[("Container data store<br/><b>Source Mirror</b><br/>rootless Gitea · committed refs")]
+            GITEA[("Container data store<br/><b>Git and Image Packages</b><br/>rootless Gitea · refs · immutable assets")]
             ARTIFACTS[("Container data store<br/><b>Workspace and Result Store</b><br/>S3-compatible object storage")]
             DOCKER_METRICS["Container<br/><b>Docker VM Metrics</b><br/>Fluent Bit · Linux VM aggregate"]
             HOST_METRICS["Container<br/><b>Host and Gondolin Metrics</b><br/>Fluent Bit · QEMU process exporter"]
@@ -55,6 +60,8 @@ flowchart LR
         VOICE_VM -->|"AWS CLI · S3Mock-only HTTP"| ARTIFACTS
         GATEWAY -->|"resolve workspace"| ARTIFACTS
         ARTIFACTS -->|"materialize · capture result"| WORKER
+        BUILDER_VM -->|"upload checksummed assets<br/>restricted workflow secret"| GITEA
+        GITEA -->|"download image assets"| WORKER
         EDGE -.->|"metrics · traces"| OTEL
         BROKER -.->|"metrics · traces"| OTEL
         GATEWAY -.->|"metrics · traces"| OTEL
@@ -79,5 +86,5 @@ flowchart LR
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
     class USER person;
     class TSC,MODELS,INTEGRATIONS external;
-    class BROWSER,INGRESS,ROUTER,EDGE,BROKER,PI,VOICE_VM,GATEWAY,HABITAT,WORKER,TASK_TOOLS,DOCKER_METRICS,HOST_METRICS,OTEL container;
+    class BROWSER,INGRESS,ROUTER,EDGE,BROKER,PI,VOICE_VM,GATEWAY,HABITAT,WORKER,BUILDER_MANAGER,BUILDER_VM,TASK_TOOLS,DOCKER_METRICS,HOST_METRICS,OTEL container;
     class TASKS,VOICE_DATA,GITEA,ARTIFACTS data;

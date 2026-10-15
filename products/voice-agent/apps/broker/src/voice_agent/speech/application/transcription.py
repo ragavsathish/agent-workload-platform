@@ -1,4 +1,4 @@
-"""Pure, payload-free post-processing for MLX Whisper results."""
+"""Pure, payload-free post-processing for speech-to-text results."""
 
 from __future__ import annotations
 

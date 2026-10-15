@@ -289,7 +289,7 @@ async def run_bot(transport: BaseTransport, identity: str):
     stt = OpenAISTTService(
         api_key=broker_token,
         base_url=broker_url,
-        settings=OpenAISTTService.Settings(model="mlx-whisper", language="en"),
+        settings=OpenAISTTService.Settings(model="parakeet-v3", language="en"),
     )
     llm = OpenAILLMService(
         api_key=broker_token,

@@ -16,10 +16,9 @@ import uuid
 import wave
 from contextlib import asynccontextmanager
 from io import BytesIO
-from typing import Annotated, Any, cast
+from typing import Annotated, Any
 
 import httpx
-import mlx_whisper
 import numpy as np
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
@@ -27,8 +26,10 @@ from fastapi.responses import Response, StreamingResponse
 from loguru import logger
 from pydantic import BaseModel, Field
 from voice_agent.shared.telemetry import configure_telemetry
+
 from voice_agent.speech.application.transcription import extract_transcript
 from voice_agent.speech.infrastructure.mlx_tts import synthesize_pcm
+from voice_agent.speech.infrastructure.parakeet_stt import load_model, transcribe_pcm
 
 # The broker handles raw voice data. Do not emit library or application logs from this process.
 logger.remove()
@@ -85,6 +86,7 @@ class SpeechRequest(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await asyncio.to_thread(load_model, os.environ["MLX_STT_MODEL"])
     app.state.http = httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=5.0))
     yield
     await app.state.http.aclose()
@@ -116,15 +118,10 @@ async def transcribe(
         audio = _decode_wav(content)
         telemetry.record("inference.stt.audio", outcome="accepted")
         async with _inference_slot:
-            result = cast(
-                dict[str, Any],
-                await asyncio.to_thread(
-                    mlx_whisper.transcribe,
-                    audio,
-                    path_or_hf_repo=os.environ["MLX_STT_MODEL"],
-                    temperature=0.0,
-                    language=os.getenv("STT_LANGUAGE", "en"),
-                ),
+            result = await asyncio.to_thread(
+                transcribe_pcm,
+                audio,
+                model_id=os.environ["MLX_STT_MODEL"],
             )
         transcript = extract_transcript(result)
         telemetry.record("inference.stt.transcript", outcome=transcript.outcome)

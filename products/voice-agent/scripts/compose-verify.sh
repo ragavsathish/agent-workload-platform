@@ -133,6 +133,34 @@ if [[ -s "$gitea_agent_token_file" ]]; then
 else
   fail "Gitea Tea token is missing"
 fi
+gitea_builder_token_file="$root/deploy/secrets/gitea-builder-token"
+if [[ -s "$gitea_builder_token_file" ]]; then
+  gitea_builder_token="$(<"$gitea_builder_token_file")"
+  gitea_builder_identity="$(curl -fsS -H "Authorization: token $gitea_builder_token" \
+    http://127.0.0.1:3001/api/v1/user 2>/dev/null || true)"
+  [[ "$gitea_builder_identity" == *'"login":"image-builder"'* ]] \
+    && pass "Gitea package token identifies the restricted image builder" \
+    || fail "Gitea image-builder token identity is invalid"
+  if curl -fsS -H "Authorization: token $gitea_builder_token" \
+    http://127.0.0.1:3001/api/v1/packages/image-builder?type=generic >/dev/null; then
+    pass "Gitea generic image-package API is enabled"
+  else
+    fail "Gitea generic image-package API is unavailable"
+  fi
+else
+  fail "Gitea image-builder token is missing"
+fi
+gitea_dispatcher_token_file="$root/deploy/secrets/gitea-dispatcher-token"
+if [[ -s "$gitea_dispatcher_token_file" ]]; then
+  gitea_dispatcher_token="$(<"$gitea_dispatcher_token_file")"
+  gitea_dispatcher_identity="$(curl -fsS -H "Authorization: token $gitea_dispatcher_token" \
+    http://127.0.0.1:3001/api/v1/user 2>/dev/null || true)"
+  [[ "$gitea_dispatcher_identity" == *'"login":"workflow-dispatcher"'* ]] \
+    && pass "Gitea workflow token identifies the restricted dispatcher" \
+    || fail "Gitea workflow-dispatcher token identity is invalid"
+else
+  fail "Gitea workflow-dispatcher token is missing"
+fi
 gateway_ports="$(docker inspect -f '{{json .NetworkSettings.Ports}}' "$("${compose[@]}" ps -q agent-gateway)")"
 if [[ "$gateway_ports" == *'"9444/tcp":[{"HostIp":"127.0.0.1"'* ]]; then
   pass "agent gateway is published only on host loopback for native Pi voice"
@@ -316,7 +344,7 @@ else
   fail "gateway cannot reach the private artifact bucket"
 fi
 
-for label in com.sathish.pipecat-broker com.sathish.pipecat-host-observability com.sathish.pipecat-pi-voice com.sathish.pipecat-worker; do
+for label in com.sathish.pipecat-broker com.sathish.pipecat-host-observability com.sathish.pipecat-pi-voice com.sathish.pipecat-worker com.sathish.pipecat-image-builder; do
   launchctl print "gui/$UID/$label" >/dev/null 2>&1 && pass "$label is loaded" || fail "$label is not loaded"
 done
 
