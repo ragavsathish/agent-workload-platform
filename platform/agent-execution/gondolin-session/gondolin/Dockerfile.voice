@@ -1,11 +1,13 @@
 # syntax=docker/dockerfile:1.7
 
 ARG PLAYWRIGHT_MCP_IMAGE
+FROM grafana/otel-lgtm:0.30.1@sha256:bb182ac3174a20923fa58f00d1790fa71eb06cc0150078c0b0e8feb9e6611492 AS otel-lgtm
 FROM ${PLAYWRIGHT_MCP_IMAGE}
 
 ARG TARGETARCH
 ARG TEA_VERSION=0.15.1
 USER root
+COPY --from=otel-lgtm /otel-lgtm/prometheus/promtool /usr/local/bin/promtool
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update \

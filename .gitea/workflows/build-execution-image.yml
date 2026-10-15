@@ -1,0 +1,28 @@
+name: Build voice runtime image
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_version:
+        description: Immutable voice-runtime image cache key
+        required: true
+        type: string
+      source_revision:
+        description: Immutable Git commit containing the declared build inputs
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: gondolin-builder
+    timeout-minutes: 120
+    steps:
+      - name: Check out the requested revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ inputs.source_revision }}
+      - name: Build and publish the voice runtime image
+        env:
+          ARTIFACT_VERSION: ${{ inputs.artifact_version }}
+          IMAGE_BUILDER_TOKEN: ${{ secrets.IMAGE_BUILDER_TOKEN }}
+        run: node /runner/dist/image-builder-workflow.js
