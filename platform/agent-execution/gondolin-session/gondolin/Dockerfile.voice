@@ -11,17 +11,22 @@ COPY --from=prometheus /bin/promtool /usr/local/bin/promtool
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update \
-    && apt-get install --yes --no-install-recommends awscli ca-certificates curl git \
+    && apt-get install --yes --no-install-recommends awscli ca-certificates curl git
+RUN --mount=type=secret,id=gondolin_mitm_ca,required=false \
+    cp /etc/ssl/certs/ca-certificates.crt /tmp/build-ca-bundle.crt \
+    && if [ -f /run/secrets/gondolin_mitm_ca ]; then \
+         cat /run/secrets/gondolin_mitm_ca >> /tmp/build-ca-bundle.crt; \
+       fi \
     && case "$TARGETARCH" in \
          amd64) tea_sha256=aac99cc6e650a81ae7b5061f8c75bc0eade4509c828d97b6072e1f0a3bd24357 ;; \
          arm64) tea_sha256=0db109df6696bfe01f9203402f503404692404d4ea9c16a540ecaeecc8e6bab2 ;; \
          *) echo "Unsupported Tea architecture: $TARGETARCH" >&2; exit 1 ;; \
        esac \
-    && curl --fail --location --silent --show-error \
+    && curl --cacert /tmp/build-ca-bundle.crt --fail --location --silent --show-error \
        "https://dl.gitea.com/tea/${TEA_VERSION}/tea-${TEA_VERSION}-linux-${TARGETARCH}" \
        --output /tmp/tea \
     && echo "$tea_sha256  /tmp/tea" | sha256sum --check --strict \
     && install -m 0555 /tmp/tea /usr/local/bin/tea \
-    && rm /tmp/tea \
+    && rm /tmp/tea /tmp/build-ca-bundle.crt \
     && promtool --version
 USER node
