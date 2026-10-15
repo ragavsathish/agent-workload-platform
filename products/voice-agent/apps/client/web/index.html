@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Private Pi voice workspace">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#07100e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Pi Voice">
+  <title>Pi Voice</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.json">
+  <style>html,body{margin:0;min-height:100%;background:#07100e}</style>
+  <script>
+    // A bounded, local-only performance profile for improving the product UX.
+    // No transcript, audio, diagram source, URL, or free-form error is recorded.
+    window.__piUxTelemetry = (() => {
+      const storageKey = 'pi-ux-performance-v1';
+      let events = [];
+      try {
+        const stored = JSON.parse(localStorage.getItem(storageKey) || '[]');
+        if (Array.isArray(stored)) events = stored.slice(-500);
+      } catch (_) {
+        events = [];
+      }
+
+      const persist = () => {
+        try { localStorage.setItem(storageKey, JSON.stringify(events)); } catch (_) {}
+      };
+      const percentile = (values, fraction) => {
+        if (values.length === 0) return null;
+        const sorted = [...values].sort((a, b) => a - b);
+        return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * fraction) - 1)];
+      };
+
+      return {
+        recordJson(raw) {
+          const event = JSON.parse(raw);
+          events.push(event);
+          if (events.length > 500) events.splice(0, events.length - 500);
+          persist();
+        },
+        snapshot() { return events.map((event) => ({ ...event })); },
+        summary() {
+          const names = [...new Set(events.map((event) => event.name))];
+          return Object.fromEntries(names.map((name) => {
+            const matching = events.filter((event) => event.name === name);
+            const durations = matching
+              .map((event) => event.durationMs)
+              .filter(Number.isFinite);
+            return [name, {
+              samples: matching.length,
+              count: matching.reduce((sum, event) => sum + (event.count || 0), 0),
+              errors: matching.filter((event) => event.outcome === 'error').length,
+              p50Ms: percentile(durations, 0.50),
+              p95Ms: percentile(durations, 0.95),
+              maxMs: durations.length ? Math.max(...durations) : null,
+            }];
+          }));
+        },
+        clear() { events.length = 0; persist(); },
+      };
+    })();
+  </script>
+  <script src="voice-runtime/voice_bridge.js" type="module"></script>
+</head>
+<body>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

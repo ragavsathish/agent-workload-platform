@@ -680,6 +680,18 @@ if __name__ == "__main__":
             StaticFiles(directory=client_dist / "canvaskit"),
             name="canvaskit",
         )
+    if (client_dist / "voice-runtime").is_dir():
+        app.mount(
+            "/voice-runtime",
+            StaticFiles(directory=client_dist / "voice-runtime"),
+            name="voice-runtime",
+        )
+    if (client_dist / "diagnostics").is_dir():
+        app.mount(
+            "/diagnostics",
+            StaticFiles(directory=client_dist / "diagnostics", html=True),
+            name="diagnostics",
+        )
 
     def register_browser_asset(asset_name: str, media_type: str | None = None) -> None:
         """Expose one generated Flutter root asset without shadowing Pipecat routes."""
@@ -704,9 +716,10 @@ if __name__ == "__main__":
         ("flutter_service_worker.js", "text/javascript"),
         ("favicon.svg", "image/svg+xml"),
         ("main.dart.js", "text/javascript"),
+        ("main.dart.mjs", "text/javascript"),
+        ("main.dart.wasm", "application/wasm"),
         ("manifest.json", "application/manifest+json"),
         ("version.json", "application/json"),
-        ("voice_bridge.js", "text/javascript"),
     ):
         register_browser_asset(browser_asset_name, browser_asset_type)
 

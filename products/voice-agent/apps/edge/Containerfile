@@ -33,7 +33,8 @@ COPY apps/edge/audio_diagnostics.py ./
 COPY apps/edge/otel_bridge.py ./
 COPY apps/edge/visual_response.py ./
 COPY packages/telemetry/src ./src
-COPY apps/web/build/web ./client-dist
+COPY apps/client/build/web ./client-dist
+COPY apps/diagnostics/dist ./client-dist/diagnostics
 
 USER 65532:65532
 EXPOSE 7860

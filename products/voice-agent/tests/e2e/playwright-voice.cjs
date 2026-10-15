@@ -25,13 +25,14 @@ const result = {
   replayVariants: [],
   replayMetricPoints: 0,
   liveWaveformPoints: 0,
+  audioPlayback: null,
+  muteDuringThinking: null,
   labels: [],
   visualizerStates: [],
   finalLabel: null,
   consoleErrors: [],
   requestFailures: [],
   screenshot: path.join(outputDir, 'voice-e2e.png'),
-  replayScreenshot: path.join(outputDir, 'voice-replays-e2e.png'),
   trace: path.join(outputDir, 'voice-e2e-trace.zip'),
 };
 
@@ -47,12 +48,16 @@ const enableFlutterSemantics = async (page) => {
 };
 
 const readVoiceLabel = async (page) => {
+  const labels = ['Ready', 'Starting…', 'Listening', 'Muted', 'Thinking…', 'Speaking'];
+  for (const label of labels) {
+    if (await page.locator(`flt-semantics[aria-label="${label}"]`).count()) return label;
+  }
   const header = await page
     .locator('flt-semantics[role="group"][aria-label*="Pi Voice"]')
     .first()
     .getAttribute('aria-label')
     .catch(() => '');
-  return ['Ready', 'Starting…', 'Listening', 'Muted', 'Thinking…', 'Speaking']
+  return labels
     .find((label) => header?.split('\n').includes(label)) || '';
 };
 
@@ -109,6 +114,8 @@ const main = async () => {
   const startedAt = Date.now();
   let lastLabel = '';
   let lastVisualizerState = '';
+  let mutedDuringThinking = false;
+  let observedMutedTransition = false;
   while (Date.now() - startedAt < 150_000) {
     const label = await readVoiceLabel(page);
     if (label && label !== lastLabel) {
@@ -118,6 +125,17 @@ const main = async () => {
     // The Flutter activity indicator is state-driven rather than a DOM canvas.
     // Keep the legacy result field stable for downstream result readers.
     lastVisualizerState = label || lastVisualizerState;
+
+    if (label === 'Thinking…' && !mutedDuringThinking) {
+      await page.getByRole('button', { name: 'Mute', exact: true }).click();
+      await page.getByRole('button', { name: 'Unmute', exact: true }).waitFor({ timeout: 500 });
+      mutedDuringThinking = true;
+      result.muteDuringThinking = { clickedDuring: label, remainedMutedDuring: null };
+    } else if (mutedDuringThinking && label === 'Speaking' && !observedMutedTransition) {
+      await page.getByRole('button', { name: 'Unmute', exact: true }).waitFor({ timeout: 3_000 });
+      observedMutedTransition = true;
+      result.muteDuringThinking.remainedMutedDuring = label;
+    }
 
     const snapshot = await page.evaluate(async () => {
       const response = await fetch('/api/pi-transcript', { cache: 'no-store' });
@@ -144,7 +162,7 @@ const main = async () => {
       if (assistantEntry) {
         result.userTranscript = entries[userIndex].text;
         result.assistantResponse = assistantEntry.text;
-        break;
+        if (observedMutedTransition) break;
       }
     }
     await page.waitForTimeout(250);
@@ -159,6 +177,33 @@ const main = async () => {
   if (!result.labels.includes('Speaking')) {
     throw new Error('The UI never exposed the Speaking state');
   }
+  if (!mutedDuringThinking || !observedMutedTransition) {
+    throw new Error('Mute did not remain active across the Thinking state transition');
+  }
+
+  await page.getByRole('button', { name: 'Unmute', exact: true }).click();
+  await page.getByRole('button', { name: 'Mute', exact: true }).waitFor({ timeout: 10_000 });
+
+  result.audioPlayback = await page.evaluate(() => {
+    const output = document.querySelector('audio[data-pipecat-output="true"]');
+    const stream = output?.srcObject;
+    const tracks = stream instanceof MediaStream ? stream.getAudioTracks() : [];
+    return {
+      outputPresent: output instanceof HTMLAudioElement,
+      paused: output instanceof HTMLAudioElement ? output.paused : null,
+      muted: output instanceof HTMLAudioElement ? output.muted : null,
+      trackCount: tracks.length,
+      liveTrackCount: tracks.filter((track) => track.readyState === 'live').length,
+    };
+  });
+  if (
+    !result.audioPlayback.outputPresent ||
+    result.audioPlayback.paused !== false ||
+    result.audioPlayback.muted !== false ||
+    result.audioPlayback.liveTrackCount === 0
+  ) {
+    throw new Error(`Remote audio is not playing: ${JSON.stringify(result.audioPlayback)}`);
+  }
 
   const liveDiagnostics = await page.evaluate(async () => {
     const response = await fetch('/api/audio-diagnostics/live', { cache: 'no-store' });
@@ -170,6 +215,13 @@ const main = async () => {
   if (liveDiagnostics?.active !== true || result.liveWaveformPoints === 0) {
     throw new Error('Live microphone envelope was not available during the conversation');
   }
+
+  await page.getByRole('button', { name: 'Mute', exact: true }).click();
+  await page.getByRole('button', { name: 'Unmute', exact: true }).waitFor({ timeout: 10_000 });
+  result.labels.push('Muted');
+  await page.getByRole('button', { name: 'Unmute', exact: true }).click();
+  await page.getByRole('button', { name: 'Mute', exact: true }).waitFor({ timeout: 10_000 });
+  result.labels.push('Listening');
 
   await page.screenshot({ path: result.screenshot, fullPage: true });
   await page.getByRole('button', { name: 'End conversation' }).click();
@@ -189,45 +241,9 @@ const main = async () => {
   }
   if (!result.replaySession) throw new Error('Completed conversation did not create an audio replay');
 
-  const replayPage = await context.newPage();
-  await replayPage.goto(`${baseUrl}/?view=audio-diagnostics`, {
-    waitUntil: 'domcontentloaded',
-    timeout: 60_000,
-  });
-  await enableFlutterSemantics(replayPage);
-  await replayPage
-    .locator('flt-semantics[aria-label*="Last five conversations"]')
-    .waitFor();
-  await replayPage.getByRole('button', { name: 'Load waveform comparison' }).first().click();
-  await replayPage.waitForFunction(() => {
-    const waveforms = [...document.querySelectorAll('[aria-label^="Audio waveform"]')];
-    return waveforms.length === 3 && waveforms.every((waveform) => waveform.childElementCount > 0);
-  }, { timeout: 20_000 });
-  await replayPage
-    .locator('flt-semantics[aria-label*="Mean predicted complex-mask magnitude"]')
-    .waitFor();
-  await replayPage.waitForFunction(() => (
-    [...document.querySelectorAll('[aria-label^="Audio waveform"]')]
-      .filter((waveform) => waveform.querySelector('canvas')).length >= 2
-  ), { timeout: 30_000 });
-  result.spectrogramCanvases = await replayPage.locator('[aria-label^="Audio waveform"] canvas').count();
-  result.spectrogramLayout = await replayPage.locator('[aria-label^="Audio waveform"]').evaluateAll((elements) => (
-    elements.filter((element) => element.querySelector('canvas')).map((element) => ({
-      childCount: element.childElementCount,
-      height: element.getBoundingClientRect().height,
-      width: element.getBoundingClientRect().width,
-      canvases: [...element.querySelectorAll('canvas')].map((canvas) => ({
-        height: canvas.getBoundingClientRect().height,
-        width: canvas.getBoundingClientRect().width,
-        pixelHeight: canvas.height,
-        pixelWidth: canvas.width,
-      })),
-    }))
-  ));
-  if (result.spectrogramLayout.some((layout) => layout.width <= 0 || layout.height <= 0)) {
-    throw new Error(`Spectrogram has no visible layout: ${JSON.stringify(result.spectrogramLayout)}`);
-  }
-  const metrics = await replayPage.evaluate(async (sessionId) => {
+  // Patrol owns Flutter layout assertions. This deployed-browser test stays at
+  // the media contract: WebRTC playback plus retained replay APIs.
+  const metrics = await page.evaluate(async (sessionId) => {
     const response = await fetch(
       `/api/audio-diagnostics/${encodeURIComponent(sessionId)}/metrics`,
       { cache: 'no-store' },
@@ -243,9 +259,7 @@ const main = async () => {
   ) {
     throw new Error('VoxLock model diagnostics were not retained');
   }
-  await replayPage.waitForTimeout(1_500);
-  await replayPage.screenshot({ path: result.replayScreenshot, fullPage: true });
-  const replayChecks = await replayPage.evaluate(async (sessionId) => {
+  const replayChecks = await page.evaluate(async (sessionId) => {
     const variants = ['raw', 'voxlock', 'rnnoise'];
     return Promise.all(variants.map(async (variant) => {
       const response = await fetch(

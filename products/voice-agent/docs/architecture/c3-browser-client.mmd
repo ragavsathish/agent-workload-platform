@@ -2,33 +2,26 @@ flowchart LR
     USER([Person<br/><b>Tailnet User</b>])
     EDGE[External container<br/><b>Voice Edge</b><br/>WebRTC and owner-scoped HTTP APIs]
 
-    subgraph BROWSER["Container: Browser Client · Flutter Web"]
+    subgraph BROWSER["Container: Browser Voice Client · Flutter Web"]
         direction TB
-        ROUTER["Component<br/><b>View Router</b><br/>selects voice, chat/tasks, or replay view"]
+        ROUTER["Component<br/><b>View Router</b><br/>selects voice or chat/task view"]
         VOICE["Component<br/><b>Voice Experience</b><br/>conversation, activity, context, and responsive layout"]
         TIMELINE["Component<br/><b>Chat and Task Timeline</b><br/>polls transcript/tasks and submits messages or task decisions"]
-        AUDIO["Component<br/><b>Audio Diagnostics</b><br/>live envelope, last-five replays, and model charts"]
         API["Component<br/><b>Owner API Client</b><br/>typed same-origin HTTP requests"]
         DIAGRAM["Component<br/><b>Mermaid Platform View</b><br/>embeds validated SVG inside Flutter"]
-        ADAPTER["Component<br/><b>Browser Integration Adapter</b><br/>official Pipecat JS transport, Mermaid, WaveSurfer, and audio"]
+        ADAPTER["Component<br/><b>Browser Integration Adapter</b><br/>official Pipecat JS transport, Mermaid, and audio"]
 
         ROUTER -->|"opens"| VOICE
         ROUTER -->|"opens"| TIMELINE
-        ROUTER -->|"opens"| AUDIO
         VOICE -->|"starts, mutes, stops; consumes activity"| ADAPTER
         VOICE -->|"renders live response"| DIAGRAM
         TIMELINE -->|"renders completed response"| DIAGRAM
         DIAGRAM -->|"requests strict SVG render"| ADAPTER
         VOICE -->|"polls usage; compacts"| API
         TIMELINE -->|"polls and commands"| API
-        AUDIO -->|"polls diagnostics"| API
-        AUDIO -->|"mounts replay visualization"| ADAPTER
     end
 
-    USER -->|"operates"| VOICE
-    USER -->|"reviews"| DIAGRAM
-    USER -->|"chats and manages work"| TIMELINE
-    USER -->|"inspects"| AUDIO
+    USER -->|"navigates and operates"| ROUTER
     ADAPTER -->|"WebRTC signaling and media"| EDGE
     API -->|"owner-scoped HTTP APIs"| EDGE
 
@@ -36,5 +29,5 @@ flowchart LR
     classDef component fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
     classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
     class USER person;
-    class ROUTER,VOICE,TIMELINE,AUDIO,API,DIAGRAM,ADAPTER component;
+    class ROUTER,VOICE,TIMELINE,API,DIAGRAM,ADAPTER component;
     class EDGE external;

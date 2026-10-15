@@ -1,0 +1,189 @@
+:root {
+  color-scheme: dark;
+  background: #080b0e;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: #080b0e; }
+button, a { font: inherit; }
+
+.audio-diagnostics-page {
+  width: 100%;
+  min-height: 100vh;
+  padding: clamp(1rem, 4vw, 3rem);
+  background: radial-gradient(circle at 50% -15%, rgb(42 128 91 / 18%), transparent 38rem), #090b0d;
+  color: #e7edf2;
+}
+
+.audio-diagnostics-header,
+.audio-session-list,
+.live-diagnostic,
+.audio-diagnostics-footer {
+  width: min(100%, 72rem);
+  margin-inline: auto;
+}
+
+.audio-diagnostics-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.eyebrow {
+  margin: 0;
+  color: #56e39f;
+  font: 700 0.7rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.16em;
+}
+
+.audio-diagnostics-header h1 {
+  margin: 0.35rem 0 0.45rem;
+  font-size: clamp(1.35rem, 4vw, 2rem);
+}
+
+.audio-diagnostics-header p:not(.eyebrow) {
+  max-width: 42rem;
+  margin: 0;
+  color: #89949f;
+  line-height: 1.5;
+}
+
+.header-actions { display: flex; gap: 0.5rem; }
+.header-actions a,
+.header-actions button,
+.audio-comparison-load,
+.audio-waveform-controls button {
+  border: 1px solid #365044;
+  border-radius: 7px;
+  padding: 0.55rem 0.8rem;
+  background: #14271f;
+  color: #b9f5d6;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.audio-session-list { display: grid; gap: 1rem; }
+
+.live-diagnostic,
+.audio-session-card {
+  border: 1px solid #283038;
+  border-radius: 14px;
+  padding: 1rem;
+  background: rgb(16 21 26 / 94%);
+}
+
+.live-diagnostic { margin-bottom: 1rem; }
+.live-diagnostic > header,
+.audio-session-card > header,
+.audio-session-card > header > div,
+.audio-variant-header {
+  display: flex;
+  align-items: center;
+}
+
+.live-diagnostic > header,
+.audio-session-card > header,
+.audio-variant-header { justify-content: space-between; gap: 1rem; }
+
+.live-diagnostic h2,
+.diagnostic-chart h3 {
+  margin: 0.25rem 0 0;
+  color: #e7edf2;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.live-diagnostic > header > span {
+  color: #71e9ad;
+  font: 0.7rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.live-waveform { height: 5.5rem; margin-top: 0.75rem; background: #0b0f12; }
+.audio-session-card { padding: clamp(0.85rem, 2vw, 1.25rem); }
+.audio-session-card > header { margin-bottom: 1rem; }
+.audio-session-card > header > div { flex-wrap: wrap; gap: 0.65rem; }
+.audio-session-number {
+  color: #71e9ad;
+  font: 650 0.75rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.audio-session-card time,
+.audio-session-duration { color: #7f8b95; font-size: 0.75rem; }
+
+.audio-variant-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.audio-variant {
+  min-width: 0;
+  border: 1px solid #222b32;
+  border-radius: 9px;
+  padding: 0.75rem;
+  background: #0b0f12;
+}
+.audio-variant-header { margin-bottom: 0.65rem; }
+.audio-variant strong { font-size: 0.78rem; }
+.audio-variant-header span {
+  border-radius: 999px;
+  padding: 0.2rem 0.4rem;
+  background: #194a37;
+  color: #8cf5c1;
+  font-size: 0.58rem;
+  text-transform: uppercase;
+}
+
+.audio-waveform { min-width: 0; }
+.audio-spectrogram { min-height: 7rem; overflow: hidden; background: #080b0e; }
+.audio-spectrogram > div { background: #080b0e !important; }
+.audio-waveform-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.audio-waveform-controls button { padding: 0.48rem 0.7rem; }
+.audio-waveform-controls button:disabled { cursor: wait; opacity: 0.45; }
+.audio-waveform-controls span {
+  color: #7f8b95;
+  font: 0.65rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.diagnostic-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+.diagnostic-chart { min-width: 0; border-top: 1px solid #273039; padding-top: 0.8rem; }
+.diagnostic-chart:last-child { grid-column: 1 / -1; }
+.diagnostic-chart-canvas { height: 15rem; margin-top: 0.65rem; }
+
+.audio-session-warning,
+.audio-diagnostics-error,
+.audio-diagnostics-empty { color: #ffbd76; font-size: 0.76rem; }
+.audio-diagnostics-empty,
+.audio-diagnostics-error {
+  width: min(100%, 72rem);
+  margin: 3rem auto;
+  text-align: center;
+}
+.audio-diagnostics-footer {
+  margin-top: 1rem;
+  color: #65717b;
+  font-size: 0.68rem;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .audio-variant-grid,
+  .diagnostic-chart-grid { grid-template-columns: 1fr; }
+  .audio-diagnostics-header { align-items: stretch; flex-direction: column; }
+  .header-actions { align-self: flex-start; }
+  .diagnostic-chart:last-child { grid-column: auto; }
+}

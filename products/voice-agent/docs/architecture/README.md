@@ -10,7 +10,8 @@ notation is used for runtime views because it preserves order without crossing r
 |---|---|---|---|
 | C1 system context | Who uses the Voice Agent and which external systems does it depend on? | [c1-system-context.mmd](c1-system-context.mmd) | [PNG](c1-system-context.png) |
 | C2 containers | Which independently running parts own voice, Pi, task, artifact, and telemetry responsibilities? | [c2-container.mmd](c2-container.mmd) | [PNG](c2-container.png) |
-| C3 Browser Client | Which UI components own conversation control, diagrams, tasks, transcript, and diagnostics? | [c3-browser-client.mmd](c3-browser-client.mmd) | [PNG](c3-browser-client.png) |
+| C3 Browser Voice Client | Which Flutter components own conversation control, diagrams, tasks, and transcript? | [c3-browser-client.mmd](c3-browser-client.mmd) | [PNG](c3-browser-client.png) |
+| C3 Input Diagnostics | Which React components own live input monitoring, replay comparison, and model charts? | [c3-input-diagnostics.mmd](c3-input-diagnostics.mmd) | [PNG](c3-input-diagnostics.png) |
 | C3 Voice Edge | How does Pipecat turn browser audio into an authenticated, observable voice pipeline? | [c3-voice-edge.mmd](c3-voice-edge.mmd) | [PNG](c3-voice-edge.png) |
 | C3 Inference Broker | Which narrow adapters expose native STT, TTS, Pi streaming, context, and fallback inference? | [c3-inference-broker.mmd](c3-inference-broker.mmd) | [PNG](c3-inference-broker.png) |
 | C3 Pi Voice Service | How are persistent Pi turns, tools, transcript, context, skills, and the voice VM coordinated? | [c3-pi-voice-service.mmd](c3-pi-voice-service.mmd) | [PNG](c3-pi-voice-service.png) |
@@ -36,9 +37,12 @@ policy, or telemetry changes belong.
 Pipecat is an off-the-shelf library inside the **Voice Edge**, not a separately deployed service.
 It owns WebRTC media orchestration, Silero VAD, Smart Turn v3, STT/LLM/TTS sequencing, heartbeats,
 and pipeline metrics. Before turn detection, the edge applies exactly one server-side input filter:
-RNNoise by default or VoxLock when owner-voice isolation is enabled. The Flutter Web client uses a
-narrow JavaScript adapter around Pipecat's official browser transport, Mermaid, and WaveSurfer; all
-visible UI, responsive state, HTTP orchestration, charts, chat, and task interactions remain in Dart.
+RNNoise by default or VoxLock when owner-voice isolation is enabled. The shared Flutter client currently uses a
+narrow JavaScript adapter around Pipecat's official browser transport and Mermaid on web. Its iOS and
+Android runners compile the same Dart UI behind a platform-neutral voice-session interface; native
+Pipecat adapters remain planned rather than represented as deployed containers. Conversation,
+chat/task, responsive state, and voice controls remain in Dart. Input diagnostics is a separate
+React bundle at `/diagnostics/`; it uses Recharts and WaveSurfer without loading the Flutter runtime.
 The adapter speaks RTVI, while Tailscale Serve is the only browser ingress. It exposes the voice UI on tailnet HTTPS
 after tailnet authorization. Tailscale terminates TLS and supplies the authenticated identity to a
 localhost-only Traefik router. Traefik maps `/` to the Voice Edge, `/metrics/` to Grafana,
@@ -78,8 +82,10 @@ access to proposal records, and Habitat has no direct host port.
 
 | C4 element | Repository evidence |
 |---|---|
-| Browser Client | `apps/web/lib/`; production Flutter assets copied by `apps/edge/Containerfile` |
-| Browser Client components | `apps/web/lib/main.dart`; `views/voice_view.dart`; `views/transcript_view.dart`; `views/audio_diagnostics_view.dart`; `widgets/mermaid_view.dart`; `bridge/voice_bridge.js` |
+| Browser Voice Client | `apps/client/lib/`; production Flutter web assets copied by `apps/edge/Containerfile` |
+| Browser Voice Client components | `apps/client/lib/main.dart`; `views/voice_view.dart`; `views/transcript_view.dart`; `widgets/mermaid_view_web.dart`; `platform/voice_session_web.dart`; `bridge/voice_bridge.js` |
+| Mobile Client foundation | `apps/client/ios/`; `apps/client/android/`; `apps/client/lib/platform/voice_session.dart`; native adapters are not implemented yet |
+| Input Diagnostics | `apps/diagnostics/`; React bundle emitted to `apps/diagnostics/dist/` |
 | Tailnet Ingress | `deploy/compose.yml`; `scripts/compose-login.sh` |
 | Path Router | `deploy/traefik/traefik.yml`; `deploy/traefik/routes.yml` |
 | Voice Edge | `apps/edge/bot.py`; `apps/edge/Containerfile` |
@@ -89,7 +95,7 @@ access to proposal records, and Habitat has no direct host port.
 | Inference Broker components | `apps/broker/src/voice_agent/speech/presentation/http.py`; `application/transcription.py`; `infrastructure/parakeet_stt.py`; `infrastructure/mlx_tts.py` |
 | Pi Voice Service | `apps/pi-agent/voice-agent-service.ts`; Pi voice LaunchAgent |
 | Pi Voice Service components | `apps/pi-agent/voice-agent-service.ts`; `apps/pi-agent/gondolin-workspace.ts` |
-| Pi Context Usage and Compaction | `apps/web/lib/views/voice_view.dart`; `apps/edge/bot.py`; broker HTTP adapter; `apps/pi-agent/voice-agent-service.ts` |
+| Pi Context Usage and Compaction | `apps/client/lib/views/voice_view.dart`; `apps/edge/bot.py`; broker HTTP adapter; `apps/pi-agent/voice-agent-service.ts` |
 | Voice Tool Sandbox and Runtime Data | `apps/pi-agent/gondolin-workspace.ts`; `scripts/install-launch-agents.sh`; `deploy/launchd/run-pi-agent.sh` |
 | Agent Gateway | `apps/gateway/src/voice_gateway/main.py`; `apps/gateway/Dockerfile` |
 | Agent Gateway components | `apps/gateway/src/voice_gateway/main.py`; `packages/tasking/src/voice_agent/tasking/application/service.py`; `domain/approval.py`; `infrastructure/artifacts.py` |
