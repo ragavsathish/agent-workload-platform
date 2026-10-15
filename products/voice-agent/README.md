@@ -239,7 +239,10 @@ reusable skills are mounted read-only at `/skills`. Committed source is publishe
 loopback-only Gitea service during `make start`; the VM may anonymously clone that public-in-Gitea
 mirror into `/workspace`, but receives no publisher credential. No host Git directory is mounted, so
 ignored files, local secrets, and uncommitted changes are not exposed. It disables discovered
-host extensions, prompt templates, themes, and context files. Kokoro speaks the final text produced
+host extensions, prompt templates, themes, and context files. The service explicitly registers
+Wassette through Pi's native MCP extension as a deferred tool provider; `tool_search` reveals only
+the selected WASM tools, and the Wassette child process receives a credential-scrubbed environment.
+Kokoro speaks the final text produced
 by Pi after any tool calls complete. `PI_VOICE_MODEL` selects the model; when blank, Pi uses its
 configured default. The VM image includes AWS CLI and receives mock-only credentials plus a
 synthetic `S3_ENDPOINT_URL`. Gondolin denies general egress and rewrites only that synthetic origin

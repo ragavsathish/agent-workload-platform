@@ -7,7 +7,7 @@
 - 20 GiB free disk minimum; 40 GiB recommended for images, telemetry, and model caches
 - Docker Desktop with Docker Compose
 - uv with Python 3.13, Node.js/npm, Ollama, curl, and Homebrew `libpq` and `fluent-bit`
-- Pi plus the repository's built Gondolin agent extension and any approved Wassette components
+- Pi, Wassette, the repository's built Gondolin agent extension, and any approved Wassette components
 - A Tailscale account shared with the browser device
 
 Kubernetes, k3s, Lima, Podman, Quadlet, systemd, SSH forwarding, and Tailscale Funnel are not used.
@@ -46,8 +46,8 @@ into an image. It also installs four LaunchAgents in
 
 - inference broker: local Parakeet v3 MLX, Ollama, and Kokoro capability on `127.0.0.1:9443`;
 - host observability: macOS and registered Gondolin VM metrics on `127.0.0.1:2022` and `:9465`;
-- Pi Voice Service: persistent owner conversation and Gondolin-isolated native tools on
-  `127.0.0.1:9446`;
+- Pi Voice Service: persistent owner conversation, Gondolin-isolated native tools, and deferred
+  host-side Wassette MCP tools on `127.0.0.1:9446`;
 - Pi worker: consumes approved tasks from Postgres and invokes Gondolin/Wassette.
 
 The worker routes Pi's standard `read`, `write`, `edit`, and `bash` tools
@@ -55,6 +55,12 @@ through the micro-VM with only the immutable task workspace mounted at
 `/workspace`; they never fall back to host operations. Results about disks,
 processes, or the operating system therefore describe that isolated workload,
 not macOS.
+
+The voice orchestrator starts Wassette as an MCP stdio subprocess only when its Pi session is
+created. Wassette components are separate from Gondolin: they receive no orchestrator credentials,
+start without host capabilities, and must be granted only the minimum filesystem, network, or
+environment access required for the selected component. The private component cache lives under
+`~/Library/Application Support/PipecatEdge/wassette-components`.
 
 The Compose gateway receives the database and approval secrets. The voice edge receives only the
 broker and gateway bearer tokens. Tailscale state and Postgres data use named Docker volumes.

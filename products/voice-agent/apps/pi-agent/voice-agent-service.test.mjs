@@ -6,6 +6,8 @@ import test from "node:test";
 
 import {
   canManuallyCompact,
+  createWassetteMcpRegistration,
+  isolatedVoiceMcpConfig,
   latestConversationPrompt,
   normalizeMessages,
   openVoiceSessionManager,
@@ -26,6 +28,35 @@ import {
   GUEST_SKILLS,
   toGondolinPath,
 } from "./dist/gondolin-workspace.js";
+
+test("orchestrator Pi registers Wassette through native deferred MCP", async () => {
+  const registrations = [];
+  await createWassetteMcpRegistration({
+    cwd: "/host/voice-workspace",
+    wassetteBin: "/host/bin/wassette",
+    wassetteComponentDir: "/host/runtime/wassette-components",
+  })({
+    registerMcpServer(name, config) {
+      registrations.push({ name, config });
+    },
+  });
+
+  assert.equal(registrations.length, 1);
+  assert.equal(registrations[0].name, "wassette");
+  assert.deepEqual(registrations[0].config.args, [
+    "run",
+    "--component-dir",
+    "/host/runtime/wassette-components",
+  ]);
+  assert.equal(registrations[0].config.exposure, "deferred");
+  assert.equal(registrations[0].config.env.GITEA_TOKEN, "");
+  assert.equal(registrations[0].config.env.ARTIFACT_SECRET_KEY, "");
+  assert.equal(registrations[0].config.env.AWS_SESSION_TOKEN, "");
+});
+
+test("voice MCP ignores shared host and project MCP configuration", () => {
+  assert.deepEqual(isolatedVoiceMcpConfig(), { servers: [], errors: [] });
+});
 
 test("persistent voice VM disables broken macOS QEMU idle resume", () => {
   const options = createGondolinVmOptions({
@@ -72,6 +103,7 @@ test("Pi natively discovers mounted skills and exposes guest-readable paths", as
   const skill = join(skills, "engineering", "diagnosing-bugs");
   const agentDir = join(root, "agent");
   const cwd = join(root, "workspace");
+  let explicitExtensionLoaded = false;
   try {
     await Promise.all([
       mkdir(skill, { recursive: true }),
@@ -83,15 +115,16 @@ test("Pi natively discovers mounted skills and exposes guest-readable paths", as
       "---\nname: diagnosing-bugs\ndescription: Diagnose difficult bugs.\n---\n\n# Diagnose\n",
     );
 
-    const loader = await skillResourceLoader("Voice system prompt", {
-      agentDir,
-      cwd,
-      skillsDir: skills,
-    });
+    const loader = await skillResourceLoader(
+      "Voice system prompt",
+      { agentDir, cwd, skillsDir: skills },
+      [() => { explicitExtensionLoaded = true; }],
+    );
     const result = loader.getSkills();
 
     assert.deepEqual(result.diagnostics, []);
     assert.equal(result.skills.length, 1);
+    assert.equal(explicitExtensionLoaded, true);
     assert.equal(result.skills[0].name, "diagnosing-bugs");
     assert.equal(
       result.skills[0].filePath,

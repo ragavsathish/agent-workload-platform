@@ -20,6 +20,7 @@ uv run --project apps/gateway python deploy/prepare_compose.py "$root"
 "${compose[@]}" up -d --wait --force-recreate postgres s3mock gitea
 "$root/scripts/db-init.sh"
 "$root/scripts/gitea-sync.sh"
+make -C "$root" wassette-arxiv-install
 "$root/scripts/install-launch-agents.sh"
 "${compose[@]}" up -d --wait --force-recreate
 "$root/scripts/compose-verify.sh"

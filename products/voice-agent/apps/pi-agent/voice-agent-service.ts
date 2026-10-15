@@ -6,6 +6,8 @@ import { pathToFileURL } from "node:url";
 import {
   calculateContextTokens,
   createAgentSession,
+  createMcpExtension,
+  createToolSearchExtension,
   DEFAULT_COMPACTION_SETTINGS,
   DefaultResourceLoader,
   defineTool,
@@ -13,6 +15,8 @@ import {
   ModelRuntime,
   SessionManager,
   type AgentSession,
+  type ExtensionAPI,
+  type ExtensionFactory,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
@@ -46,6 +50,8 @@ type ServiceSettings = {
   s3MockSecretKey: string;
   thinking: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   timeoutMs: number;
+  wassetteBin: string;
+  wassetteComponentDir: string;
 };
 
 type ToolResult = {
@@ -71,6 +77,46 @@ export type PublicContextUsage = {
 
 const MAX_TRANSCRIPT_ENTRIES = 200;
 const MAX_TRANSCRIPT_TEXT_CHARS = 24_000;
+const WASSETTE_SYSTEM_PROMPT = `Wassette provides capability-controlled WebAssembly tools through MCP.
+Use tool_search when a request could benefit from a Wassette component. Components start without
+host capabilities: grant only the minimum capability needed for the current request, and never grant
+access to orchestrator credentials, the Pi agent directory, or unrelated host files.`;
+
+const SCRUBBED_WASSETTE_ENV = {
+  AGENT_GATEWAY_TOKEN: "",
+  ARTIFACT_ACCESS_KEY: "",
+  ARTIFACT_SECRET_KEY: "",
+  AWS_ACCESS_KEY_ID: "",
+  AWS_SECRET_ACCESS_KEY: "",
+  AWS_SESSION_TOKEN: "",
+  DATABASE_URL: "",
+  GITEA_BUILDER_TOKEN: "",
+  GITEA_TOKEN: "",
+  GITHUB_TOKEN: "",
+  INFERENCE_BROKER_TOKEN: "",
+  ORCHESTRATOR_APPROVAL_SECRET: "",
+};
+
+export function createWassetteMcpRegistration(
+  settings: Pick<ServiceSettings, "cwd" | "wassetteBin" | "wassetteComponentDir">,
+): ExtensionFactory {
+  return (pi: ExtensionAPI) => {
+    pi.registerMcpServer("wassette", {
+      command: settings.wassetteBin,
+      args: ["run", "--component-dir", settings.wassetteComponentDir],
+      cwd: settings.cwd,
+      env: { ...SCRUBBED_WASSETTE_ENV },
+      exposure: "deferred",
+      description: "Run capability-controlled WebAssembly components with Wassette.",
+      timeout: 60,
+    });
+  };
+}
+
+/** Voice MCP is explicit: shared user or project mcp.json files must not override its policy. */
+export function isolatedVoiceMcpConfig() {
+  return { servers: [], errors: [] };
+}
 
 export function canManuallyCompact(
   tokens: number | null,
@@ -296,11 +342,14 @@ function guestSkillPath(skillsDir: string, hostPath: string): string {
 export async function skillResourceLoader(
   systemPrompt: string,
   settings: Pick<ServiceSettings, "agentDir" | "cwd" | "skillsDir">,
+  extensionFactories: ExtensionFactory[] = [],
 ): Promise<DefaultResourceLoader> {
   const loader = new DefaultResourceLoader({
     cwd: settings.cwd,
     agentDir: settings.agentDir,
     systemPrompt,
+    appendSystemPrompt: extensionFactories.length > 0 ? [WASSETTE_SYSTEM_PROMPT] : [],
+    extensionFactories,
     additionalSkillPaths: [settings.skillsDir],
     noExtensions: true,
     noSkills: true,
@@ -551,7 +600,11 @@ class VoiceAgent {
     this.unsubscribeSession?.();
     this.unsubscribeSession = undefined;
     this.session?.dispose();
-    const resourceLoader = await skillResourceLoader(systemPrompt, this.settings);
+    const resourceLoader = await skillResourceLoader(systemPrompt, this.settings, [
+      createToolSearchExtension(),
+      createMcpExtension({ loadConfig: isolatedVoiceMcpConfig }),
+      createWassetteMcpRegistration(this.settings),
+    ]);
     let model;
     if (this.settings.model) {
       const separator = this.settings.model.indexOf("/");
@@ -575,6 +628,7 @@ class VoiceAgent {
         "write",
         "edit",
         "bash",
+        "tool_search",
         "propose_agent_task",
         "submit_agent_task",
         "get_agent_task",
@@ -614,6 +668,7 @@ class VoiceAgent {
         this.transcript.finishTool(event.toolCallId, event.isError);
       }
     });
+    await session.bindExtensions({});
     this.systemPrompt = systemPrompt;
   }
 
@@ -799,6 +854,8 @@ async function loadSettings(): Promise<ServiceSettings> {
     s3MockSecretKey: requiredEnv("ARTIFACT_SECRET_KEY"),
     thinking,
     timeoutMs: Number.parseFloat(process.env.PI_VOICE_TIMEOUT_SECONDS || "120") * 1000,
+    wassetteBin: resolve(requiredEnv("WASSETTE_BIN")),
+    wassetteComponentDir: resolve(requiredEnv("WASSETTE_COMPONENT_DIR")),
   };
 }
 

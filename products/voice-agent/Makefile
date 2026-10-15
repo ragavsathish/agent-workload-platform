@@ -1,4 +1,4 @@
-.PHONY: setup build up start logs down recreate verify cycle-test login status grafana-password warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e playwright-voice host-preflight install-host-services db-init broker worker pull-model check
+.PHONY: setup build up start logs down recreate verify cycle-test login status grafana-password warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e playwright-voice host-preflight install-host-services wassette-arxiv-build wassette-arxiv-install db-init broker worker pull-model check
 
 COMPOSE = docker compose --env-file deploy/.env -f deploy/compose.yml
 
@@ -88,8 +88,14 @@ playwright-voice:
 host-preflight:
 	./scripts/host-preflight.sh
 
-install-host-services:
+install-host-services: wassette-arxiv-install
 	./scripts/install-launch-agents.sh
+
+wassette-arxiv-build:
+	$(MAKE) -C components/arxiv-rs build
+
+wassette-arxiv-install: wassette-arxiv-build
+	$(MAKE) -C components/arxiv-rs install
 
 db-init:
 	./scripts/db-init.sh
