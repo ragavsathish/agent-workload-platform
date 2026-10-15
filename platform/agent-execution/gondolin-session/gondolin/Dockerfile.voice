@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-ARG PLAYWRIGHT_MCP_IMAGE=mcr.microsoft.com/playwright/mcp:v0.0.79@sha256:2f69a7a48fb9e5eea360f8f160192b11241e6e7d124389c103164f39e6fd2f8d
+ARG PLAYWRIGHT_MCP_IMAGE=gitea.local:3001/image-builder/base-playwright-mcp:v0.0.79-arm64@sha256:2f69a7a48fb9e5eea360f8f160192b11241e6e7d124389c103164f39e6fd2f8d
 FROM prom/prometheus:v3.13.2@sha256:508729e0e2d18e11fd742a5a5ca70e557b940a93948c3c95fd0123a6fd538b69 AS prometheus
 FROM ${PLAYWRIGHT_MCP_IMAGE}
 
