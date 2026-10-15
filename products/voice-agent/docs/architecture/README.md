@@ -36,8 +36,10 @@ policy, or telemetry changes belong.
 Pipecat is an off-the-shelf library inside the **Voice Edge**, not a separately deployed service.
 It owns WebRTC media orchestration, Silero VAD, Smart Turn v3, STT/LLM/TTS sequencing, heartbeats,
 and pipeline metrics. Before turn detection, the edge applies exactly one server-side input filter:
-RNNoise by default or VoxLock when owner-voice isolation is enabled. The React client uses Pipecat
-RTVI, while Tailscale Serve is the only browser ingress. It exposes the voice UI on tailnet HTTPS
+RNNoise by default or VoxLock when owner-voice isolation is enabled. The Flutter Web client uses a
+narrow JavaScript adapter around Pipecat's official browser transport, Mermaid, and WaveSurfer; all
+visible UI, responsive state, HTTP orchestration, charts, chat, and task interactions remain in Dart.
+The adapter speaks RTVI, while Tailscale Serve is the only browser ingress. It exposes the voice UI on tailnet HTTPS
 after tailnet authorization. Tailscale terminates TLS and supplies the authenticated identity to a
 localhost-only Traefik router. Traefik maps `/` to the Voice Edge, `/metrics/` to Grafana,
 `/git/` to Gitea, and `/queue/` to Habitat on one HTTPS origin; there is no Caddy or public/LAN
@@ -76,8 +78,8 @@ access to proposal records, and Habitat has no direct host port.
 
 | C4 element | Repository evidence |
 |---|---|
-| Browser Client | `apps/web/src/`; production assets copied by `apps/edge/Containerfile` |
-| Browser Client components | `apps/web/src/main.tsx`; `apps/web/src/components/App.tsx`; `TaskPanel.tsx`; `TranscriptView.tsx`; `AudioDiagnosticsView.tsx`; `MermaidDiagram.tsx` |
+| Browser Client | `apps/web/lib/`; production Flutter assets copied by `apps/edge/Containerfile` |
+| Browser Client components | `apps/web/lib/main.dart`; `views/voice_view.dart`; `views/transcript_view.dart`; `views/audio_diagnostics_view.dart`; `widgets/mermaid_view.dart`; `bridge/voice_bridge.js` |
 | Tailnet Ingress | `deploy/compose.yml`; `scripts/compose-login.sh` |
 | Path Router | `deploy/traefik/traefik.yml`; `deploy/traefik/routes.yml` |
 | Voice Edge | `apps/edge/bot.py`; `apps/edge/Containerfile` |
@@ -87,7 +89,7 @@ access to proposal records, and Habitat has no direct host port.
 | Inference Broker components | `apps/broker/src/voice_agent/speech/presentation/http.py`; `application/transcription.py`; `infrastructure/parakeet_stt.py`; `infrastructure/mlx_tts.py` |
 | Pi Voice Service | `apps/pi-agent/voice-agent-service.ts`; Pi voice LaunchAgent |
 | Pi Voice Service components | `apps/pi-agent/voice-agent-service.ts`; `apps/pi-agent/gondolin-workspace.ts` |
-| Pi Context Usage and Compaction | `apps/web/src/components/App.tsx`; `apps/edge/bot.py`; broker HTTP adapter; `apps/pi-agent/voice-agent-service.ts` |
+| Pi Context Usage and Compaction | `apps/web/lib/views/voice_view.dart`; `apps/edge/bot.py`; broker HTTP adapter; `apps/pi-agent/voice-agent-service.ts` |
 | Voice Tool Sandbox and Runtime Data | `apps/pi-agent/gondolin-workspace.ts`; `scripts/install-launch-agents.sh`; `deploy/launchd/run-pi-agent.sh` |
 | Agent Gateway | `apps/gateway/src/voice_gateway/main.py`; `apps/gateway/Dockerfile` |
 | Agent Gateway components | `apps/gateway/src/voice_gateway/main.py`; `packages/tasking/src/voice_agent/tasking/application/service.py`; `domain/approval.py`; `infrastructure/artifacts.py` |

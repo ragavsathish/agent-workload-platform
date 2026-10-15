@@ -44,6 +44,14 @@ class VisualResponseTest(unittest.TestCase):
         self.assertEqual(result.spoken, "Ready.")
         self.assertEqual(result.mermaid, "flowchart TD\n A[Ready]")
 
+    def test_accepts_literal_newline_from_local_model(self):
+        result = parse_visual_response(
+            '{"spoken":"Voice interface ready.","mermaid":"flowchart TD\n  Voice --> Pi"}'
+        )
+
+        self.assertEqual(result.spoken, "Voice interface ready.")
+        self.assertEqual(result.mermaid, "flowchart TD\n  Voice --> Pi")
+
     def test_plain_text_falls_back_to_safe_diagram(self):
         result = parse_visual_response('Completed <unsafe> "work".')
 

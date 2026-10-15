@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+tool_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+pub_cache="$tool_dir/.flutter_tooling/pub-cache"
+patrol="$pub_cache/bin/patrol"
+
+if [[ ! -x "$patrol" ]]; then
+  PUB_CACHE="$pub_cache" "$tool_dir/tool/flutterw" pub global activate patrol_cli 4.8.0
+fi
+export PUB_CACHE="$pub_cache"
+export PATROL_FLUTTER_COMMAND="$tool_dir/tool/flutterw"
+if [[ -n "${FLUTTER_BIN:-}" ]]; then
+  export PATH="$(dirname "$FLUTTER_BIN"):$PATH"
+elif command -v flutter >/dev/null 2>&1; then
+  export PATH="$(dirname "$(command -v flutter)"):$PATH"
+else
+  export PATH="$tool_dir/.flutter_tooling/flutter-3.47.7/bin:$PATH"
+fi
+exec "$patrol" "$@"

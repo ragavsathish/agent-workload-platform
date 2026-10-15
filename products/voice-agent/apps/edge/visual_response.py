@@ -117,7 +117,9 @@ def parse_visual_response(raw: str) -> VisualResponse:
     """Return safe speech and Mermaid, degrading to a summary diagram."""
     candidate = _strip_code_fence(raw)
     try:
-        payload = json.loads(candidate)
+        # Local models sometimes place literal newlines inside the Mermaid JSON
+        # string. They are harmless diagram whitespace but invalid strict JSON.
+        payload = json.loads(candidate, strict=False)
     except (json.JSONDecodeError, TypeError):
         payload = None
 

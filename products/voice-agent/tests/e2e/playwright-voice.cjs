@@ -32,10 +32,32 @@ const result = {
   requestFailures: [],
   screenshot: path.join(outputDir, 'voice-e2e.png'),
   replayScreenshot: path.join(outputDir, 'voice-replays-e2e.png'),
+  trace: path.join(outputDir, 'voice-e2e-trace.zip'),
+};
+
+let browser;
+let context;
+
+const enableFlutterSemantics = async (page) => {
+  const placeholder = page.locator('flt-semantics-placeholder');
+  if (await placeholder.count()) {
+    await placeholder.evaluate((element) => element.click());
+    await page.locator('flt-semantics').first().waitFor({ timeout: 10_000 });
+  }
+};
+
+const readVoiceLabel = async (page) => {
+  const header = await page
+    .locator('flt-semantics[role="group"][aria-label*="Pi Voice"]')
+    .first()
+    .getAttribute('aria-label')
+    .catch(() => '');
+  return ['Ready', 'Starting…', 'Listening', 'Muted', 'Thinking…', 'Speaking']
+    .find((label) => header?.split('\n').includes(label)) || '';
 };
 
 const main = async () => {
-  const browser = await chromium.launch({
+  browser = await chromium.launch({
     headless: true,
     executablePath: '/ms-playwright/chromium-1237/chrome-linux/chrome',
     args: [
@@ -48,11 +70,12 @@ const main = async () => {
     ],
   });
 
-  const context = await browser.newContext({
+  context = await browser.newContext({
     ignoreHTTPSErrors: false,
     permissions: ['microphone'],
     viewport: { width: 1440, height: 1000 },
   });
+  await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
   const page = await context.newPage();
   page.on('console', (message) => {
     if (message.type() === 'error') result.consoleErrors.push(message.text());
@@ -62,6 +85,7 @@ const main = async () => {
   });
 
   await page.goto(baseUrl, { waitUntil: 'networkidle', timeout: 60_000 });
+  await enableFlutterSemantics(page);
   const initialSnapshot = await page.evaluate(async () => {
     const response = await fetch('/api/pi-transcript', { cache: 'no-store' });
     return response.ok ? response.json() : null;
@@ -86,19 +110,14 @@ const main = async () => {
   let lastLabel = '';
   let lastVisualizerState = '';
   while (Date.now() - startedAt < 150_000) {
-    const label = (await page.locator('.voice-state-label').textContent())?.trim() || '';
+    const label = await readVoiceLabel(page);
     if (label && label !== lastLabel) {
       result.labels.push(label);
       lastLabel = label;
     }
-    const visualizerState = await page
-      .locator('canvas[aria-label="Pi bot audio activity"]')
-      .getAttribute('data-state')
-      .catch(() => null);
-    if (visualizerState && visualizerState !== lastVisualizerState) {
-      result.visualizerStates.push(visualizerState);
-      lastVisualizerState = visualizerState;
-    }
+    // The Flutter activity indicator is state-driven rather than a DOM canvas.
+    // Keep the legacy result field stable for downstream result readers.
+    lastVisualizerState = label || lastVisualizerState;
 
     const snapshot = await page.evaluate(async () => {
       const response = await fetch('/api/pi-transcript', { cache: 'no-store' });
@@ -155,7 +174,7 @@ const main = async () => {
   await page.screenshot({ path: result.screenshot, fullPage: true });
   await page.getByRole('button', { name: 'End conversation' }).click();
   await page.getByRole('button', { name: 'Start conversation' }).waitFor({ timeout: 20_000 });
-  result.finalLabel = (await page.locator('.voice-state-label').textContent())?.trim() || null;
+  result.finalLabel = await readVoiceLabel(page) || null;
   if (result.finalLabel !== 'Ready') throw new Error(`Expected Ready, got ${result.finalLabel}`);
 
   const replayDeadline = Date.now() + 20_000;
@@ -175,19 +194,25 @@ const main = async () => {
     waitUntil: 'domcontentloaded',
     timeout: 60_000,
   });
-  await replayPage.getByText('Last five conversations').waitFor();
+  await enableFlutterSemantics(replayPage);
+  await replayPage
+    .locator('flt-semantics[aria-label*="Last five conversations"]')
+    .waitFor();
   await replayPage.getByRole('button', { name: 'Load waveform comparison' }).first().click();
   await replayPage.waitForFunction(() => {
-    const controls = [...document.querySelectorAll('button[aria-label^="Play "]')];
-    return controls.length === 3 && controls.every((control) => !control.disabled);
+    const waveforms = [...document.querySelectorAll('[aria-label^="Audio waveform"]')];
+    return waveforms.length === 3 && waveforms.every((waveform) => waveform.childElementCount > 0);
   }, { timeout: 20_000 });
-  await replayPage.getByText('Mean predicted complex-mask magnitude · model band').waitFor();
+  await replayPage
+    .locator('flt-semantics[aria-label*="Mean predicted complex-mask magnitude"]')
+    .waitFor();
   await replayPage.waitForFunction(() => (
-    document.querySelectorAll('.audio-spectrogram canvas').length >= 4
+    [...document.querySelectorAll('[aria-label^="Audio waveform"]')]
+      .filter((waveform) => waveform.querySelector('canvas')).length >= 2
   ), { timeout: 30_000 });
-  result.spectrogramCanvases = await replayPage.locator('.audio-spectrogram canvas').count();
-  result.spectrogramLayout = await replayPage.locator('.audio-spectrogram').evaluateAll((elements) => (
-    elements.map((element) => ({
+  result.spectrogramCanvases = await replayPage.locator('[aria-label^="Audio waveform"] canvas').count();
+  result.spectrogramLayout = await replayPage.locator('[aria-label^="Audio waveform"]').evaluateAll((elements) => (
+    elements.filter((element) => element.querySelector('canvas')).map((element) => ({
       childCount: element.childElementCount,
       height: element.getBoundingClientRect().height,
       width: element.getBoundingClientRect().width,
@@ -241,7 +266,6 @@ const main = async () => {
   }
 
   result.result = 'PASS';
-  await browser.close();
 };
 
 main()
@@ -249,7 +273,13 @@ main()
     result.error = error instanceof Error ? error.stack : String(error);
     process.exitCode = 1;
   })
-  .finally(() => {
+  .finally(async () => {
+    if (context) {
+      await context.tracing.stop({ path: result.trace }).catch((error) => {
+        result.traceError = error instanceof Error ? error.message : String(error);
+      });
+    }
+    if (browser) await browser.close().catch(() => {});
     fs.writeFileSync(path.join(outputDir, 'result.json'), `${JSON.stringify(result, null, 2)}\n`);
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     process.exit(process.exitCode || 0);

@@ -10,7 +10,7 @@ flowchart TB
 
         subgraph VOICE["Interactive voice path"]
             direction LR
-            BROWSER["Container<br/><b>Browser Client</b><br/>React · Pipecat RTVI"]
+            BROWSER["Container<br/><b>Browser Client</b><br/>Flutter Web · Pipecat JS transport adapter"]
             INGRESS["Container<br/><b>Tailnet Ingress</b><br/>Tailscale Serve"]
             ROUTER["Container<br/><b>Path Router</b><br/>Traefik · exact-owner forward-auth"]
             EDGE["Container<br/><b>Voice Edge</b><br/>Python · Pipecat · RNNoise/VoxLock · FastAPI"]

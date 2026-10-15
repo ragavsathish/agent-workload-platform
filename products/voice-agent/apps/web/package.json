@@ -1,39 +1,22 @@
 {
-  "name": "pipecat-mlx-voice",
+  "name": "@agent-workload-platform/voice-web-bridge",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
-    "test": "node --test test/*.test.mjs",
-    "preview": "vite preview"
+    "build": "npm run build:bridge && ./tool/flutterw build web --release",
+    "build:bridge": "esbuild bridge/voice_bridge.js --bundle --format=iife --target=es2022 --outfile=web/voice_bridge.js",
+    "lint": "./tool/flutterw analyze",
+    "test": "./tool/flutterw test",
+    "test:patrol": "./tool/run-patrol-web"
   },
   "dependencies": {
-    "@pipecat-ai/client-js": "^1.10.0",
-    "@pipecat-ai/client-react": "^1.6.0",
-    "@pipecat-ai/small-webrtc-transport": "^1.10.0",
-    "@pipecat-ai/voice-ui-kit": "^0.11.0",
-    "@wavesurfer/react": "^1.0.12",
-    "mermaid": "12.1.0",
-    "react": "^19",
-    "react-dom": "^19",
-    "recharts": "^3.10.1",
+    "@pipecat-ai/client-js": "1.13.1",
+    "@pipecat-ai/small-webrtc-transport": "1.10.8",
+    "mermaid": "12.2.0",
     "wavesurfer.js": "^8.0.2"
   },
   "devDependencies": {
-    "@eslint/js": "^10",
-    "@types/node": "^25",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "@vitejs/plugin-react": "^6",
-    "eslint": "^10",
-    "eslint-plugin-react-hooks": "^7",
-    "eslint-plugin-react-refresh": "^0",
-    "globals": "^17",
-    "typescript": "~6",
-    "typescript-eslint": "^8",
-    "vite": "^8"
+    "esbuild": "0.25.11"
   }
 }

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+tool_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+build_dir="$tool_dir/build"
+
+exec "$tool_dir/tool/patrolw" test \
+  --device chrome \
+  --target patrol_test/voice_web_test.dart \
+  --web-headless \
+  --web-trace on \
+  --web-screenshot on \
+  --web-results-dir "$build_dir/patrol-results" \
+  --web-report-dir "$build_dir/patrol-report" \
+  --web-traces-dir "$build_dir/patrol-traces"

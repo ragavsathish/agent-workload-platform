@@ -674,6 +674,41 @@ if __name__ == "__main__":
     client_dist = Path(__file__).resolve().parent / "client-dist"
     if (client_dist / "assets").is_dir():
         app.mount("/assets", StaticFiles(directory=client_dist / "assets"), name="assets")
+    if (client_dist / "canvaskit").is_dir():
+        app.mount(
+            "/canvaskit",
+            StaticFiles(directory=client_dist / "canvaskit"),
+            name="canvaskit",
+        )
+
+    def register_browser_asset(asset_name: str, media_type: str | None = None) -> None:
+        """Expose one generated Flutter root asset without shadowing Pipecat routes."""
+
+        async def browser_asset():
+            target = client_dist / asset_name
+            if not target.is_file():
+                return JSONResponse({"error": "client build is missing"}, status_code=503)
+            return FileResponse(target, media_type=media_type)
+
+        app.add_api_route(
+            f"/{asset_name}",
+            browser_asset,
+            methods=["GET"],
+            include_in_schema=False,
+            name=f"browser-{asset_name.replace('.', '-')}",
+        )
+
+    for browser_asset_name, browser_asset_type in (
+        ("flutter_bootstrap.js", "text/javascript"),
+        ("flutter.js", "text/javascript"),
+        ("flutter_service_worker.js", "text/javascript"),
+        ("favicon.svg", "image/svg+xml"),
+        ("main.dart.js", "text/javascript"),
+        ("manifest.json", "application/manifest+json"),
+        ("version.json", "application/json"),
+        ("voice_bridge.js", "text/javascript"),
+    ):
+        register_browser_asset(browser_asset_name, browser_asset_type)
 
     @app.get("/", include_in_schema=False)
     async def browser_client():
@@ -681,10 +716,6 @@ if __name__ == "__main__":
         if not index.is_file():
             return JSONResponse({"error": "client build is missing"}, status_code=503)
         return FileResponse(index)
-
-    @app.get("/favicon.svg", include_in_schema=False)
-    async def favicon():
-        return FileResponse(client_dist / "favicon.svg")
 
     @app.get("/api/features")
     async def features():

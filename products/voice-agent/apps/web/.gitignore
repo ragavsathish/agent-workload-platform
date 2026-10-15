@@ -1,4 +1,7 @@
 # Logs
+!lib/
+!lib/**
+
 logs
 *.log
 npm-debug.log*
@@ -8,6 +11,15 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+.dart_tool
+.flutter_tooling
+.flutter-plugins-dependencies
+.packages
+build
+coverage
+patrol_test/test_bundle.dart
+test_bundle.dart
+web/voice_bridge.js
 dist
 dist-ssr
 *.local

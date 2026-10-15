@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+flutter_version="3.47.7"
+tool_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+sdk_dir="$tool_dir/.flutter_tooling/flutter-$flutter_version"
+
+if [[ -n "${FLUTTER_BIN:-}" ]]; then
+  exec "$FLUTTER_BIN" "$@"
+fi
+if command -v flutter >/dev/null 2>&1; then
+  exec flutter "$@"
+fi
+if [[ ! -x "$sdk_dir/bin/flutter" ]]; then
+  mkdir -p "$(dirname "$sdk_dir")"
+  git clone --depth 1 --branch "$flutter_version" https://github.com/flutter/flutter.git "$sdk_dir"
+fi
+exec "$sdk_dir/bin/flutter" "$@"
