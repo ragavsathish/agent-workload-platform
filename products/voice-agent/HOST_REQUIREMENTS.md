@@ -50,10 +50,11 @@ into an image. It also installs four LaunchAgents in
   `127.0.0.1:9446`;
 - Pi worker: consumes approved tasks from Postgres and invokes Gondolin/Wassette.
 
-The worker disables Pi's host-side built-in tools. Its explicit
-`gondolin_bash` tool runs commands inside the micro-VM with only the immutable
-task workspace mounted at `/workspace`. Results about disks, processes, or the
-operating system therefore describe that isolated workload, not macOS.
+The worker routes Pi's standard `read`, `write`, `edit`, and `bash` tools
+through the micro-VM with only the immutable task workspace mounted at
+`/workspace`; they never fall back to host operations. Results about disks,
+processes, or the operating system therefore describe that isolated workload,
+not macOS.
 
 The Compose gateway receives the database and approval secrets. The voice edge receives only the
 broker and gateway bearer tokens. Tailscale state and Postgres data use named Docker volumes.

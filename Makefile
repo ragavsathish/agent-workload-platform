@@ -13,7 +13,7 @@ endif
 C4_GONDOLIN_SERVICE := playwright-layout-$(C4_GONDOLIN_PROFILE)
 C4_GONDOLIN_ASSETS := artifacts/c4-gondolin/$(C4_GONDOLIN_ARCH)
 C4_GONDOLIN_CONFIG := products/architecture-visualization/integrations/gondolin/gondolin/playwright-layout.$(C4_GONDOLIN_ARCH).json
-C4_GONDOLIN ?= npx --yes @earendil-works/gondolin@0.12.0
+C4_GONDOLIN ?= npx --yes @earendil-works/gondolin@0.13.0
 GONDOLIN_BROWSER_ASSETS := artifacts/gondolin-browser/$(C4_GONDOLIN_ARCH)
 GONDOLIN_BROWSER_CONFIG := platform/agent-execution/gondolin-session/gondolin/playwright-mcp.$(C4_GONDOLIN_ARCH).json
 GONDOLIN_BROWSER_SERVICE := voice-runtime-$(C4_GONDOLIN_PROFILE)

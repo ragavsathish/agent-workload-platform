@@ -45,10 +45,10 @@ ownership and planned extractions are documented in
   exception message, URL parameter, request body, or response body.
 - Database credentials, Pi/provider authentication, sessions, and writable workspaces never enter the voice
   container.
-- The Pi worker runs on macOS with built-in host tools disabled. Its explicit
-  `gondolin_bash` tool runs inside a Gondolin micro-VM with only the immutable
-  task workspace mounted at `/workspace`; browser and permission-scoped
-  Wassette tools are additional capabilities.
+- The Pi worker runs on macOS, but Pi's standard `read`, `write`, `edit`, and
+  `bash` tools are backed by a Gondolin micro-VM with only the immutable task
+  workspace mounted at `/workspace`; browser and permission-scoped Wassette
+  tools are additional capabilities.
 - Durable delegation is deliberately **YOLO voice submission** for now: the Pi
   Voice Service may create and immediately queue a task when the owner asks for
   asynchronous work. A separately created proposal still requires a later
