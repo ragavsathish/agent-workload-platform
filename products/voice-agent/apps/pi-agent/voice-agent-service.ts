@@ -20,6 +20,7 @@ import {
   type SessionEntry,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { configureTelemetry } from "@agent-workload-platform/otel";
 
 import { GondolinWorkspace, GUEST_SKILLS } from "./gondolin-workspace.js";
 
@@ -1089,6 +1090,7 @@ async function loadSettings(): Promise<ServiceSettings> {
 export async function main(): Promise<void> {
   const settings = await loadSettings();
   const agent = await VoiceAgent.create(settings);
+  const telemetry = configureTelemetry("pipecat-pi-voice");
   const server = createServer(async (request, response) => {
     if (request.headers.authorization !== `Bearer ${settings.serviceToken}`) {
       sendJson(response, 401, { detail: "invalid Pi voice credential" });
@@ -1190,7 +1192,10 @@ export async function main(): Promise<void> {
         };
         request.once("close", abortOnDisconnect);
         try {
-          await agent.streamTurn(messages, (delta) => send({ type: "delta", delta }));
+          await telemetry.observe(
+            "pi.turn",
+            () => agent.streamTurn(messages, (delta) => send({ type: "delta", delta })),
+          );
           send({ type: "done" });
           response.end();
         } catch (error) {
@@ -1203,7 +1208,7 @@ export async function main(): Promise<void> {
           request.off("close", abortOnDisconnect);
         }
       } else {
-        const text = await agent.turn(messages);
+        const text = await telemetry.observe("pi.turn", () => agent.turn(messages));
         sendJson(response, 200, { text });
       }
     } catch (error) {
@@ -1222,6 +1227,7 @@ export async function main(): Promise<void> {
     await new Promise<void>((resolveShutdown, rejectShutdown) => {
       server.close((error) => error ? rejectShutdown(error) : resolveShutdown());
     });
+    await telemetry.shutdown();
   };
   process.once("SIGINT", () => void shutdown());
   process.once("SIGTERM", () => void shutdown());

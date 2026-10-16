@@ -185,7 +185,11 @@ collector. From an authenticated tailnet device, open
 by Tailscale through the localhost-only Traefik ingress and does not ask for another password.
 Direct Mac-loopback access at
 <http://127.0.0.1:3300> still requires user `admin`; obtain its generated password with
-`make grafana-password`. The provisioned **Voice Product Health** dashboard follows the product
+`make grafana-password`. Edge, inference broker, Pi voice, agent gateway, task worker, and the
+image-builder manager export the same payload-free OpenTelemetry operation metric and traces with
+distinct `service.name` resources. The builder VM pins Gitea Runner 4.1 and routes its native OTLP job
+traces and runner metrics to the same loopback collector as `pipecat-gitea-runner`; the collector is
+not exposed by the VM or application containers. The provisioned **Voice Product Health** dashboard follows the product
 journey from detected speech through transcript, Pi inference, and reply audio. It also shows turn
 outcomes, voice-filter pass rate, user-perceived and inference-stage latency, task activity,
 failures, and recent payload-free traces.

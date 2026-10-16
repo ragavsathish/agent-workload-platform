@@ -13,7 +13,9 @@ ORCHESTRATOR_ALLOWED_USERS="$identity" \
 before="$("${compose[@]}" exec -T postgres psql -U voice_agents -d voice_agents -Atc \
   "SELECT count(*) FROM voice_task_proposals")"
 result_file="$(mktemp -t pipecat-blackbox.XXXXXX)"
-trap 'rm -f "$result_file"' EXIT
+otel_baseline="$(mktemp -t pipecat-otel-baseline.XXXXXX)"
+trap 'rm -f "$result_file" "$otel_baseline"' EXIT
+"$repo_dir/tests/e2e/otel-smoke-test.sh" snapshot >"$otel_baseline"
 
 BLACKBOX_IDENTITY="$identity" BLACKBOX_SKIP_UP=true "$repo_dir/tests/e2e/blackbox-voice.sh" \
   "Propose a task in the default workspace to report voice black box complete without changing files" \
@@ -36,4 +38,4 @@ expected_workspace="$(sed -n 's/^VOICE_DEFAULT_WORKSPACE=//p' "$repo_dir/deploy/
 expected_prefix="s3://agent-artifacts/workspaces/$expected_workspace/sources/"
 [[ "$workspace" == "$expected_prefix"*.bundle ]] || { echo "FAIL persisted immutable workspace mismatch" >&2; exit 1; }
 echo "PASS synthetic voice created one pending, identity-bound Postgres proposal"
-"$repo_dir/tests/e2e/otel-smoke-test.sh"
+"$repo_dir/tests/e2e/otel-smoke-test.sh" verify "$otel_baseline"

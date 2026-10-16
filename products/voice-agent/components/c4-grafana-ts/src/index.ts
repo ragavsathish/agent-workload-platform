@@ -48,9 +48,12 @@ function escapePrometheusLabel(value: string): string {
 }
 
 function query(refId: string, serviceName: string): object {
+  const escapedServiceName = escapePrometheusLabel(serviceName);
   const expression = serviceName === "*"
     ? "sum(increase(pipecat_operation_total[$__range])) or vector(0)"
-    : `sum(increase(pipecat_operation_total{service_name="${escapePrometheusLabel(serviceName)}"}[$__range])) or vector(0)`;
+    : serviceName === "pipecat-gitea-runner"
+      ? `sum(gitea_runner_info{service_name="${escapedServiceName}"}) or vector(0)`
+      : `sum(increase(pipecat_operation_total{service_name="${escapedServiceName}"}[$__range])) or vector(0)`;
   return {
     datasource: { type: "prometheus", uid: "prometheus" },
     editorMode: "code",

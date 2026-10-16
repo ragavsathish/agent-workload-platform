@@ -73,6 +73,24 @@ test("rejects references to diagrams that were not supplied", () => {
   );
 });
 
+test("uses the Gitea runner's native health metric for its activity overlay", () => {
+  const dashboard = JSON.parse(compileDashboard(
+    options,
+    diagrams,
+    [],
+    [{
+      diagramId: "deployment",
+      elementId: "EDGE",
+      refId: "A",
+      serviceName: "pipecat-gitea-runner",
+    }],
+  ));
+  assert.equal(
+    dashboard.panels[2].targets[0].expr,
+    'sum(gitea_runner_info{service_name="pipecat-gitea-runner"}) or vector(0)',
+  );
+});
+
 test("rejects descriptive Grafana query references without trapping", () => {
   assertComponentError(
     () => compileDashboard(

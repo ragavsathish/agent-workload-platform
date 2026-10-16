@@ -174,6 +174,15 @@ else
   fail "observability loopback publications are missing"
 fi
 [[ "$otel_ports" != *'4317/tcp":[* && "$otel_ports" != *'9090/tcp":[* && "$otel_ports" != *'3100/tcp":[* ]] && pass "collector backends publish no extra host ports" || fail "collector backend ports are exposed"
+for service in "${services[@]}"; do
+  [[ "$service" == otel-lgtm ]] && continue
+  service_ports="$(docker inspect -f '{{json .NetworkSettings.Ports}}' "$("${compose[@]}" ps -q "$service")")"
+  if grep -Eq '"(4317|4318)/tcp":\[\{' <<<"$service_ports"; then
+    fail "$service publishes an OTLP collector port"
+  else
+    pass "$service publishes no OTLP collector port"
+  fi
+done
 fluent_bit_cid="$("${compose[@]}" ps -q fluent-bit)"
 [[ -z "$(docker port "$fluent_bit_cid" 2>/dev/null)" ]] \
   && pass "Fluent Bit publishes no Docker port" \

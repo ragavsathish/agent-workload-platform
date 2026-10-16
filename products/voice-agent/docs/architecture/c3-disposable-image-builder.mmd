@@ -3,6 +3,7 @@ flowchart TB
     SOURCE[(External data<br/><b>Gitea Repository</b><br/>workflow and immutable revision)]
     PACKAGES[(External data store<br/><b>Gitea Generic Packages</b><br/>archive and manifest)]
     INTERNET[External system<br/><b>Public Package Sources</b><br/>build dependencies]
+    OTEL[External system<br/><b>OTel LGTM</b><br/>runner metrics and job traces]
 
     subgraph HOST["Deployment node: macOS host"]
         MANAGER["Container<br/><b>Builder VM Manager</b><br/>starts, monitors, and checkpoints one warm VM"]
@@ -23,6 +24,8 @@ flowchart TB
     RUNNER -->|"checks out requested revision"| SOURCE
     DOCKER -->|"pulls build dependencies"| INTERNET
     ASSETS -->|"uploads checksummed package"| PACKAGES
+    MANAGER -.->|"lifecycle metrics and traces"| OTEL
+    RUNNER -.->|"native OTLP job traces and metrics"| OTEL
 
     classDef component fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
     classDef container fill:#dcfce7,color:#14532d,stroke:#16a34a,stroke-width:2px;
@@ -30,5 +33,5 @@ flowchart TB
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
     class RUNNER,DOCKER,BUILD,ASSETS component;
     class MANAGER container;
-    class GITEA,INTERNET external;
+    class GITEA,INTERNET,OTEL external;
     class SOURCE,PACKAGES,CHECKPOINT data;

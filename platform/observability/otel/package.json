@@ -1,0 +1,28 @@
+{
+  "name": "@agent-workload-platform/otel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test index.test.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.mjs"
+    }
+  },
+  "files": [
+    "index.d.ts",
+    "index.mjs"
+  ],
+  "dependencies": {
+    "@opentelemetry/api": "1.9.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "0.206.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.206.0",
+    "@opentelemetry/resources": "2.0.1",
+    "@opentelemetry/sdk-metrics": "2.0.1",
+    "@opentelemetry/sdk-trace-base": "2.0.1",
+    "@opentelemetry/sdk-trace-node": "2.0.1"
+  }
+}

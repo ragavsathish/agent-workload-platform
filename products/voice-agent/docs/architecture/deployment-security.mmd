@@ -91,6 +91,7 @@ flowchart LR
         VOICE_TOOLS -->|"synthetic allowlist"| GITEA
         VOICE_TOOLS -->|"synthetic allowlist"| S3
         RUNNER -->|"Actions · packages"| GITEA
+        RUNNER -.->|"OTLP job traces · runner metrics"| OTEL
         WORKER -->|"verified package"| GITEA
         HOST_METRICS -.->|"host-access scrape"| OTEL
     end

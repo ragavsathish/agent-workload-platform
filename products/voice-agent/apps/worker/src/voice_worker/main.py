@@ -10,10 +10,13 @@ from typing import Any, cast
 
 from absurd_sdk import Absurd, TaskContext
 from dotenv import load_dotenv
+from voice_agent.shared.telemetry import configure_telemetry
 from voice_agent.tasking.application.pi_response import parse_pi_event_stream, presentation_prompt
 from voice_agent.tasking.domain.workspaces import resolve_workspace
 from voice_agent.tasking.infrastructure.artifacts import ArtifactStore
 from voice_agent.tasking.infrastructure.config import Settings
+
+telemetry = configure_telemetry("pipecat-task-worker")
 
 
 def build_pi_command(settings: Settings, *, task_id: str, instruction: str) -> list[str]:
@@ -116,6 +119,10 @@ def create_worker(settings: Settings) -> Absurd:
         default_cancellation={"max_duration": settings.task_timeout_seconds + 60},
     )
     def agent_run(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
+        with telemetry.observe("task.run"):
+            return run_agent_task(params, ctx)
+
+    def run_agent_task(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
         task_id = str(ctx.task_id)
         run_handle = ctx.begin_step("run-pi")
         if run_handle.done:
