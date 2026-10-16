@@ -8,6 +8,36 @@ import 'package:voice_agent_client/theme.dart';
 import 'package:voice_agent_client/views/voice_view.dart';
 
 void main() {
+  testWidgets('tablet conversation map grows with available height', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(768, 820);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final session = FakeVoiceSession();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildTheme(),
+        home: VoiceView(api: VoiceApi(), session: session),
+      ),
+    );
+    final compactHeight = tester
+        .getSize(find.byKey(const Key('conversation-map-placeholder')))
+        .height;
+
+    tester.view.physicalSize = const Size(768, 1180);
+    await tester.pump();
+    final tallHeight = tester
+        .getSize(find.byKey(const Key('conversation-map-placeholder')))
+        .height;
+
+    expect(tallHeight, greaterThan(compactHeight + 200));
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await session.close();
+  });
+
   testWidgets('shared controls drive the injected platform voice session', (
     tester,
   ) async {

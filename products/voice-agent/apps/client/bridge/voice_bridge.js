@@ -3,6 +3,8 @@ const mermaidViewports = new WeakMap();
 let client;
 let clientPromise;
 let currentAudio;
+let currentAudioUrl;
+let currentSpeech;
 let botAudio;
 let mermaidPromise;
 let renderSequence = 0;
@@ -61,6 +63,14 @@ const stopBotTrack = (track, participant) => {
   botAudio.pause();
   botAudio.srcObject = null;
   emit('audio-output', { active: false });
+};
+
+const replaceCurrentAudio = (audio, { objectUrl, spoken } = {}) => {
+  currentAudio?.pause();
+  if (currentAudioUrl) URL.revokeObjectURL(currentAudioUrl);
+  currentAudio = audio;
+  currentAudioUrl = objectUrl;
+  currentSpeech = spoken;
 };
 
 const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
@@ -298,6 +308,11 @@ window.voiceBridge = {
     window.open(url, '_blank', 'noopener,noreferrer');
   },
   async playSpeech(spoken) {
+    if (currentAudio && currentAudioUrl && currentSpeech === spoken) {
+      currentAudio.currentTime = 0;
+      await currentAudio.play();
+      return;
+    }
     const response = await fetch('/api/pi-speech', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -305,14 +320,11 @@ window.voiceBridge = {
     });
     if (!response.ok) throw new Error('Speech request failed');
     const url = URL.createObjectURL(await response.blob());
-    currentAudio?.pause();
-    currentAudio = new Audio(url);
-    currentAudio.addEventListener('ended', () => URL.revokeObjectURL(url), { once: true });
+    replaceCurrentAudio(new Audio(url), { objectUrl: url, spoken });
     await currentAudio.play();
   },
   async playUrl(url) {
-    currentAudio?.pause();
-    currentAudio = new Audio(url);
+    replaceCurrentAudio(new Audio(url));
     await currentAudio.play();
   },
 };

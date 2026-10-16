@@ -204,8 +204,8 @@ class _VoiceViewState extends State<VoiceView> {
     final diagramHeight = mobile
         ? (size.height - 300).clamp(320.0, 520.0)
         : width >= 900
-        ? 430.0
-        : 380.0;
+        ? (size.height - 400).clamp(430.0, 720.0)
+        : (size.height - 360).clamp(380.0, 760.0);
     return Scaffold(
       body: SafeArea(
         child: Center(

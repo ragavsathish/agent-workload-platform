@@ -27,8 +27,9 @@ class TaskItem extends TimelineItem {
 }
 
 class TranscriptView extends StatefulWidget {
-  const TranscriptView({required this.api, super.key});
+  const TranscriptView({required this.api, this.playSpeech, super.key});
   final VoiceApi api;
+  final Future<void> Function(String spoken)? playSpeech;
 
   @override
   State<TranscriptView> createState() => _TranscriptViewState();
@@ -49,6 +50,7 @@ class _TranscriptViewState extends State<TranscriptView> {
   bool _live = true;
   bool _sending = false;
   String? _error;
+  String? _playbackNotice;
   String? _taskBusy;
 
   @override
@@ -117,16 +119,45 @@ class _TranscriptViewState extends State<TranscriptView> {
     setState(() {
       _sending = true;
       _error = null;
+      _playbackNotice = null;
     });
     try {
       final response = await widget.api.sendMessage(content);
       _message.clear();
-      await ClientActions.playSpeech(response.spoken);
       await _pollTranscript();
+      await _playSpeech(response.spoken);
     } on Object catch (error) {
       if (mounted) setState(() => _error = '$error');
     } finally {
       if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _playSpeech(String spoken) async {
+    try {
+      await (widget.playSpeech ?? ClientActions.playSpeech)(spoken);
+      if (mounted) setState(() => _playbackNotice = null);
+    } on Object {
+      if (mounted) {
+        setState(
+          () => _playbackNotice =
+              'Audio did not play automatically. Tap Listen again on the response.',
+        );
+      }
+    }
+  }
+
+  Future<void> _playUrl(String url) async {
+    try {
+      await ClientActions.playUrl(url);
+      if (mounted) setState(() => _playbackNotice = null);
+    } on Object {
+      if (mounted) {
+        setState(
+          () => _playbackNotice =
+              'Audio playback was blocked. Tap Listen again to retry.',
+        );
+      }
     }
   }
 
@@ -192,6 +223,20 @@ class _TranscriptViewState extends State<TranscriptView> {
                     _error!,
                     key: const Key('timeline-error'),
                     style: const TextStyle(color: PiColors.danger),
+                  ),
+                ),
+              if (_playbackNotice != null)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 8,
+                  ),
+                  color: PiColors.blue.withValues(alpha: .1),
+                  child: Text(
+                    _playbackNotice!,
+                    key: const Key('playback-notice'),
+                    style: const TextStyle(color: PiColors.blue),
                   ),
                 ),
               Expanded(
@@ -295,7 +340,7 @@ class _TranscriptViewState extends State<TranscriptView> {
                   label: Text(isExpanded ? 'Hide diagram' : 'Show diagram'),
                 ),
                 OutlinedButton.icon(
-                  onPressed: () => ClientActions.playSpeech(visual.spoken),
+                  onPressed: () => _playSpeech(visual.spoken),
                   icon: const Icon(Icons.volume_up_outlined, size: 15),
                   label: const Text('Listen again'),
                 ),
@@ -373,7 +418,7 @@ class _TranscriptViewState extends State<TranscriptView> {
                         ),
                       ),
                       OutlinedButton.icon(
-                        onPressed: () => ClientActions.playUrl(
+                        onPressed: () => _playUrl(
                           '/api/tasks/${Uri.encodeComponent(task.id)}/speech',
                         ),
                         icon: const Icon(Icons.volume_up_outlined, size: 15),
