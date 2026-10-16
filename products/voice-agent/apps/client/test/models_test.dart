@@ -15,6 +15,14 @@ void main() {
     expect(VisualResponse.fromValue('plain response'), isNull);
   });
 
+  test('routes an Excalidraw transcript response to the Excalidraw app', () {
+    final response = VisualResponse.fromValue(
+      '{"spoken":"Here is the drawing.","presentation":{"kind":"excalidraw","elements":[{"type":"rectangle","x":20,"y":20,"width":200,"height":80,"label":{"text":"Voice"}}]}}',
+    );
+
+    expect(response?.resourceUri, 'ui://excalidraw/mcp-app.html');
+  });
+
   test('derives an active task from worker state', () {
     final task = AgentTask.fromJson({
       'id': 'task-1',

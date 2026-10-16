@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 MAX_RESPONSE_LENGTH = 70_000
 MAX_SPOKEN_LENGTH = 2_000
-VOICE_CANVAS_URI = "ui://voice-canvas/main"
+MERMAID_URI = "ui://mermaid/main"
 EXCALIDRAW_URI = "ui://excalidraw/mcp-app.html"
 EXCALIDRAW_TYPES = {
     "cameraUpdate", "rectangle", "ellipse", "diamond", "text", "arrow", "line"
@@ -103,7 +103,7 @@ def response_from_text(text: str) -> PiResponse:
     resource_uri = (
         EXCALIDRAW_URI
         if presentation.get("kind") == "excalidraw"
-        else VOICE_CANVAS_URI
+        else MERMAID_URI
     )
     return PiResponse(
         text=text or spoken,

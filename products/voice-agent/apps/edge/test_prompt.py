@@ -1,6 +1,6 @@
 import unittest
 
-from bot import voice_prompt_template, voice_system_instruction
+from bot import voice_prompt_layers, voice_prompt_template, voice_system_instruction
 
 
 class VoicePromptTest(unittest.TestCase):
@@ -18,6 +18,24 @@ class VoicePromptTest(unittest.TestCase):
 
     def test_prompt_template_is_cached(self):
         self.assertIs(voice_prompt_template(), voice_prompt_template())
+
+    def test_prompt_is_composed_from_ordered_behavior_layers(self):
+        layers = voice_prompt_layers()
+
+        self.assertEqual(tuple(layers), (
+            "identity",
+            "response_contract",
+            "standard_presentation",
+            "excalidraw_presentation",
+            "execution",
+            "environment",
+            "delegation",
+        ))
+        self.assertIn("brief spoken walkthrough", layers["excalidraw_presentation"])
+        self.assertLess(
+            voice_prompt_template().index(layers["response_contract"]),
+            voice_prompt_template().index(layers["excalidraw_presentation"]),
+        )
 
 
 if __name__ == "__main__":

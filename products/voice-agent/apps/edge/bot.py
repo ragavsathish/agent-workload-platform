@@ -58,6 +58,16 @@ logger.remove()
 load_dotenv(override=True)
 telemetry = configure_telemetry("pipecat-voice-edge")
 
+PROMPT_LAYER_ORDER = (
+    "identity",
+    "response_contract",
+    "standard_presentation",
+    "excalidraw_presentation",
+    "execution",
+    "environment",
+    "delegation",
+)
+
 class VoicePresentationResponseProcessor(FrameProcessor):
     """Split one model response into an MCP App presentation and TTS-safe speech."""
 
@@ -233,15 +243,30 @@ async def broker_sessions_request(
 
 
 @lru_cache(maxsize=1)
-def voice_prompt_template() -> str:
-    """Load and validate the versioned model instruction."""
+def voice_prompt_layers() -> dict[str, str]:
+    """Load and validate the ordered model-instruction layers."""
     prompt_path = Path(__file__).with_name("prompt.toml")
     with prompt_path.open("rb") as source:
-        prompt = tomllib.load(source).get("system_prompt")
+        layers = tomllib.load(source).get("layers")
+    if not isinstance(layers, dict) or set(layers) != set(PROMPT_LAYER_ORDER):
+        raise RuntimeError("prompt.toml must define the expected prompt layers")
+    normalized: dict[str, str] = {}
+    for name in PROMPT_LAYER_ORDER:
+        value = layers.get(name)
+        if not isinstance(value, str) or not value.strip():
+            raise RuntimeError(f"prompt.toml layer {name} must be non-empty")
+        normalized[name] = value.strip()
+    return normalized
+
+
+@lru_cache(maxsize=1)
+def voice_prompt_template() -> str:
+    """Compose the stable Pi instruction shared by voice and typed turns."""
+    prompt = "\n\n".join(voice_prompt_layers().values())
     marker = "{{DEFAULT_WORKSPACE}}"
-    if not isinstance(prompt, str) or not prompt.strip() or prompt.count(marker) != 1:
+    if prompt.count(marker) != 1:
         raise RuntimeError("prompt.toml must define one default-workspace placeholder")
-    return prompt.strip()
+    return prompt
 
 
 def voice_system_instruction(default_workspace: str) -> str:
@@ -716,7 +741,7 @@ if __name__ == "__main__":
             except HTTPException as exc:
                 return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
         response = await call_next(request)
-        if path.startswith(("/voice-canvas/", "/excalidraw/")):
+        if path.startswith(("/mermaid/", "/excalidraw/")):
             # The MCP App runs in an opaque-origin sandbox. Permit only its
             # immutable static assets to load across that sandbox boundary.
             response.headers["Access-Control-Allow-Origin"] = "*"
@@ -738,11 +763,11 @@ if __name__ == "__main__":
             StaticFiles(directory=client_dist / "voice-runtime"),
             name="voice-runtime",
         )
-    if (client_dist / "voice-canvas").is_dir():
+    if (client_dist / "mermaid").is_dir():
         app.mount(
-            "/voice-canvas",
-            StaticFiles(directory=client_dist / "voice-canvas", html=True),
-            name="voice-canvas",
+            "/mermaid",
+            StaticFiles(directory=client_dist / "mermaid", html=True),
+            name="mermaid",
         )
     if (client_dist / "excalidraw").is_dir():
         app.mount(

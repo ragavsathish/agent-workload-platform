@@ -101,10 +101,12 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
       final next = await widget.api.transcript();
       if (!mounted) return;
       final changed = next.revision != _snapshot.revision;
-      setState(() {
-        _snapshot = next;
-        _live = true;
-      });
+      if (changed || !_live) {
+        setState(() {
+          if (changed) _snapshot = next;
+          _live = true;
+        });
+      }
       if (changed) _scrollToEnd();
     } on Object {
       if (mounted) setState(() => _live = false);
@@ -273,7 +275,7 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
   void _scrollToEnd() => WidgetsBinding.instance.addPostFrameCallback((_) {
     if (_scroll.hasClients) {
       _scroll.animateTo(
-        _scroll.position.maxScrollExtent,
+        _scroll.position.minScrollExtent,
         duration: const Duration(milliseconds: 220),
         curve: Curves.easeOut,
       );
@@ -924,6 +926,7 @@ class _ConversationPane extends StatelessWidget {
             : ListView.builder(
                 key: const Key('timeline-list'),
                 controller: scrollController,
+                reverse: true,
                 padding: EdgeInsets.fromLTRB(
                   MediaQuery.sizeOf(context).width >= 840 ? 34 : 16,
                   24,
@@ -932,7 +935,7 @@ class _ConversationPane extends StatelessWidget {
                 ),
                 itemCount: entries.length,
                 itemBuilder: (_, index) {
-                  final entry = entries[index];
+                  final entry = entries[entries.length - index - 1];
                   return _MessageRow(
                     entry: entry,
                     diagramExpanded: expanded.contains(entry.id),
@@ -1096,6 +1099,7 @@ class _MessageRow extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: 12),
                   child: McpAppView(
+                    key: Key('mcp-app-${entry.id}'),
                     presentation: visual.presentation,
                     resourceUri: visual.resourceUri,
                     height: 340,
@@ -1509,6 +1513,7 @@ class _TaskCard extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(top: 12),
                     child: McpAppView(
+                      key: Key('mcp-app-task-${task.id}'),
                       presentation: task.response!.presentation,
                       resourceUri: task.response!.resourceUri,
                       height: 360,

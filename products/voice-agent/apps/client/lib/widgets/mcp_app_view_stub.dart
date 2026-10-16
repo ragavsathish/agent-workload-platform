@@ -6,7 +6,7 @@ import '../theme.dart';
 class McpAppView extends StatelessWidget {
   const McpAppView({
     required this.presentation,
-    this.resourceUri = 'ui://voice-canvas/main',
+    this.resourceUri = 'ui://mermaid/main',
     this.height = 360,
     super.key,
   });
@@ -25,7 +25,7 @@ class McpAppView extends StatelessWidget {
       borderRadius: BorderRadius.circular(10),
     ),
     child: const Text(
-      'Voice Canvas is available in the embedded web workspace.',
+      'Interactive visuals are available in the web workspace.',
       style: TextStyle(color: PiColors.muted),
     ),
   );

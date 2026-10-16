@@ -2,10 +2,76 @@ import { AppBridge, PostMessageTransport } from '@modelcontextprotocol/ext-apps/
 
 const events = [];
 const mcpAppHosts = new WeakMap();
+const excalidrawCameraSizes = [
+  { width: 400, height: 300 },
+  { width: 600, height: 450 },
+  { width: 800, height: 600 },
+  { width: 1200, height: 900 },
+  { width: 1600, height: 1200 },
+];
+
+const validExcalidrawCamera = (element) => (
+  element?.type === 'cameraUpdate'
+  && [element.x, element.y, element.width, element.height]
+    .every((value) => typeof value === 'number' && Number.isFinite(value))
+  && element.width > 0
+  && element.height > 0
+);
+
+const excalidrawCameraFor = (elements) => {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const element of elements) {
+    if (element?.type === 'cameraUpdate'
+      || typeof element?.x !== 'number'
+      || typeof element?.y !== 'number') continue;
+    const width = typeof element.width === 'number' ? element.width : 0;
+    const height = typeof element.height === 'number' ? element.height : 0;
+    minX = Math.min(minX, element.x, element.x + width);
+    minY = Math.min(minY, element.y, element.y + height);
+    maxX = Math.max(maxX, element.x, element.x + width);
+    maxY = Math.max(maxY, element.y, element.y + height);
+  }
+  if (![minX, minY, maxX, maxY].every(Number.isFinite)) {
+    return { type: 'cameraUpdate', x: 0, y: 0, width: 800, height: 600 };
+  }
+  const contentWidth = maxX - minX;
+  const contentHeight = maxY - minY;
+  const size = excalidrawCameraSizes.find(
+    (candidate) => candidate.width >= contentWidth + 80 && candidate.height >= contentHeight + 80,
+  ) ?? excalidrawCameraSizes.at(-1);
+  return {
+    type: 'cameraUpdate',
+    x: minX - (size.width - contentWidth) / 2,
+    y: minY - (size.height - contentHeight) / 2,
+    ...size,
+  };
+};
+
+const normalizeExcalidrawPresentation = (presentation) => {
+  const source = Array.isArray(presentation.elements) ? presentation.elements : [];
+  const elements = source.map((element) => {
+    if (!element || typeof element !== 'object') return element;
+    if (element.type === 'cameraUpdate') return element;
+    if (typeof element.label === 'string') {
+      return { ...element, label: { text: element.label } };
+    }
+    return element;
+  });
+  const camera = [...elements].reverse().find(validExcalidrawCamera)
+    ?? excalidrawCameraFor(elements);
+  return {
+    ...presentation,
+    elements: [camera, ...elements.filter((element) => element?.type !== 'cameraUpdate')],
+  };
+};
+
 const mcpApps = Object.freeze({
-  'ui://voice-canvas/main': {
-    src: '/voice-canvas/index.html',
-    title: 'Interactive Pi Voice Canvas',
+  'ui://mermaid/main': {
+    src: '/mermaid/index.html',
+    title: 'Pi Mermaid diagram',
     toolInput: (presentation) => ({ presentation }),
     toolResult: (presentation) => ({ presentation }),
   },
@@ -50,7 +116,9 @@ const messagePresentation = (value) => {
     presentation: payload.presentation,
     resourceUri: typeof payload.resourceUri === 'string'
       ? payload.resourceUri
-      : 'ui://voice-canvas/main',
+      : payload.presentation.kind === 'excalidraw'
+        ? 'ui://excalidraw/mcp-app.html'
+        : 'ui://mermaid/main',
   };
 };
 
@@ -157,16 +225,19 @@ window.voiceBridge = {
   consumeEvents() {
     return JSON.stringify(events.splice(0));
   },
-  async mountMcpApp(elementId, rawPresentation, resourceUri = 'ui://voice-canvas/main') {
+  async mountMcpApp(elementId, rawPresentation, resourceUri = 'ui://mermaid/main') {
     const target = await waitForElement(elementId);
     if (!target) return JSON.stringify({ ok: false, error: 'MCP App host unavailable' });
     try {
       const appDefinition = mcpApps[resourceUri];
       if (!appDefinition) throw new Error('Unsupported MCP App resource');
-      const presentation = typeof rawPresentation === 'string'
+      const rawValue = typeof rawPresentation === 'string'
         ? JSON.parse(rawPresentation)
         : rawPresentation;
-      if (!presentation || typeof presentation !== 'object') throw new Error('Invalid presentation');
+      if (!rawValue || typeof rawValue !== 'object') throw new Error('Invalid presentation');
+      const presentation = resourceUri === 'ui://excalidraw/mcp-app.html'
+        ? normalizeExcalidrawPresentation(rawValue)
+        : rawValue;
 
       const previous = mcpAppHosts.get(target);
       if (previous) {

@@ -14,11 +14,12 @@ MAX_NODES = 24
 MAX_EDGES = 48
 MAX_EXCALIDRAW_ELEMENTS = 80
 MAX_EXCALIDRAW_BYTES = 64 * 1024
-VOICE_CANVAS_URI = "ui://voice-canvas/main"
+MERMAID_URI = "ui://mermaid/main"
 EXCALIDRAW_URI = "ui://excalidraw/mcp-app.html"
 EXCALIDRAW_TYPES = {
     "cameraUpdate", "rectangle", "ellipse", "diamond", "text", "arrow", "line"
 }
+EXCALIDRAW_CAMERA_SIZES = ((400, 300), (600, 450), (800, 600), (1200, 900), (1600, 1200))
 
 
 @dataclass(frozen=True)
@@ -186,9 +187,9 @@ def _bounded_json_value(value: object, depth: int = 0) -> object | None:
         return max(-10_000, min(10_000, value))
     if isinstance(value, list):
         return [
-            bounded
+            bounded_item
             for item in value[:128]
-            if (bounded := _bounded_json_value(item, depth + 1)) is not None
+            if (bounded_item := _bounded_json_value(item, depth + 1)) is not None
         ]
     if isinstance(value, dict):
         bounded: dict[str, object] = {}
@@ -200,6 +201,48 @@ def _bounded_json_value(value: object, depth: int = 0) -> object | None:
                 bounded[key[:80]] = safe_item
         return bounded
     return None
+
+
+def _finite_number(value: object, default: int | float = 0) -> int | float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return default
+    return value if math.isfinite(value) else default
+
+
+def _repair_excalidraw_camera(
+    camera: dict[str, object], elements: list[dict[str, object]]
+) -> dict[str, object]:
+    x = _finite_number(camera.get("x"))
+    y = _finite_number(camera.get("y"))
+    width = _finite_number(camera.get("width"))
+    height = _finite_number(camera.get("height"))
+    if width > 0 and height > 0 and abs((width / height) - (4 / 3)) < 0.01:
+        return {"type": "cameraUpdate", "x": x, "y": y, "width": width, "height": height}
+
+    required_width = 400.0
+    required_height = 300.0
+    for element in elements:
+        if element.get("type") == "cameraUpdate":
+            continue
+        element_x = _finite_number(element.get("x"), x)
+        element_y = _finite_number(element.get("y"), y)
+        element_width = max(0, _finite_number(element.get("width")))
+        element_height = max(0, _finite_number(element.get("height")))
+        required_width = max(required_width, element_x + element_width - x + 40)
+        required_height = max(required_height, element_y + element_height - y + 40)
+
+    repaired_width, repaired_height = EXCALIDRAW_CAMERA_SIZES[-1]
+    for candidate_width, candidate_height in EXCALIDRAW_CAMERA_SIZES:
+        if candidate_width >= required_width and candidate_height >= required_height:
+            repaired_width, repaired_height = candidate_width, candidate_height
+            break
+    return {
+        "type": "cameraUpdate",
+        "x": x,
+        "y": y,
+        "width": repaired_width,
+        "height": repaired_height,
+    }
 
 
 def _normalize_excalidraw(value: dict[object, object], spoken: str) -> dict[str, object]:
@@ -220,14 +263,31 @@ def _normalize_excalidraw(value: dict[object, object], spoken: str) -> dict[str,
             if not isinstance(element_id, str) or not element_id or element_id in ids:
                 continue
             ids.add(element_id)
+            label = safe.get("label")
+            if isinstance(label, str):
+                label = " ".join(label.split())[:MAX_LABEL_LENGTH]
+                if label:
+                    safe["label"] = {"text": label}
+                else:
+                    safe.pop("label", None)
         elements.append(safe)
     if not elements:
         return fallback_presentation(spoken)
+    camera_indexes = [
+        index for index, element in enumerate(elements)
+        if element.get("type") == "cameraUpdate"
+    ]
+    if camera_indexes:
+        for index in camera_indexes:
+            elements[index] = _repair_excalidraw_camera(elements[index], elements)
+    else:
+        elements.insert(0, _repair_excalidraw_camera({}, elements))
+    title = value.get("title")
     presentation = {
         "kind": "excalidraw",
         "title": (
-            value["title"].strip()[:MAX_TITLE_LENGTH]
-            if isinstance(value.get("title"), str)
+            title.strip()[:MAX_TITLE_LENGTH]
+            if isinstance(title, str)
             else "Pi diagram"
         ),
         "elements": elements,
@@ -258,7 +318,7 @@ def parse_presentation_response(raw: str) -> PresentationResponse:
     resource_uri = (
         EXCALIDRAW_URI
         if presentation.get("kind") == "excalidraw"
-        else VOICE_CANVAS_URI
+        else MERMAID_URI
     )
     return PresentationResponse(
         spoken=spoken,

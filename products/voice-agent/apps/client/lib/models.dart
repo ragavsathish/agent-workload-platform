@@ -9,7 +9,7 @@ class VisualResponse {
   const VisualResponse({
     required this.spoken,
     required this.presentation,
-    this.resourceUri = 'ui://voice-canvas/main',
+    this.resourceUri = 'ui://mermaid/main',
   });
 
   final String spoken;
@@ -30,13 +30,16 @@ class VisualResponse {
     final spoken = body['spoken'];
     final presentation = asMap(body['presentation']);
     final resourceUri = body['resourceUri'];
+    final inferredResourceUri = presentation['kind'] == 'excalidraw'
+        ? 'ui://excalidraw/mcp-app.html'
+        : 'ui://mermaid/main';
     return spoken is String && presentation.isNotEmpty
         ? VisualResponse(
             spoken: spoken,
             presentation: presentation,
             resourceUri: resourceUri is String
                 ? resourceUri
-                : 'ui://voice-canvas/main',
+                : inferredResourceUri,
           )
         : null;
   }

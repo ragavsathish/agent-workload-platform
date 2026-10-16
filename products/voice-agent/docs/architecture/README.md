@@ -101,7 +101,7 @@ access to proposal records, and Habitat has no direct host port.
 | C4 element | Repository evidence |
 |---|---|
 | Browser Voice Client | `apps/client/lib/`; production Flutter web assets copied by `apps/edge/Containerfile` |
-| Browser Voice Client components | `apps/client/lib/main.dart`; `views/voice_view.dart`; `views/pi_workspace_view.dart`; `widgets/mcp_app_view_web.dart`; `platform/voice_session_web.dart`; `bridge/voice_bridge.js`; `voice_canvas/main.dart`; the lazy Excalidraw app is built from `vendor/excalidraw-mcp` by `tool/build-excalidraw-app.mjs` |
+| Browser Voice Client components | `apps/client/lib/main.dart`; `views/voice_view.dart`; `views/pi_workspace_view.dart`; `widgets/mcp_app_view_web.dart`; `platform/voice_session_web.dart`; `bridge/voice_bridge.js`; `bridge/mermaid_app.js`; the lazy Excalidraw app is built from `vendor/excalidraw-mcp` by `tool/build-excalidraw-app.mjs` |
 | Mobile Client foundation | `apps/client/ios/`; `apps/client/android/`; `apps/client/lib/platform/voice_session.dart`; native adapters are not implemented yet |
 | Input Diagnostics | `apps/diagnostics/`; React bundle emitted to `apps/diagnostics/dist/` |
 | Engineering Evidence and C4 Explorer | `deploy/observability/generate-c4-heatmap.mjs`; `components/c4-grafana-ts/`; provisioned Grafana dashboard compiled by WASM from these Mermaid sources |

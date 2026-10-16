@@ -182,7 +182,7 @@ const profileViewport = async (browser, name, viewport, query = '') => {
           { from: 'voice', to: 'pi' },
         ],
       }),
-      'ui://voice-canvas/main',
+      'ui://mermaid/main',
     ));
     await new Promise((resolve) => setTimeout(resolve, 100));
     const probe = {

@@ -23,6 +23,13 @@ export const createInitialFixtureState = () => deepFreeze({
     canCompact: true,
   },
   entries: [
+    ...Array.from({ length: 198 }, (_, index) => ({
+      id: `fixture-history-${index}`,
+      timestamp: Date.parse('2026-10-15T08:00:00Z') + index,
+      role: index % 2 === 0 ? 'user' : 'assistant',
+      text: `Earlier fixture turn ${index + 1}`,
+      status: 'completed',
+    })),
     {
       id: 'fixture-tool',
       timestamp: Date.parse('2026-10-16T07:59:59Z'),

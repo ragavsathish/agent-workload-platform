@@ -26,8 +26,10 @@ class PresentationResponseTest(unittest.TestCase):
         }))
         self.assertEqual(result.spoken, "Task queued.")
         self.assertEqual(result.presentation["kind"], "flow")
-        self.assertEqual(len(result.presentation["nodes"]), 2)
-        self.assertEqual(result.resource_uri, "ui://voice-canvas/main")
+        nodes = result.presentation["nodes"]
+        self.assertIsInstance(nodes, list)
+        self.assertEqual(len(nodes), 2)  # type: ignore[arg-type]
+        self.assertEqual(result.resource_uri, "ui://mermaid/main")
 
     def test_accepts_bounded_excalidraw_presentation(self):
         result = parse_presentation_response(json.dumps({
@@ -45,7 +47,53 @@ class PresentationResponseTest(unittest.TestCase):
 
         self.assertEqual(result.presentation["kind"], "excalidraw")
         self.assertEqual(result.resource_uri, "ui://excalidraw/mcp-app.html")
-        self.assertEqual(len(result.presentation["elements"]), 2)
+        elements = result.presentation["elements"]
+        self.assertIsInstance(elements, list)
+        self.assertEqual(len(elements), 2)  # type: ignore[arg-type]
+
+    def test_repairs_model_excalidraw_camera_and_string_labels(self):
+        result = parse_presentation_response(json.dumps({
+            "spoken": "Here is the editable diagram.",
+            "presentation": {
+                "kind": "excalidraw",
+                "title": "Voice path",
+                "elements": [
+                    {"type": "cameraUpdate", "id": "camera", "x": 0, "y": 0,
+                     "width": 0, "height": 0},
+                    {"type": "rectangle", "id": "voice", "x": 80, "y": 100,
+                     "width": 180, "height": 80, "label": "Voice"},
+                ],
+            },
+        }))
+
+        elements = result.presentation["elements"]
+        self.assertIsInstance(elements, list)
+        camera, rectangle = elements  # type: ignore[misc]
+        self.assertEqual(camera, {
+            "type": "cameraUpdate", "x": 0, "y": 0, "width": 400, "height": 300,
+        })
+        self.assertEqual(rectangle["label"], {"text": "Voice"})
+
+    def test_repairs_excalidraw_camera_to_fit_wide_content(self):
+        result = parse_presentation_response(json.dumps({
+            "spoken": "Here is the architecture.",
+            "presentation": {
+                "kind": "excalidraw",
+                "elements": [
+                    {"type": "cameraUpdate", "x": 0, "y": 0, "width": 0, "height": 0},
+                    {"type": "rectangle", "id": "first", "x": 40, "y": 190,
+                     "width": 150, "height": 70},
+                    {"type": "rectangle", "id": "last", "x": 1410, "y": 330,
+                     "width": 150, "height": 70},
+                ],
+            },
+        }))
+
+        elements = result.presentation["elements"]
+        self.assertIsInstance(elements, list)
+        camera = elements[0]  # type: ignore[index]
+        self.assertEqual(camera["width"], 1600)
+        self.assertEqual(camera["height"], 1200)
 
     def test_plain_or_invalid_response_gets_safe_status_fallback(self):
         plain = parse_presentation_response('Completed <unsafe> "work".')

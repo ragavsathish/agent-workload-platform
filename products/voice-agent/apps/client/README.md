@@ -11,8 +11,8 @@ page microphone access but not camera access, and prevents navigation away from
 the configured workspace origin. The device must be connected to the tailnet.
 
 Visual responses use the MCP Apps protocol. Flutter hosts the official MCP App
-bridge in a sandboxed iframe. The small Dart Voice Canvas handles normal status
-and flow views; a locally bundled Excalidraw app handles explicit rich or
+bridge in a sandboxed iframe. A locally bundled Mermaid app handles normal
+status and flow views; a locally bundled Excalidraw app handles explicit rich or
 editable diagram requests. Excalidraw and its fonts are built from
 `vendor/excalidraw-mcp`, are loaded only when selected, and make no CDN request.
 Both apps receive only bounded presentation data. The host does not expose task

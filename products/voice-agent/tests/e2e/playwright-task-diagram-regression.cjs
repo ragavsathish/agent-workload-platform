@@ -27,7 +27,7 @@ const main = async () => {
           nodes: [{ id: 'task', label: 'Task' }, { id: 'result', label: 'Result' }],
           edges: [{ from: 'task', to: 'result' }],
         }),
-        'ui://voice-canvas/main',
+        'ui://mermaid/main',
       );
       await new Promise((resolve) => setTimeout(resolve, 50));
       const target = document.createElement('div');
@@ -36,10 +36,18 @@ const main = async () => {
       target.style.height = '200px';
       document.body.append(target);
       const result = JSON.parse(await render);
-      target.remove();
       return result;
     });
     if (!delayedMount.ok) throw new Error(`Delayed MCP App mount failed: ${delayedMount.error}`);
+    const mermaidFrame = page.frames().find((frame) => frame.url().includes('/mermaid/index.html'));
+    if (!mermaidFrame) throw new Error('Mermaid MCP App iframe did not load');
+    const diagram = mermaidFrame.locator('.diagram svg');
+    await diagram.waitFor({ timeout: 10_000 });
+    const diagramText = await diagram.textContent();
+    if (!diagramText?.includes('Task') || !diagramText.includes('Result')) {
+      throw new Error(`Mermaid labels were not rendered: ${diagramText}`);
+    }
+    await page.evaluate(() => document.querySelector('#delayed-mcp-app-mount')?.remove());
     const placeholder = page.locator('flt-semantics-placeholder');
     if (await placeholder.count()) await placeholder.evaluate((element) => element.click());
     await page.getByText(/^Tasks \d+$/).click();

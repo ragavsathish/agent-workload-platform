@@ -35,7 +35,7 @@ def test_extracts_authoritative_final_message_after_tool_activity() -> None:
 
     assert response.spoken == "Tests pass."
     assert response.presentation["title"] == "Verification"
-    assert response.resource_uri == "ui://voice-canvas/main"
+    assert response.resource_uri == "ui://mermaid/main"
     assert "private" not in response.text
 
 

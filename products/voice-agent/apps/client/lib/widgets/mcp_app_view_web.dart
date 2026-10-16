@@ -13,7 +13,7 @@ import '../ux_telemetry.dart';
 class McpAppView extends StatefulWidget {
   const McpAppView({
     required this.presentation,
-    this.resourceUri = 'ui://voice-canvas/main',
+    this.resourceUri = 'ui://mermaid/main',
     this.height = 360,
     super.key,
   });
@@ -30,17 +30,19 @@ class _McpAppViewState extends State<McpAppView> {
   static int _sequence = 0;
   late final String _elementId = 'flutter-mcp-app-${_sequence++}';
   late final String _viewType = 'mcp-app-view-$_elementId';
+  late String _presentationJson;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+    _presentationJson = jsonEncode(widget.presentation);
     ui_web.platformViewRegistry.registerViewFactory(_viewType, (_) {
       final element = web.HTMLDivElement()
         ..id = _elementId
         ..tabIndex = 0
-        ..title = 'Interactive Pi Voice Canvas'
-        ..setAttribute('aria-label', 'Interactive Pi Voice Canvas');
+        ..title = 'Interactive Pi visual'
+        ..setAttribute('aria-label', 'Interactive Pi visual');
       element.style
         ..width = '100%'
         ..height = '100%'
@@ -54,8 +56,10 @@ class _McpAppViewState extends State<McpAppView> {
   @override
   void didUpdateWidget(covariant McpAppView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.presentation != widget.presentation ||
+    final nextPresentationJson = jsonEncode(widget.presentation);
+    if (_presentationJson != nextPresentationJson ||
         oldWidget.resourceUri != widget.resourceUri) {
+      _presentationJson = nextPresentationJson;
       unawaited(_mount());
     }
   }
@@ -66,7 +70,7 @@ class _McpAppViewState extends State<McpAppView> {
     try {
       final result = await BrowserBridge.mountMcpApp(
         _elementId,
-        jsonEncode(widget.presentation),
+        _presentationJson,
         widget.resourceUri,
       );
       if (mounted) {
@@ -125,7 +129,7 @@ class _McpAppViewState extends State<McpAppView> {
       height: widget.height,
       child: Semantics(
         container: true,
-        label: 'Interactive Pi Voice Canvas',
+        label: 'Interactive Pi visual',
         child: HtmlElementView(viewType: _viewType),
       ),
     );

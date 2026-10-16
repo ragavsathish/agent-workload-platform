@@ -26,7 +26,7 @@ class _VoiceViewState extends State<VoiceView> {
   bool _isMuted = false;
   ContextUsage? _context;
   JsonMap? _presentation;
-  String _resourceUri = 'ui://voice-canvas/main';
+  String _resourceUri = 'ui://mermaid/main';
   String? _error;
   bool _compactBusy = false;
   late final VoiceSession _session;
@@ -82,7 +82,7 @@ class _VoiceViewState extends State<VoiceView> {
           final next = event.presentation;
           if (next != null && next.isNotEmpty) {
             _presentation = next;
-            _resourceUri = event.resourceUri ?? 'ui://voice-canvas/main';
+            _resourceUri = event.resourceUri ?? 'ui://mermaid/main';
           }
         case VoiceEventType.audioError:
           _error = event.message ?? 'Audio output failed.';

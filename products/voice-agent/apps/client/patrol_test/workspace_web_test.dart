@@ -11,9 +11,15 @@ void main() {
   patrolTest('observes typed conversation and durable work through HTTP', (
     $,
   ) async {
-    await $.platform.web.resizeWindow(size: const Size(1440, 1000));
+    await $.platform.web.resizeWindow(size: const Size(390, 844));
     web.window.history.replaceState(null, '', '/?view=transcript');
     await $.pumpWidgetAndSettle(const app.VoiceAgentApp());
+    expect(
+      find.byKey(const Key('message-fixture-assistant')),
+      findsOneWidget,
+      reason: 'A restored 200-entry mobile transcript must open at its latest entry.',
+    );
+    await $.platform.web.resizeWindow(size: const Size(1440, 1000));
 
     final result =
         await runJourney<
@@ -82,6 +88,9 @@ Future<WorkspaceEvent> _observeWorkspace(PatrolIntegrationTester $) async {
   await $('Completed').waitUntilVisible();
   await $(const Key('message-fixture-assistant')).waitUntilExists();
   await $('Ready from the HTTP fixture.').waitUntilVisible();
+  await $(const Key('diagram-fixture-assistant')).tap();
+  await $(const Key('mcp-app-fixture-assistant')).waitUntilExists();
+  expect($('Visual unavailable'), findsNothing);
   await $('1k / 8k').waitUntilVisible();
   return const WorkspaceObserved();
 }
