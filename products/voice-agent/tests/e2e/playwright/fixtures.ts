@@ -37,20 +37,13 @@ const fetchJson = (page, url) => page.evaluate(async (path) => {
   return response.json();
 }, url);
 
-const expectCleanBrowser = (evidence, options = {}) => {
-  const ignoredFailures = options.ignoredFailures || [];
-  const ignoredConsoleErrors = options.ignoredConsoleErrors || [
-    /^Chrome Report: \[deprecation\] /,
-  ];
-  const failures = evidence.requestFailures.filter(
-    (failure) => !ignoredFailures.some((pattern) => pattern.test(failure.url)),
-  );
+const expectCleanBrowser = (evidence) => {
   const consoleErrors = evidence.consoleErrors.filter(
-    (message) => !ignoredConsoleErrors.some((pattern) => pattern.test(message)),
+    (message) => !/^Chrome Report: \[deprecation\] /.test(message),
   );
   expect(consoleErrors, 'browser console errors').toEqual([]);
   expect(evidence.pageErrors, 'uncaught browser errors').toEqual([]);
-  expect(failures, 'unexpected request failures').toEqual([]);
+  expect(evidence.requestFailures, 'unexpected request failures').toEqual([]);
 };
 
 export { test, expect, enableFlutterSemantics, fetchJson, expectCleanBrowser };

@@ -2,7 +2,6 @@ from pathlib import Path
 
 import pytest
 from voice_agent.tasking.infrastructure.config import Settings
-
 from voice_worker.main import build_pi_command
 
 

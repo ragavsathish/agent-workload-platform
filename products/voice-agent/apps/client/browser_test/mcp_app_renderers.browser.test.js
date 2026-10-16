@@ -215,6 +215,23 @@ describe('MCP App renderers', () => {
     expect(document.getElementById(hostId).textContent).toBe('Visual unavailable');
   });
 
+  test('waits for a host element created after rendering starts', async () => {
+    document.body.replaceChildren();
+    const rendering = window.voiceBridge.mountMcpApp(
+      hostId,
+      JSON.stringify(presentations[0].value),
+      presentations[0].uri,
+    );
+    window.setTimeout(makeHost, 50);
+
+    expect(JSON.parse(await rendering)).toMatchObject({ ok: true });
+    const rendered = await commands.inspectMcpFrame({
+      title: presentations[0].title,
+      selector: presentations[0].selector,
+    });
+    for (const label of presentations[0].labels) expect(rendered.text).toContain(label);
+  });
+
   test('serializes concurrent mounts and keeps the latest visual', async () => {
     const [firstResult, secondResult] = await Promise.all([
       window.voiceBridge.mountMcpApp(

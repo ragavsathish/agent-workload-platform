@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 
 import numpy as np
-
 from voice_agent.speech.infrastructure import parakeet_stt
 
 

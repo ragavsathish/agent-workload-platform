@@ -159,7 +159,5 @@ test('completes a deployed voice session and retains its diagnostics', async ({
     body: Buffer.from(`${JSON.stringify(evidence, null, 2)}\n`),
     contentType: 'application/json',
   });
-  expectCleanBrowser(browserEvidence, {
-    ignoredFailures: [/\/api\/pi-speech$/],
-  });
+  expectCleanBrowser(browserEvidence);
 });
