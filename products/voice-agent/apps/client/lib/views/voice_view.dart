@@ -440,11 +440,19 @@ class _Header extends StatelessWidget {
       children: [
         _VoiceState(stateLabel),
         OutlinedButton.icon(
+          key: const Key('open-audio-diagnostics'),
           onPressed: () => ClientActions.openView('audio-diagnostics'),
           icon: const Icon(Icons.graphic_eq_rounded, size: 15),
           label: const Text('Replays'),
         ),
         OutlinedButton.icon(
+          key: const Key('open-system-health'),
+          onPressed: () => ClientActions.openView('system-health'),
+          icon: const Icon(Icons.account_tree_outlined, size: 15),
+          label: const Text('System'),
+        ),
+        OutlinedButton.icon(
+          key: const Key('open-transcript'),
           onPressed: () => ClientActions.openView('transcript'),
           icon: const Icon(Icons.chat_bubble_outline_rounded, size: 15),
           label: const Text('Chat'),
@@ -462,14 +470,26 @@ class _Header extends StatelessWidget {
                   style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                 ),
                 const Spacer(),
-                _VoiceState(stateLabel, compact: true),
+                _VoiceState(
+                  stateLabel,
+                  compact: true,
+                  showLabel: constraints.maxWidth >= 400,
+                ),
                 const SizedBox(width: 2),
                 _HeaderIconButton(
+                  key: const Key('open-audio-diagnostics'),
                   tooltip: 'Replays',
                   icon: Icons.graphic_eq_rounded,
                   onPressed: () => ClientActions.openView('audio-diagnostics'),
                 ),
                 _HeaderIconButton(
+                  key: const Key('open-system-health'),
+                  tooltip: 'System health',
+                  icon: Icons.account_tree_outlined,
+                  onPressed: () => ClientActions.openView('system-health'),
+                ),
+                _HeaderIconButton(
+                  key: const Key('open-transcript'),
                   tooltip: 'Chat',
                   icon: Icons.chat_bubble_outline_rounded,
                   onPressed: () => ClientActions.openView('transcript'),
@@ -490,6 +510,7 @@ class _Header extends StatelessWidget {
 
 class _HeaderIconButton extends StatelessWidget {
   const _HeaderIconButton({
+    super.key,
     required this.tooltip,
     required this.icon,
     required this.onPressed,
@@ -538,9 +559,10 @@ class _BrandMark extends StatelessWidget {
 }
 
 class _VoiceState extends StatelessWidget {
-  const _VoiceState(this.label, {this.compact = false});
+  const _VoiceState(this.label, {this.compact = false, this.showLabel = true});
   final String label;
   final bool compact;
+  final bool showLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -573,18 +595,20 @@ class _VoiceState extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 7),
-            Text(
-              compact && label == 'Starting…'
-                  ? 'STARTING'
-                  : label.toUpperCase(),
-              style: const TextStyle(
-                color: Color(0xFF89949F),
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                letterSpacing: .9,
+            if (showLabel) ...[
+              const SizedBox(width: 7),
+              Text(
+                compact && label == 'Starting…'
+                    ? 'STARTING'
+                    : label.toUpperCase(),
+                style: const TextStyle(
+                  color: Color(0xFF89949F),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: .9,
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),

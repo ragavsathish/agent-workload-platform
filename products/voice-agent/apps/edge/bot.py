@@ -1,5 +1,6 @@
 """Tailnet-facing Pipecat process for the isolated Linux VM."""
 
+import asyncio
 import os
 import tomllib
 import wave
@@ -56,7 +57,6 @@ logger.remove()
 
 load_dotenv(override=True)
 telemetry = configure_telemetry("pipecat-voice-edge")
-
 
 class VoiceVisualResponseProcessor(FrameProcessor):
     """Split one model response into browser Mermaid and TTS-safe speech."""
@@ -201,6 +201,36 @@ async def broker_transcript_request() -> dict[str, object]:
     return payload
 
 
+async def broker_sessions_request(
+    path: str = "",
+    method: str = "GET",
+    *,
+    operation: str,
+) -> dict[str, object]:
+    with telemetry.observe(operation):
+        headers = {"Authorization": f"Bearer {required_env('INFERENCE_BROKER_TOKEN')}"}
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
+            response = await client.request(
+                method,
+                f"{required_env('INFERENCE_BROKER_BASE_URL').rstrip('/')}/pi/sessions{path}",
+                headers=headers,
+            )
+        if response.is_error:
+            status = response.status_code if response.status_code in {404, 409} else 502
+            detail = "Pi session history is unavailable"
+            try:
+                service_detail = response.json().get("detail")
+                if isinstance(service_detail, str):
+                    detail = service_detail
+            except ValueError:
+                pass
+            raise HTTPException(status_code=status, detail=detail)
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=502, detail="invalid Pi session history")
+        return payload
+
+
 @lru_cache(maxsize=1)
 def voice_prompt_template() -> str:
     """Load and validate the versioned model instruction."""
@@ -275,6 +305,21 @@ async def broker_context_request(method: str, path: str) -> dict[str, object]:
     payload = response.json()
     if not isinstance(payload, dict):
         raise HTTPException(status_code=502, detail="invalid Pi context")
+    return payload
+
+
+async def broker_abort_pi_turn() -> dict[str, object]:
+    headers = {"Authorization": f"Bearer {required_env('INFERENCE_BROKER_TOKEN')}"}
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
+        response = await client.post(
+            f"{required_env('INFERENCE_BROKER_BASE_URL').rstrip('/')}/pi/turn/abort",
+            headers=headers,
+        )
+    if response.is_error:
+        raise HTTPException(status_code=502, detail="Pi turn could not be stopped")
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=502, detail="invalid Pi turn response")
     return payload
 
 
@@ -692,7 +737,6 @@ if __name__ == "__main__":
             StaticFiles(directory=client_dist / "diagnostics", html=True),
             name="diagnostics",
         )
-
     def register_browser_asset(asset_name: str, media_type: str | None = None) -> None:
         """Expose one generated Flutter root asset without shadowing Pipecat routes."""
 
@@ -805,6 +849,59 @@ if __name__ == "__main__":
             headers={"Cache-Control": "no-store"},
         )
 
+    @app.get("/api/pi-sessions")
+    async def get_pi_sessions(request: Request):
+        validate_http_identity(request)
+        return JSONResponse(
+            await broker_sessions_request(operation="browser.pi.sessions.list"),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/api/pi-sessions/{session_id}")
+    async def get_pi_session_history(session_id: str, request: Request):
+        validate_http_identity(request)
+        if (
+            not session_id
+            or len(session_id) > 128
+            or not session_id.replace("-", "").replace("_", "").isalnum()
+        ):
+            raise HTTPException(status_code=400, detail="invalid Pi session ID")
+        return JSONResponse(
+            await broker_sessions_request(
+                f"/{session_id}", operation="browser.pi.sessions.read"
+            ),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/pi-sessions/new", status_code=201)
+    async def start_new_pi_session(request: Request):
+        validate_http_identity(request)
+        return JSONResponse(
+            await broker_sessions_request(
+                "/new", "POST", operation="browser.pi.sessions.new"
+            ),
+            status_code=201,
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/pi-sessions/{session_id}/resume")
+    async def resume_pi_session(session_id: str, request: Request):
+        validate_http_identity(request)
+        if (
+            not session_id
+            or len(session_id) > 128
+            or not session_id.replace("-", "").replace("_", "").isalnum()
+        ):
+            raise HTTPException(status_code=400, detail="invalid Pi session ID")
+        return JSONResponse(
+            await broker_sessions_request(
+                f"/{session_id}/resume",
+                "POST",
+                operation="browser.pi.sessions.resume",
+            ),
+            headers={"Cache-Control": "no-store"},
+        )
+
     @app.post("/api/pi-message")
     async def send_pi_message(request: Request):
         validate_http_identity(request)
@@ -821,6 +918,14 @@ if __name__ == "__main__":
         result = await broker_pi_message(message)
         return JSONResponse(
             {"spoken": result.spoken, "mermaid": result.mermaid},
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/pi-turn/abort")
+    async def abort_pi_turn(request: Request):
+        validate_http_identity(request)
+        return JSONResponse(
+            await broker_abort_pi_turn(),
             headers={"Cache-Control": "no-store"},
         )
 

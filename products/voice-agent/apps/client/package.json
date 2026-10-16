@@ -8,7 +8,8 @@
     "build:bridge": "node tool/build-bridge.mjs",
     "lint": "./tool/flutterw analyze",
     "test": "./tool/flutterw test",
-    "test:patrol": "./tool/run-patrol-web",
+    "test:webmcp": "node --test bridge/webmcp_tools.test.mjs",
+    "test:patrol": "npm run build:bridge && ./tool/run-patrol-web",
     "profile:web": "./tool/profile-web"
   },
   "dependencies": {

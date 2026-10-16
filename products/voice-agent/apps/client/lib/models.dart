@@ -92,6 +92,32 @@ class TranscriptSnapshot {
   );
 }
 
+class PiSessionSummary {
+  const PiSessionSummary({
+    required this.id,
+    required this.title,
+    required this.updatedAt,
+    required this.messageCount,
+    required this.active,
+  });
+
+  final String id;
+  final String title;
+  final DateTime updatedAt;
+  final int messageCount;
+  final bool active;
+
+  factory PiSessionSummary.fromJson(JsonMap json) => PiSessionSummary(
+    id: '${json['id'] ?? ''}',
+    title: '${json['title'] ?? 'Untitled session'}',
+    updatedAt:
+        DateTime.tryParse('${json['updatedAt'] ?? ''}') ??
+        DateTime.fromMillisecondsSinceEpoch(0),
+    messageCount: (json['messageCount'] as num?)?.toInt() ?? 0,
+    active: json['active'] == true,
+  );
+}
+
 class AgentTask {
   const AgentTask({
     required this.id,

@@ -13,14 +13,22 @@ class ApiException implements Exception {
 
 class VoiceApi {
   VoiceApi({http.Client? client}) : _client = client ?? http.Client();
+  static const _configuredOrigin = String.fromEnvironment('VOICE_API_ORIGIN');
   final http.Client _client;
+
+  Uri _uri(String path) => _configuredOrigin.isEmpty
+      ? Uri.base.resolve(path)
+      : Uri.parse(_configuredOrigin).resolve(path);
+
+  /// Resolves non-JSON browser resources against the same API origin.
+  Uri endpoint(String path) => _uri(path);
 
   Future<JsonMap> _json(
     String path, {
     String method = 'GET',
     Object? body,
   }) async {
-    final uri = Uri.base.resolve(path);
+    final uri = _uri(path);
     final headers = body == null
         ? <String, String>{}
         : {'Content-Type': 'application/json'};
@@ -52,6 +60,29 @@ class VoiceApi {
   );
   Future<TranscriptSnapshot> transcript() async =>
       TranscriptSnapshot.fromJson(await _json('/api/pi-transcript'));
+  Future<List<PiSessionSummary>> sessions() async {
+    final body = await _json('/api/pi-sessions');
+    return (body['sessions'] as List? ?? const [])
+        .map((value) => PiSessionSummary.fromJson(asMap(value)))
+        .toList(growable: false);
+  }
+
+  Future<TranscriptSnapshot> sessionTranscript(String id) async =>
+      TranscriptSnapshot.fromJson(
+        await _json('/api/pi-sessions/${Uri.encodeComponent(id)}'),
+      );
+
+  Future<void> newSession() async {
+    await _json('/api/pi-sessions/new', method: 'POST');
+  }
+
+  Future<void> resumeSession(String id) async {
+    await _json(
+      '/api/pi-sessions/${Uri.encodeComponent(id)}/resume',
+      method: 'POST',
+    );
+  }
+
   Future<VisualResponse> sendMessage(String message) async {
     final body = await _json(
       '/api/pi-message',
@@ -62,9 +93,13 @@ class VoiceApi {
         (throw const ApiException('Pi returned an invalid response.'));
   }
 
+  Future<void> stopTurn() async {
+    await _json('/api/pi-turn/abort', method: 'POST');
+  }
+
   Future<List<AgentTask>> tasks() async {
     final response = await _client.get(
-      Uri.base.resolve('/api/tasks'),
+      _uri('/api/tasks'),
       headers: {'Cache-Control': 'no-store'},
     );
     if (response.statusCode != 200) {
@@ -78,6 +113,14 @@ class VoiceApi {
         .map((v) => AgentTask.fromJson(asMap(v)))
         .toList(growable: false);
   }
+
+  Future<AgentTask> createTask(String instruction) async => AgentTask.fromJson(
+    await _json(
+      '/api/tasks',
+      method: 'POST',
+      body: {'instruction': instruction},
+    ),
+  );
 
   Future<void> taskAction(String id, String action) async => _json(
     '/api/tasks/${Uri.encodeComponent(id)}/$action',

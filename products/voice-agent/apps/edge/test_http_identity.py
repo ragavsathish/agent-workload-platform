@@ -1,10 +1,17 @@
 import os
 import unittest
+from contextlib import contextmanager
+from types import SimpleNamespace
 from unittest.mock import patch
 
+import httpx
 from fastapi import HTTPException, Request
 
-from bot import validate_http_identity, validate_ingress_identity
+from bot import (
+    broker_sessions_request,
+    validate_http_identity,
+    validate_ingress_identity,
+)
 
 
 def request(method: str, *, origin: str | None = None, identity: str | None = None) -> Request:
@@ -70,6 +77,100 @@ class HttpIdentityTest(unittest.TestCase):
             validate_ingress_identity(request("GET", identity="other@example.com"))
 
         self.assertEqual(raised.exception.status_code, 403)
+
+
+class SessionTelemetryTest(unittest.IsolatedAsyncioTestCase):
+    async def test_new_session_observes_the_edge_to_broker_hop(self):
+        operations: list[str] = []
+
+        @contextmanager
+        def observe(operation: str):
+            operations.append(operation)
+            yield
+
+        class Client:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return None
+
+            async def request(self, method: str, url: str, **kwargs):
+                request = httpx.Request(method, url)
+                return httpx.Response(
+                    201,
+                    request=request,
+                    json={"activeSessionId": "fresh-session"},
+                )
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "INFERENCE_BROKER_TOKEN": "x" * 32,
+                    "INFERENCE_BROKER_BASE_URL": "http://broker.test/v1",
+                },
+            ),
+            patch("bot.httpx.AsyncClient", Client),
+            patch("bot.telemetry", SimpleNamespace(observe=observe)),
+        ):
+            payload = await broker_sessions_request(
+                "/new",
+                "POST",
+                operation="browser.pi.sessions.new",
+            )
+
+        self.assertEqual(payload["activeSessionId"], "fresh-session")
+        self.assertEqual(operations, ["browser.pi.sessions.new"])
+
+    async def test_resume_session_observes_the_edge_to_broker_hop(self):
+        operations: list[str] = []
+
+        @contextmanager
+        def observe(operation: str):
+            operations.append(operation)
+            yield
+
+        class Client:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return None
+
+            async def request(self, method: str, url: str, **kwargs):
+                request = httpx.Request(method, url)
+                return httpx.Response(
+                    200,
+                    request=request,
+                    json={"id": "persisted-session"},
+                )
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "INFERENCE_BROKER_TOKEN": "x" * 32,
+                    "INFERENCE_BROKER_BASE_URL": "http://broker.test/v1",
+                },
+            ),
+            patch("bot.httpx.AsyncClient", Client),
+            patch("bot.telemetry", SimpleNamespace(observe=observe)),
+        ):
+            payload = await broker_sessions_request(
+                "/persisted-session/resume",
+                "POST",
+                operation="browser.pi.sessions.resume",
+            )
+
+        self.assertEqual(payload["id"], "persisted-session")
+        self.assertEqual(operations, ["browser.pi.sessions.resume"])
 
 
 if __name__ == "__main__":

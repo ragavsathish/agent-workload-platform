@@ -26,7 +26,6 @@ from fastapi.responses import Response, StreamingResponse
 from loguru import logger
 from pydantic import BaseModel, Field
 from voice_agent.shared.telemetry import configure_telemetry
-
 from voice_agent.speech.application.transcription import extract_transcript
 from voice_agent.speech.infrastructure.mlx_tts import synthesize_pcm
 from voice_agent.speech.infrastructure.parakeet_stt import load_model, transcribe_pcm
@@ -407,6 +406,98 @@ async def pi_transcript(request: Request, _: None = Depends(authenticate)) -> Re
     )
 
 
+async def _pi_sessions_request(
+    client: httpx.AsyncClient,
+    path: str,
+    method: str = "GET",
+    *,
+    operation: str,
+) -> Response:
+    with telemetry.observe(operation):
+        try:
+            response = await client.request(
+                method,
+                f"{_pi_service_url()}/v1/sessions{path}",
+                headers={"Authorization": f"Bearer {BROKER_TOKEN}"},
+                timeout=10.0,
+            )
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status_code=502, detail="Pi session history is unavailable"
+            ) from exc
+        if len(response.content) > 1_000_000:
+            raise HTTPException(status_code=502, detail="Pi session history is unavailable")
+        if response.status_code in {404, 409}:
+            detail = "Pi session history is unavailable"
+            try:
+                service_detail = response.json().get("detail")
+                if isinstance(service_detail, str):
+                    detail = service_detail
+            except ValueError:
+                pass
+            raise HTTPException(status_code=response.status_code, detail=detail)
+        if response.status_code not in {200, 201}:
+            raise HTTPException(status_code=502, detail="Pi session history is unavailable")
+        return Response(
+            content=response.content,
+            status_code=response.status_code,
+            media_type="application/json",
+            headers={"Cache-Control": "no-store"},
+        )
+
+
+@app.get("/v1/pi/sessions", response_model=None)
+async def pi_sessions(request: Request, _: None = Depends(authenticate)) -> Response:
+    """List bounded persisted sessions without exposing host paths."""
+
+    return await _pi_sessions_request(
+        request.app.state.http, "", operation="inference.pi.sessions.list"
+    )
+
+
+@app.get("/v1/pi/sessions/{session_id}", response_model=None)
+async def pi_session_history(
+    session_id: str, request: Request, _: None = Depends(authenticate)
+) -> Response:
+    """Return one display-safe persisted transcript."""
+
+    if not session_id.replace("-", "").replace("_", "").isalnum() or len(session_id) > 128:
+        raise HTTPException(status_code=400, detail="invalid Pi session ID")
+    return await _pi_sessions_request(
+        request.app.state.http,
+        f"/{session_id}",
+        operation="inference.pi.sessions.read",
+    )
+
+
+@app.post("/v1/pi/sessions/new", response_model=None)
+async def pi_new_session(request: Request, _: None = Depends(authenticate)) -> Response:
+    """Start a fresh persistent voice session when Pi is idle."""
+
+    return await _pi_sessions_request(
+        request.app.state.http,
+        "/new",
+        "POST",
+        operation="inference.pi.sessions.new",
+    )
+
+
+@app.post("/v1/pi/sessions/{session_id}/resume", response_model=None)
+async def pi_resume_session(
+    session_id: str, request: Request, _: None = Depends(authenticate)
+) -> Response:
+    """Resume one persisted Pi voice session when the service is idle."""
+
+    if not session_id.replace("-", "").replace("_", "").isalnum() or len(session_id) > 128:
+        raise HTTPException(status_code=400, detail="invalid Pi session ID")
+    return await _pi_sessions_request(
+        request.app.state.http,
+        f"/{session_id}/resume",
+        "POST",
+        operation="inference.pi.sessions.resume",
+    )
+
+
 async def _pi_context_request(client: httpx.AsyncClient, method: str, path: str) -> Response:
     try:
         response = await client.request(
@@ -439,6 +530,27 @@ async def compact_pi_context(request: Request, _: None = Depends(authenticate)) 
     """Compact the persistent voice session after any active turn completes."""
 
     return await _pi_context_request(request.app.state.http, "POST", "/v1/context/compact")
+
+
+@app.post("/v1/pi/turn/abort", response_model=None)
+async def abort_pi_turn(request: Request, _: None = Depends(authenticate)) -> Response:
+    """Stop the active persistent Pi turn without closing its session."""
+
+    try:
+        response = await request.app.state.http.post(
+            f"{_pi_service_url()}/v1/turn/abort",
+            headers={"Authorization": f"Bearer {BROKER_TOKEN}"},
+            timeout=10.0,
+        )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="Pi turn could not be stopped") from exc
+    if response.status_code != 200 or len(response.content) > 16_384:
+        raise HTTPException(status_code=502, detail="Pi turn could not be stopped")
+    return Response(
+        content=response.content,
+        media_type="application/json",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 if __name__ == "__main__":

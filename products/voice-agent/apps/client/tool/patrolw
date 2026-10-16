@@ -10,6 +10,8 @@ if [[ ! -x "$patrol" ]] || ! grep -Fq "$pub_cache" "$patrol"; then
 fi
 export PUB_CACHE="$pub_cache"
 export PATROL_FLUTTER_COMMAND="$tool_dir/tool/flutterw"
+node "$tool_dir/tool/patch-patrol-web-trace.mjs" \
+  "$pub_cache/hosted/pub.dev/patrol-4.10.0/web_runner/tests/test.spec.ts"
 if [[ -n "${FLUTTER_BIN:-}" ]]; then
   export PATH="$(dirname "$FLUTTER_BIN"):$PATH"
 elif command -v flutter >/dev/null 2>&1; then

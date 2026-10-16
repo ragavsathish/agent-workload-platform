@@ -17,6 +17,7 @@ import {
   type AgentSession,
   type ExtensionAPI,
   type ExtensionFactory,
+  type SessionEntry,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
@@ -73,6 +74,14 @@ export type PublicContextUsage = {
   percent: number | null;
   estimated: boolean;
   canCompact: boolean;
+};
+
+export type PublicSessionSummary = {
+  id: string;
+  title: string;
+  updatedAt: string;
+  messageCount: number;
+  active: boolean;
 };
 
 const MAX_TRANSCRIPT_ENTRIES = 200;
@@ -205,6 +214,127 @@ export class PublicTranscript {
       entries: this.entries.map((entry) => ({ ...entry })),
     };
   }
+
+  reset(): void {
+    this.entries = [];
+    this.revision += 1;
+  }
+
+  replace(entries: PublicTranscriptEntry[]): void {
+    this.entries = entries.slice(-MAX_TRANSCRIPT_ENTRIES).map((entry) => ({ ...entry }));
+    this.revision += 1;
+  }
+}
+
+function publicMessageText(content: unknown): string {
+  if (typeof content === "string") return content.slice(0, MAX_TRANSCRIPT_TEXT_CHARS);
+  if (!Array.isArray(content)) return "";
+  return content
+    .flatMap((part) => {
+      if (!part || typeof part !== "object" || Array.isArray(part)) return [];
+      const value = part as Record<string, unknown>;
+      return value.type === "text" && typeof value.text === "string" ? [value.text] : [];
+    })
+    .join("")
+    .slice(0, MAX_TRANSCRIPT_TEXT_CHARS);
+}
+
+/** Project a persisted Pi branch without exposing reasoning, tool input, or tool output. */
+export function publicSessionTranscript(entries: SessionEntry[]): PublicTranscriptEntry[] {
+  const results = new Map<string, boolean>();
+  for (const entry of entries) {
+    if (entry.type !== "message" || entry.message.role !== "toolResult") continue;
+    results.set(entry.message.toolCallId, entry.message.isError);
+  }
+  const projected: PublicTranscriptEntry[] = [];
+  for (const entry of entries) {
+    if (entry.type !== "message") continue;
+    const message = entry.message;
+    const timestamp = Number.isFinite(message.timestamp)
+      ? message.timestamp
+      : Date.parse(entry.timestamp);
+    if (message.role === "user") {
+      const text = publicMessageText(message.content);
+      if (text) projected.push({ id: entry.id, timestamp, role: "user", text });
+      continue;
+    }
+    if (message.role !== "assistant") continue;
+    const text = publicMessageText(message.content);
+    if (text) {
+      projected.push({
+        id: entry.id,
+        timestamp,
+        role: "assistant",
+        text,
+        status: "completed",
+      });
+    }
+    for (const part of message.content) {
+      if (part.type !== "toolCall") continue;
+      const safeName = part.name.replace(/[^a-zA-Z0-9_.:-]/g, "").slice(0, 80) || "tool";
+      const failed = results.get(part.id);
+      projected.push({
+        id: part.id.slice(0, 128),
+        timestamp,
+        role: "tool",
+        text: safeName,
+        status: failed === undefined ? "running" : failed ? "failed" : "completed",
+      });
+    }
+  }
+  return projected.slice(-MAX_TRANSCRIPT_ENTRIES);
+}
+
+/** Restore the display-safe transcript for the persisted active Voice Session. */
+export function restorePublicTranscript(sessionManager: SessionManager): PublicTranscript {
+  const transcript = new PublicTranscript();
+  transcript.replace(publicSessionTranscript(sessionManager.getBranch()));
+  return transcript;
+}
+
+function sessionTitle(name: string | undefined, firstMessage: string): string {
+  const value = (name?.trim() || firstMessage.trim() || "Untitled session")
+    .replace(/\s+/g, " ");
+  return value.length > 72 ? `${value.slice(0, 69)}…` : value;
+}
+
+export async function listVoiceSessions(
+  cwd: string,
+  sessionDir: string,
+  activeId: string,
+): Promise<PublicSessionSummary[]> {
+  const sessions = await SessionManager.list(cwd, sessionDir);
+  const catalog = sessions.slice(0, 30).map((session) => ({
+    id: session.id,
+    title: sessionTitle(session.name, session.firstMessage),
+    updatedAt: session.modified.toISOString(),
+    messageCount: session.messageCount,
+    active: session.id === activeId,
+  }));
+  if (!catalog.some((session) => session.active)) {
+    catalog.unshift({
+      id: activeId,
+      title: "Voice orchestrator",
+      updatedAt: new Date().toISOString(),
+      messageCount: 0,
+      active: true,
+    });
+  }
+  return catalog.slice(0, 30).sort(
+    (left, right) => Number(right.active) - Number(left.active),
+  );
+}
+
+export function readVoiceSession(
+  cwd: string,
+  sessionDir: string,
+  sessionId: string,
+): { revision: number; entries: PublicTranscriptEntry[] } | undefined {
+  const path = SessionManager.findById(cwd, sessionId, sessionDir);
+  if (!path) return undefined;
+  const manager = SessionManager.open(path, sessionDir, cwd);
+  const branch = manager.getBranch();
+  return { revision: branch.length, entries: publicSessionTranscript(branch) };
 }
 
 const MAX_BODY_BYTES = 131_072;
@@ -434,7 +564,7 @@ class VoiceAgent {
   private createdThisTurn = new Set<string>();
   private session?: AgentSession;
   private systemPrompt = "";
-  private readonly transcript = new PublicTranscript();
+  private readonly transcript: PublicTranscript;
   private activeAssistantId?: string;
   private unsubscribeSession?: () => void;
   private turnQueue: Promise<void> = Promise.resolve();
@@ -443,6 +573,10 @@ class VoiceAgent {
   private compacting = false;
   private persistedContextTokens: number | null;
   private persistedContextWindow: number | null;
+  private activeSessionId: string;
+  private pendingSessionManager?: SessionManager;
+  private turnsInFlight = 0;
+  private maintenanceInFlight = 0;
 
   private constructor(
     settings: ServiceSettings,
@@ -450,12 +584,16 @@ class VoiceAgent {
     gondolin: GondolinWorkspace,
     persistedContextTokens: number | null,
     persistedContextWindow: number | null,
+    activeSessionId: string,
+    transcript: PublicTranscript,
   ) {
     this.settings = settings;
     this.modelRuntime = modelRuntime;
     this.gondolin = gondolin;
     this.persistedContextTokens = persistedContextTokens;
     this.persistedContextWindow = persistedContextWindow;
+    this.activeSessionId = activeSessionId;
+    this.transcript = transcript;
   }
 
   static async create(settings: ServiceSettings): Promise<VoiceAgent> {
@@ -492,6 +630,8 @@ class VoiceAgent {
       gondolin,
       persistedUsage ? calculateContextTokens(persistedUsage) : null,
       persistedModel?.contextWindow ?? null,
+      persistedSession.getSessionId(),
+      restorePublicTranscript(persistedSession),
     );
   }
 
@@ -617,6 +757,8 @@ class VoiceAgent {
       );
       if (!model) throw new Error(`Pi voice model is unavailable: ${this.settings.model}`);
     }
+    const sessionManager = this.pendingSessionManager
+      ?? openVoiceSessionManager(this.settings.cwd, this.settings.sessionDir);
     const { session } = await createAgentSession({
       cwd: this.settings.cwd,
       agentDir: this.settings.agentDir,
@@ -637,9 +779,11 @@ class VoiceAgent {
       ],
       customTools: this.tools(),
       resourceLoader,
-      sessionManager: openVoiceSessionManager(this.settings.cwd, this.settings.sessionDir),
+      sessionManager,
     });
     this.session = session;
+    this.pendingSessionManager = undefined;
+    this.activeSessionId = session.sessionManager.getSessionId();
     this.unsubscribeSession = session.subscribe((event) => {
       if (event.type === "message_start" && event.message.role === "assistant") {
         this.activeAssistantId = this.transcript.beginAssistant();
@@ -676,6 +820,78 @@ class VoiceAgent {
     return this.transcript.snapshot();
   }
 
+  async sessionCatalog(): Promise<{ sessions: PublicSessionSummary[] }> {
+    return {
+      sessions: await listVoiceSessions(
+        this.settings.cwd,
+        this.settings.sessionDir,
+        this.activeSessionId,
+      ),
+    };
+  }
+
+  historicalSession(sessionId: string): { revision: number; entries: PublicTranscriptEntry[] } | undefined {
+    return readVoiceSession(this.settings.cwd, this.settings.sessionDir, sessionId);
+  }
+
+  startFreshSession(): { id: string } {
+    if (this.turnsInFlight > 0 || this.maintenanceInFlight > 0) {
+      throw new Error("Pi is busy; stop or finish the active turn before starting a new session");
+    }
+    this.unsubscribeSession?.();
+    this.unsubscribeSession = undefined;
+    this.session?.dispose();
+    this.session = undefined;
+    this.pendingSessionManager = SessionManager.create(
+      this.settings.cwd,
+      this.settings.sessionDir,
+    );
+    this.activeSessionId = this.pendingSessionManager.getSessionId();
+    this.systemPrompt = "";
+    this.persistedContextTokens = null;
+    this.persistedContextWindow = null;
+    this.estimatedContextTokens = undefined;
+    this.transcript.reset();
+    return { id: this.activeSessionId };
+  }
+
+  resumeSession(sessionId: string): { id: string } | undefined {
+    if (this.turnsInFlight > 0 || this.maintenanceInFlight > 0) {
+      throw new Error("Pi is busy; stop or finish the active turn before resuming a session");
+    }
+    const path = SessionManager.findById(
+      this.settings.cwd,
+      sessionId,
+      this.settings.sessionDir,
+    );
+    if (!path) return undefined;
+    const manager = SessionManager.open(
+      path,
+      this.settings.sessionDir,
+      this.settings.cwd,
+    );
+    const entries = manager.getEntries();
+    const usage = getLastAssistantUsage(entries);
+    const modelChange = [...entries].reverse().find(
+      (entry) => entry.type === "model_change",
+    );
+    const model = modelChange?.type === "model_change"
+      ? this.modelRuntime.getModel(modelChange.provider, modelChange.modelId)
+      : undefined;
+    this.unsubscribeSession?.();
+    this.unsubscribeSession = undefined;
+    this.session?.dispose();
+    this.session = undefined;
+    this.pendingSessionManager = manager;
+    this.activeSessionId = manager.getSessionId();
+    this.systemPrompt = "";
+    this.persistedContextTokens = usage ? calculateContextTokens(usage) : null;
+    this.persistedContextWindow = model?.contextWindow ?? null;
+    this.estimatedContextTokens = undefined;
+    this.transcript.replace(publicSessionTranscript(manager.getBranch()));
+    return { id: this.activeSessionId };
+  }
+
   contextSnapshot(): PublicContextUsage {
     const usage = this.session?.getContextUsage();
     const tokens = usage?.tokens
@@ -688,6 +904,7 @@ class VoiceAgent {
       ? Math.min(100, (tokens / contextWindow) * 100)
       : null;
     const sessionManager = this.session?.sessionManager
+      ?? this.pendingSessionManager
       ?? openVoiceSessionManager(this.settings.cwd, this.settings.sessionDir);
     const branch = sessionManager.getBranch();
     const keepRecentTokens = this.session?.settingsManager.getCompactionKeepRecentTokens()
@@ -707,6 +924,7 @@ class VoiceAgent {
   }
 
   async compact(): Promise<PublicContextUsage> {
+    this.maintenanceInFlight += 1;
     const execute = async (): Promise<PublicContextUsage> => {
       if (!this.session) await this.newSession(this.systemPrompt);
       if (!this.session) throw new Error("Pi voice session is unavailable");
@@ -724,10 +942,15 @@ class VoiceAgent {
 
     const result = this.turnQueue.then(execute, execute);
     this.turnQueue = result.then(() => undefined, () => undefined);
-    return result;
+    try {
+      return await result;
+    } finally {
+      this.maintenanceInFlight -= 1;
+    }
   }
 
   private async runTurn(rawMessages: unknown, onDelta?: (delta: string) => void): Promise<string> {
+    this.turnsInFlight += 1;
     const execute = async (): Promise<string> => {
       const messages = normalizeMessages(rawMessages);
       const { systemPrompt, transcript } = splitConversation(messages);
@@ -759,7 +982,11 @@ class VoiceAgent {
 
     const result = this.turnQueue.then(execute, execute);
     this.turnQueue = result.then(() => undefined, () => undefined);
-    return result;
+    try {
+      return await result;
+    } finally {
+      this.turnsInFlight -= 1;
+    }
   }
 
   async turn(rawMessages: unknown): Promise<string> {
@@ -876,6 +1103,49 @@ export async function main(): Promise<void> {
       sendJson(response, 200, agent.transcriptSnapshot());
       return;
     }
+    if (request.method === "GET" && request.url === "/v1/sessions") {
+      response.setHeader("cache-control", "no-store");
+      sendJson(response, 200, await agent.sessionCatalog());
+      return;
+    }
+    if (request.method === "POST" && request.url === "/v1/sessions/new") {
+      try {
+        const fresh = agent.startFreshSession();
+        response.setHeader("cache-control", "no-store");
+        sendJson(response, 201, fresh);
+      } catch (error) {
+        sendJson(response, 409, {
+          detail: error instanceof Error ? error.message : "Pi session could not be started",
+        });
+      }
+      return;
+    }
+    const resumeSession = request.url?.match(
+      /^\/v1\/sessions\/([A-Za-z0-9_-]{1,128})\/resume$/,
+    );
+    if (request.method === "POST" && resumeSession) {
+      try {
+        const resumed = agent.resumeSession(resumeSession[1]);
+        if (!resumed) sendJson(response, 404, { detail: "session not found" });
+        else {
+          response.setHeader("cache-control", "no-store");
+          sendJson(response, 200, resumed);
+        }
+      } catch (error) {
+        sendJson(response, 409, {
+          detail: error instanceof Error ? error.message : "Pi session could not be resumed",
+        });
+      }
+      return;
+    }
+    const historicalSession = request.url?.match(/^\/v1\/sessions\/([A-Za-z0-9_-]{1,128})$/);
+    if (request.method === "GET" && historicalSession) {
+      response.setHeader("cache-control", "no-store");
+      const snapshot = agent.historicalSession(historicalSession[1]);
+      if (!snapshot) sendJson(response, 404, { detail: "session not found" });
+      else sendJson(response, 200, snapshot);
+      return;
+    }
     if (request.method === "GET" && request.url === "/v1/context") {
       response.setHeader("cache-control", "no-store");
       sendJson(response, 200, agent.contextSnapshot());
@@ -890,6 +1160,11 @@ export async function main(): Promise<void> {
           detail: error instanceof Error ? error.message : "Pi context compaction failed",
         });
       }
+      return;
+    }
+    if (request.method === "POST" && request.url === "/v1/turn/abort") {
+      await agent.abort();
+      sendJson(response, 200, { status: "stopped" });
       return;
     }
     if (request.method !== "POST" || !["/v1/turn", "/v1/turn/stream"].includes(request.url || "")) {

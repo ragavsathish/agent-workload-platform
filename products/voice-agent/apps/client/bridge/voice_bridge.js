@@ -1,3 +1,5 @@
+import { installPiWebMcpTools } from './webmcp_tools.js';
+
 const events = [];
 const mermaidViewports = new WeakMap();
 let client;
@@ -8,6 +10,27 @@ let currentSpeech;
 let botAudio;
 let mermaidPromise;
 let renderSequence = 0;
+let webMcpRegistration;
+
+const ensureWebMcp = () => {
+  if (webMcpRegistration) return webMcpRegistration;
+  webMcpRegistration = installPiWebMcpTools({
+    modelContext: document.modelContext,
+    fetchImpl: window.fetch.bind(window),
+    notify: (detail) => emit('webmcp', detail),
+  }).then((result) => {
+    if (!result.supported) webMcpRegistration = undefined;
+    return result;
+  }).catch((error) => {
+    webMcpRegistration = undefined;
+    return {
+      supported: true,
+      registered: [],
+      error: error instanceof Error ? error.name : 'RegistrationError',
+    };
+  });
+  return webMcpRegistration;
+};
 
 const waitForElement = async (elementId) => {
   for (let attempt = 0; attempt < 40; attempt += 1) {
@@ -223,6 +246,9 @@ const ensureMermaid = () => {
 };
 
 window.voiceBridge = {
+  async installWebMcp() {
+    return JSON.stringify(await ensureWebMcp());
+  },
   async start() {
     ensureBotAudio();
     const pc = await ensureClient();
@@ -304,16 +330,18 @@ window.voiceBridge = {
   openView(view) {
     const url = view === 'audio-diagnostics'
       ? '/diagnostics/'
+      : view === 'system-health'
+        ? '/metrics/d/voice-c4-heatmap/c4-operational-heat-map'
       : `/?view=${encodeURIComponent(view)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   },
-  async playSpeech(spoken) {
+  async playSpeech(spoken, endpoint = '/api/pi-speech') {
     if (currentAudio && currentAudioUrl && currentSpeech === spoken) {
       currentAudio.currentTime = 0;
       await currentAudio.play();
       return;
     }
-    const response = await fetch('/api/pi-speech', {
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ spoken }),
@@ -328,3 +356,5 @@ window.voiceBridge = {
     await currentAudio.play();
   },
 };
+
+void ensureWebMcp();
