@@ -35,9 +35,23 @@ const pathOf = (url) => {
   }
 };
 
+const routeOf = (url) => {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.pathname}${parsed.search}`;
+  } catch {
+    return '<invalid-url>';
+  }
+};
+
+const headerValue = (headers, name) => headers
+  ?.find((header) => header.name.toLowerCase() === name.toLowerCase())
+  ?.value ?? '';
+
 const requestOf = (event) => ({
   method: event.snapshot?.request?.method ?? '<unknown>',
   path: pathOf(event.snapshot?.request?.url ?? ''),
+  initiator: routeOf(headerValue(event.snapshot?.request?.headers, 'referer')),
   status: event.snapshot?.response?.status ?? -1,
 });
 
@@ -55,10 +69,22 @@ const redactedConsoleMessage = (event) => {
   };
 };
 
-const isExpectedCancellation = (request) =>
-  request.status <= 0 &&
-  request.method === 'POST' &&
-  request.path === '/api/pi-speech';
+const isPopupStaticAsset = (request) =>
+  request.path === '/flutter_bootstrap.js' ||
+  /^\/voice-runtime\/[a-zA-Z0-9_-]+\.js$/.test(request.path);
+
+const isNavigationPopup = (request) =>
+  request.initiator === '/?view=transcript' ||
+  request.initiator === '/metrics/d/voice-c4-heatmap/c4-operational-heat-map' ||
+  (request.path.startsWith('/voice-runtime/chunk-') &&
+    request.initiator === '/voice-runtime/voice_bridge.js');
+
+const isExpectedCancellation = (request) => request.status <= 0 && (
+  (request.method === 'POST' && request.path === '/api/pi-speech') ||
+  (request.method === 'GET' &&
+    isPopupStaticAsset(request) &&
+    isNavigationPopup(request))
+);
 
 const summarizeTrace = (tracePath) => {
   execFileSync('unzip', ['-tqq', tracePath]);

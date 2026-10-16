@@ -76,7 +76,7 @@ Future<WorkspaceEvent> _interpretWorkspace(
 };
 
 Future<WorkspaceEvent> _observeWorkspace(PatrolIntegrationTester $) async {
-  await $(const Key('conversation-section')).waitUntilExists();
+  await $(const Key('session-fixture-live')).waitUntilExists();
   await $(const Key('tool-activity-fixture-tool')).waitUntilExists();
   await $('read_workspace').waitUntilVisible();
   await $('Completed').waitUntilVisible();
