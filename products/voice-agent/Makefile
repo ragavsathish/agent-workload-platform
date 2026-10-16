@@ -8,6 +8,7 @@ setup:
 	uv sync --project apps/worker --python 3.13
 	uv sync --project apps/edge --python 3.13
 	cd apps/client && npm ci
+	cd ../../vendor/excalidraw-mcp && pnpm install --frozen-lockfile --ignore-scripts --ignore-workspace --config.node-linker=isolated
 	cd apps/diagnostics && npm ci
 	pnpm --dir ../.. --filter @agent-workload-platform/voice-pi-agent install
 	cp -n deploy/.env.example deploy/.env || true

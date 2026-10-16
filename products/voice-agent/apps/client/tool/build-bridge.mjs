@@ -20,3 +20,13 @@ await build({
   splitting: true,
   target: 'es2022',
 });
+
+await build({
+  bundle: true,
+  entryNames: 'mcp_app',
+  entryPoints: [new URL('../bridge/voice_canvas_app.js', import.meta.url).pathname],
+  format: 'esm',
+  minify: true,
+  outdir: new URL('../web/voice-canvas/', import.meta.url).pathname,
+  target: 'es2022',
+});

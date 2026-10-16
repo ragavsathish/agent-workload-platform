@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+client_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+mkdir -p "$client_dir/web/voice-canvas"
+cd "$client_dir"
+./tool/dartw compile js --csp -O2 \
+  -o web/voice-canvas/main.dart.js \
+  voice_canvas/main.dart

@@ -6,10 +6,15 @@ JsonMap asMap(Object? value) =>
     value is Map<String, dynamic> ? value : const {};
 
 class VisualResponse {
-  const VisualResponse({required this.spoken, required this.mermaid});
+  const VisualResponse({
+    required this.spoken,
+    required this.presentation,
+    this.resourceUri = 'ui://voice-canvas/main',
+  });
 
   final String spoken;
-  final String mermaid;
+  final JsonMap presentation;
+  final String resourceUri;
 
   static VisualResponse? fromValue(Object? value) {
     JsonMap body;
@@ -23,9 +28,16 @@ class VisualResponse {
       body = asMap(value);
     }
     final spoken = body['spoken'];
-    final mermaid = body['mermaid'];
-    return spoken is String && mermaid is String
-        ? VisualResponse(spoken: spoken, mermaid: mermaid)
+    final presentation = asMap(body['presentation']);
+    final resourceUri = body['resourceUri'];
+    return spoken is String && presentation.isNotEmpty
+        ? VisualResponse(
+            spoken: spoken,
+            presentation: presentation,
+            resourceUri: resourceUri is String
+                ? resourceUri
+                : 'ui://voice-canvas/main',
+          )
         : null;
   }
 }

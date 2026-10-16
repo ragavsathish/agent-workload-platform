@@ -89,7 +89,8 @@ def run_pi(
         "response": {
             "text": response.text,
             "spoken": response.spoken,
-            "mermaid": response.mermaid,
+            "presentation": response.presentation,
+            "resourceUri": response.resource_uri,
         },
     }
 

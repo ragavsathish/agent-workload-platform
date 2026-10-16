@@ -7,7 +7,7 @@ import '../api_client.dart';
 import '../models.dart';
 import '../platform/client_actions.dart';
 import '../theme.dart';
-import '../widgets/mermaid_view.dart';
+import '../widgets/mcp_app_view.dart';
 
 enum WorkspaceSection { conversation, tasks }
 
@@ -1095,7 +1095,11 @@ class _MessageRow extends StatelessWidget {
               if (diagramExpanded)
                 Padding(
                   padding: const EdgeInsets.only(top: 12),
-                  child: MermaidView(diagram: visual.mermaid, height: 340),
+                  child: McpAppView(
+                    presentation: visual.presentation,
+                    resourceUri: visual.resourceUri,
+                    height: 340,
+                  ),
                 ),
             ],
           ],
@@ -1504,8 +1508,9 @@ class _TaskCard extends StatelessWidget {
                 if (diagramExpanded)
                   Padding(
                     padding: const EdgeInsets.only(top: 12),
-                    child: MermaidView(
-                      diagram: task.response!.mermaid,
+                    child: McpAppView(
+                      presentation: task.response!.presentation,
+                      resourceUri: task.response!.resourceUri,
                       height: 360,
                     ),
                   ),

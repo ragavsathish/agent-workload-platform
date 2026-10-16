@@ -151,7 +151,7 @@ const profileViewport = async (browser, name, viewport, query = '') => {
     paints: browserData.paints,
     lcpMs: browserData.lcpMs,
     cls: browserData.cls,
-    mermaidRender: browserData.ux['mermaid.render'] || null,
+    mcpAppRender: browserData.ux['mcp_app.render'] || null,
     topResources: browserData.resources
       .sort((left, right) => right.transferBytes - left.transferBytes)
       .slice(0, 12),
@@ -160,28 +160,41 @@ const profileViewport = async (browser, name, viewport, query = '') => {
       .slice(0, 12),
     violations,
   };
-  result.lazyMermaid = await page.evaluate(async () => {
+  result.lazyMcpApp = await page.evaluate(async () => {
     const host = document.createElement('div');
-    host.id = `profile-mermaid-${Date.now()}`;
+    host.id = `profile-mcp-app-${Date.now()}`;
     host.style.width = '640px';
     host.style.height = '420px';
     host.style.overflow = 'auto';
     document.body.append(host);
     const started = performance.now();
-    const response = JSON.parse(await window.voiceBridge.renderMermaid(
+    const response = JSON.parse(await window.voiceBridge.mountMcpApp(
       host.id,
-      'flowchart LR\n  browser[Browser] --> voice[Voice agent]\n  voice --> pi[Pi]',
+      JSON.stringify({
+        kind: 'flow', title: 'Voice path',
+        nodes: [
+          { id: 'browser', label: 'Browser' },
+          { id: 'voice', label: 'Voice agent' },
+          { id: 'pi', label: 'Pi' },
+        ],
+        edges: [
+          { from: 'browser', to: 'voice' },
+          { from: 'voice', to: 'pi' },
+        ],
+      }),
+      'ui://voice-canvas/main',
     ));
+    await new Promise((resolve) => setTimeout(resolve, 100));
     const probe = {
       ok: response.ok === true,
       renderMs: performance.now() - started,
-      svgCount: host.querySelectorAll('svg').length,
+      iframeCount: host.querySelectorAll('iframe').length,
     };
     host.remove();
     return probe;
   });
-  if (!result.lazyMermaid.ok || result.lazyMermaid.svgCount !== 1) {
-    throw new Error(`${name}: lazy Mermaid render failed`);
+  if (!result.lazyMcpApp.ok || result.lazyMcpApp.iframeCount !== 1) {
+    throw new Error(`${name}: lazy MCP App mount failed`);
   }
   await context.close();
   return result;

@@ -1,26 +1,35 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui_web' as ui_web;
 
 import 'package:flutter/material.dart';
 import 'package:web/web.dart' as web;
 
 import '../browser_bridge.dart';
+import '../models.dart';
 import '../theme.dart';
 import '../ux_telemetry.dart';
 
-class MermaidView extends StatefulWidget {
-  const MermaidView({required this.diagram, this.height = 360, super.key});
-  final String diagram;
+class McpAppView extends StatefulWidget {
+  const McpAppView({
+    required this.presentation,
+    this.resourceUri = 'ui://voice-canvas/main',
+    this.height = 360,
+    super.key,
+  });
+
+  final JsonMap presentation;
+  final String resourceUri;
   final double height;
 
   @override
-  State<MermaidView> createState() => _MermaidViewState();
+  State<McpAppView> createState() => _McpAppViewState();
 }
 
-class _MermaidViewState extends State<MermaidView> {
+class _McpAppViewState extends State<McpAppView> {
   static int _sequence = 0;
-  late final String _elementId = 'flutter-mermaid-${_sequence++}';
-  late final String _viewType = 'mermaid-view-$_elementId';
+  late final String _elementId = 'flutter-mcp-app-${_sequence++}';
+  late final String _viewType = 'mcp-app-view-$_elementId';
   String? _error;
 
   @override
@@ -30,52 +39,51 @@ class _MermaidViewState extends State<MermaidView> {
       final element = web.HTMLDivElement()
         ..id = _elementId
         ..tabIndex = 0
-        ..title = 'Drag to pan. Pinch with two fingers to zoom.'
-        ..setAttribute(
-          'aria-label',
-          'Interactive Mermaid response diagram. Drag to pan and pinch to zoom.',
-        );
+        ..title = 'Interactive Pi Voice Canvas'
+        ..setAttribute('aria-label', 'Interactive Pi Voice Canvas');
       element.style
         ..width = '100%'
         ..height = '100%'
         ..display = 'block'
-        ..overflow = 'auto'
-        ..overscrollBehavior = 'contain'
-        ..touchAction = 'none';
-      unawaited(Future<void>.delayed(Duration.zero, _render));
+        ..overflow = 'hidden';
+      unawaited(Future<void>.delayed(Duration.zero, _mount));
       return element;
     });
   }
 
   @override
-  void didUpdateWidget(covariant MermaidView oldWidget) {
+  void didUpdateWidget(covariant McpAppView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.diagram != widget.diagram) unawaited(_render());
+    if (oldWidget.presentation != widget.presentation ||
+        oldWidget.resourceUri != widget.resourceUri) {
+      unawaited(_mount());
+    }
   }
 
-  Future<void> _render() async {
-    if (widget.diagram.trim().isEmpty) return;
+  Future<void> _mount() async {
+    if (widget.presentation.isEmpty) return;
     final started = Stopwatch()..start();
     try {
-      final result = await BrowserBridge.renderMermaid(
+      final result = await BrowserBridge.mountMcpApp(
         _elementId,
-        widget.diagram,
+        jsonEncode(widget.presentation),
+        widget.resourceUri,
       );
       if (mounted) {
         setState(
           () => _error = result.contains('"ok":true')
               ? null
-              : 'Diagram unavailable',
+              : 'Visual unavailable',
         );
       }
-      UxTelemetry.instance.record('mermaid.render', duration: started.elapsed);
+      UxTelemetry.instance.record('mcp_app.render', duration: started.elapsed);
     } on Object {
       UxTelemetry.instance.record(
-        'mermaid.render',
+        'mcp_app.render',
         duration: started.elapsed,
         outcome: 'error',
       );
-      if (mounted) setState(() => _error = 'Diagram unavailable');
+      if (mounted) setState(() => _error = 'Visual unavailable');
     }
   }
 
@@ -84,7 +92,7 @@ class _MermaidViewState extends State<MermaidView> {
     if (_error != null) {
       return Semantics(
         liveRegion: true,
-        label: 'Diagram unavailable. Retry diagram.',
+        label: 'Visual unavailable. Retry visual.',
         child: Container(
           height: 72,
           alignment: Alignment.center,
@@ -97,17 +105,17 @@ class _MermaidViewState extends State<MermaidView> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(
-                Icons.account_tree_outlined,
+                Icons.widgets_outlined,
                 size: 17,
                 color: PiColors.muted,
               ),
               const SizedBox(width: 8),
               const Text(
-                'Diagram unavailable',
+                'Visual unavailable',
                 style: TextStyle(color: PiColors.muted),
               ),
               const SizedBox(width: 6),
-              TextButton(onPressed: _render, child: const Text('Retry')),
+              TextButton(onPressed: _mount, child: const Text('Retry')),
             ],
           ),
         ),
@@ -117,7 +125,7 @@ class _MermaidViewState extends State<MermaidView> {
       height: widget.height,
       child: Semantics(
         container: true,
-        label: 'Interactive Mermaid response diagram. Drag to pan and pinch to zoom.',
+        label: 'Interactive Pi Voice Canvas',
         child: HtmlElementView(viewType: _viewType),
       ),
     );

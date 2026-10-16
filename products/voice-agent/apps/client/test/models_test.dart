@@ -4,11 +4,11 @@ import 'package:voice_agent_client/models.dart';
 void main() {
   test('parses a visual Pi response without exposing raw JSON', () {
     final response = VisualResponse.fromValue(
-      '{"spoken":"Done.","mermaid":"flowchart LR\\nA --> B"}',
+      '{"spoken":"Done.","presentation":{"kind":"flow","title":"Done","nodes":[{"id":"a","label":"A"},{"id":"b","label":"B"}],"edges":[{"from":"a","to":"b"}]}}',
     );
 
     expect(response?.spoken, 'Done.');
-    expect(response?.mermaid, contains('A --> B'));
+    expect(response?.presentation['kind'], 'flow');
   });
 
   test('rejects non-visual transcript text', () {

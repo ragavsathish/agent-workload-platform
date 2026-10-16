@@ -15,10 +15,11 @@ external void _setMuted(JSBoolean muted);
 @JS('voiceBridge.consumeEvents')
 external JSString _consumeEvents();
 
-@JS('voiceBridge.renderMermaid')
-external JSPromise<JSString> _renderMermaid(
+@JS('voiceBridge.mountMcpApp')
+external JSPromise<JSString> _mountMcpApp(
   JSString elementId,
-  JSString source,
+  JSString presentation,
+  JSString resourceUri,
 );
 
 @JS('voiceBridge.openView')
@@ -39,8 +40,15 @@ abstract final class BrowserBridge {
 
   static String consumeEvents() => _consumeEvents().toDart;
 
-  static Future<String> renderMermaid(String elementId, String source) async =>
-      (await _renderMermaid(elementId.toJS, source.toJS).toDart).toDart;
+  static Future<String> mountMcpApp(
+    String elementId,
+    String presentation,
+    String resourceUri,
+  ) async => (await _mountMcpApp(
+    elementId.toJS,
+    presentation.toJS,
+    resourceUri.toJS,
+  ).toDart).toDart;
 
   static void openView(String view) => _openView(view.toJS);
 

@@ -49,7 +49,7 @@ from voice_agent.shared.telemetry import configure_telemetry
 from audio_diagnostics import audio_diagnostic_store
 from audio_filter import audio_filter_readiness, create_audio_filter
 from otel_bridge import configure_pipecat_observers
-from visual_response import StreamingSpokenExtractor, parse_visual_response
+from presentation_response import StreamingSpokenExtractor, parse_presentation_response
 
 # Voice content must never reach stdout/stderr. Docker also uses the `none` log driver, but removing
 # Loguru's shared handler prevents Pipecat from formatting transcripts or LLM context at all.
@@ -58,8 +58,8 @@ logger.remove()
 load_dotenv(override=True)
 telemetry = configure_telemetry("pipecat-voice-edge")
 
-class VoiceVisualResponseProcessor(FrameProcessor):
-    """Split one model response into browser Mermaid and TTS-safe speech."""
+class VoicePresentationResponseProcessor(FrameProcessor):
+    """Split one model response into an MCP App presentation and TTS-safe speech."""
 
     def __init__(self):
         super().__init__()
@@ -99,11 +99,12 @@ class VoiceVisualResponseProcessor(FrameProcessor):
                 await self.push_frame(frame)
                 return
 
-            response = parse_visual_response(raw)
+            response = parse_presentation_response(raw)
             await self.pipeline_worker.rtvi.send_server_message(
                 {
-                    "type": "mermaid",
-                    "diagram": response.mermaid,
+                    "type": "mcp-app",
+                    "resourceUri": response.resource_uri,
+                    "presentation": response.presentation,
                     "spoken": response.spoken,
                 }
             )
@@ -281,7 +282,7 @@ async def broker_pi_message(message: str):
         raise HTTPException(status_code=502, detail="Pi returned an invalid response") from exc
     if not isinstance(raw, str) or not raw.strip():
         raise HTTPException(status_code=502, detail="Pi returned an empty response")
-    return parse_visual_response(raw)
+    return parse_presentation_response(raw)
 
 
 async def broker_context_request(method: str, path: str) -> dict[str, object]:
@@ -626,14 +627,14 @@ async def run_bot(transport: BaseTransport, identity: str):
     async def on_user_turn_message_added(_aggregator, _message):
         telemetry.record("pipecat.user_turn.transcript_emitted")
 
-    visual_response = VoiceVisualResponseProcessor()
+    presentation_response = VoicePresentationResponseProcessor()
     pipeline = Pipeline(
         [
             transport.input(),
             stt,
             user_aggregator,
             llm,
-            visual_response,
+            presentation_response,
             tts,
             transport.output(),
             assistant_aggregator,
@@ -660,8 +661,8 @@ async def run_bot(transport: BaseTransport, identity: str):
                 "role": "developer",
                 "content": (
                     f"The authenticated user is {identity}. Respond with spoken exactly "
-                    '"Voice interface ready." and a Mermaid flowchart showing Voice connected '
-                    "to Pi."
+                    '"Voice interface ready." and a flow presentation showing Voice connected '
+                    "to Pi using the response schema from your system instruction."
                 ),
             }
         )
@@ -714,7 +715,13 @@ if __name__ == "__main__":
                 validate_http_identity(request)
             except HTTPException as exc:
                 return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
-        return await call_next(request)
+        response = await call_next(request)
+        if path.startswith(("/voice-canvas/", "/excalidraw/")):
+            # The MCP App runs in an opaque-origin sandbox. Permit only its
+            # immutable static assets to load across that sandbox boundary.
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
+        return response
 
     client_dist = Path(__file__).resolve().parent / "client-dist"
     if (client_dist / "assets").is_dir():
@@ -730,6 +737,18 @@ if __name__ == "__main__":
             "/voice-runtime",
             StaticFiles(directory=client_dist / "voice-runtime"),
             name="voice-runtime",
+        )
+    if (client_dist / "voice-canvas").is_dir():
+        app.mount(
+            "/voice-canvas",
+            StaticFiles(directory=client_dist / "voice-canvas", html=True),
+            name="voice-canvas",
+        )
+    if (client_dist / "excalidraw").is_dir():
+        app.mount(
+            "/excalidraw",
+            StaticFiles(directory=client_dist / "excalidraw", html=True),
+            name="excalidraw",
         )
     if (client_dist / "diagnostics").is_dir():
         app.mount(
@@ -917,7 +936,11 @@ if __name__ == "__main__":
             raise HTTPException(status_code=413, detail="message is too large")
         result = await broker_pi_message(message)
         return JSONResponse(
-            {"spoken": result.spoken, "mermaid": result.mermaid},
+            {
+                "spoken": result.spoken,
+                "presentation": result.presentation,
+                "resourceUri": result.resource_uri,
+            },
             headers={"Cache-Control": "no-store"},
         )
 

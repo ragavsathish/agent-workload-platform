@@ -2,27 +2,28 @@
 
 from __future__ import annotations
 
-import html
 import json
-import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-MAX_DIAGRAM_LENGTH = 24_000
-MAX_RESPONSE_LENGTH = 12_000
+MAX_RESPONSE_LENGTH = 70_000
 MAX_SPOKEN_LENGTH = 2_000
-
-_MERMAID_PREFIX = re.compile(
-    r"^(?:flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|"
-    r"erDiagram|journey|gantt|pie|mindmap|timeline|quadrantChart|xychart-beta)\b"
-)
+VOICE_CANVAS_URI = "ui://voice-canvas/main"
+EXCALIDRAW_URI = "ui://excalidraw/mcp-app.html"
+EXCALIDRAW_TYPES = {
+    "cameraUpdate", "rectangle", "ellipse", "diamond", "text", "arrow", "line"
+}
 
 PRESENTATION_INSTRUCTION = """
 
 When the work is complete, make your final assistant message exactly one JSON object
-with two string fields: "spoken" and "mermaid". "spoken" must be a concise, precise
-summary suitable for text-to-speech. "mermaid" must be a valid, compact Mermaid
-diagram describing the result. Do not use Markdown fences around the JSON or diagram.
+with fields "spoken" and "presentation". "spoken" must be a concise, precise summary
+suitable for text-to-speech. "presentation" must contain "kind" ("flow" or "status"),
+a short "title", "nodes" with unique "id" and "label" strings, and "edges" with
+"from", "to", and optional "label" strings. When the user explicitly requests a
+rich, editable, or Excalidraw diagram, use kind "excalidraw" with a title and at
+most 80 cameraUpdate, rectangle, ellipse, diamond, text, arrow, or line elements.
+Do not use Markdown fences.
 """.strip()
 
 
@@ -30,7 +31,8 @@ diagram describing the result. Do not use Markdown fences around the JSON or dia
 class PiResponse:
     text: str
     spoken: str
-    mermaid: str
+    presentation: dict[str, object]
+    resource_uri: str
 
 
 def presentation_prompt(instruction: str) -> str:
@@ -55,10 +57,14 @@ def _message_text(message: object) -> str:
     return "".join(parts).strip()
 
 
-def fallback_mermaid(spoken: str) -> str:
+def fallback_presentation(spoken: str) -> dict[str, object]:
     label = " ".join(spoken.split()) or "Task completed"
-    label = html.escape(label[:240], quote=True)
-    return f'flowchart TD\n  task["Pi task"] --> result["{label}"]'
+    return {
+        "kind": "status",
+        "title": "Task result",
+        "nodes": [{"id": "result", "label": label[:240]}],
+        "edges": [],
+    }
 
 
 def response_from_text(text: str) -> PiResponse:
@@ -70,21 +76,41 @@ def response_from_text(text: str) -> PiResponse:
 
     if isinstance(payload, dict):
         spoken_value = payload.get("spoken")
-        mermaid_value = payload.get("mermaid")
         spoken = spoken_value.strip() if isinstance(spoken_value, str) else ""
-        mermaid = mermaid_value.strip() if isinstance(mermaid_value, str) else ""
+        presentation_value = payload.get("presentation")
+        presentation = presentation_value if isinstance(presentation_value, dict) else None
     else:
         spoken = text
-        mermaid = ""
+        presentation = None
 
     spoken = (spoken or "Task completed.")[:MAX_SPOKEN_LENGTH]
-    if (
-        not mermaid
-        or len(mermaid) > MAX_DIAGRAM_LENGTH
-        or _MERMAID_PREFIX.match(mermaid) is None
-    ):
-        mermaid = fallback_mermaid(spoken)
-    return PiResponse(text=text or spoken, spoken=spoken, mermaid=mermaid)
+    if presentation and presentation.get("kind") == "excalidraw":
+        elements = presentation.get("elements")
+        valid_elements = (
+            isinstance(elements, list)
+            and 0 < len(elements) <= 80
+            and all(
+                isinstance(element, dict)
+                and element.get("type") in EXCALIDRAW_TYPES
+                for element in elements
+            )
+            and len(json.dumps(presentation, separators=(",", ":")).encode()) <= 64 * 1024
+        )
+        if not valid_elements:
+            presentation = None
+    if not presentation or presentation.get("kind") not in {"flow", "status", "excalidraw"}:
+        presentation = fallback_presentation(spoken)
+    resource_uri = (
+        EXCALIDRAW_URI
+        if presentation.get("kind") == "excalidraw"
+        else VOICE_CANVAS_URI
+    )
+    return PiResponse(
+        text=text or spoken,
+        spoken=spoken,
+        presentation=presentation,
+        resource_uri=resource_uri,
+    )
 
 
 def parse_pi_event_stream(stream: Iterable[str | bytes]) -> PiResponse:

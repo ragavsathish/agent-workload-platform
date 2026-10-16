@@ -36,7 +36,11 @@ export const createInitialFixtureState = () => deepFreeze({
       role: 'assistant',
       text: JSON.stringify({
         spoken: 'Ready from the HTTP fixture.',
-        mermaid: 'flowchart LR\nBrowser --> Pi',
+        presentation: {
+          kind: 'flow', title: 'Voice path',
+          nodes: [{ id: 'browser', label: 'Browser' }, { id: 'pi', label: 'Pi' }],
+          edges: [{ from: 'browser', to: 'pi' }],
+        },
       }),
     },
   ],
@@ -235,7 +239,11 @@ export const completeTurn = (state, turnId) => {
   if (!state.activeTurn || state.activeTurn.id !== turnId) return state;
   const visual = deepFreeze({
     spoken: `Fixture response to: ${state.activeTurn.message}`,
-    mermaid: 'flowchart LR\nRequest --> Response',
+    presentation: {
+      kind: 'flow', title: 'Response',
+      nodes: [{ id: 'request', label: 'Request' }, { id: 'response', label: 'Response' }],
+      edges: [{ from: 'request', to: 'response' }],
+    },
   });
   return deepFreeze({
     ...state,
@@ -264,12 +272,20 @@ export const abortActiveTurn = (state) => {
 
 export const completedTurnResponse = (message) => deepFreeze({
   spoken: `Fixture response to: ${message}`,
-  mermaid: 'flowchart LR\nRequest --> Response',
+  presentation: {
+    kind: 'flow', title: 'Response',
+    nodes: [{ id: 'request', label: 'Request' }, { id: 'response', label: 'Response' }],
+    edges: [{ from: 'request', to: 'response' }],
+  },
 });
 
 export const interruptedTurnResponse = () => deepFreeze({
   spoken: 'Response stopped.',
-  mermaid: 'flowchart LR\nRequest --> Stopped',
+  presentation: {
+    kind: 'flow', title: 'Stopped',
+    nodes: [{ id: 'request', label: 'Request' }, { id: 'stopped', label: 'Stopped' }],
+    edges: [{ from: 'request', to: 'stopped' }],
+  },
 });
 
 export const createTask = (state, instruction, { now }) => {

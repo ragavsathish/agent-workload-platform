@@ -145,7 +145,17 @@ class _FakeVoiceApi extends VoiceApi {
     sentMessages.add(message);
     return const VisualResponse(
       spoken: 'The task is complete.',
-      mermaid: 'flowchart LR\nA --> B',
+      presentation: {
+        'kind': 'flow',
+        'title': 'Task complete',
+        'nodes': [
+          {'id': 'a', 'label': 'A'},
+          {'id': 'b', 'label': 'B'},
+        ],
+        'edges': [
+          {'from': 'a', 'to': 'b'},
+        ],
+      },
     );
   }
 }

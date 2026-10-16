@@ -4,18 +4,19 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "build": "npm run build:bridge && ./tool/flutterw build web --release --wasm",
+    "build": "npm run build:canvas && npm run build:excalidraw && npm run build:bridge && ./tool/flutterw build web --release --wasm",
+    "build:canvas": "./tool/build-voice-canvas",
+    "build:excalidraw": "node tool/build-excalidraw-app.mjs",
     "build:bridge": "node tool/build-bridge.mjs",
     "lint": "./tool/flutterw analyze",
     "test": "./tool/flutterw test",
-    "test:webmcp": "node --test bridge/webmcp_tools.test.mjs",
     "test:patrol": "npm run build:bridge && ./tool/run-patrol-web",
     "profile:web": "./tool/profile-web"
   },
   "dependencies": {
+    "@modelcontextprotocol/ext-apps": "0.4.2",
     "@pipecat-ai/client-js": "1.13.1",
-    "@pipecat-ai/small-webrtc-transport": "1.10.8",
-    "mermaid": "12.2.0"
+    "@pipecat-ai/small-webrtc-transport": "1.10.8"
   },
   "devDependencies": {
     "esbuild": "0.28.2"

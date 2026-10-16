@@ -10,19 +10,13 @@ microphone permission only when the page starts a voice conversation, grants the
 page microphone access but not camera access, and prevents navigation away from
 the configured workspace origin. The device must be connected to the tailnet.
 
-On supported Chromium builds, the page progressively registers three WebMCP
-tools: read the bounded active workspace state, send a typed Pi message, and
-create a pending task. It never exposes task approval or execution. WebMCP is
-currently an experimental browser capability; unsupported browsers and native
-WKWebView continue normally without registering tools.
-
-For local Chrome testing, enable `chrome://flags/#enable-webmcp-testing` before
-loading the page. The registration status can be inspected without invoking a
-tool:
-
-```js
-JSON.parse(await window.voiceBridge.installWebMcp())
-```
+Visual responses use the MCP Apps protocol. Flutter hosts the official MCP App
+bridge in a sandboxed iframe. The small Dart Voice Canvas handles normal status
+and flow views; a locally bundled Excalidraw app handles explicit rich or
+editable diagram requests. Excalidraw and its fonts are built from
+`vendor/excalidraw-mcp`, are loaded only when selected, and make no CDN request.
+Both apps receive only bounded presentation data. The host does not expose task
+approval, execution, credentials, links, exports, or server tools.
 
 Override the production workspace at build time when needed:
 
@@ -38,7 +32,6 @@ Override the production workspace at build time when needed:
 ./tool/flutterw test
 ./tool/flutterw build bundle
 npm run build
-npm run test:webmcp
 npm run test:patrol
 npm run profile:web
 ```
@@ -85,10 +78,10 @@ transport lifecycle are intentionally independent from this workspace.
 ## Client UX performance profile
 
 UX timing stays in the client to guide product performance improvements. It
-never posts to the server and never records transcript text, audio, Mermaid
+never posts to the server and never records transcript text, audio, presentation
 source, URLs, or error messages. The bounded profile contains first-frame time,
 Flutter build/raster timings and jank counts, start/mute/stop latency, and
-Mermaid render latency. On web, the latest 500 samples persist locally across
+MCP App mount latency. On web, the latest 500 samples persist locally across
 reloads.
 
 Inspect raw web samples or an aggregate with p50, p95, maximum, count, and
@@ -113,10 +106,10 @@ resources for investigation. The `?force_js=1` switch exists only to reproduce
 the fallback path during profiling. The latest report is written to
 `build/ux-profile.json`.
 
-The 2026-10-16 cold-phone profile identified eager Pipecat and Mermaid loading
-as the avoidable startup cost. Those modules now load only when a conversation
-starts or a live diagram arrives; the initial conversation map is a lightweight
-Flutter drawing. Compared with the original JavaScript build, the JavaScript
+The 2026-10-16 cold-phone profile identified eager Pipecat and diagram loading
+as avoidable startup costs. Pipecat now loads when a conversation starts and
+the sandboxed MCP App mounts only when a structured presentation arrives; the
+initial conversation map is a lightweight Flutter drawing. Compared with the original JavaScript build, the JavaScript
 fallback reduced resource-timing transfer from 5.41 MB to 2.65 MB, blocking
 time from 773 ms to 632 ms, heap from 26.9 MB to 15.8 MB, and FCP from 1,112 ms
 to 932 ms. On a Wasm-capable phone profile, heap is 8.2 MB and FCP is 880 ms.

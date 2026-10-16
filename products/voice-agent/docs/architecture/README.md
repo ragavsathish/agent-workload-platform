@@ -101,14 +101,14 @@ access to proposal records, and Habitat has no direct host port.
 | C4 element | Repository evidence |
 |---|---|
 | Browser Voice Client | `apps/client/lib/`; production Flutter web assets copied by `apps/edge/Containerfile` |
-| Browser Voice Client components | `apps/client/lib/main.dart`; `views/voice_view.dart`; `views/transcript_view.dart`; `widgets/mermaid_view_web.dart`; `platform/voice_session_web.dart`; `bridge/voice_bridge.js` |
+| Browser Voice Client components | `apps/client/lib/main.dart`; `views/voice_view.dart`; `views/pi_workspace_view.dart`; `widgets/mcp_app_view_web.dart`; `platform/voice_session_web.dart`; `bridge/voice_bridge.js`; `voice_canvas/main.dart`; the lazy Excalidraw app is built from `vendor/excalidraw-mcp` by `tool/build-excalidraw-app.mjs` |
 | Mobile Client foundation | `apps/client/ios/`; `apps/client/android/`; `apps/client/lib/platform/voice_session.dart`; native adapters are not implemented yet |
 | Input Diagnostics | `apps/diagnostics/`; React bundle emitted to `apps/diagnostics/dist/` |
 | Engineering Evidence and C4 Explorer | `deploy/observability/generate-c4-heatmap.mjs`; `components/c4-grafana-ts/`; provisioned Grafana dashboard compiled by WASM from these Mermaid sources |
 | Tailnet Ingress | `deploy/compose.yml`; `scripts/compose-login.sh` |
 | Path Router | `deploy/traefik/traefik.yml`; `deploy/traefik/routes.yml` |
 | Voice Edge | `apps/edge/bot.py`; `apps/edge/Containerfile` |
-| Voice Edge components | `apps/edge/bot.py`; `apps/edge/audio_filter.py`; `apps/edge/audio_diagnostics.py`; `apps/edge/visual_response.py`; `apps/edge/otel_bridge.py` |
+| Voice Edge components | `apps/edge/bot.py`; `apps/edge/audio_filter.py`; `apps/edge/audio_diagnostics.py`; `apps/edge/presentation_response.py`; `apps/edge/otel_bridge.py` |
 | Input Audio Filter | `apps/edge/audio_filter.py`; `deploy/prepare_compose.py`; `apps/edge/Containerfile` |
 | Inference Broker | `apps/broker/src/voice_agent/speech/presentation/http.py`; broker LaunchAgent |
 | Inference Broker components | `apps/broker/src/voice_agent/speech/presentation/http.py`; `application/transcription.py`; `infrastructure/parakeet_stt.py`; `infrastructure/mlx_tts.py` |

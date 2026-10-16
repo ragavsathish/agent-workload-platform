@@ -20,13 +20,18 @@ const main = async () => {
   try {
     await page.goto(`${baseUrl}/?view=transcript`, { waitUntil: 'networkidle', timeout: 60_000 });
     const delayedMount = await page.evaluate(async () => {
-      const render = window.voiceBridge.renderMermaid(
-        'delayed-mermaid-mount',
-        'flowchart LR\n  task[Task] --> result[Result]',
+      const render = window.voiceBridge.mountMcpApp(
+        'delayed-mcp-app-mount',
+        JSON.stringify({
+          kind: 'flow', title: 'Task result',
+          nodes: [{ id: 'task', label: 'Task' }, { id: 'result', label: 'Result' }],
+          edges: [{ from: 'task', to: 'result' }],
+        }),
+        'ui://voice-canvas/main',
       );
       await new Promise((resolve) => setTimeout(resolve, 50));
       const target = document.createElement('div');
-      target.id = 'delayed-mermaid-mount';
+      target.id = 'delayed-mcp-app-mount';
       target.style.width = '320px';
       target.style.height = '200px';
       document.body.append(target);
@@ -34,7 +39,7 @@ const main = async () => {
       target.remove();
       return result;
     });
-    if (!delayedMount.ok) throw new Error(`Delayed Mermaid mount failed: ${delayedMount.error}`);
+    if (!delayedMount.ok) throw new Error(`Delayed MCP App mount failed: ${delayedMount.error}`);
     const placeholder = page.locator('flt-semantics-placeholder');
     if (await placeholder.count()) await placeholder.evaluate((element) => element.click());
     await page.getByText(/^Tasks \d+$/).click();
@@ -45,7 +50,7 @@ const main = async () => {
       await showDiagrams.first().click();
     }
     await page.waitForTimeout(1_000);
-    const unavailable = page.getByText('Diagram unavailable', { exact: true });
+    const unavailable = page.getByText('Visual unavailable', { exact: true });
     const count = await unavailable.count();
     await page.screenshot({ path: path.join(outputDir, 'task-diagram-regression.png'), fullPage: true });
     if (count !== 0) throw new Error(`Found ${count} unavailable task diagram(s)`);

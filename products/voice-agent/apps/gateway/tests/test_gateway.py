@@ -41,7 +41,13 @@ def test_voice_view_never_returns_host_approval_token_or_raw_events(monkeypatch)
                     "stdout": "private raw output",
                     "response": {
                         "spoken": "Done.",
-                        "mermaid": "flowchart TD\n  task --> done",
+                        "presentation": {
+                            "kind": "status",
+                            "title": "Task result",
+                            "nodes": [{"id": "done", "label": "Done"}],
+                            "edges": [],
+                        },
+                        "resourceUri": "ui://voice-canvas/main",
                     },
                 },
             },
@@ -51,6 +57,7 @@ def test_voice_view_never_returns_host_approval_token_or_raw_events(monkeypatch)
     assert "approval_token" not in view
     assert "private raw output" not in str(view)
     assert view["result"]["result"]["response"]["spoken"] == "Done."
+    assert view["result"]["result"]["response"]["resourceUri"] == "ui://voice-canvas/main"
 
 
 def test_gateway_capability_is_bound_to_one_configured_identity(monkeypatch):

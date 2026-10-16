@@ -9,7 +9,8 @@ class VoicePromptTest(unittest.TestCase):
 
         self.assertIn("exactly full-wasm-server", prompt)
         self.assertNotIn("{{DEFAULT_WORKSPACE}}", prompt)
-        self.assertIn('"spoken" and "mermaid"', prompt)
+        self.assertIn('"spoken" and "presentation"', prompt)
+        self.assertIn('kind "excalidraw"', prompt)
 
     def test_workspace_cannot_inject_another_prompt_line(self):
         with self.assertRaises(RuntimeError):

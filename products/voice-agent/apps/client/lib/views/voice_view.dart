@@ -8,7 +8,7 @@ import '../platform/client_actions.dart';
 import '../platform/voice_session.dart';
 import '../theme.dart';
 import '../ux_telemetry.dart';
-import '../widgets/mermaid_view.dart';
+import '../widgets/mcp_app_view.dart';
 
 enum VoicePhase { ready, starting, listening, muted, thinking, speaking }
 
@@ -25,8 +25,8 @@ class _VoiceViewState extends State<VoiceView> {
   VoicePhase _phase = VoicePhase.ready;
   bool _isMuted = false;
   ContextUsage? _context;
-  String _diagram = '';
-  bool _hasLiveDiagram = false;
+  JsonMap? _presentation;
+  String _resourceUri = 'ui://voice-canvas/main';
   String? _error;
   bool _compactBusy = false;
   late final VoiceSession _session;
@@ -78,11 +78,11 @@ class _VoiceViewState extends State<VoiceView> {
           } else if (_phase == VoicePhase.speaking) {
             _phase = VoicePhase.listening;
           }
-        case VoiceEventType.mermaid:
-          final next = event.diagram;
-          if (next != null && next.isNotEmpty && next.length <= 24000) {
-            _diagram = next;
-            _hasLiveDiagram = true;
+        case VoiceEventType.mcpApp:
+          final next = event.presentation;
+          if (next != null && next.isNotEmpty) {
+            _presentation = next;
+            _resourceUri = event.resourceUri ?? 'ui://voice-canvas/main';
           }
         case VoiceEventType.audioError:
           _error = event.message ?? 'Audio output failed.';
@@ -255,7 +255,7 @@ class _VoiceViewState extends State<VoiceView> {
                           children: [
                             Expanded(
                               child: Text(
-                                'Conversation map',
+                                'Live response',
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
@@ -263,7 +263,7 @@ class _VoiceViewState extends State<VoiceView> {
                               ),
                             ),
                             Text(
-                              'PINCH · DRAG',
+                              'MCP APP',
                               style: TextStyle(
                                 color: PiColors.muted,
                                 fontFamily: 'monospace',
@@ -277,7 +277,7 @@ class _VoiceViewState extends State<VoiceView> {
                         const Eyebrow('Live response'),
                         const SizedBox(height: 6),
                         const Text(
-                          'Conversation map',
+                          'Interactive canvas',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -285,10 +285,11 @@ class _VoiceViewState extends State<VoiceView> {
                         ),
                       ],
                       SizedBox(height: mobile ? 6 : 10),
-                      if (_hasLiveDiagram)
-                        MermaidView(
-                          key: const Key('live-mermaid'),
-                          diagram: _diagram,
+                      if (_presentation != null)
+                        McpAppView(
+                          key: const Key('live-mcp-app'),
+                          presentation: _presentation!,
+                          resourceUri: _resourceUri,
                           height: diagramHeight,
                         )
                       else
