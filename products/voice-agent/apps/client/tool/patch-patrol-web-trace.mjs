@@ -2,9 +2,15 @@ import fs from 'node:fs';
 const [runnerPath] = process.argv.slice(2);
 if (!runnerPath) throw new Error('Patrol web runner path is required.');
 
-const marker = 'await context.tracing.start({ screenshots: true, snapshots: true, sources: true })';
+const startMarker = 'await context.tracing.start({ screenshots: true, snapshots: true, sources: true })';
+const stopMarker = 'await context.tracing.stop({ path: testInfo.outputPath("trace.zip") })';
 let source = fs.readFileSync(runnerPath, 'utf8');
-if (source.includes(marker)) process.exit(0);
+const hasStart = source.includes(startMarker);
+const hasStop = source.includes(stopMarker);
+if (hasStart !== hasStop) {
+  throw new Error('Patrol web runner has a partial trace patch; refusing to continue.');
+}
+if (hasStart && hasStop) process.exit(0);
 
 const fixtureStart = '  page: async ({ page, context }, use, testInfo) => {\n';
 const fixtureEnd = `    for (const p of context.pages()) {
@@ -19,9 +25,9 @@ if (!source.includes(fixtureStart) || !source.includes(fixtureEnd)) {
 }
 
 source = source
-  .replace(fixtureStart, `${fixtureStart}    ${marker}\n`)
+  .replace(fixtureStart, `${fixtureStart}    ${startMarker}\n`)
   .replace(
     fixtureEnd,
-    `${fixtureEnd}\n    await context.tracing.stop({ path: testInfo.outputPath("trace.zip") })\n`,
+    `${fixtureEnd}\n    ${stopMarker}\n`,
   );
 fs.writeFileSync(runnerPath, source);

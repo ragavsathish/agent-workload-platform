@@ -1,58 +1,34 @@
+import fs from 'node:fs';
 import http from 'node:http';
-const port = Number(process.env.PATROL_FIXTURE_PORT ?? 54321);
-let revision = 1;
-let activeTurn = null;
-let activeSessionId = 'fixture-live';
-let freshSession = false;
-const entries = [
-  {
-    id: 'fixture-tool',
-    timestamp: Date.parse('2026-10-16T07:59:59Z'),
-    role: 'tool',
-    text: 'read_workspace',
-    status: 'completed',
-  },
-  {
-    id: 'fixture-assistant',
-    timestamp: Date.parse('2026-10-16T08:00:00Z'),
-    role: 'assistant',
-    text: JSON.stringify({
-      spoken: 'Ready from the HTTP fixture.',
-      mermaid: 'flowchart LR\nBrowser --> Pi',
-    }),
-  },
-];
-const tasks = [
-  {
-    id: 'fixture-task',
-    instruction: 'Review the fixture deployment',
-    workspace: '/workspace',
-    plan_hash: 'fixture-plan',
-    status: 'pending',
-    created_at: '2026-10-16T08:00:00Z',
-  },
-];
-const historicalSessions = new Map([
-  ['fixture-history', {
-    title: 'Release review',
-    updatedAt: '2026-10-15T18:30:00Z',
-    entries: [
-      {
-        id: 'history-user',
-        timestamp: Date.parse('2026-10-15T18:29:00Z'),
-        role: 'user',
-        text: 'How did the release go?',
-      },
-      {
-        id: 'history-assistant',
-        timestamp: Date.parse('2026-10-15T18:30:00Z'),
-        role: 'assistant',
-        text: 'The release completed successfully.',
-        status: 'completed',
-      },
-    ],
-  }],
-]);
+import { randomUUID } from 'node:crypto';
+
+import {
+  abortActiveTurn,
+  beginTurn,
+  changeTaskStatus,
+  compactContext,
+  completeTurn,
+  completedTurnResponse,
+  contextUsage,
+  createInitialFixtureState,
+  createTask,
+  historicalTranscript,
+  interruptedTurnResponse,
+  resumeSession,
+  sessionSummaries,
+  startNewSession,
+  transcriptSnapshot,
+} from './patrol-fixture-domain.mjs';
+
+const requestedPort = Number(process.env.PATROL_FIXTURE_PORT ?? 54321);
+const readyFile = process.env.PATROL_FIXTURE_READY_FILE;
+const fixtureNonce = process.env.PATROL_FIXTURE_NONCE ?? randomUUID();
+const clock = Object.freeze({
+  now: () => new Date().toISOString(),
+  timestamp: () => Date.now(),
+});
+let state = createInitialFixtureState();
+const pendingTurns = new Map();
 
 const headers = {
   'Access-Control-Allow-Headers': 'Cache-Control, Content-Type',
@@ -62,12 +38,36 @@ const headers = {
   'Content-Type': 'application/json',
 };
 
-function json(response, status, body) {
+const json = (response, status, body) => {
   response.writeHead(status, headers);
   response.end(JSON.stringify(body));
-}
+};
 
-function silentWav() {
+const apply = (transition) => {
+  state = transition.state;
+  return transition;
+};
+
+const statusFor = (error) => switchError(error, {
+  SessionNotFound: 404,
+  TaskNotFound: 404,
+  TurnAlreadyActive: 409,
+});
+
+const switchError = (error, statuses) => statuses[error.type] ?? 400;
+
+const sendTransition = (response, transition, successStatus = 200) => {
+  if (transition.type === 'Err') {
+    json(response, statusFor(transition.error), {
+      detail: transition.error.type,
+    });
+    return false;
+  }
+  json(response, successStatus, transition.value);
+  return true;
+};
+
+const silentWav = () => {
   const samples = 800;
   const buffer = Buffer.alloc(44 + samples * 2);
   buffer.write('RIFF', 0);
@@ -83,23 +83,51 @@ function silentWav() {
   buffer.write('data', 36);
   buffer.writeUInt32LE(samples * 2, 40);
   return buffer;
-}
+};
 
-async function bodyOf(request) {
+const bodyOf = async (request) => {
   const chunks = [];
   for await (const chunk of request) chunks.push(chunk);
   return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
-}
+};
+
+const completeActiveTurn = async (message) => {
+  const started = apply(beginTurn(state, message, { now: clock.timestamp }));
+  if (started.type === 'Err') return started;
+  const turn = started.value;
+  const outcome = await new Promise((resolve) => {
+    const timer = setTimeout(() => resolve('completed'), 1800);
+    pendingTurns.set(turn.id, {
+      release: () => {
+        clearTimeout(timer);
+        resolve('interrupted');
+      },
+    });
+  });
+  pendingTurns.delete(turn.id);
+  if (outcome === 'completed') state = completeTurn(state, turn.id);
+  return {
+    type: 'Ok',
+    state,
+    value: outcome === 'completed'
+      ? completedTurnResponse(message)
+      : interruptedTurnResponse(),
+  };
+};
 
 const server = http.createServer(async (request, response) => {
-  const url = new URL(request.url, `http://127.0.0.1:${port}`);
+  const url = new URL(request.url, 'http://127.0.0.1');
   if (request.method === 'OPTIONS') {
     response.writeHead(204, headers);
     response.end();
     return;
   }
   if (request.method === 'GET' && url.pathname === '/health') {
-    json(response, 200, { ok: true });
+    json(response, 200, {
+      ok: true,
+      fixture: 'voice-agent-patrol',
+      nonce: fixtureNonce,
+    });
     return;
   }
   if (request.method === 'POST' && url.pathname === '/api/pi-speech') {
@@ -114,177 +142,77 @@ const server = http.createServer(async (request, response) => {
     return;
   }
   if (request.method === 'GET' && url.pathname === '/api/pi-context') {
-    json(response, 200, {
-      tokens: freshSession ? null : 1200,
-      contextWindow: freshSession ? null : 8000,
-      percent: freshSession ? null : 15,
-      estimated: false,
-      canCompact: !freshSession,
-    });
+    json(response, 200, contextUsage(state));
     return;
   }
   if (request.method === 'POST' && url.pathname === '/api/pi-context/compact') {
-    json(response, 200, {
-      tokens: 600,
-      contextWindow: 8000,
-      percent: 7.5,
-      estimated: false,
-      canCompact: false,
-    });
+    sendTransition(response, apply(compactContext(state)));
     return;
   }
   if (request.method === 'GET' && url.pathname === '/api/pi-transcript') {
-    json(response, 200, { revision, entries });
+    json(response, 200, transcriptSnapshot(state));
     return;
   }
   if (request.method === 'GET' && url.pathname === '/api/pi-sessions') {
-    json(response, 200, {
-      sessions: [
-        {
-          id: activeSessionId,
-          title: 'Voice orchestrator',
-          updatedAt: '2026-10-16T08:00:00Z',
-          messageCount: entries.length,
-          active: true,
-        },
-        ...[...historicalSessions].map(([id, session]) => ({
-          id,
-          title: session.title,
-          updatedAt: session.updatedAt,
-          messageCount: session.entries.length,
-          active: false,
-        })),
-      ],
-    });
+    json(response, 200, sessionSummaries(state));
     return;
   }
   if (request.method === 'POST' && url.pathname === '/api/pi-sessions/new') {
-    historicalSessions.set(activeSessionId, {
-      title: 'Previous voice session',
-      updatedAt: new Date().toISOString(),
-      entries: structuredClone(entries),
-    });
-    activeSessionId = 'fixture-live-2';
-    freshSession = true;
-    entries.splice(0, entries.length);
-    revision += 1;
-    json(response, 201, { id: activeSessionId });
+    sendTransition(response, apply(startNewSession(state, clock)), 201);
     return;
   }
   const resumeMatch = url.pathname.match(/^\/api\/pi-sessions\/([^/]+)\/resume$/);
-  if (request.method === 'POST' && resumeMatch && historicalSessions.has(resumeMatch[1])) {
-    const next = historicalSessions.get(resumeMatch[1]);
-    historicalSessions.set(activeSessionId, {
-      title: 'Previous voice session',
-      updatedAt: new Date().toISOString(),
-      entries: structuredClone(entries),
-    });
-    historicalSessions.delete(resumeMatch[1]);
-    activeSessionId = resumeMatch[1];
-    freshSession = false;
-    entries.splice(0, entries.length, ...structuredClone(next.entries));
-    revision += 1;
-    json(response, 200, { id: activeSessionId });
+  if (request.method === 'POST' && resumeMatch) {
+    sendTransition(response, apply(resumeSession(state, resumeMatch[1], clock)));
     return;
   }
   const sessionMatch = url.pathname.match(/^\/api\/pi-sessions\/([^/]+)$/);
-  if (request.method === 'GET' && sessionMatch && historicalSessions.has(sessionMatch[1])) {
-    const session = historicalSessions.get(sessionMatch[1]);
-    json(response, 200, {
-      revision: 1,
-      entries: session.entries,
-    });
+  if (request.method === 'GET' && sessionMatch) {
+    sendTransition(response, historicalTranscript(state, sessionMatch[1]));
     return;
   }
   if (request.method === 'POST' && url.pathname === '/api/pi-message') {
     const body = await bodyOf(request);
-    const visual = {
-      spoken: `Fixture response to: ${body.message}`,
-      mermaid: 'flowchart LR\nRequest --> Response',
-    };
-    freshSession = false;
-    revision += 1;
-    const assistant = {
-      id: `fixture-assistant-${revision}`,
-      timestamp: Date.now(),
-      role: 'assistant',
-      text: 'Inspecting the fixture…',
-      status: 'running',
-    };
-    entries.push(
-      {
-        id: `fixture-user-${revision}`,
-        timestamp: Date.now(),
-        role: 'user',
-        text: body.message,
-      },
-      assistant,
-    );
-    let release;
-    const interrupted = new Promise((resolve) => {
-      release = resolve;
-    });
-    const timer = setTimeout(release, 1800);
-    const turn = { assistant, aborted: false, release };
-    activeTurn = turn;
-    await interrupted;
-    clearTimeout(timer);
-    if (!turn.aborted) {
-      assistant.text = JSON.stringify(visual);
-      assistant.status = 'completed';
-      revision += 1;
-    }
-    if (activeTurn === turn) activeTurn = null;
-    json(response, 200, turn.aborted ? {
-      spoken: 'Response stopped.',
-      mermaid: 'flowchart LR\nRequest --> Stopped',
-    } : visual);
+    sendTransition(response, await completeActiveTurn(body.message));
     return;
   }
   if (request.method === 'POST' && url.pathname === '/api/pi-turn/abort') {
-    if (activeTurn) {
-      activeTurn.aborted = true;
-      activeTurn.assistant.status = 'completed';
-      revision += 1;
-      activeTurn.release();
-    }
+    const transition = apply(abortActiveTurn(state));
+    const pending = pendingTurns.get(transition.value.turnId);
+    pending?.release();
     json(response, 200, { status: 'stopped' });
     return;
   }
   if (request.method === 'GET' && url.pathname === '/api/tasks') {
-    json(response, 200, tasks);
+    json(response, 200, state.tasks);
     return;
   }
   if (request.method === 'POST' && url.pathname === '/api/tasks') {
     const body = await bodyOf(request);
-    const task = {
-      id: `fixture-task-${tasks.length + 1}`,
-      instruction: body.instruction,
-      workspace: '/workspace',
-      plan_hash: `fixture-plan-${tasks.length + 1}`,
-      status: 'pending',
-      created_at: new Date().toISOString(),
-    };
-    tasks.unshift(task);
-    json(response, 201, task);
+    sendTransition(response, apply(createTask(state, body.instruction, clock)), 201);
     return;
   }
   const action = url.pathname.match(/^\/api\/tasks\/([^/]+)\/(approve|cancel)$/);
   if (request.method === 'POST' && action) {
-    const task = tasks.find((candidate) => candidate.id === action[1]);
-    if (!task) {
-      json(response, 404, { detail: 'task not found' });
-      return;
-    }
-    task.status = action[2] === 'approve' ? 'approved' : 'cancelled';
-    json(response, 200, task);
+    const status = action[2] === 'approve' ? 'approved' : 'cancelled';
+    sendTransition(response, apply(changeTaskStatus(state, action[1], status)));
     return;
   }
   json(response, 404, { detail: 'fixture route not found' });
 });
 
-server.listen(port, '127.0.0.1', () => {
-  console.log(`Patrol fixture listening on http://127.0.0.1:${port}`);
+server.listen(requestedPort, '127.0.0.1', () => {
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    throw new Error('Patrol fixture did not bind a TCP address.');
+  }
+  const ready = {
+    fixture: 'voice-agent-patrol',
+    nonce: fixtureNonce,
+    port: address.port,
+  };
+  if (readyFile) fs.writeFileSync(readyFile, `${JSON.stringify(ready)}\n`);
+  console.log(`Patrol fixture listening on http://127.0.0.1:${address.port}`);
 });
 
 for (const signal of ['SIGINT', 'SIGTERM']) {

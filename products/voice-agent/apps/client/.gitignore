@@ -19,6 +19,7 @@ build
 coverage
 patrol_test/test_bundle.dart
 test_bundle.dart
+.patrol.env
 web/voice_bridge.js
 web/bridge
 web/voice-runtime
