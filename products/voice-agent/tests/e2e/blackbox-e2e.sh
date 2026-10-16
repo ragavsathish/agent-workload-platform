@@ -5,7 +5,20 @@ repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 configured_identity="$(sed -n 's/^ORCHESTRATOR_ALLOWED_USERS=//p' "$repo_dir/deploy/.env" | tail -1)"
 identity="${BLACKBOX_IDENTITY:-${configured_identity%%,*}}"
 [[ -n "$identity" ]] || { echo "FAIL no smoke-test identity is configured" >&2; exit 1; }
-compose=(docker compose --env-file "$repo_dir/deploy/.env" -f "$repo_dir/deploy/compose.yml" -f "$repo_dir/deploy/compose.local-test.yml")
+base_compose=(docker compose --env-file "$repo_dir/deploy/.env" -f "$repo_dir/deploy/compose.yml")
+compose=("${base_compose[@]}")
+tailnet_mode="${BLACKBOX_USE_TAILSCALE:-auto}"
+if [[ "$tailnet_mode" == "auto" ]]; then
+  if "${base_compose[@]}" exec -T tailscale \
+    tailscale --socket=/tmp/tailscaled.sock status >/dev/null 2>&1; then
+    tailnet_mode="true"
+  else
+    tailnet_mode="false"
+  fi
+fi
+if [[ "$tailnet_mode" != "true" ]]; then
+  compose+=(-f "$repo_dir/deploy/compose.local-test.yml")
+fi
 
 ORCHESTRATOR_ALLOWED_USERS="$identity" \
   "${compose[@]}" up -d --wait --build tailscale s3mock postgres agent-gateway voice-edge >/dev/null
