@@ -1,0 +1,11 @@
+{
+  "image": "voice-agent-gondolin:playwright-mcp-0.0.79-arm64",
+  "build": {
+    "context": "platform/agent-execution/gondolin-session/gondolin",
+    "dockerfile": "platform/agent-execution/gondolin-session/gondolin/Dockerfile.voice",
+    "assetConfig": "platform/agent-execution/gondolin-session/gondolin/playwright-mcp.aarch64.json",
+    "publish": false
+  },
+  "memory": "2G",
+  "cpus": 2
+}

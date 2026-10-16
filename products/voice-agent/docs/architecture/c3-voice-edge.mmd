@@ -1,0 +1,46 @@
+flowchart TB
+    BROWSER[External container<br/><b>Browser Client</b><br/>RTVI and owner HTTP requests]
+    BROKER[External container<br/><b>Inference Broker</b><br/>STT · Pi stream · TTS · context]
+    GATEWAY[External container<br/><b>Agent Gateway</b><br/>task lifecycle]
+    STORE[(External data store<br/><b>Diagnostic Volume</b><br/>last five sessions)]
+    OTEL[External container<br/><b>OTel LGTM</b><br/>metrics and traces]
+
+    subgraph EDGE["Container: Voice Edge · Python + Pipecat + FastAPI"]
+        direction TB
+        HTTP["Component<br/><b>Owner HTTP Boundary</b><br/>origin and exact tailnet-identity checks"]
+        API["Component<br/><b>Browser API</b><br/>features, tasks, transcript, context, diagnostics"]
+        TRANSPORT["Component<br/><b>SmallWebRTC Transport</b><br/>bidirectional 16/24 kHz audio"]
+        FILTER["Component<br/><b>Input Filter and Recorder</b><br/>one selected filter plus bounded replay"]
+        TURN["Component<br/><b>Turn Detector</b><br/>Silero VAD and Smart Turn v3"]
+        STT["Component<br/><b>STT Adapter</b><br/>OpenAI-compatible audio request"]
+        CONTEXT["Component<br/><b>Conversation Aggregators</b><br/>user and assistant context frames"]
+        LLM["Component<br/><b>Pi LLM Adapter</b><br/>streaming OpenAI-compatible completion"]
+        VISUAL["Component<br/><b>Visual Response Processor</b><br/>stream speech and publish final Mermaid"]
+        TTS["Component<br/><b>TTS Adapter</b><br/>OpenAI-compatible PCM request"]
+        TELEMETRY["Component<br/><b>Pipecat Telemetry Bridge</b><br/>turn, speaking, latency, service, and error signals"]
+
+        HTTP --> API
+        TRANSPORT --> FILTER --> TURN --> STT --> CONTEXT --> LLM --> VISUAL --> TTS --> TRANSPORT
+        TURN -.->|"lifecycle events"| TELEMETRY
+        STT -.->|"service metrics"| TELEMETRY
+        LLM -.->|"service metrics"| TELEMETRY
+        TTS -.->|"service metrics"| TELEMETRY
+    end
+
+    BROWSER -->|"signaling, microphone audio, owner APIs"| HTTP
+    HTTP -->|"authorized signaling"| TRANSPORT
+    API -->|"task commands and queries"| GATEWAY
+    API -->|"context, transcript, speech"| BROKER
+    FILTER -->|"bounded session audio and metrics"| STORE
+    STT -->|"WAV"| BROKER
+    LLM -->|"messages · SSE response"| BROKER
+    TTS -->|"text · PCM"| BROKER
+    TRANSPORT -->|"audio and server Mermaid message"| BROWSER
+    TELEMETRY -.->|"OTLP"| OTEL
+
+    classDef component fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
+    classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
+    classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
+    class HTTP,API,TRANSPORT,FILTER,TURN,STT,CONTEXT,LLM,VISUAL,TTS,TELEMETRY component;
+    class BROWSER,BROKER,GATEWAY,OTEL external;
+    class STORE data;

@@ -39,6 +39,7 @@ class Settings:
     allow_unsandboxed: bool
     task_timeout_seconds: int
     max_output_bytes: int
+    skills_dir: Path | None
     artifact_endpoint_url: str = ""
     artifact_bucket: str = ""
     artifact_access_key: str = ""
@@ -47,6 +48,16 @@ class Settings:
     worker_scratch_root: Path = Path("~/.local/share/agent-workload-platform/workspaces")
     max_artifact_bytes: int = 16_777_216
     defer_workspace_validation: bool = False
+    image_build_timeout_seconds: int = 7200
+    image_installer_cli: Path | None = None
+    gitea_endpoint_url: str = ""
+    gitea_source_owner: str = "source-publisher"
+    gitea_image_workflow: str = "build-execution-image.yml"
+    gitea_workflow_ref: str = "refs/heads/main"
+    gitea_package_owner: str = "image-builder"
+    gitea_builder_token: str = ""
+    gitea_actions_token: str = ""
+    node_binary: str = "/opt/homebrew/bin/node"
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -67,6 +78,11 @@ class Settings:
             allow_unsandboxed=_bool_env("WORKER_ALLOW_UNSANDBOXED"),
             task_timeout_seconds=int(os.getenv("WORKER_TASK_TIMEOUT_SECONDS", "1800")),
             max_output_bytes=int(os.getenv("WORKER_MAX_OUTPUT_BYTES", "1048576")),
+            skills_dir=(
+                Path(_value("PI_TASK_SKILLS_DIR")).expanduser().resolve()
+                if _value("PI_TASK_SKILLS_DIR")
+                else None
+            ),
             artifact_endpoint_url=_value("ARTIFACT_ENDPOINT_URL"),
             artifact_bucket=_value("ARTIFACT_BUCKET", "agent-artifacts"),
             artifact_access_key=_value("ARTIFACT_ACCESS_KEY", "local-test"),
@@ -80,6 +96,22 @@ class Settings:
             ).expanduser(),
             max_artifact_bytes=int(os.getenv("WORKER_MAX_ARTIFACT_BYTES", "16777216")),
             defer_workspace_validation=_bool_env("ORCHESTRATOR_DEFER_WORKSPACE_VALIDATION"),
+            image_build_timeout_seconds=int(os.getenv("IMAGE_BUILD_TIMEOUT_SECONDS", "7200")),
+            image_installer_cli=(
+                Path(_value("IMAGE_INSTALLER_CLI")).expanduser().resolve()
+                if _value("IMAGE_INSTALLER_CLI")
+                else None
+            ),
+            gitea_endpoint_url=_value("GITEA_ENDPOINT_URL", "http://127.0.0.1:3001"),
+            gitea_source_owner=_value("GITEA_OWNER", "source-publisher"),
+            gitea_image_workflow=_value(
+                "GITEA_IMAGE_WORKFLOW", "build-execution-image.yml"
+            ),
+            gitea_workflow_ref=_value("GITEA_WORKFLOW_REF", "refs/heads/main"),
+            gitea_package_owner=_value("GITEA_PACKAGE_OWNER", "image-builder"),
+            gitea_builder_token=_value("GITEA_BUILDER_TOKEN"),
+            gitea_actions_token=_value("GITEA_ACTIONS_TOKEN"),
+            node_binary=_value("NODE_BINARY", "/opt/homebrew/bin/node"),
         )
 
     @property

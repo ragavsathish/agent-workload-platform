@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+client_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_dir="$(cd "$client_dir/../../../.." && pwd)"
+port="${UX_PROFILE_PORT:-18123}"
+server_log="$(mktemp -t pi-voice-profile-server)"
+server_pid=""
+
+cleanup() {
+  if [[ -n "$server_pid" ]]; then
+    kill "$server_pid" >/dev/null 2>&1 || true
+    wait "$server_pid" >/dev/null 2>&1 || true
+  fi
+  unlink "$server_log" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+cd "$client_dir"
+npm run build
+python3 -m http.server "$port" --bind 0.0.0.0 --directory build/web >"$server_log" 2>&1 &
+server_pid="$!"
+
+for _ in {1..40}; do
+  if curl --fail --silent "http://127.0.0.1:$port/" >/dev/null; then
+    break
+  fi
+  sleep 0.1
+done
+curl --fail --silent "http://127.0.0.1:$port/" >/dev/null
+
+docker run --rm \
+  --add-host=host.docker.internal:host-gateway \
+  -e NODE_PATH=/app/node_modules \
+  -e UX_PROFILE_ENFORCE=1 \
+  -e UX_PROFILE_OUTPUT=/output/ux-profile.json \
+  -e "UX_PROFILE_URL=http://host.docker.internal:$port" \
+  -v "$client_dir/build:/output" \
+  -v "$repo_dir/products/voice-agent/tests/e2e/playwright-ux-profile.cjs:/tests/playwright-ux-profile.cjs:ro" \
+  --entrypoint node \
+  mcr.microsoft.com/playwright/mcp:v0.0.79@sha256:18c0a9c934004fe9580cc79f1e8e6e6cde7c667348b215335e8a23fd3e509804 \
+  /tests/playwright-ux-profile.cjs

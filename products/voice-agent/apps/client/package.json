@@ -1,0 +1,22 @@
+{
+  "name": "@agent-workload-platform/voice-client",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "npm run build:bridge && ./tool/flutterw build web --release --wasm",
+    "build:bridge": "node tool/build-bridge.mjs",
+    "lint": "./tool/flutterw analyze",
+    "test": "./tool/flutterw test",
+    "test:patrol": "./tool/run-patrol-web",
+    "profile:web": "./tool/profile-web"
+  },
+  "dependencies": {
+    "@pipecat-ai/client-js": "1.13.1",
+    "@pipecat-ai/small-webrtc-transport": "1.10.8",
+    "mermaid": "12.2.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

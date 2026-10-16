@@ -48,7 +48,14 @@ def main() -> None:
     for host_env_name in sys.argv[3:]:
         host_env = Path(host_env_name)
         if host_env.is_file():
-            update(host_env, {"ORCHESTRATOR_ALLOWED_USERS": login})
+            update(
+                host_env,
+                {
+                    "ORCHESTRATOR_ALLOWED_USERS": login,
+                    "GRAFANA_ROOT_URL": f"https://{dns_name}/metrics/",
+                    "GITEA_ROOT_URL": f"https://{dns_name}/git/",
+                },
+            )
     print(f"https://{dns_name}")
 
 

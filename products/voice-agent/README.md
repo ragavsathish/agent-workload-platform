@@ -27,8 +27,11 @@ ownership and planned extractions are documented in
 
 ## Trust model
 
-- Tailscale Serve terminates trusted tailnet HTTPS and proxies HTTP and WebSocket traffic directly
-  to Pipecat over shared loopback. Funnel and public Docker ports are not enabled.
+- Tailscale Serve terminates trusted tailnet HTTPS, enforces tailnet access, strips spoofed
+  identity headers, and injects the authenticated login before forwarding to Traefik over shared
+  loopback. Before routing, Traefik asks the edge to match that login against the configured owner.
+  It routes `/` to Pipecat, `/metrics/` to Grafana, `/git/` to Gitea, and `/queue/` to the
+  upstream Absurd Habitat operator UI. Funnel and public Docker ports are not enabled.
 - Browser sessions require an exact HTTPS origin and a signed, one-use token in the WebSocket path.
   The current deployment is deliberately single-user: login pins exactly one owner identity during
   setup, while tailnet ACLs authenticate which devices can reach the listener.
@@ -42,10 +45,10 @@ ownership and planned extractions are documented in
   exception message, URL parameter, request body, or response body.
 - Database credentials, Pi/provider authentication, sessions, and writable workspaces never enter the voice
   container.
-- The Pi worker runs on macOS with built-in host tools disabled. Its explicit
-  `gondolin_bash` tool runs inside a Gondolin micro-VM with only the immutable
-  task workspace mounted at `/workspace`; browser and permission-scoped
-  Wassette tools are additional capabilities.
+- The Pi worker runs on macOS, but Pi's standard `read`, `write`, `edit`, and
+  `bash` tools are backed by a Gondolin micro-VM with only the immutable task
+  workspace mounted at `/workspace`; browser and permission-scoped Wassette
+  tools are additional capabilities.
 - Durable delegation is deliberately **YOLO voice submission** for now: the Pi
   Voice Service may create and immediately queue a task when the owner asks for
   asynchronous work. A separately created proposal still requires a later
@@ -76,7 +79,8 @@ stdout; `Ctrl-C` stops following output but leaves the services running. Use
 `make logs` to follow an already-running deployment.
 
 `make login` performs interactive Tailscale authentication when needed, binds the exact login and
-MagicDNS origin, enables the tailnet-only HTTPS proxy on port 443, and prints the browser URL.
+MagicDNS origin, enables one tailnet-only HTTPS origin on port 443, and prints the voice, metrics,
+Git, and durable-queue URLs.
 
 ## Browser URL
 
@@ -87,9 +91,9 @@ tailnet at:
 
 The MagicDNS name and TLS certificate belong to the Tailscale node, so the URL
 can remain configured while the application is unavailable. A `tailscale
-serve status` result such as `proxy http://127.0.0.1:7860` proves only that the
+serve status` result such as `proxy http://127.0.0.1:8080` proves only that the
 HTTPS route exists. The `voice-edge` container must also be running in the same
-network namespace and listening on port 7860.
+network namespace and listening on port 7860, and Traefik must be listening on port 8080.
 
 Check the complete path with:
 
@@ -136,22 +140,33 @@ bind-mounts `~/Documents`. Each task verifies the bundle digest, expands it bene
 the scratch directory. The mock validates the local artifact contract, not production IAM or
 durability; swap its endpoint for a real S3-compatible service before relying on those guarantees.
 
-Raw audio and synthesized speech exist only in memory while streaming. Transcripts remain in the
-in-memory conversation context for the active call and are discarded with it. Postgres stores only
-an explicitly proposed task instruction. Queue workers run Pi with `--no-session`, and native
+Raw microphone input and the selected filter output are retained as WAV files for the five most
+recent completed conversations in the private `voice-diagnostics` Docker volume. The
+tailnet-authenticated **Replays** page exposes those two versions for listening; the oldest session
+is deleted after the sixth completes. Recording stops at `VOICE_DIAGNOSTIC_MAX_SECONDS` per session,
+and audio is never exported to OpenTelemetry. The same page uses WaveSurfer for replay waveforms
+and raw/VoxLock spectrograms, and Recharts for input/output energy, suppression, per-filter
+latency, LSTM-state activity, and the model's predicted complex-mask magnitude. The edge image
+instruments the digest-verified VoxLock ONNX graph at build time to expose that mask; it records
+only frequency-band aggregates, not model tensors. The live view polls a bounded microphone
+envelope rather than sending replayable audio samples. Synthesized speech exists only in memory while
+streaming. Transcripts remain in the in-memory conversation context for the active call and are
+discarded with it. Postgres stores only an explicitly proposed task instruction. Queue workers run Pi
+with `--no-session`, and native
 launch services write stdout and stderr to `/dev/null`, so agent conversations are not retained as
 Pi session JSONL. The synthetic black-box runner reports event counts, never transcript text.
 
 The server-side microphone filter is selected with `VOICE_INPUT_FILTER=rnnoise|voxlock`; RNNoise
-is the rollback default. VoxLock uses the host WAV named by `VOXLOCK_VOICE_SAMPLE_SOURCE`.
+is the rollback default. Only the selected filter is initialized and executed; its output continues
+to VAD and transcription and is retained beside the raw input for diagnostics. VoxLock
+uses the host WAV named by `VOXLOCK_VOICE_SAMPLE_SOURCE`.
 `make up` validates mono 16 kHz PCM16 input, extracts the strongest three seconds from its first
 15 seconds, and writes only that derived sample to an ignored mode-0600 Compose secret. The edge
 loads hash-verified ONNX models baked into its image and runs with Hugging Face networking disabled.
 VoxLock is target-speaker isolation, not authentication or liveness detection. See the
 [VoxLock implementation and validation guide](../../docs/research/voxlock-pipecat-integration.md).
-
 Silero VAD keeps Pipecat's recommended `stop_secs=0.2`; `LocalSmartTurnAnalyzerV3` decides when a
-spoken turn is complete. MLX Whisper receives every completed audio segment directly—there is no
+spoken turn is complete. Parakeet TDT 0.6B v3 on MLX receives every completed audio segment directly—there is no
 speaker-authentication gate. The selected input filter runs before VAD and transcription.
 Payload-free metrics distinguish accepted audio, emitted or empty
 transcripts, Smart Turn inference triggers, completed turns, and stop timeouts without exporting
@@ -161,13 +176,40 @@ audio or transcript text.
 
 The pinned `grafana/otel-lgtm` development bundle provides Grafana, Prometheus, Tempo, and an OTLP
 collector. From an authenticated tailnet device, open
-<https://pipecat-edge.tailf6d713.ts.net:8443>; Grafana trusts only the identity header injected by
-the Tailscale proxy and does not ask for another password. Direct Mac-loopback access at
+<https://pipecat-edge.tailf6d713.ts.net/metrics/>; Grafana trusts only the identity header injected
+by Tailscale through the localhost-only Traefik ingress and does not ask for another password.
+Direct Mac-loopback access at
 <http://127.0.0.1:3300> still requires user `admin`; obtain its generated password with
 `make grafana-password`. The provisioned **Voice Product Health** dashboard follows the product
 journey from detected speech through transcript, Pi inference, and reply audio. It also shows turn
 outcomes, voice-filter pass rate, user-perceived and inference-stage latency, task activity,
 failures, and recent payload-free traces.
+
+The provisioned **Platform Resources** dashboard separates three resource layers: the physical Mac,
+the Docker Desktop Linux VM, and each running Gondolin QEMU runner. Native Fluent Bit reports macOS
+CPU, active+wired memory, load, disk, and network metrics. The Compose Fluent Bit instance reads the
+Docker VM's `/proc` and `/sys` read-only. A small loopback-only host exporter reports CPU, resident
+memory, uptime, and configured limits for every registered voice or task Gondolin VM. It exports no
+process command lines, guest data, audio, or transcript content.
+
+CPU busy is average non-idle time across a system's logical CPUs. Docker memory uses `MemAvailable`;
+the Mac panel uses active plus wired memory and is deliberately labelled as an approximation, not
+Apple's Memory Pressure indicator. Load per CPU near 100% means roughly one runnable job per logical
+CPU; a sustained higher value means work is queueing. Disk and network panels are throughput, not
+latency. A Gondolin VM's resident memory is the host QEMU process RSS, not guest-visible used memory.
+Task VMs appear only while a task is executing.
+
+Mac and Docker measurements are nested: Docker activity is already part of the physical Mac total,
+so never add those lines together. Similarly, use the product dashboard and traces to correlate a
+resource spike with a voice operation rather than attributing every system-wide spike to voice.
+Both native endpoints bind only to Mac loopback; OTel reaches them through Docker's host gateway.
+
+The upstream Absurd **Habitat** operator UI is available at
+<https://pipecat-edge.tailf6d713.ts.net/queue/>. It reads queue, task, run, event, and checkpoint
+state directly from Postgres and can perform native queue operations such as retry. Habitat has no
+published Docker port and receives a separate `habitat_operator` credential whose grants are
+limited to the Absurd schema; it cannot read voice task proposals. This operational view does not
+replace the gateway's proposal, approval, or tenant-policy boundary.
 
 Grafana and OTLP/HTTP bind only to Mac loopback. OTLP/gRPC, Prometheus, Tempo, and Loki ports are not
 published. Gateway and edge stdout is retained only in bounded local Docker logs for `make logs`;
@@ -175,21 +217,60 @@ applications do not send the OpenTelemetry logs signal. Telemetry is stored in t
 `otel-lgtm-data` Docker volume; Prometheus retention is seven days. This all-in-one bundle is for
 private local monitoring, not production.
 
+The same authenticated origin serves the voice UI at `/`, the committed source mirror at `/git/`,
+and Habitat at `/queue/`. Tailscale authenticates the connection and strips spoofed identity
+headers; Traefik then uses the edge's forward-auth endpoint to require the exact configured owner
+before any route is served. Prometheus, OTLP, the Agent Gateway, S3Mock, Postgres, and the Traefik
+dashboard have no tailnet route.
+
 The black-box runner synthesizes speech with Kokoro, streams it through the same authenticated
-WebSocket used by the browser, transcribes it with MLX Whisper, and exercises the LLM/tool path.
+WebSocket used by the browser, transcribes it with Parakeet v3 on MLX, and exercises the LLM/tool path.
 Before Tailscale login it uses `deploy/compose.local-test.yml` as a non-listening network anchor;
 set `BLACKBOX_USE_TAILSCALE=true` to test an authenticated tunnel namespace. See
 [TESTING.md](TESTING.md) for assertions and failure interpretation.
 
 Set `VOICE_LLM_BACKEND=pi` in `apps/edge/.env` to select the alternate
-`Whisper -> Pi agent -> restricted Pi task tools -> Kokoro` path. The default remains `ollama`.
+`Parakeet v3 -> Pi agent -> restricted Pi task tools -> Kokoro` path. The default remains `ollama`.
 Pi voice uses a dedicated long-running Node service built on Pi's `createAgentSession()` SDK. The
 service keeps conversation state between turns, reconciles a restarted or reset Pipecat transcript,
 and owns the product's proposal, submission, status, approval, and cancellation tools. Its native
 read, write, edit, and bash operations run only inside the persistent Gondolin Voice Workspace;
-reusable skills are mounted there read-only. It disables discovered host extensions, prompt
-templates, themes, and context files. Kokoro speaks the final text produced by Pi after any tool
-calls complete. `PI_VOICE_MODEL` selects the model; when blank, Pi uses its configured default.
+reusable skills are mounted read-only at `/skills`. Committed source is published to the private,
+loopback-only Gitea service during `make start`; the VM may anonymously clone that public-in-Gitea
+mirror into `/workspace`, but receives no publisher credential. No host Git directory is mounted, so
+ignored files, local secrets, and uncommitted changes are not exposed. It disables discovered
+host extensions, prompt templates, themes, and context files. The service explicitly registers
+Wassette through Pi's native MCP extension as a deferred tool provider; `tool_search` reveals only
+the selected WASM tools, and the Wassette child process receives a credential-scrubbed environment.
+Kokoro speaks the final text produced
+by Pi after any tool calls complete. `PI_VOICE_MODEL` selects the model; when blank, Pi uses its
+configured default. The VM image includes AWS CLI and receives mock-only credentials plus a
+synthetic `S3_ENDPOINT_URL`. Gondolin denies general egress and rewrites only that synthetic origin
+to loopback-published S3Mock, allowing Pi to inspect `s3://$S3_BUCKET` without general network
+access. The image also includes `promtool`; `PROMETHEUS_URL` points to a separately allowlisted
+synthetic origin backed by Prometheus's loopback-only host port, so Pi can query telemetry without
+receiving access to Grafana credentials or the Docker monitoring network.
+
+Gitea uses rootless mode, SQLite, and named Docker volumes. Registration and SSH are disabled.
+Actions schedule trusted image builds, while Packages store immutable project-image artifacts. `scripts/gitea-sync.sh`
+creates the publisher account and repository idempotently, then
+mirrors only committed refs from this repository. Gitea is reachable from macOS only on
+`http://127.0.0.1:3001`; Gondolin can reach only its synthetic read endpoint and S3Mock, with all
+other VM network destinations denied.
+
+The VM image includes the checksum-verified `tea` CLI. Deployment provisions a separate restricted
+`voice-agent` account and a
+`public-only,read:repository,read:issue,read:user,read:organization` token. The persistent
+VM configures that token as Tea login `local`; it cannot publish code or mutate issues and pull
+requests. The deployment-only `source-publisher` credential never enters the VM.
+
+Project-specific task images are declared in `.pi/gondolin.json`. On a cache miss, the task worker
+dispatches the repository's fixed Gitea workflow and checkpoints its run ID. One shared, capacity-one
+Gitea Runner executes trusted repository workflows inside a warm Gondolin builder VM. Its private
+Docker daemon keeps an `overlay2` layer cache; it never receives the macOS Docker socket. The VM
+publishes a checksummed archive and manifest to Gitea Generic Packages. The task worker verifies the
+manifest and digest before registering the requested Gondolin image reference. The builder VM is a
+shared trust domain, so only administrator-approved repositories may use its runner label.
 
 See [BENCHMARKS.md](BENCHMARKS.md) for the measured M4 Pro CPU, unified-memory, LLM throughput,
 and speech realtime factors, plus the reproducible benchmark command.

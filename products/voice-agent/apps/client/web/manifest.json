@@ -1,0 +1,9 @@
+{
+  "name": "Pi Voice",
+  "short_name": "Pi Voice",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#07100e",
+  "theme_color": "#07100e",
+  "description": "Private Pi voice workspace"
+}

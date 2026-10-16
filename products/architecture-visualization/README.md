@@ -67,9 +67,9 @@ are from the verified arm64 build and may vary slightly with toolchain changes.
 
 From the repository root:
 
-The verified toolchain is Node.js `26.7.0`, pnpm `11.19.0`, Pi `0.84.4`,
+The verified toolchain is Node.js `26.7.0`, pnpm `11.19.0`, Pi `1.2.0`,
 Wassette `0.7.0`, and WAC CLI `0.10.1`. Install Pi with
-`pnpm add --global @earendil-works/pi-coding-agent@0.84.4`; install the
+`pnpm add --global @earendil-works/pi-coding-agent@1.2.0`; install the
 Wassette `0.7.0` binary for your platform, then confirm `wassette --version`
 before building. Install a prebuilt WAC CLI where available; the command below
 uses Cargo only as its installer. The product itself contains no Rust code.

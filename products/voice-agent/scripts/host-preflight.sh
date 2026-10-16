@@ -10,7 +10,7 @@ fail() { printf 'FAIL  %s\n' "$*"; failures=$((failures + 1)); }
 
 [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]] && pass "Apple Silicon macOS host" || fail "Apple Silicon macOS is required"
 
-for command in docker uv node npm ollama curl python3; do
+for command in docker uv node npm ollama curl python3 wassette; do
   command -v "$command" >/dev/null 2>&1 && pass "$command is installed" || fail "$command is missing"
 done
 [[ -x /opt/homebrew/opt/libpq/bin/psql ]] && pass "Homebrew libpq client is installed" || fail "libpq is required: brew install libpq"

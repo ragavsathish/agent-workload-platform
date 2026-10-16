@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from fastapi import HTTPException, Request
 
-from bot import validate_http_identity
+from bot import validate_http_identity, validate_ingress_identity
 
 
 def request(method: str, *, origin: str | None = None, identity: str | None = None) -> Request:
@@ -58,6 +58,16 @@ class HttpIdentityTest(unittest.TestCase):
     def test_safe_request_still_requires_tailnet_identity(self):
         with self.assertRaises(HTTPException) as raised:
             validate_http_identity(request("GET"))
+
+        self.assertEqual(raised.exception.status_code, 403)
+
+    def test_ingress_forward_auth_requires_the_exact_owner(self):
+        self.assertEqual(
+            validate_ingress_identity(request("GET", identity="OWNER@example.com")),
+            "owner@example.com",
+        )
+        with self.assertRaises(HTTPException) as raised:
+            validate_ingress_identity(request("GET", identity="other@example.com"))
 
         self.assertEqual(raised.exception.status_code, 403)
 

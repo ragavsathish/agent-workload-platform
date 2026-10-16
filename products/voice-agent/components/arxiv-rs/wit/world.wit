@@ -1,0 +1,33 @@
+package microsoft:arxiv-rs;
+
+/// An example world for arXiv research component
+world arxiv-rs {
+    /// Search for papers on arXiv
+    ///
+    /// Parameters:
+    /// - query: search query (e.g., "machine learning", "cat:cs.AI", "ti:neural networks")
+    /// - max-results: maximum number of results to return
+    /// - date-from: optional date filter in YYYYMMDD format (empty string to skip)
+    /// - categories: optional comma-separated category filter (empty string to skip)
+    ///
+    /// Returns formatted markdown with paper results
+    export search-papers: func(query: string, max-results: u32, date-from: string, categories: string) -> result<string, string>;
+
+    /// Download a paper in memory and extract text from a bounded page range
+    ///
+    /// Parameters:
+    /// - id: arXiv paper ID (e.g., "2301.00001")
+    /// - first-page: first one-based page number to extract
+    /// - last-page: last one-based page number to extract (inclusive)
+    ///
+    /// Returns bounded markdown text; PDF bytes never leave this component
+    export read-paper-pages: func(id: string, first-page: u32, last-page: u32) -> result<string, string>;
+
+    /// Read paper metadata and abstract from arXiv
+    ///
+    /// Parameters:
+    /// - id: arXiv paper ID (e.g., "2301.00001")
+    ///
+    /// Returns formatted markdown with paper details
+    export read-paper: func(id: string) -> result<string, string>;
+}

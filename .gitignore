@@ -11,3 +11,4 @@ products/architecture-visualization/components/generated/
 products/architecture-visualization/core/generated/
 .DS_Store
 .pnpm-store/v11/
+/work/

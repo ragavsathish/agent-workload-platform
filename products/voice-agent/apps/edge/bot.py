@@ -1,7 +1,9 @@
 """Tailnet-facing Pipecat process for the isolated Linux VM."""
 
 import os
+import tomllib
 import wave
+from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 
@@ -43,6 +45,7 @@ from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.workers.runner import WorkerRunner
 from voice_agent.shared.telemetry import configure_telemetry
 
+from audio_diagnostics import audio_diagnostic_store
 from audio_filter import audio_filter_readiness, create_audio_filter
 from otel_bridge import configure_pipecat_observers
 from visual_response import StreamingSpokenExtractor, parse_visual_response
@@ -173,6 +176,16 @@ def validate_http_identity(request: Request) -> str:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
 
+def validate_ingress_identity(request: Request) -> str:
+    """Authorize Traefik's owner-only forward-auth request."""
+    try:
+        return validate_identity(
+            request.headers.get("tailscale-user-login", "").strip().lower()
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+
 async def broker_transcript_request() -> dict[str, object]:
     headers = {"Authorization": f"Bearer {required_env('INFERENCE_BROKER_TOKEN')}"}
     async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
@@ -186,6 +199,59 @@ async def broker_transcript_request() -> dict[str, object]:
     if not isinstance(payload, dict):
         raise HTTPException(status_code=502, detail="invalid Pi transcript")
     return payload
+
+
+@lru_cache(maxsize=1)
+def voice_prompt_template() -> str:
+    """Load and validate the versioned model instruction."""
+    prompt_path = Path(__file__).with_name("prompt.toml")
+    with prompt_path.open("rb") as source:
+        prompt = tomllib.load(source).get("system_prompt")
+    marker = "{{DEFAULT_WORKSPACE}}"
+    if not isinstance(prompt, str) or not prompt.strip() or prompt.count(marker) != 1:
+        raise RuntimeError("prompt.toml must define one default-workspace placeholder")
+    return prompt.strip()
+
+
+def voice_system_instruction(default_workspace: str) -> str:
+    """Render the one stable Pi instruction shared by voice and typed turns."""
+    workspace = default_workspace.strip()
+    if not workspace or len(workspace) > 256 or any(char in workspace for char in "\r\n"):
+        raise RuntimeError("VOICE_DEFAULT_WORKSPACE is invalid")
+    return voice_prompt_template().replace("{{DEFAULT_WORKSPACE}}", workspace)
+
+
+async def broker_pi_message(message: str):
+    """Send one typed turn through the same persistent Pi session as voice."""
+    timeout = float(os.getenv("PI_VOICE_TIMEOUT_SECONDS", "120")) + 10
+    headers = {"Authorization": f"Bearer {required_env('INFERENCE_BROKER_TOKEN')}"}
+    payload = {
+        "model": "pi-agent",
+        "stream": False,
+        "messages": [
+            {
+                "role": "system",
+                "content": voice_system_instruction(required_env("VOICE_DEFAULT_WORKSPACE")),
+            },
+            {"role": "user", "content": message},
+        ],
+    }
+    with telemetry.observe("browser.pi.turn"):
+        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=5.0)) as client:
+            response = await client.post(
+                f"{required_env('INFERENCE_BROKER_BASE_URL').rstrip('/')}/pi/chat/completions",
+                headers=headers,
+                json=payload,
+            )
+    if response.is_error:
+        raise HTTPException(status_code=502, detail="Pi response is unavailable")
+    try:
+        raw = response.json()["choices"][0]["message"]["content"]
+    except (ValueError, KeyError, IndexError, TypeError) as exc:
+        raise HTTPException(status_code=502, detail="Pi returned an invalid response") from exc
+    if not isinstance(raw, str) or not raw.strip():
+        raise HTTPException(status_code=502, detail="Pi returned an empty response")
+    return parse_visual_response(raw)
 
 
 async def broker_context_request(method: str, path: str) -> dict[str, object]:
@@ -263,6 +329,27 @@ def pcm_wave(pcm: bytes) -> bytes:
     return output.getvalue()
 
 
+async def broker_speech(spoken: str) -> bytes:
+    """Synthesize bounded speech and return a browser-playable WAV."""
+    headers = {"Authorization": f"Bearer {required_env('INFERENCE_BROKER_TOKEN')}"}
+    with telemetry.observe("browser.pi.speech"):
+        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=5.0)) as client:
+            response = await client.post(
+                f"{required_env('INFERENCE_BROKER_BASE_URL').rstrip('/')}/audio/speech",
+                headers=headers,
+                json={
+                    "model": "kokoro",
+                    "input": spoken,
+                    "voice": "alloy",
+                    "response_format": "pcm",
+                    "speed": 1.0,
+                },
+            )
+    if response.is_error or len(response.content) > 50_000_000:
+        raise HTTPException(status_code=502, detail="Pi speech is unavailable")
+    return pcm_wave(response.content)
+
+
 async def run_bot(transport: BaseTransport, identity: str):
     broker_url = required_env("INFERENCE_BROKER_BASE_URL")
     broker_token = required_env("INFERENCE_BROKER_TOKEN")
@@ -278,55 +365,14 @@ async def run_bot(transport: BaseTransport, identity: str):
     stt = OpenAISTTService(
         api_key=broker_token,
         base_url=broker_url,
-        settings=OpenAISTTService.Settings(model="mlx-whisper", language="en"),
+        settings=OpenAISTTService.Settings(model="parakeet-v3", language="en"),
     )
     llm = OpenAILLMService(
         api_key=broker_token,
         base_url=llm_base_url,
         settings=OpenAILLMService.Settings(
             model=model,
-            system_instruction=(
-                "You are a precise, voice-operated coding agent. "
-                "Every final response must be exactly one JSON object with two string fields: "
-                '"spoken" and "mermaid". Do not wrap the JSON or Mermaid in code fences. The '
-                '"spoken" value is the shortest complete natural-language answer and is the only '
-                'text that will be read aloud. The "mermaid" value is a valid Mermaid diagram '
-                "that visually captures the current result, state, action, or flow. Prefer a small "
-                "flowchart TD unless sequence or state notation explains the answer better. Use "
-                "short labels and meaningful directed relationships. Never put Mermaid syntax in "
-                'the "spoken" value. '
-                "Answer only what the user asked, using the shortest complete response. Lead with "
-                "the result or current status. Do not use greetings, filler, praise, repetition, "
-                "or unsupported speculation. Prefer concrete names, identifiers, states, and "
-                "numbers. Ask one short clarification only when missing information prevents a "
-                "correct action. Clearly distinguish requested, pending, completed, failed, and "
-                "cancelled actions. Never say an action succeeded until its tool result confirms "
-                "success. Report only the relevant facts returned by tools and do not embellish "
-                'them. Keep "spoken" in plain sentences without visual formatting. '
-                "For ordinary coding, inspection, testing, package installation, and shell work, "
-                "act immediately with the native read, write, edit, and bash tools. Do not ask "
-                "for confirmation and do not create a task proposal. All four tools run inside "
-                "one persistent Gondolin voice VM with a writable dedicated voice workspace at "
-                "/workspace. Reusable skills are mounted separately and read-only at /skills. "
-                "When a request matches a skill, inspect its complete SKILL.md with bash before "
-                "acting and follow it while it remains relevant. Never attempt to modify /skills. "
-                "Never describe VM state as Mac host state. You may "
-                "make any change the user requests inside that VM and workspace. "
-                "Use submit_agent_task when work should continue asynchronously, must target a "
-                "durable project workspace, or is better handled by another Pi worker. You may "
-                "submit that work yourself without asking for approval. State the exact delegated "
-                "instruction and returned task ID. You can also propose, inspect, approve, and "
-                "cancel queued tasks with the available tools. Creating a proposal never runs it, "
-                "while submit_agent_task creates and immediately queues the task. "
-                "After proposing, read back the exact instruction and workspace. Approval is "
-                "allowed only in a later user turn when the user explicitly asks to approve that "
-                "pending task. Never approve in the same turn as proposal creation and never infer "
-                "approval from unrelated speech. Approved durable work runs separately through "
-                "Gondolin and Wassette MCP. "
-                f"The configured default workspace is exactly {default_workspace}. When the user "
-                "says the default or current workspace, use that exact logical name without "
-                "rewriting it."
-            ),
+            system_instruction=voice_system_instruction(default_workspace),
         ),
     )
     tts = OpenAITTSService(
@@ -628,6 +674,54 @@ if __name__ == "__main__":
     client_dist = Path(__file__).resolve().parent / "client-dist"
     if (client_dist / "assets").is_dir():
         app.mount("/assets", StaticFiles(directory=client_dist / "assets"), name="assets")
+    if (client_dist / "canvaskit").is_dir():
+        app.mount(
+            "/canvaskit",
+            StaticFiles(directory=client_dist / "canvaskit"),
+            name="canvaskit",
+        )
+    if (client_dist / "voice-runtime").is_dir():
+        app.mount(
+            "/voice-runtime",
+            StaticFiles(directory=client_dist / "voice-runtime"),
+            name="voice-runtime",
+        )
+    if (client_dist / "diagnostics").is_dir():
+        app.mount(
+            "/diagnostics",
+            StaticFiles(directory=client_dist / "diagnostics", html=True),
+            name="diagnostics",
+        )
+
+    def register_browser_asset(asset_name: str, media_type: str | None = None) -> None:
+        """Expose one generated Flutter root asset without shadowing Pipecat routes."""
+
+        async def browser_asset():
+            target = client_dist / asset_name
+            if not target.is_file():
+                return JSONResponse({"error": "client build is missing"}, status_code=503)
+            return FileResponse(target, media_type=media_type)
+
+        app.add_api_route(
+            f"/{asset_name}",
+            browser_asset,
+            methods=["GET"],
+            include_in_schema=False,
+            name=f"browser-{asset_name.replace('.', '-')}",
+        )
+
+    for browser_asset_name, browser_asset_type in (
+        ("flutter_bootstrap.js", "text/javascript"),
+        ("flutter.js", "text/javascript"),
+        ("flutter_service_worker.js", "text/javascript"),
+        ("favicon.svg", "image/svg+xml"),
+        ("main.dart.js", "text/javascript"),
+        ("main.dart.mjs", "text/javascript"),
+        ("main.dart.wasm", "application/wasm"),
+        ("manifest.json", "application/manifest+json"),
+        ("version.json", "application/json"),
+    ):
+        register_browser_asset(browser_asset_name, browser_asset_type)
 
     @app.get("/", include_in_schema=False)
     async def browser_client():
@@ -635,10 +729,6 @@ if __name__ == "__main__":
         if not index.is_file():
             return JSONResponse({"error": "client build is missing"}, status_code=503)
         return FileResponse(index)
-
-    @app.get("/favicon.svg", include_in_schema=False)
-    async def favicon():
-        return FileResponse(client_dist / "favicon.svg")
 
     @app.get("/api/features")
     async def features():
@@ -650,6 +740,11 @@ if __name__ == "__main__":
             "defaultWorkspace": required_env("VOICE_DEFAULT_WORKSPACE"),
             "audioFilter": audio_filter_readiness(),
         }
+
+    @app.get("/api/ingress-auth", include_in_schema=False)
+    async def ingress_auth(request: Request):
+        validate_ingress_identity(request)
+        return Response(status_code=204)
 
     @app.get("/api/tasks")
     async def list_browser_tasks(request: Request):
@@ -696,23 +791,8 @@ if __name__ == "__main__":
     async def task_speech(proposal_id: str, request: Request):
         task = await owner_gateway_request(request, "GET", f"/tasks/{proposal_id}")
         spoken = task_spoken_text(task)
-        headers = {"Authorization": f"Bearer {required_env('INFERENCE_BROKER_TOKEN')}"}
-        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=5.0)) as client:
-            response = await client.post(
-                f"{required_env('INFERENCE_BROKER_BASE_URL').rstrip('/')}/audio/speech",
-                headers=headers,
-                json={
-                    "model": "kokoro",
-                    "input": spoken,
-                    "voice": "alloy",
-                    "response_format": "pcm",
-                    "speed": 1.0,
-                },
-            )
-        if response.is_error or len(response.content) > 50_000_000:
-            raise HTTPException(status_code=502, detail="task speech is unavailable")
         return Response(
-            content=pcm_wave(response.content),
+            content=await broker_speech(spoken),
             media_type="audio/wav",
             headers={"Cache-Control": "no-store"},
         )
@@ -723,6 +803,82 @@ if __name__ == "__main__":
         return JSONResponse(
             await broker_transcript_request(),
             headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/pi-message")
+    async def send_pi_message(request: Request):
+        validate_http_identity(request)
+        try:
+            payload = await request.json()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="invalid message request") from exc
+        message = payload.get("message") if isinstance(payload, dict) else None
+        if not isinstance(message, str) or not message.strip():
+            raise HTTPException(status_code=400, detail="message is required")
+        message = message.strip()
+        if len(message) > 8_000:
+            raise HTTPException(status_code=413, detail="message is too large")
+        result = await broker_pi_message(message)
+        return JSONResponse(
+            {"spoken": result.spoken, "mermaid": result.mermaid},
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/pi-speech")
+    async def pi_speech(request: Request):
+        validate_http_identity(request)
+        try:
+            payload = await request.json()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="invalid speech request") from exc
+        spoken = payload.get("spoken") if isinstance(payload, dict) else None
+        if not isinstance(spoken, str) or not spoken.strip():
+            raise HTTPException(status_code=400, detail="spoken text is required")
+        spoken = spoken.strip()
+        if len(spoken) > 2_000:
+            raise HTTPException(status_code=413, detail="spoken text is too large")
+        return Response(
+            content=await broker_speech(spoken),
+            media_type="audio/wav",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/api/audio-diagnostics")
+    async def list_audio_diagnostics(request: Request):
+        validate_http_identity(request)
+        return JSONResponse(
+            {"sessions": audio_diagnostic_store().list()},
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/api/audio-diagnostics/live")
+    async def live_audio_diagnostics(request: Request):
+        validate_http_identity(request)
+        return JSONResponse(
+            audio_diagnostic_store().live_snapshot(),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/api/audio-diagnostics/{session_id}/metrics")
+    async def audio_diagnostic_metrics(session_id: str, request: Request):
+        validate_http_identity(request)
+        try:
+            payload = audio_diagnostic_store().metrics(session_id)
+        except (ValueError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=404, detail="audio diagnostic not found") from exc
+        return JSONResponse(payload, headers={"Cache-Control": "no-store, private"})
+
+    @app.get("/api/audio-diagnostics/{session_id}/{variant}.wav")
+    async def replay_audio_diagnostic(session_id: str, variant: str, request: Request):
+        validate_http_identity(request)
+        try:
+            target = audio_diagnostic_store().audio_path(session_id, variant)
+        except (ValueError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=404, detail="audio diagnostic not found") from exc
+        return FileResponse(
+            target,
+            media_type="audio/wav",
+            headers={"Cache-Control": "no-store, private"},
         )
 
     @app.get("/api/pi-context")

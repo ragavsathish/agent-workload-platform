@@ -5,6 +5,7 @@ import process from "node:process";
 
 import {
   createHttpHooks,
+  ReadonlyProvider,
   RealFSProvider,
   VM,
   type ExecProcess,
@@ -16,6 +17,8 @@ import type {
   Transport,
   TransportSendOptions,
 } from "@modelcontextprotocol/sdk/shared/transport.js";
+
+import { createGondolinCodingTools } from "./coding-tools.js";
 
 const MCP_COMMAND = [
   "/usr/local/bin/node",
@@ -42,8 +45,11 @@ export type GuestSidecar = {
 
 export type GondolinBrowserOptions = {
   imagePath: string;
-  mounts?: Record<string, string>;
+  mounts?: Record<string, string | { hostPath: string; readonly?: boolean }>;
   allowedHosts?: string[];
+  networkEnabled?: boolean;
+  memory?: string;
+  cpus?: number;
   sidecars?: GuestSidecar[];
   sessionLabel?: string;
 };
@@ -161,6 +167,7 @@ export class GondolinPlaywrightMcp {
   private transport?: GondolinStdioTransport;
   private client?: Client;
   private sidecarProcesses: ExecProcess[] = [];
+  private metricsRegistration?: string;
   private readonly outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "gondolin-browser-output-"));
 
   constructor(private readonly options: GondolinBrowserOptions) {}
@@ -169,25 +176,55 @@ export class GondolinPlaywrightMcp {
     if (this.vm) return this.vm;
     if (this.vmPromise) return this.vmPromise;
     const creation = (async () => {
-      if (!fs.existsSync(this.options.imagePath)) {
+      if (path.isAbsolute(this.options.imagePath) && !fs.existsSync(this.options.imagePath)) {
         throw new Error(`Missing Gondolin browser assets: ${this.options.imagePath}`);
       }
-      const { httpHooks, env } = createHttpHooks({
-        allowedHosts: this.options.allowedHosts ?? [],
-      });
+      const networkEnabled = this.options.networkEnabled ?? true;
+      const network = networkEnabled
+        ? createHttpHooks({ allowedHosts: this.options.allowedHosts ?? [] })
+        : undefined;
       const mounts = Object.fromEntries(
         Object.entries({ "/output": this.outputDirectory, ...this.options.mounts })
-          .map(([guestPath, hostPath]) => [guestPath, new RealFSProvider(hostPath)]),
+          .map(([guestPath, mount]) => {
+            const spec: { hostPath: string; readonly?: boolean } =
+              typeof mount === "string" ? { hostPath: mount } : mount;
+            const provider = new RealFSProvider(spec.hostPath);
+            return [guestPath, spec.readonly ? new ReadonlyProvider(provider) : provider];
+          }),
       );
       const vm = await VM.create({
-        sandbox: { imagePath: this.options.imagePath },
-        httpHooks,
-        env,
+        sandbox: { imagePath: this.options.imagePath, netEnabled: networkEnabled },
+        httpHooks: network?.httpHooks,
+        env: network?.env,
         vfs: { mounts },
-        memory: "2G",
-        cpus: 2,
+        memory: this.options.memory ?? "2G",
+        cpus: this.options.cpus ?? 2,
         sessionLabel: this.options.sessionLabel ?? "pi-playwright-mcp",
       });
+      await vm.start();
+      const metricsDirectory = process.env.GONDOLIN_METRICS_DIR;
+      if (metricsDirectory) {
+        const pid = vm.getHostPid();
+        if (pid === null) {
+          await vm.close();
+          throw new Error("Gondolin VM runner PID is unavailable");
+        }
+        fs.mkdirSync(metricsDirectory, { recursive: true, mode: 0o700 });
+        fs.chmodSync(metricsDirectory, 0o700);
+        const safeId = vm.id.replace(/[^a-zA-Z0-9_-]/g, "_");
+        const target = path.join(metricsDirectory, `${safeId}.json`);
+        const temporary = `${target}.${process.pid}.tmp`;
+        fs.writeFileSync(temporary, `${JSON.stringify({
+          id: vm.id,
+          label: this.options.sessionLabel ?? "pi-playwright-mcp",
+          pid,
+          ownerPid: process.pid,
+          cpus: 2,
+          memoryBytes: 2 * 1024 * 1024 * 1024,
+        })}\n`, { mode: 0o600 });
+        fs.renameSync(temporary, target);
+        this.metricsRegistration = target;
+      }
       this.vm = vm;
       return vm;
     })();
@@ -229,6 +266,12 @@ export class GondolinPlaywrightMcp {
     return this.client!.callTool({ name, arguments: args });
   }
 
+  async codingTools(
+    localCwd: string,
+  ): Promise<ReturnType<typeof createGondolinCodingTools>> {
+    return createGondolinCodingTools(await this.ensureVm(), localCwd);
+  }
+
   async exec(command: string, options: GondolinExecOptions = {}): Promise<GondolinExecResult> {
     const vm = await this.ensureVm();
     const timeoutMs = Math.min(Math.max(options.timeoutMs ?? 30_000, 1_000), 120_000);
@@ -268,6 +311,10 @@ export class GondolinPlaywrightMcp {
       try {
         await vm?.close();
       } finally {
+        if (this.metricsRegistration) {
+          fs.rmSync(this.metricsRegistration, { force: true });
+          this.metricsRegistration = undefined;
+        }
         fs.rmSync(this.outputDirectory, { recursive: true, force: true });
       }
     }

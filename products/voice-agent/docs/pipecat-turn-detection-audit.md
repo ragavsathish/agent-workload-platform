@@ -1,5 +1,9 @@
 # Pipecat turn-detection audit
 
+> Historical note: this audit predates the broker's switch from MLX Whisper to Parakeet TDT 0.6B
+> v3 on MLX. Pipecat still uses its segmented OpenAI-compatible STT adapter, but Whisper-specific
+> model filtering observations below no longer describe the broker implementation.
+
 Date: 2026-10-13
 
 Scope: Pipecat 1.12.0, pinned by `apps/edge/uv.lock`, compared with the current
@@ -163,7 +167,7 @@ and [the fallback path](https://github.com/pipecat-ai/pipecat/blob/v1.12.0/src/p
 
 `apps/edge/bot.py` instantiates `OpenAISTTService` without overriding
 `ttfs_p99_latency`. Pipecat 1.12.0 therefore advertises the OpenAI REST default,
-2.01 seconds. The endpoint is actually the local MLX Whisper broker, not OpenAI.
+2.01 seconds. At audit time the endpoint was the local MLX Whisper broker, not OpenAI.
 Pipecat documents that self-hosted/local deployments must measure and override
 this value.
 

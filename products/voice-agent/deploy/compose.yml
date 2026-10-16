@@ -1,6 +1,51 @@
 name: pipecat-mlx-voice
 
 services:
+  gitea:
+    image: docker.gitea.com/gitea:28.1.0-rootless@sha256:b1a90409ae9afcd5a5725404c3639da7245248848b99e35332968891290b953e
+    restart: unless-stopped
+    environment:
+      GITEA__actions__ENABLED: "true"
+      GITEA__database__DB_TYPE: sqlite3
+      GITEA__database__PATH: /var/lib/gitea/data/gitea.db
+      GITEA__packages__ENABLED: "true"
+      GITEA__security__INSTALL_LOCK: "true"
+      GITEA__server__DISABLE_SSH: "true"
+      GITEA__server__DOMAIN: 127.0.0.1
+      GITEA__server__HTTP_ADDR: 0.0.0.0
+      GITEA__server__LOCAL_ROOT_URL: http://gitea:3000/
+      GITEA__server__PUBLIC_URL_DETECTION: auto
+      GITEA__server__ROOT_URL: ${GITEA_ROOT_URL:-http://127.0.0.1:3001/}
+      GITEA__service__DISABLE_REGISTRATION: "true"
+      GITEA__service__REQUIRE_SIGNIN_VIEW: "false"
+    ports: ["127.0.0.1:3001:3000"]
+    volumes:
+      - gitea-data:/var/lib/gitea
+      - gitea-config:/etc/gitea
+    networks:
+      control:
+        ipv4_address: 172.30.90.5
+      data:
+      host-access:
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=64m,uid=1000,gid=1000"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   s3mock-init:
     image: adobe/s3mock:5.0.0@sha256:c461c8f4234bd63540d2f3a3cabce69d814c78dc890a5af08727525a028e23da
     entrypoint: ["/bin/sh", "-c"]
@@ -57,6 +102,73 @@ services:
       retries: 20
     security_opt: [no-new-privileges:true]
 
+  habitat:
+    image: local/absurd-habitat:0.5.0
+    pull_policy: never
+    build:
+      context: ..
+      dockerfile: deploy/habitat/Containerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      HABITAT_LISTEN: 0.0.0.0:7890
+      HABITAT_BASE_PATH: /queue
+      HABITAT_DB_HOST: postgres
+      HABITAT_DB_PORT: "5432"
+      HABITAT_DB_NAME: voice_agents
+      HABITAT_DB_USER: habitat_operator
+      HABITAT_DB_PASSWORD_FILE: /run/secrets/habitat-database-password
+      HABITAT_DB_SSLMODE: disable
+    secrets: [habitat-database-password]
+    networks:
+      control:
+        ipv4_address: 172.30.90.6
+      data:
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    user: "65532:65532"
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.25
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:7890/queue/_healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  fluent-bit:
+    image: fluent/fluent-bit:4.2.0@sha256:aff743e1a5e61d036d10a4472d67cdd7a6b408c92218eb86e3f301e2bac7817a
+    restart: unless-stopped
+    command: ["--config=/fluent-bit/etc/fluent-bit.yaml"]
+    volumes:
+      - ./observability/fluent-bit.yaml:/fluent-bit/etc/fluent-bit.yaml:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    networks: [monitoring]
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.25
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   otel-lgtm:
     image: grafana/otel-lgtm:0.30.1@sha256:bb182ac3174a20923fa58f00d1790fa71eb06cc0150078c0b0e8feb9e6611492
     entrypoint: ["/bin/bash", "-c"]
@@ -77,6 +189,8 @@ services:
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://127.0.0.1:3300/}
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
       GF_USERS_AUTO_ASSIGN_ORG_ROLE: Viewer
       GF_USERS_ALLOW_SIGN_UP: "false"
       PROMETHEUS_EXTRA_ARGS: --storage.tsdb.retention.time=7d
@@ -84,13 +198,17 @@ services:
     ports:
       - "127.0.0.1:3300:3000"
       - "127.0.0.1:4318:4318"
+      - "127.0.0.1:9091:9090"
     volumes:
       - otel-lgtm-data:/data
       - ./observability/dashboards.yml:/otel-lgtm/grafana/conf/provisioning/dashboards/pipecat.yml:ro
       - ./observability/pipecat-overview.json:/otel-lgtm/grafana/conf/provisioning/dashboards/pipecat/pipecat-overview.json:ro
+      - ./observability/system-overview.json:/otel-lgtm/grafana/conf/provisioning/dashboards/pipecat/system-overview.json:ro
+      - ./observability/otelcol-config.yaml:/otel-lgtm/otelcol-config.yaml:ro
     networks:
       control:
         ipv4_address: 172.30.90.4
+      monitoring:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     pids_limit: 512
@@ -183,6 +301,8 @@ services:
       - "inference-broker:host-gateway"
       - "agent-gateway:172.30.90.3"
       - "otel-lgtm:172.30.90.4"
+      - "gitea:172.30.90.5"
+      - "habitat:172.30.90.6"
     networks:
       control:
         ipv4_address: 172.30.90.2
@@ -196,6 +316,44 @@ services:
     pids_limit: 128
     mem_limit: 256m
     cpus: 1
+
+  traefik:
+    image: traefik:3.7.13@sha256:24841fe2de7304c149343d877d2923b4c8800a38ba015dea9174c23b20e344a0
+    restart: unless-stopped
+    depends_on:
+      gitea:
+        condition: service_healthy
+      habitat:
+        condition: service_healthy
+      otel-lgtm:
+        condition: service_healthy
+      tailscale:
+        condition: service_started
+      voice-edge:
+        condition: service_healthy
+    network_mode: service:tailscale
+    command: ["--configFile=/etc/traefik/traefik.yml"]
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/routes.yml:/etc/traefik/routes.yml:ro
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=16m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    user: "65532:65532"
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.25
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   voice-edge:
     image: local/pipecat-edge:compose
@@ -216,10 +374,14 @@ services:
       AGENT_GATEWAY_BASE_URL: http://agent-gateway:9444/v1
       VOICE_DEFAULT_WORKSPACE: ${VOICE_DEFAULT_WORKSPACE:?set VOICE_DEFAULT_WORKSPACE in deploy/.env}
       VOICE_INPUT_FILTER: ${VOICE_INPUT_FILTER:-rnnoise}
+      VOICE_DIAGNOSTIC_DIR: /var/lib/voice-diagnostics
+      VOICE_DIAGNOSTIC_MAX_SESSIONS: "5"
+      VOICE_DIAGNOSTIC_MAX_SECONDS: ${VOICE_DIAGNOSTIC_MAX_SECONDS:-1800}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-lgtm:4318
       OTEL_LOGS_EXPORTER: none
       OTEL_METRIC_EXPORT_INTERVAL: "5000"
     secrets: [broker-token, agent-gateway-token, voxlock-voice-sample]
+    volumes: [voice-diagnostics:/var/lib/voice-diagnostics]
     read_only: true
     tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=256m"]
     cap_drop: [ALL]
@@ -235,10 +397,13 @@ services:
         max-file: "3"
 
 volumes:
+  gitea-config:
+  gitea-data:
   otel-lgtm-data:
   s3mock-data:
   postgres-data:
   tailscale-state:
+  voice-diagnostics:
 
 networks:
   control:
@@ -246,6 +411,8 @@ networks:
       config:
         - subnet: 172.30.90.0/24
   data:
+    internal: true
+  monitoring:
     internal: true
   host-access:
 
@@ -258,6 +425,8 @@ secrets:
     file: ./secrets/postgres-password
   database-url:
     file: ./secrets/database-url
+  habitat-database-password:
+    file: ./secrets/habitat-database-password
   approval-secret:
     file: ./secrets/approval-secret
   grafana-admin-password:

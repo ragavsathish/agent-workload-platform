@@ -1,0 +1,47 @@
+flowchart LR
+    EDGE[External container<br/><b>Voice Edge</b><br/>bounded bearer-authenticated requests]
+    PI[External container<br/><b>Pi Voice Service</b><br/>persistent streamed turns]
+    OLLAMA[External system<br/><b>Ollama</b><br/>configured fallback LLM]
+    MODELS[(External data<br/><b>Local MLX Models</b><br/>Parakeet v3 and Kokoro)]
+    OTEL[External container<br/><b>OTel LGTM</b>]
+
+    subgraph BROKER["Container: Inference Broker · native Python + FastAPI + MLX"]
+        direction TB
+        GUARD["Component<br/><b>Capability Guard</b><br/>constant-time bearer auth and request limits"]
+        SLOT["Component<br/><b>Inference Slot</b><br/>serializes local STT and TTS work"]
+        STT_API["Component<br/><b>Transcription Endpoint</b><br/>validates mono 16-bit 16 kHz WAV"]
+        STT["Component<br/><b>Parakeet STT Adapter</b><br/>cached MLX model and log-mel inference"]
+        NORMALIZE["Component<br/><b>Transcript Normalizer</b><br/>extracts bounded text and outcomes"]
+        TTS_API["Component<br/><b>Speech Endpoint</b><br/>validates text, voice, speed, and PCM format"]
+        TTS["Component<br/><b>Kokoro TTS Adapter</b><br/>cached MLX synthesis and 24 kHz PCM"]
+        PI_ADAPTER["Component<br/><b>Pi Protocol Adapter</b><br/>OpenAI stream to native Pi SSE"]
+        CONTEXT["Component<br/><b>Pi Projection Proxy</b><br/>transcript, context, and compaction only"]
+        FALLBACK["Component<br/><b>Fallback LLM Proxy</b><br/>fixed model and allowlisted tool schema"]
+        TELEMETRY["Component<br/><b>Inference Telemetry</b><br/>content-free latency and outcome signals"]
+
+        GUARD --> STT_API --> SLOT --> STT --> NORMALIZE
+        GUARD --> TTS_API --> SLOT --> TTS
+        GUARD --> PI_ADAPTER
+        GUARD --> CONTEXT
+        GUARD --> FALLBACK
+        STT_API -.-> TELEMETRY
+        TTS_API -.-> TELEMETRY
+        PI_ADAPTER -.-> TELEMETRY
+    end
+
+    EDGE -->|"STT, TTS, Pi, and context HTTP"| GUARD
+    STT -->|"loads"| MODELS
+    TTS -->|"loads"| MODELS
+    PI_ADAPTER -->|"SSE turn stream"| PI
+    CONTEXT -->|"bounded owner projections"| PI
+    FALLBACK -->|"streamed fixed-model completion"| OLLAMA
+    NORMALIZE -->|"transcript text"| EDGE
+    TTS -->|"PCM"| EDGE
+    TELEMETRY -.->|"OTLP"| OTEL
+
+    classDef component fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
+    classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
+    classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
+    class GUARD,SLOT,STT_API,STT,NORMALIZE,TTS_API,TTS,PI_ADAPTER,CONTEXT,FALLBACK,TELEMETRY component;
+    class EDGE,PI,OLLAMA,OTEL external;
+    class MODELS data;

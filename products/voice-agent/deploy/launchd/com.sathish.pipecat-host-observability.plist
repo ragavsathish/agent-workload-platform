@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.sathish.pipecat-host-observability</string>
+  <key>ProgramArguments</key>
+  <array><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/scripts/run-host-observability.sh</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>FLUENT_BIT_BIN</key><string>/opt/homebrew/bin/fluent-bit</string>
+    <key>FLUENT_BIT_CONFIG</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/observability/fluent-bit-host.yaml</string>
+    <key>GONDOLIN_METRICS_DIR</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/gondolin-metrics</string>
+    <key>GONDOLIN_METRICS_HOST</key><string>127.0.0.1</string>
+    <key>GONDOLIN_METRICS_PORT</key><string>9465</string>
+  </dict>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>/Users/sathish.narayanan/Library/Logs/PipecatEdge/host-observability.log</string>
+  <key>StandardErrorPath</key><string>/Users/sathish.narayanan/Library/Logs/PipecatEdge/host-observability.log</string>
+</dict>
+</plist>

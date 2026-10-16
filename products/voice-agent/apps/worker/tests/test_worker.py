@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 from voice_agent.tasking.infrastructure.config import Settings
+
 from voice_worker.main import build_pi_command
 
 
@@ -21,6 +22,7 @@ def settings(tmp_path: Path, *, sandboxed: bool) -> Settings:
         allow_unsandboxed=False,
         task_timeout_seconds=60,
         max_output_bytes=1024,
+        skills_dir=tmp_path / "skills",
     )
 
 
@@ -33,6 +35,8 @@ def test_command_uses_only_explicit_gondolin_tools(tmp_path: Path) -> None:
     assert "--session-id" not in command
     assert "--session-dir" not in command
     assert "--extension" in command
+    assert "--no-skills" in command
+    assert command[command.index("--skill") + 1] == str(tmp_path / "skills")
     assert command[-2] == "--"
     assert command[-1].startswith("work\n\n")
     assert '"spoken" and "mermaid"' in command[-1]

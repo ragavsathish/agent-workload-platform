@@ -8,6 +8,8 @@ sequenceDiagram
     participant Store as S3 Workspace / Result Store
     participant Queue as PostgreSQL / Absurd
     participant Worker as Pi Task Worker
+    participant Gitea as Gitea Actions and Packages
+    participant Builder as Shared Gondolin Builder
     participant Model as Model Provider
     participant Tools as Gondolin / Wassette
 
@@ -25,6 +27,16 @@ sequenceDiagram
     Worker->>Queue: Claim one task
     Worker->>Store: Download and verify workspace bundle
     Store-->>Worker: Immutable Git bundle
+    opt Repository declares an uncached .pi/gondolin.json build
+        Worker->>Gitea: Dispatch repository workflow and checkpoint run ID
+        Gitea->>Builder: Assign job to capacity-one runner
+        Builder->>Gitea: Check out immutable revision
+        Builder->>Builder: Build with private Docker and produce assets + SHA-256
+        Builder->>Gitea: Upload immutable generic package and manifest
+        Worker->>Gitea: Observe terminal workflow status
+        Worker->>Gitea: Download package
+        Worker->>Worker: Verify digest and register image ref
+    end
     Worker->>Model: Run stateless Pi task-agent loop
     Worker->>Tools: Execute isolated workspace or integration tools
     Tools-->>Worker: Bounded tool result

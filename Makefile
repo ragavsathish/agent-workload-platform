@@ -13,9 +13,13 @@ endif
 C4_GONDOLIN_SERVICE := playwright-layout-$(C4_GONDOLIN_PROFILE)
 C4_GONDOLIN_ASSETS := artifacts/c4-gondolin/$(C4_GONDOLIN_ARCH)
 C4_GONDOLIN_CONFIG := products/architecture-visualization/integrations/gondolin/gondolin/playwright-layout.$(C4_GONDOLIN_ARCH).json
-C4_GONDOLIN ?= npx --yes @earendil-works/gondolin@0.12.0
+C4_GONDOLIN ?= npx --yes @earendil-works/gondolin@0.13.0
 GONDOLIN_BROWSER_ASSETS := artifacts/gondolin-browser/$(C4_GONDOLIN_ARCH)
 GONDOLIN_BROWSER_CONFIG := platform/agent-execution/gondolin-session/gondolin/playwright-mcp.$(C4_GONDOLIN_ARCH).json
+GONDOLIN_BROWSER_SERVICE := voice-runtime-$(C4_GONDOLIN_PROFILE)
+GONDOLIN_BUILDER_ASSETS := artifacts/gondolin-builder/$(C4_GONDOLIN_ARCH)
+GONDOLIN_BUILDER_CONFIG := platform/agent-execution/gondolin-session/gondolin/image-builder.$(C4_GONDOLIN_ARCH).json
+GONDOLIN_BUILDER_SERVICE := image-builder-$(C4_GONDOLIN_PROFILE)
 C4_OCI_REPOSITORY ?= ghcr.io/ragavsathish/agent-workload-platform/c4-suite
 C4_OCI_VERSION ?= $(shell node -p "require('./$(C4_WORKLOAD)/components/package.json').version")
 C4_OCI_REVISION := $(shell git rev-parse HEAD)
@@ -24,7 +28,7 @@ C4_OCI_WASM := $(C4_WORKLOAD)/components/dist/c4-suite.wasm
 C4_OCI_SBOM := artifacts/c4-excalidraw/oci/c4-suite.spdx.json
 C4_OCI_ARTIFACT_TYPE := application/vnd.agent-workload-platform.wasm.component.v1
 C4_OCI_SOURCE := https://github.com/ragavsathish/agent-workload-platform
-.PHONY: c4 c4-build c4-test c4-gondolin-build gondolin-session-build c4-oci-build c4-oci-publish c4-oci-verify
+.PHONY: c4 c4-build c4-test c4-gondolin-build gondolin-session-build gondolin-builder-build c4-oci-build c4-oci-publish c4-oci-verify
 
 c4-build:
 	pnpm --dir $(C4_WORKLOAD) run build
@@ -39,8 +43,14 @@ c4-gondolin-build:
 	$(C4_GONDOLIN) build --config $(C4_GONDOLIN_CONFIG) --output $(C4_GONDOLIN_ASSETS)
 
 gondolin-session-build:
+	docker compose --profile $(C4_GONDOLIN_PROFILE) -f platform/agent-execution/gondolin-session/gondolin/compose.yaml build $(GONDOLIN_BROWSER_SERVICE)
 	mkdir -p $(GONDOLIN_BROWSER_ASSETS)
 	$(C4_GONDOLIN) build --config $(GONDOLIN_BROWSER_CONFIG) --output $(GONDOLIN_BROWSER_ASSETS)
+
+gondolin-builder-build:
+	docker compose --profile $(C4_GONDOLIN_PROFILE) -f platform/agent-execution/gondolin-session/gondolin/compose.yaml build $(GONDOLIN_BUILDER_SERVICE)
+	mkdir -p $(GONDOLIN_BUILDER_ASSETS)
+	$(C4_GONDOLIN) build --config $(GONDOLIN_BUILDER_CONFIG) --output $(GONDOLIN_BUILDER_ASSETS)
 
 c4-oci-build:
 	pnpm --dir $(C4_WORKLOAD) run build:wasm

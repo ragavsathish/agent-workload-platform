@@ -31,6 +31,8 @@ def build_pi_command(settings: Settings, *, task_id: str, instruction: str) -> l
         "--no-themes",
         "--approve",
     ]
+    if settings.skills_dir:
+        command.extend(["--skill", str(settings.skills_dir)])
     if settings.pi_model:
         command.extend(["--model", settings.pi_model])
     if settings.gondolin_extension:
@@ -47,6 +49,8 @@ def validate_worker(settings: Settings) -> None:
         raise RuntimeError(f"Pi binary not found: {settings.pi_binary}")
     if settings.gondolin_extension and not settings.gondolin_extension.is_file():
         raise RuntimeError(f"Gondolin extension not found: {settings.gondolin_extension}")
+    if settings.skills_dir and not settings.skills_dir.is_dir():
+        raise RuntimeError(f"Skills directory not found: {settings.skills_dir}")
     if not settings.gondolin_extension and not settings.allow_unsandboxed:
         raise RuntimeError("secure worker requires PI_GONDOLIN_EXTENSION")
     if settings.artifact_workspaces:
@@ -116,21 +120,26 @@ def create_worker(settings: Settings) -> Absurd:
         if run_handle.done:
             return cast(dict[str, Any], run_handle.state)
 
-        # Arbitrary agent side effects cannot be made transactional with Postgres. Persist an
-        # intent before launching Pi so a recovered task stops for review instead of running the
-        # same shell/edit operations twice after a host crash.
-        intent = ctx.begin_step("run-intent")
-        if intent.done:
-            return {
-                "state": "needs_manual_reconciliation",
-                "session_id": task_id,
-                "message": "Pi started previously but did not checkpoint a result; not rerun.",
-            }
-        ctx.complete_step(intent, {"started": True, "session_id": task_id})
+        def checkpoint_pi_intent() -> dict[str, Any] | None:
+            # Pi's arbitrary side effects cannot be made transactional with Postgres, so persist
+            # this intent immediately before Pi starts.
+            intent = ctx.begin_step("run-intent")
+            if intent.done:
+                return {
+                    "state": "needs_manual_reconciliation",
+                    "session_id": task_id,
+                    "message": "Pi started previously but did not checkpoint a result; not rerun.",
+                }
+            ctx.complete_step(intent, {"started": True, "session_id": task_id})
+            return None
+
         if artifacts:
             with artifacts.materialize_workspace(
                 str(params["workspace"]), settings.worker_scratch_root
             ) as workspace:
+                reconciliation = checkpoint_pi_intent()
+                if reconciliation:
+                    return reconciliation
                 result = run_pi(
                     settings,
                     task_id=task_id,
@@ -150,6 +159,9 @@ def create_worker(settings: Settings) -> Absurd:
                     resolve_workspace(str(params["workspace"]), settings.workspace_roots)
                 ),
             )
+            reconciliation = checkpoint_pi_intent()
+            if reconciliation:
+                return reconciliation
             result = run_pi(
                 settings,
                 task_id=task_id,

@@ -11,10 +11,10 @@ The shared implementation now lives at
 [`platform/agent-execution/gondolin-session`](../platform/agent-execution/gondolin-session).
 It runs the official
 [`@playwright/mcp`](https://github.com/microsoft/playwright-mcp) server inside a
-Gondolin VM and provides `gondolin_bash` for general agent work. The current
-task workspace is the only host directory mounted into the VM, at
-`/workspace`; other host paths are unavailable. Pi's host-side built-in tools
-stay disabled. Shell commands have a bounded timeout and output size.
+Gondolin VM and routes Pi's standard `read`, `write`, `edit`, and `bash` tools
+through that VM. The current task workspace is the only host directory mounted
+into the VM, at `/workspace`; other host paths are unavailable. The tools never
+fall back to their host-side operations.
 
 The extension calls Playwright's `tools/list` at session start and registers
 the returned names, descriptions, and JSON Schemas unchanged. The platform
@@ -37,11 +37,11 @@ Override it with `MEMORY_FILE_PATH`. The server is an upstream dependency, so
 the platform owns only its small MCP client adapter rather than a storage
 implementation.
 
-For repository, filesystem, and system-inspection tasks, Pi uses
-`gondolin_bash`. System information describes the isolated VM and its mounted
-workspace, never the Mac host. The runtime's agent smoke test verifies that a
-workspace file is readable and writable from the VM while an unmounted host
-path remains inaccessible:
+For repository, filesystem, and system-inspection tasks, Pi uses its standard
+coding tools backed by Gondolin. System information describes the isolated VM
+and its mounted workspace, never the Mac host. The runtime's agent smoke test
+verifies that a workspace file is readable and writable from the VM while an
+unmounted host path remains inaccessible:
 
 ```sh
 cd platform/agent-execution/gondolin-session

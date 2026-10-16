@@ -1,22 +1,26 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { chmod, mkdir, readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
   calculateContextTokens,
   createAgentSession,
-  createExtensionRuntime,
+  createMcpExtension,
+  createToolSearchExtension,
   DEFAULT_COMPACTION_SETTINGS,
+  DefaultResourceLoader,
   defineTool,
   getLastAssistantUsage,
   ModelRuntime,
   SessionManager,
   type AgentSession,
+  type ExtensionAPI,
+  type ExtensionFactory,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
-import { GondolinWorkspace } from "./gondolin-workspace.js";
+import { GondolinWorkspace, GUEST_SKILLS } from "./gondolin-workspace.js";
 
 type VoiceMessage = {
   role: "system" | "developer" | "user" | "assistant";
@@ -26,6 +30,9 @@ type VoiceMessage = {
 type ServiceSettings = {
   agentDir: string;
   cwd: string;
+  giteaEndpointUrl: string;
+  giteaOwner: string;
+  giteaToken: string;
   gondolinAssets: string;
   gatewayToken: string;
   gatewayUrl: string;
@@ -33,11 +40,18 @@ type ServiceSettings = {
   listenHost: string;
   listenPort: number;
   model?: string;
+  prometheusEndpointUrl: string;
   sessionDir: string;
   serviceToken: string;
   skillsDir: string;
+  s3MockAccessKey: string;
+  s3MockBucket: string;
+  s3MockEndpointUrl: string;
+  s3MockSecretKey: string;
   thinking: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   timeoutMs: number;
+  wassetteBin: string;
+  wassetteComponentDir: string;
 };
 
 type ToolResult = {
@@ -63,6 +77,46 @@ export type PublicContextUsage = {
 
 const MAX_TRANSCRIPT_ENTRIES = 200;
 const MAX_TRANSCRIPT_TEXT_CHARS = 24_000;
+const WASSETTE_SYSTEM_PROMPT = `Wassette provides capability-controlled WebAssembly tools through MCP.
+Use tool_search when a request could benefit from a Wassette component. Components start without
+host capabilities: grant only the minimum capability needed for the current request, and never grant
+access to orchestrator credentials, the Pi agent directory, or unrelated host files.`;
+
+const SCRUBBED_WASSETTE_ENV = {
+  AGENT_GATEWAY_TOKEN: "",
+  ARTIFACT_ACCESS_KEY: "",
+  ARTIFACT_SECRET_KEY: "",
+  AWS_ACCESS_KEY_ID: "",
+  AWS_SECRET_ACCESS_KEY: "",
+  AWS_SESSION_TOKEN: "",
+  DATABASE_URL: "",
+  GITEA_BUILDER_TOKEN: "",
+  GITEA_TOKEN: "",
+  GITHUB_TOKEN: "",
+  INFERENCE_BROKER_TOKEN: "",
+  ORCHESTRATOR_APPROVAL_SECRET: "",
+};
+
+export function createWassetteMcpRegistration(
+  settings: Pick<ServiceSettings, "cwd" | "wassetteBin" | "wassetteComponentDir">,
+): ExtensionFactory {
+  return (pi: ExtensionAPI) => {
+    pi.registerMcpServer("wassette", {
+      command: settings.wassetteBin,
+      args: ["run", "--component-dir", settings.wassetteComponentDir],
+      cwd: settings.cwd,
+      env: { ...SCRUBBED_WASSETTE_ENV },
+      exposure: "deferred",
+      description: "Run capability-controlled WebAssembly components with Wassette.",
+      timeout: 60,
+    });
+  };
+}
+
+/** Voice MCP is explicit: shared user or project mcp.json files must not override its policy. */
+export function isolatedVoiceMcpConfig() {
+  return { servers: [], errors: [] };
+}
 
 export function canManuallyCompact(
   tokens: number | null,
@@ -160,7 +214,6 @@ const proposalIdParameters = Type.Object(
   },
   { additionalProperties: false },
 );
-
 function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is required`);
@@ -274,25 +327,53 @@ function toolResult(payload: Record<string, unknown>, tool: string): ToolResult 
   };
 }
 
-function staticResourceLoader(systemPrompt: string) {
-  const extensionsResult = {
-    extensions: [],
-    errors: [],
-    runtime: createExtensionRuntime(),
-  };
-  return {
-    getExtensions: () => extensionsResult,
-    getSkills: () => ({ skills: [], diagnostics: [] }),
-    getPrompts: () => ({ prompts: [], diagnostics: [] }),
-    getThemes: () => ({ themes: [], diagnostics: [] }),
-    getAgentsFiles: () => ({ agentsFiles: [] }),
-    getSystemPrompt: () => systemPrompt,
-    getSystemPromptSource: () => undefined,
-    getAppendSystemPrompt: () => [],
-    getAppendSystemPromptSources: () => [],
-    extendResources: (_paths: unknown) => undefined,
-    reload: async () => undefined,
-  };
+function guestSkillPath(skillsDir: string, hostPath: string): string {
+  const relativePath = relative(skillsDir, hostPath);
+  if (
+    relativePath === ".."
+    || relativePath.startsWith(`..${sep}`)
+    || isAbsolute(relativePath)
+  ) {
+    throw new Error(`Pi discovered a skill outside the configured skills directory: ${hostPath}`);
+  }
+  return posix.join(GUEST_SKILLS, ...relativePath.split(sep));
+}
+
+export async function skillResourceLoader(
+  systemPrompt: string,
+  settings: Pick<ServiceSettings, "agentDir" | "cwd" | "skillsDir">,
+  extensionFactories: ExtensionFactory[] = [],
+): Promise<DefaultResourceLoader> {
+  const loader = new DefaultResourceLoader({
+    cwd: settings.cwd,
+    agentDir: settings.agentDir,
+    systemPrompt,
+    appendSystemPrompt: extensionFactories.length > 0 ? [WASSETTE_SYSTEM_PROMPT] : [],
+    extensionFactories,
+    additionalSkillPaths: [settings.skillsDir],
+    noExtensions: true,
+    noSkills: true,
+    noPromptTemplates: true,
+    noThemes: true,
+    noContextFiles: true,
+    skillsOverride: ({ skills, diagnostics }) => ({
+      diagnostics,
+      skills: skills.map((skill) => ({
+        ...skill,
+        filePath: guestSkillPath(settings.skillsDir, skill.filePath),
+        baseDir: guestSkillPath(settings.skillsDir, skill.baseDir),
+        sourceInfo: {
+          ...skill.sourceInfo,
+          path: guestSkillPath(settings.skillsDir, skill.sourceInfo.path),
+          ...(skill.sourceInfo.baseDir
+            ? { baseDir: guestSkillPath(settings.skillsDir, skill.sourceInfo.baseDir) }
+            : {}),
+        },
+      })),
+    }),
+  });
+  await loader.reload();
+  return loader;
 }
 
 async function gatewayRequest(
@@ -385,9 +466,17 @@ class VoiceAgent {
       allowModelNetwork: false,
     });
     const gondolin = await GondolinWorkspace.create({
+      giteaEndpointUrl: settings.giteaEndpointUrl,
+      giteaOwner: settings.giteaOwner,
+      giteaToken: settings.giteaToken,
       imagePath: settings.gondolinAssets,
       localCwd: settings.cwd,
+      prometheusEndpointUrl: settings.prometheusEndpointUrl,
       skillsDir: settings.skillsDir,
+      s3MockAccessKey: settings.s3MockAccessKey,
+      s3MockBucket: settings.s3MockBucket,
+      s3MockEndpointUrl: settings.s3MockEndpointUrl,
+      s3MockSecretKey: settings.s3MockSecretKey,
       sessionLabel: "pi-voice",
     });
     const persistedSession = openVoiceSessionManager(settings.cwd, settings.sessionDir);
@@ -511,7 +600,11 @@ class VoiceAgent {
     this.unsubscribeSession?.();
     this.unsubscribeSession = undefined;
     this.session?.dispose();
-    const resourceLoader = staticResourceLoader(systemPrompt);
+    const resourceLoader = await skillResourceLoader(systemPrompt, this.settings, [
+      createToolSearchExtension(),
+      createMcpExtension({ loadConfig: isolatedVoiceMcpConfig }),
+      createWassetteMcpRegistration(this.settings),
+    ]);
     let model;
     if (this.settings.model) {
       const separator = this.settings.model.indexOf("/");
@@ -535,6 +628,7 @@ class VoiceAgent {
         "write",
         "edit",
         "bash",
+        "tool_search",
         "propose_agent_task",
         "submit_agent_task",
         "get_agent_task",
@@ -574,6 +668,7 @@ class VoiceAgent {
         this.transcript.finishTool(event.toolCallId, event.isError);
       }
     });
+    await session.bindExtensions({});
     this.systemPrompt = systemPrompt;
   }
 
@@ -739,6 +834,9 @@ async function loadSettings(): Promise<ServiceSettings> {
   return {
     agentDir,
     cwd,
+    giteaEndpointUrl: requiredEnv("GITEA_ENDPOINT_URL"),
+    giteaOwner: requiredEnv("GITEA_OWNER"),
+    giteaToken: requiredEnv("GITEA_TOKEN"),
     gondolinAssets: resolve(requiredEnv("GONDOLIN_BROWSER_ASSETS")),
     gatewayToken: requiredEnv("AGENT_GATEWAY_TOKEN"),
     gatewayUrl: (process.env.AGENT_GATEWAY_BASE_URL || "http://127.0.0.1:9444/v1").replace(/\/$/, ""),
@@ -746,11 +844,18 @@ async function loadSettings(): Promise<ServiceSettings> {
     listenHost: process.env.PI_VOICE_SERVICE_HOST || "127.0.0.1",
     listenPort: Number.parseInt(process.env.PI_VOICE_SERVICE_PORT || "9446", 10),
     model: process.env.PI_VOICE_MODEL?.trim() || process.env.PI_MODEL?.trim() || undefined,
+    prometheusEndpointUrl: process.env.PROMETHEUS_ENDPOINT_URL || "http://127.0.0.1:9091",
     sessionDir,
     serviceToken: requiredEnv("INFERENCE_BROKER_TOKEN"),
     skillsDir,
+    s3MockAccessKey: requiredEnv("ARTIFACT_ACCESS_KEY"),
+    s3MockBucket: requiredEnv("ARTIFACT_BUCKET"),
+    s3MockEndpointUrl: requiredEnv("ARTIFACT_ENDPOINT_URL"),
+    s3MockSecretKey: requiredEnv("ARTIFACT_SECRET_KEY"),
     thinking,
     timeoutMs: Number.parseFloat(process.env.PI_VOICE_TIMEOUT_SECONDS || "120") * 1000,
+    wassetteBin: resolve(requiredEnv("WASSETTE_BIN")),
+    wassetteComponentDir: resolve(requiredEnv("WASSETTE_COMPONENT_DIR")),
   };
 }
 

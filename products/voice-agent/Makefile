@@ -1,4 +1,4 @@
-.PHONY: setup build up start logs down recreate verify cycle-test login status grafana-password warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e host-preflight install-host-services db-init broker worker pull-model check
+.PHONY: setup build up start logs down recreate verify cycle-test login status grafana-password warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e playwright-voice playwright-diagnostics host-preflight install-host-services wassette-arxiv-build wassette-arxiv-install db-init broker worker pull-model check
 
 COMPOSE = docker compose --env-file deploy/.env -f deploy/compose.yml
 
@@ -7,13 +7,15 @@ setup:
 	uv sync --project apps/gateway --python 3.13
 	uv sync --project apps/worker --python 3.13
 	uv sync --project apps/edge --python 3.13
-	cd apps/web && npm ci
+	cd apps/client && npm ci
+	cd apps/diagnostics && npm ci
 	pnpm --dir ../.. --filter @agent-workload-platform/voice-pi-agent install
 	cp -n deploy/.env.example deploy/.env || true
 	cp -n apps/edge/.env.example apps/edge/.env || true
 
 build:
-	cd apps/web && npm run build
+	cd apps/client && npm run build
+	cd apps/diagnostics && npm run build
 	$(COMPOSE) build
 
 up:
@@ -25,12 +27,12 @@ start:
 
 logs:
 	@mkdir -p "$$HOME/Library/Logs/PipecatEdge"
-	@touch "$$HOME/Library/Logs/PipecatEdge/broker.log" "$$HOME/Library/Logs/PipecatEdge/pi-voice.log" "$$HOME/Library/Logs/PipecatEdge/worker.log"
+	@touch "$$HOME/Library/Logs/PipecatEdge/broker.log" "$$HOME/Library/Logs/PipecatEdge/pi-voice.log" "$$HOME/Library/Logs/PipecatEdge/worker.log" "$$HOME/Library/Logs/PipecatEdge/image-builder.log" "$$HOME/Library/Logs/PipecatEdge/host-observability.log"
 	@chmod 600 "$$HOME/Library/Logs/PipecatEdge/"*.log
 	@interrupted=0; \
 	tail -n 100 -F "$$HOME/Library/Logs/PipecatEdge/"*.log & tail_pid=$$!; \
 	trap 'interrupted=1' INT TERM; \
-	$(COMPOSE) logs -f --tail=100 agent-gateway voice-edge tailscale; status=$$?; \
+	$(COMPOSE) logs -f --tail=100 agent-gateway voice-edge tailscale traefik gitea habitat; status=$$?; \
 	kill "$$tail_pid" 2>/dev/null || true; \
 	wait "$$tail_pid" 2>/dev/null || true; \
 	if [[ "$$interrupted" == 1 || "$$status" == 130 ]]; then exit 0; fi; \
@@ -56,7 +58,9 @@ status:
 	$(COMPOSE) ps
 	$(COMPOSE) exec -T tailscale tailscale --socket=/tmp/tailscaled.sock status || true
 	launchctl print "gui/$$UID/com.sathish.pipecat-broker" | sed -n '1,20p'
+	launchctl print "gui/$$UID/com.sathish.pipecat-host-observability" | sed -n '1,20p'
 	launchctl print "gui/$$UID/com.sathish.pipecat-worker" | sed -n '1,20p'
+	launchctl print "gui/$$UID/com.sathish.pipecat-image-builder" | sed -n '1,20p'
 
 grafana-password:
 	@test -s deploy/secrets/grafana-admin-password || { echo "Run make up first" >&2; exit 1; }
@@ -80,11 +84,23 @@ blackbox-voice:
 blackbox-e2e:
 	./tests/e2e/blackbox-e2e.sh
 
+playwright-voice:
+	./tests/e2e/playwright-voice.sh
+
+playwright-diagnostics:
+	./tests/e2e/playwright-diagnostics.sh
+
 host-preflight:
 	./scripts/host-preflight.sh
 
-install-host-services:
+install-host-services: wassette-arxiv-install
 	./scripts/install-launch-agents.sh
+
+wassette-arxiv-build:
+	$(MAKE) -C components/arxiv-rs build
+
+wassette-arxiv-install: wassette-arxiv-build
+	$(MAKE) -C components/arxiv-rs install
 
 db-init:
 	./scripts/db-init.sh
@@ -103,9 +119,9 @@ check:
 	pnpm --dir ../.. --filter @agent-workload-platform/voice-pi-agent check
 	pnpm --dir ../.. --filter @agent-workload-platform/voice-pi-agent test
 	uv sync --project apps/broker --python 3.13
-	uv run --project apps/broker ruff check --config apps/broker/pyproject.toml apps/broker packages/telemetry deploy/test_prepare_compose.py
+	uv run --project apps/broker ruff check --config apps/broker/pyproject.toml apps/broker packages/telemetry deploy/test_prepare_compose.py deploy/test_finalize_edge.py
 	uv run --project apps/broker pyright --project apps/broker/pyproject.toml apps/broker packages/telemetry
-	PYTHONPATH=apps/broker/src:packages/telemetry/src uv run --project apps/broker pytest apps/broker/tests packages/telemetry/tests deploy/test_prepare_compose.py
+	PYTHONPATH=apps/broker/src:packages/telemetry/src uv run --project apps/broker pytest apps/broker/tests packages/telemetry/tests deploy/test_prepare_compose.py deploy/test_finalize_edge.py
 	uv sync --project apps/gateway --python 3.13
 	uv run --project apps/gateway ruff check --config apps/gateway/pyproject.toml apps/gateway packages/tasking
 	uv run --project apps/gateway pyright --project apps/gateway/pyproject.toml apps/gateway packages/tasking
@@ -117,9 +133,11 @@ check:
 	uv sync --project apps/edge --python 3.13
 	cd apps/edge && PYTHONPATH=.:../../packages/telemetry/src uv run ruff check . && uv run pyright
 	cd apps/edge && PYTHONPATH=.:../../packages/telemetry/src uv run python -m unittest discover -p 'test_*.py'
-	cd apps/web && npm run lint
-	cd apps/web && npm test
-	cd apps/web && npm run build
+	cd apps/client && npm run lint
+	cd apps/client && npm test
+	cd apps/client && npm run build
+	cd apps/diagnostics && npm run lint
+	cd apps/diagnostics && npm run build
 	$(COMPOSE) config --quiet
 	for script in scripts/*.sh; do bash -n "$$script"; done
 	for script in tests/e2e/*.sh deploy/launchd/run-*.sh; do bash -n "$$script"; done

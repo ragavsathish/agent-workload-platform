@@ -103,6 +103,33 @@ def main() -> None:
         grafana = grafana_path.read_text(encoding="utf-8").strip()
     else:
         grafana = secrets.token_urlsafe(32)
+    gitea_path = secrets_dir / "gitea-admin-password"
+    if gitea_path.is_file():
+        gitea = gitea_path.read_text(encoding="utf-8").strip()
+    else:
+        gitea = secrets.token_urlsafe(32)
+    gitea_agent_password_path = secrets_dir / "gitea-agent-password"
+    if gitea_agent_password_path.is_file():
+        gitea_agent_password = gitea_agent_password_path.read_text(encoding="utf-8").strip()
+    else:
+        gitea_agent_password = secrets.token_urlsafe(32)
+    gitea_builder_password_path = secrets_dir / "gitea-builder-password"
+    if gitea_builder_password_path.is_file():
+        gitea_builder_password = gitea_builder_password_path.read_text(encoding="utf-8").strip()
+    else:
+        gitea_builder_password = secrets.token_urlsafe(32)
+    gitea_dispatcher_password_path = secrets_dir / "gitea-dispatcher-password"
+    if gitea_dispatcher_password_path.is_file():
+        gitea_dispatcher_password = gitea_dispatcher_password_path.read_text(
+            encoding="utf-8"
+        ).strip()
+    else:
+        gitea_dispatcher_password = secrets.token_urlsafe(32)
+    habitat_password_path = secrets_dir / "habitat-database-password"
+    if habitat_password_path.is_file():
+        habitat_password = habitat_password_path.read_text(encoding="utf-8").strip()
+    else:
+        habitat_password = secrets.token_urlsafe(32)
     files = {
         "broker-token": broker,
         "agent-gateway-token": gateway,
@@ -112,6 +139,11 @@ def main() -> None:
             f"postgresql://voice_agents:{quote(postgres, safe='')}@postgres:5432/voice_agents"
         ),
         "grafana-admin-password": grafana,
+        "gitea-admin-password": gitea,
+        "gitea-agent-password": gitea_agent_password,
+        "gitea-builder-password": gitea_builder_password,
+        "gitea-dispatcher-password": gitea_dispatcher_password,
+        "habitat-database-password": habitat_password,
     }
     for name, value in files.items():
         path = secrets_dir / name

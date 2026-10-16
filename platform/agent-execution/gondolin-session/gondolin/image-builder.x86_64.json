@@ -1,0 +1,24 @@
+{
+  "arch": "x86_64",
+  "distro": "alpine",
+  "alpine": {
+    "version": "3.23.0",
+    "kernelPackage": "linux-virt",
+    "kernelImage": "vmlinuz-virt",
+    "initramfsPackages": ["linux-virt"],
+    "krunfwVersion": "v5.2.1"
+  },
+  "oci": {
+    "image": "agent-image-builder:29.5.2-amd64",
+    "runtime": "docker",
+    "platform": "linux/amd64",
+    "pullPolicy": "never"
+  },
+  "rootfs": {
+    "label": "agent-image-builder",
+    "sizeMb": 2048
+  },
+  "runtimeDefaults": {
+    "rootfsMode": "cow"
+  }
+}
