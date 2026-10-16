@@ -12,6 +12,7 @@ npm --prefix apps/client ci
 npm --prefix apps/client run build
 npm --prefix apps/diagnostics ci
 npm --prefix apps/diagnostics run build
+make -C "$root" grafana-c4-dashboard
 # The shared Gondolin builder is bootstrap infrastructure. Gitea Actions owns
 # repository workload builds; install-launch-agents validates existing assets.
 cp -n apps/edge/.env.example apps/edge/.env || true

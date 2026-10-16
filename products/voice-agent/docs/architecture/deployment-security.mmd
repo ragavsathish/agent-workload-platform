@@ -1,99 +1,125 @@
 flowchart LR
-    %% C4 deployment view. Arrows show only trust-boundary crossings and operational dependencies.
+    %% C4 deployment view. Only boundary crossings and primary runtime relationships are shown.
     USER(["Person<br/><b>Tailnet User</b>"])
-    CONTROL["External system<br/><b>Tailscale Control Plane</b>"]
-    MODELS["External system<br/><b>Model Providers</b>"]
-    EXTERNAL["External system<br/><b>Optional Integrations</b>"]
 
-    subgraph DEVICE["User device · Safari or WebRTC browser"]
-        BROWSER["Container<br/><b>Browser Client</b><br/>Flutter Web · Pipecat JS transport adapter"]
+    subgraph DEVICE["User device"]
+        BROWSER["Browser Client<br/>Flutter Web · Pipecat transport"]
     end
 
-    subgraph MAC["Apple Silicon Mac · macOS"]
+    subgraph MAC["Apple Silicon Mac · one macOS user boundary"]
         direction LR
 
-        subgraph DOCKER["Docker Desktop Linux VM · Docker Compose"]
+        subgraph DOCKER["Docker Desktop Linux VM"]
             direction TB
-            subgraph EDGE_NS["Shared Tailscale network namespace"]
-                direction LR
-                INGRESS["Container<br/><b>Tailnet Auth Ingress</b><br/>Tailscale Serve · HTTPS :443"]
-                ROUTER["Container<br/><b>Path Router</b><br/>Traefik · loopback :8080 · exact-owner forward-auth"]
-                EDGE["Container<br/><b>Voice Edge</b><br/>Pipecat · RNNoise/VoxLock · read-only · non-root<br/>model in image · owner sample secret"]
-                INGRESS -->|"loopback HTTP<br/>injected identity"| ROUTER
-                ROUTER -->|"/ · WebSocket"| EDGE
+            subgraph TRUST_NS["Shared namespace · 172.30.90.2 · trusted proxy source IP"]
+                direction TB
+                INGRESS["Tailscale Serve<br/>tailnet HTTPS"]
+                ROUTER["Traefik<br/>owner forward-auth"]
+                EDGE["Voice Edge<br/>Pipecat · read-only · non-root"]
+                TRUST_RISK["Risk<br/>Edge shares Grafana's trusted proxy source IP"]
+                INGRESS -->|"identity header"| ROUTER
+                ROUTER -->|"/ · WebRTC"| EDGE
+                EDGE -.-> TRUST_RISK
             end
-            GATEWAY["Container<br/><b>Agent Gateway</b><br/>read-only · non-root"]
-            POSTGRES[("Container database<br/><b>PostgreSQL</b><br/>proposals · Absurd queue · checkpoints")]
-            HABITAT["Container<br/><b>Queue Dashboard</b><br/>Absurd Habitat · read-only root · non-root"]
-            S3[("Container data store<br/><b>S3Mock</b><br/>immutable workspaces · bounded results")]
-            GITEA[("Container data store<br/><b>Gitea</b><br/>rootless · Git refs + image packages · named volumes")]
-            DOCKER_METRICS["Container<br/><b>Docker VM Metrics</b><br/>Fluent Bit · /proc + /sys read-only · no Docker socket"]
-            OTEL["Container<br/><b>OTel LGTM</b><br/>metrics · traces · no logs"]
-            GATEWAY -->|"private SQL"| POSTGRES
-            HABITAT -->|"scoped Absurd SQL<br/>no proposal access"| POSTGRES
-            GATEWAY -->|"private S3 API"| S3
+
+            subgraph CONTROL_NET["control · non-internal"]
+                GATEWAY["Agent Gateway<br/>identity · commands"]
+                HABITAT["Absurd Habitat<br/>queue operations"]
+            end
+
+            subgraph DATA_NET["data · internal"]
+                POSTGRES[("PostgreSQL<br/>proposals · queue · checkpoints")]
+                S3[("S3Mock<br/>workspaces · results")]
+                GITEA[("Gitea<br/>Git · Actions · packages")]
+            end
+
+            subgraph MONITOR_NET["monitoring · internal"]
+                DOCKER_METRICS["Docker VM Metrics<br/>Fluent Bit"]
+                OTEL["OTel LGTM<br/>Prometheus · Tempo · Grafana"]
+                DOCKER_METRICS --> OTEL
+            end
+
+            EDGE -->|"task API"| GATEWAY
+            GATEWAY --> POSTGRES
+            GATEWAY --> S3
+            HABITAT -->|"scoped queue SQL"| POSTGRES
+            ROUTER -->|"/queue/"| HABITAT
+            ROUTER -->|"/git/"| GITEA
+            ROUTER -->|"/metrics/"| OTEL
+            EDGE -.->|"OTLP"| OTEL
         end
 
-        subgraph NATIVE["Native macOS services · launchd · loopback only"]
+        subgraph NATIVE["Native macOS · launchd and child processes"]
             direction TB
-            BROKER["Container<br/><b>Inference Broker</b><br/>FastAPI · Parakeet v3 MLX · MLX Kokoro"]
-            PI["Container<br/><b>Pi Voice Service</b><br/>Node.js · persistent Pi session"]
-            WORKER["Container<br/><b>Pi Task Worker</b><br/>Python · concurrency one"]
-            BUILDER_MANAGER["Container<br/><b>Builder VM Manager</b><br/>Node.js · launchd · runner credential"]
-            HOST_METRICS["Container<br/><b>Host Observability</b><br/>Fluent Bit + Gondolin exporter<br/>loopback only · no guest credentials"]
-            RUNTIME[("Private data store<br/><b>Runtime Data</b><br/>copied runtimes · secrets · sessions · scratch")]
-            BROKER -->|"bearer HTTP :9446"| PI
-            PI -->|"sessions · workspace · skills"| RUNTIME
-            WORKER -->|"scratch · copied runtime"| RUNTIME
+            BROKER["Inference Broker<br/>FastAPI · MLX STT/TTS"]
+            PI["Pi Voice Service<br/>persistent Pi session"]
+            WORKER["Pi Task Worker<br/>claim · execute · checkpoint"]
+            TASK_PI["Pi Task Session<br/>bounded child process"]
+            BUILDER_MANAGER["Builder VM Manager<br/>warm VM lifecycle"]
+            VOICE_WASSETTE["Voice Wassette MCP<br/>per-session child"]
+            TASK_WASSETTE["Task Wassette MCP<br/>per-task child"]
+            HOST_METRICS["Host Observability<br/>Mac + QEMU metrics"]
+            RUNTIME[("Host-private data<br/>sessions · skills · scratch · secrets")]
+
+            BROKER --> PI
+            PI --> RUNTIME
+            WORKER --> RUNTIME
+            WORKER --> TASK_PI
+            PI --> VOICE_WASSETTE
+            TASK_PI --> TASK_WASSETTE
         end
 
-        subgraph ISOLATION["Agent tool isolation"]
+        subgraph VMS["Gondolin micro-VM isolation"]
             direction TB
-            VOICE_VM["Container<br/><b>Persistent Voice VM</b><br/>Gondolin · AWS/Git/Tea CLI · workspace RW"]
-            TASK_VM["Container<br/><b>Per-task VM</b><br/>Gondolin · one workspace"]
-            BUILDER_VM["Container<br/><b>Shared Builder VM</b><br/>Gondolin · Gitea Runner · private Docker · no host socket"]
-            WASSETTE["Container<br/><b>Integration Runtime</b><br/>Wassette · declared permissions"]
-            TASK_VM -->|"MCP"| WASSETTE
+            subgraph VOICE_VM["Persistent voice VM · no public egress"]
+                VOICE_TOOLS["Voice tools<br/>workspace RW · Git · Tea · AWS CLI"]
+            end
+            subgraph TASK_VM["Per-task VM · public egress enabled by current default"]
+                TASK_TOOLS["Task tools<br/>isolated workspace · project policy"]
+            end
+            subgraph BUILDER_VM["Shared builder VM · public package egress"]
+                RUNNER["Gitea Runner"]
+                DOCKERD["Private Docker daemon and cache"]
+                RUNNER --> DOCKERD
+            end
         end
 
-        EDGE -->|"bearer HTTP via host gateway :9443"| BROKER
-        EDGE -->|"control network :9444"| GATEWAY
-        PI -->|"loopback :9444"| GATEWAY
-        WORKER -->|"loopback :54329"| POSTGRES
-        WORKER -->|"loopback :9090"| S3
-        BUILDER_MANAGER -->|"resume and checkpoint warm VM"| BUILDER_VM
-        BUILDER_VM -->|"synthetic Gitea route :3001<br/>workflow jobs and package upload"| GITEA
-        WORKER -->|"verified package download :3001"| GITEA
-        PI -->|"native tools"| VOICE_VM
-        WORKER -->|"Pi extension"| TASK_VM
-        VOICE_VM -->|"synthetic HTTP allowlist<br/>restricted read token via loopback :3001"| GITEA
-        VOICE_VM -->|"synthetic HTTP allowlist<br/>host rewrite to loopback :9090"| S3
-        EDGE -.->|"OTLP/HTTP"| OTEL
-        GATEWAY -.->|"OTLP/HTTP"| OTEL
-        BROKER -.->|"loopback OTLP/HTTP"| OTEL
-        PI -.->|"register voice QEMU PID"| HOST_METRICS
-        WORKER -.->|"register task QEMU PID"| HOST_METRICS
-        DOCKER_METRICS -->|"Prometheus metrics<br/>internal network"| OTEL
-        HOST_METRICS -->|"Mac + registered QEMU metrics<br/>host gateway :2022 · :9465"| OTEL
-        ROUTER -->|"/metrics/<br/>control network"| OTEL
-        ROUTER -->|"/git/<br/>strip prefix"| GITEA
-        ROUTER -->|"/queue/<br/>owner only"| HABITAT
+        EDGE -->|"bearer · host-access"| BROKER
+        PI -->|"native tools"| VOICE_TOOLS
+        TASK_PI -->|"isolated tools"| TASK_TOOLS
+        BUILDER_MANAGER -->|"resume · checkpoint"| RUNNER
+        VOICE_TOOLS -->|"synthetic allowlist"| GITEA
+        VOICE_TOOLS -->|"synthetic allowlist"| S3
+        RUNNER -->|"Actions · packages"| GITEA
+        WORKER -->|"verified package"| GITEA
+        HOST_METRICS -.->|"host-access scrape"| OTEL
     end
 
-    USER -->|"talk · listen · review"| BROWSER
-    BROWSER -->|"tailnet HTTPS · WebRTC"| INGRESS
-    INGRESS -.->|"control protocol"| CONTROL
-    PI -->|"host-held credentials"| MODELS
-    WORKER -->|"host-held credentials"| MODELS
-    WASSETTE -->|"permission-scoped HTTPS"| EXTERNAL
+    subgraph EXTERNAL["External systems"]
+        direction TB
+        CONTROL["Tailscale Control Plane"]
+        MODELS["Model Providers"]
+        INTERNET["Public Internet and Integrations"]
+    end
+
+    USER --> BROWSER -->|"tailnet HTTPS · WebRTC"| INGRESS
+    INGRESS -.-> CONTROL
+    PI -->|"host-held credential"| MODELS
+    TASK_PI -->|"host-held credential"| MODELS
+    VOICE_WASSETTE -->|"granted capability"| INTERNET
+    TASK_WASSETTE -->|"granted capability"| INTERNET
+    TASK_TOOLS -->|"current default"| INTERNET
+    DOCKERD -->|"packages"| INTERNET
 
     classDef person fill:#084c8d,color:#fff,stroke:#05345f,stroke-width:2px;
     classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
-    classDef container fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
+    classDef runtime fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
     classDef security fill:#dcfce7,color:#14532d,stroke:#16a34a,stroke-width:2px;
+    classDef warning fill:#3b2027,color:#ffd7de,stroke:#ff778a,stroke-width:3px;
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
     class USER person;
-    class CONTROL,MODELS,EXTERNAL external;
-    class BROWSER,BROKER,PI,WORKER,BUILDER_MANAGER,HOST_METRICS,VOICE_VM,TASK_VM,BUILDER_VM,WASSETTE,HABITAT,DOCKER_METRICS,OTEL container;
+    class CONTROL,MODELS,INTERNET external;
+    class BROWSER,BROKER,PI,WORKER,TASK_PI,BUILDER_MANAGER,VOICE_WASSETTE,TASK_WASSETTE,HOST_METRICS,VOICE_TOOLS,TASK_TOOLS,RUNNER,DOCKERD,HABITAT,DOCKER_METRICS,OTEL runtime;
     class INGRESS,ROUTER,EDGE,GATEWAY security;
+    class TRUST_RISK warning;
     class POSTGRES,S3,GITEA,RUNTIME data;

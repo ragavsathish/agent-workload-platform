@@ -1,4 +1,4 @@
-.PHONY: setup build up start logs down recreate verify cycle-test login status grafana-password warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e playwright-voice playwright-diagnostics host-preflight install-host-services wassette-arxiv-build wassette-arxiv-install db-init broker worker pull-model check
+.PHONY: setup build up start logs down recreate verify cycle-test login status grafana-password warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e playwright-voice playwright-diagnostics host-preflight install-host-services wassette-arxiv-build wassette-arxiv-install wassette-c4-grafana-build wassette-c4-grafana-install grafana-c4-dashboard db-init broker worker pull-model check
 
 COMPOSE = docker compose --env-file deploy/.env -f deploy/compose.yml
 
@@ -13,7 +13,7 @@ setup:
 	cp -n deploy/.env.example deploy/.env || true
 	cp -n apps/edge/.env.example apps/edge/.env || true
 
-build:
+build: grafana-c4-dashboard
 	cd apps/client && npm run build
 	cd apps/diagnostics && npm run build
 	$(COMPOSE) build
@@ -93,7 +93,7 @@ playwright-diagnostics:
 host-preflight:
 	./scripts/host-preflight.sh
 
-install-host-services: wassette-arxiv-install
+install-host-services: wassette-arxiv-install wassette-c4-grafana-install
 	./scripts/install-launch-agents.sh
 
 wassette-arxiv-build:
@@ -101,6 +101,15 @@ wassette-arxiv-build:
 
 wassette-arxiv-install: wassette-arxiv-build
 	$(MAKE) -C components/arxiv-rs install
+
+wassette-c4-grafana-build:
+	$(MAKE) -C components/c4-grafana-ts build
+
+wassette-c4-grafana-install: wassette-c4-grafana-build
+	$(MAKE) -C components/c4-grafana-ts install
+
+grafana-c4-dashboard: wassette-c4-grafana-build
+	C4_GRAFANA_WASM="$(CURDIR)/components/c4-grafana-ts/dist/c4-grafana.wasm" node deploy/observability/generate-c4-heatmap.mjs
 
 db-init:
 	./scripts/db-init.sh
@@ -115,6 +124,7 @@ pull-model:
 	ollama pull qwen3.5:9b-mlx
 
 check:
+	$(MAKE) -C components/c4-grafana-ts check
 	pnpm --dir ../.. --filter @agent-workload-platform/gondolin-session check
 	pnpm --dir ../.. --filter @agent-workload-platform/voice-pi-agent check
 	pnpm --dir ../.. --filter @agent-workload-platform/voice-pi-agent test
@@ -138,6 +148,7 @@ check:
 	cd apps/client && npm run build
 	cd apps/diagnostics && npm run lint
 	cd apps/diagnostics && npm run build
+	$(MAKE) grafana-c4-dashboard
 	$(COMPOSE) config --quiet
 	for script in scripts/*.sh; do bash -n "$$script"; done
 	for script in tests/e2e/*.sh deploy/launchd/run-*.sh; do bash -n "$$script"; done

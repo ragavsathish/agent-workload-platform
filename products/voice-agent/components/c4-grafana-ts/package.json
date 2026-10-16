@@ -1,0 +1,20 @@
+{
+  "name": "@agent-workload-platform/c4-grafana-component",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm run clean && npm run types && npm run compile && npm run componentize",
+    "clean": "node scripts/clean.mjs",
+    "compile": "tsc",
+    "componentize": "mkdir -p dist && jco componentize build/index.js --wit wit --world-name c4-grafana -o dist/c4-grafana.wasm",
+    "test": "npm run clean && npm run types && npm run compile && node --test test/*.test.mjs",
+    "typecheck": "npm run types && tsc --noEmit",
+    "types": "jco guest-types wit -o src/generated --world-name c4-grafana"
+  },
+  "devDependencies": {
+    "@bytecodealliance/componentize-js": "0.19.3",
+    "@bytecodealliance/jco": "1.17.0",
+    "typescript": "5.9.3"
+  }
+}

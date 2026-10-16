@@ -256,6 +256,9 @@ fi
 if [[ -n "$tailscale_login" ]] \
   && "${compose[@]}" exec -T tailscale wget -q -O /dev/null \
     --header="Tailscale-User-Login: $tailscale_login" http://127.0.0.1:8080/api/features \
+  && "${compose[@]}" exec -T tailscale wget -q -O - \
+    --header="Tailscale-User-Login: $tailscale_login" http://127.0.0.1:8080/metrics/api/dashboards/uid/voice-c4-heatmap \
+    | grep -q '"title":"C4 Operational Heat Map"' \
   && "${compose[@]}" exec -T tailscale wget -q -O /dev/null \
     --header="Tailscale-User-Login: $tailscale_login" http://127.0.0.1:8080/metrics/api/user \
   && "${compose[@]}" exec -T tailscale wget -q -O /dev/null \

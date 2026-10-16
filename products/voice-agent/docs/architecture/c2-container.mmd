@@ -33,16 +33,18 @@ flowchart TB
             TASKS[("Container database<br/><b>Task Database and Queue</b><br/>PostgreSQL · Absurd schema")]
             HABITAT["Container<br/><b>Durable Queue Dashboard</b><br/>Go · Absurd Habitat"]
             WORKER["Container<br/><b>Pi Task Worker</b><br/>Python · Pi coding agent"]
+            TASK_PI["Container<br/><b>Pi Task Session</b><br/>Pi CLI · one process per claimed task"]
             BUILDER_MANAGER["Container<br/><b>Builder VM Manager</b><br/>Node.js · launchd"]
             BUILDER_VM["Container<br/><b>Shared Image Builder</b><br/>Gondolin · Gitea Runner · private Docker"]
-            TASK_TOOLS["Container<br/><b>Task Tool Runtime</b><br/>Gondolin · optional Wassette"]
+            TASK_VM["Container<br/><b>Task Tool Sandbox</b><br/>Gondolin · one isolated workspace"]
             GATEWAY -->|"persist · enqueue"| TASKS
             HABITAT -->|"inspect · retry<br/>scoped SQL"| TASKS
             TASKS -->|"claim · checkpoint"| WORKER
             WORKER -->|"dispatch · observe · cancel image workflow"| GITEA
             GITEA -->|"assign trusted workflow job"| BUILDER_VM
             BUILDER_MANAGER -->|"resume · checkpoint"| BUILDER_VM
-            WORKER -->|"isolated tools"| TASK_TOOLS
+            WORKER -->|"starts one bounded run"| TASK_PI
+            TASK_PI -->|"read · write · edit · shell · browser"| TASK_VM
         end
 
         subgraph DATA["Runtime data and operations"]
@@ -52,11 +54,14 @@ flowchart TB
             ARTIFACTS[("Container data store<br/><b>Workspace and Result Store</b><br/>S3-compatible object storage")]
             DOCKER_METRICS["Container<br/><b>Docker VM Metrics</b><br/>Fluent Bit · Linux VM aggregate"]
             HOST_METRICS["Container<br/><b>Host and Gondolin Metrics</b><br/>Fluent Bit · QEMU process exporter"]
+            WASSETTE["Container<br/><b>Wassette Integration Runtime</b><br/>native per-session MCP subprocesses · WebAssembly"]
             OTEL["Container<br/><b>Metrics and Traces</b><br/>OpenTelemetry LGTM"]
         end
 
         EDGE -->|"browser task API"| GATEWAY
         PI -->|"voice task tools"| GATEWAY
+        PI -->|"deferred MCP over stdio<br/>credential-scrubbed environment"| WASSETTE
+        TASK_PI -->|"MCP over stdio<br/>allowlisted task tools"| WASSETTE
         PI -->|"session · workspace · skills"| VOICE_DATA
         VOICE_VM -->|"clone · restricted read API · synthetic allowlist"| GITEA
         VOICE_VM -->|"AWS CLI · S3Mock-only HTTP"| ARTIFACTS
@@ -81,7 +86,7 @@ flowchart TB
     INGRESS -.->|"control protocol"| TSC
     PI -->|"provider API"| MODELS
     WORKER -->|"provider API"| MODELS
-    TASK_TOOLS -->|"declared capabilities"| INTEGRATIONS
+    WASSETTE -->|"declared component capabilities"| INTEGRATIONS
 
     classDef person fill:#084c8d,color:#fff,stroke:#05345f,stroke-width:2px;
     classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
@@ -89,5 +94,5 @@ flowchart TB
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
     class USER person;
     class TSC,MODELS,INTEGRATIONS external;
-    class BROWSER,DIAGNOSTICS,INGRESS,ROUTER,EDGE,BROKER,PI,VOICE_VM,GATEWAY,HABITAT,WORKER,BUILDER_MANAGER,BUILDER_VM,TASK_TOOLS,DOCKER_METRICS,HOST_METRICS,OTEL container;
+    class BROWSER,DIAGNOSTICS,INGRESS,ROUTER,EDGE,BROKER,PI,VOICE_VM,GATEWAY,HABITAT,WORKER,TASK_PI,BUILDER_MANAGER,BUILDER_VM,TASK_VM,DOCKER_METRICS,HOST_METRICS,WASSETTE,OTEL container;
     class TASKS,VOICE_DATA,GITEA,ARTIFACTS data;

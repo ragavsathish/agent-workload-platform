@@ -1,17 +1,18 @@
 flowchart LR
-    PI[External system<br/><b>Pi Task Session</b><br/>invokes registered tools]
+    WORKER[External container<br/><b>Pi Task Worker</b><br/>starts one bounded Pi CLI process]
     WORKSPACE[(External data<br/><b>Task Workspace</b><br/>mounted at /workspace)]
     SKILLS[(External data<br/><b>Trusted Skills</b><br/>optional read-only /skills)]
     MEMORY[(External data store<br/><b>Browser Memory</b><br/>local JSONL MCP storage)]
     GITHUB[External system<br/><b>GitHub API</b><br/>optional scoped integration]
+    WASSETTE_RUNTIME[External container<br/><b>Wassette Integration Runtime</b><br/>native per-session MCP subprocess]
 
-    subgraph RUNTIME["Container: Task Tool Runtime · Pi extension + Gondolin/Wassette"]
+    subgraph RUNTIME["Container: Pi Task Session · Pi CLI + in-process Gondolin extension"]
         direction TB
         CONFIG["Component<br/><b>Project Runtime Resolver</b><br/>reads .pi/gondolin.json and in-repo network policy"]
         LIFECYCLE["Component<br/><b>Extension Lifecycle</b><br/>start, prompt augmentation, and shutdown"]
         VM["Component<br/><b>Gondolin Tool Client</b><br/>isolated bash and optional Playwright MCP"]
         MEM["Component<br/><b>Memory MCP Client</b><br/>optional durable browser knowledge"]
-        WASSETTE["Component<br/><b>Wassette Client</b><br/>permission-scoped WebAssembly integrations"]
+        WASSETTE["Component<br/><b>Wassette MCP Client</b><br/>loads configured component and grants explicit capabilities"]
         POLICY["Component<br/><b>GitHub Tool Policy</b><br/>read allowlist; writes require explicit enablement"]
         REGISTRY["Component<br/><b>Tool Registrar</b><br/>normalizes schemas and bounds returned output"]
 
@@ -23,18 +24,17 @@ flowchart LR
         POLICY --> REGISTRY
     end
 
-    PI -->|"session lifecycle"| LIFECYCLE
-    PI -->|"tool call"| REGISTRY
+    WORKER -->|"start one process"| LIFECYCLE
     CONFIG -->|"select image, CPU, memory, egress"| VM
     VM -->|"read-write mount"| WORKSPACE
     VM -->|"read-only mount"| SKILLS
     MEM -->|"MCP operations"| MEMORY
-    POLICY -->|"allowed tools with token capability"| GITHUB
-    REGISTRY -->|"bounded text or image result"| PI
+    WASSETTE -->|"MCP over stdio"| WASSETTE_RUNTIME
+    WASSETTE_RUNTIME -->|"network and environment capabilities"| GITHUB
 
     classDef component fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
     classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
     class CONFIG,LIFECYCLE,VM,MEM,WASSETTE,POLICY,REGISTRY component;
-    class PI,GITHUB external;
+    class WORKER,GITHUB,WASSETTE_RUNTIME external;
     class WORKSPACE,SKILLS,MEMORY data;

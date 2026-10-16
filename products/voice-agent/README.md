@@ -32,6 +32,11 @@ ownership and planned extractions are documented in
   loopback. Before routing, Traefik asks the edge to match that login against the configured owner.
   It routes `/` to Pipecat, `/metrics/` to Grafana, `/git/` to Gitea, and `/queue/` to the
   upstream Absurd Habitat operator UI. Funnel and public Docker ports are not enabled.
+  Grafana provisions a generated **C4 Operational Heat Map** containing C1, C2, every C3 view, and
+  deployment, plus the dated source-backed code evidence snapshot. The build invokes the
+  capability-free TypeScript WASM compiler before Compose starts. Grafana renders the repository's
+  Mermaid sources with the pinned Grafmaid plugin and uses fixed PromQL queries for live activity
+  coloring. Grafana is the only system coverage and operational-health surface.
 - Browser sessions require an exact HTTPS origin and a signed, one-use token in the WebSocket path.
   The current deployment is deliberately single-user: login pins exactly one owner identity during
   setup, while tailnet ACLs authenticate which devices can reach the listener.
@@ -240,8 +245,10 @@ loopback-only Gitea service during `make start`; the VM may anonymously clone th
 mirror into `/workspace`, but receives no publisher credential. No host Git directory is mounted, so
 ignored files, local secrets, and uncommitted changes are not exposed. It disables discovered
 host extensions, prompt templates, themes, and context files. The service explicitly registers
-Wassette through Pi's native MCP extension as a deferred tool provider; `tool_search` reveals only
-the selected WASM tools, and the Wassette child process receives a credential-scrubbed environment.
+Wassette through Pi's native MCP extension as a deferred tool provider; `tool_search` discovers
+tools from the configured component directory without adding every schema to each turn, and the
+host-native Wassette child process receives a credential-scrubbed environment. Wassette is separate
+from the Gondolin VM used for native file and shell tools.
 Kokoro speaks the final text produced
 by Pi after any tool calls complete. `PI_VOICE_MODEL` selects the model; when blank, Pi uses its
 configured default. The VM image includes AWS CLI and receives mock-only credentials plus a

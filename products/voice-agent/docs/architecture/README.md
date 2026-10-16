@@ -20,7 +20,7 @@ notation is used for runtime views because it preserves order without crossing r
 | C3 Pi Task Worker | How does an approved durable task become an isolated Pi run and bounded result artifacts? | [c3-pi-task-worker.mmd](c3-pi-task-worker.mmd) | [PNG](c3-pi-task-worker.png) |
 | C3 Image Build Orchestration | How does a task reuse or dispatch a content-addressed Gitea image workflow? | [c3-image-build-worker.mmd](c3-image-build-worker.mmd) | [PNG](c3-image-build-worker.png) |
 | C3 Shared Image Builder | How does one warm Gondolin VM serve trusted repositories without exposing the host Docker socket? | [c3-disposable-image-builder.mmd](c3-disposable-image-builder.mmd) | [PNG](c3-disposable-image-builder.png) |
-| C3 Task Tool Runtime | How does a task-specific Pi session discover and constrain Gondolin, memory, browser, and Wassette tools? | [c3-task-tool-runtime.mmd](c3-task-tool-runtime.mmd) | [PNG](c3-task-tool-runtime.png) |
+| C3 Pi Task Session | How does a task-specific Pi process discover and constrain Gondolin, memory, browser, and Wassette tools? | [c3-task-tool-runtime.mmd](c3-task-tool-runtime.mmd) | [PNG](c3-task-tool-runtime.png) |
 | C3 Host Observability | How are macOS and per-Gondolin-runner resource metrics derived without guest access? | [c3-host-observability.mmd](c3-host-observability.mmd) | [PNG](c3-host-observability.png) |
 | D1 interactive voice turn | Where does one microphone turn go before audio and Mermaid return to the browser? | [d1-interactive-voice-turn.mmd](d1-interactive-voice-turn.mmd) | [PNG](d1-interactive-voice-turn.png) |
 | D2 delegated task | How does requested project work become an isolated durable task and result? | [d2-delegated-task.mmd](d2-delegated-task.mmd) | [PNG](d2-delegated-task.png) |
@@ -43,6 +43,16 @@ Android runners compile the same Dart UI behind a platform-neutral voice-session
 Pipecat adapters remain planned rather than represented as deployed containers. Conversation,
 chat/task, responsive state, and voice controls remain in Dart. Input diagnostics is a separate
 React bundle at `/diagnostics/`; it uses Recharts and WaveSurfer without loading the Flutter runtime.
+Grafana provisions the **C4 Operational Heat Map** dashboard. At build time,
+`deploy/observability/generate-c4-heatmap.mjs` reads the authoritative Mermaid and evidence sources,
+then calls the capability-free TypeScript WASM component in `components/c4-grafana-ts/` to compile
+the provisioned dashboard JSON. Grafana uses
+the pinned Grafmaid panel plugin to render C1, C2, all twelve C3 views, and the deployment view.
+Source-backed evidence colors apply to every view; instrumented elements additionally use fixed
+PromQL queries to show activity intensity for the selected dashboard range. The dashboard also
+contains the dated executable-line evidence snapshot formerly shown by the React coverage page;
+Grafana is now the single coverage and operational-health UI. Regenerate
+`deploy/observability/c4-heatmap.json` with `make grafana-c4-dashboard` after changing a C4 source or evidence mapping.
 The adapter speaks RTVI, while Tailscale Serve is the only browser ingress. It exposes the voice UI on tailnet HTTPS
 after tailnet authorization. Tailscale terminates TLS and supplies the authenticated identity to a
 localhost-only Traefik router. Traefik maps `/` to the Voice Edge, `/metrics/` to Grafana,
@@ -56,6 +66,14 @@ public transcript projection, native Pi tools, and a persistent Gondolin voice V
 configured fallback behind the broker; it is not the active production path. The voice VM includes
 AWS CLI and has one explicit network capability: a synthetic S3Mock origin is rewritten to the
 mock's host-loopback endpoint, while other HTTP destinations are denied.
+The Pi Voice Service also registers a host-native Wassette subprocess through Pi's deferred MCP
+extension. `tool_search` discovers tools from the configured component directory without adding all
+schemas to every model turn. The child receives a credential-scrubbed environment and its WASM
+components can use only their persisted Wassette capability grants. This path is separate from the
+Gondolin VM used by Pi's native file and shell tools.
+The capability-free TypeScript component in `components/c4-grafana-ts/` exposes a documented
+`compile-dashboard` tool. It accepts Mermaid, evidence, and activity records and returns provisionable
+Grafana JSON without filesystem, network, environment, clock, or process access.
 
 Delegated work is separate. The **Agent Gateway** owns identity and task-lifecycle policy. PostgreSQL
 stores both the proposal records and Absurd durable queue schema. S3Mock stores immutable Git bundles
@@ -86,6 +104,7 @@ access to proposal records, and Habitat has no direct host port.
 | Browser Voice Client components | `apps/client/lib/main.dart`; `views/voice_view.dart`; `views/transcript_view.dart`; `widgets/mermaid_view_web.dart`; `platform/voice_session_web.dart`; `bridge/voice_bridge.js` |
 | Mobile Client foundation | `apps/client/ios/`; `apps/client/android/`; `apps/client/lib/platform/voice_session.dart`; native adapters are not implemented yet |
 | Input Diagnostics | `apps/diagnostics/`; React bundle emitted to `apps/diagnostics/dist/` |
+| Engineering Evidence and C4 Explorer | `deploy/observability/generate-c4-heatmap.mjs`; `components/c4-grafana-ts/`; provisioned Grafana dashboard compiled by WASM from these Mermaid sources |
 | Tailnet Ingress | `deploy/compose.yml`; `scripts/compose-login.sh` |
 | Path Router | `deploy/traefik/traefik.yml`; `deploy/traefik/routes.yml` |
 | Voice Edge | `apps/edge/bot.py`; `apps/edge/Containerfile` |
@@ -95,6 +114,7 @@ access to proposal records, and Habitat has no direct host port.
 | Inference Broker components | `apps/broker/src/voice_agent/speech/presentation/http.py`; `application/transcription.py`; `infrastructure/parakeet_stt.py`; `infrastructure/mlx_tts.py` |
 | Pi Voice Service | `apps/pi-agent/voice-agent-service.ts`; Pi voice LaunchAgent |
 | Pi Voice Service components | `apps/pi-agent/voice-agent-service.ts`; `apps/pi-agent/gondolin-workspace.ts` |
+| C4 to Grafana Wassette component | `components/c4-grafana-ts/src/index.ts`; `components/c4-grafana-ts/wit/world.wit` |
 | Pi Context Usage and Compaction | `apps/client/lib/views/voice_view.dart`; `apps/edge/bot.py`; broker HTTP adapter; `apps/pi-agent/voice-agent-service.ts` |
 | Voice Tool Sandbox and Runtime Data | `apps/pi-agent/gondolin-workspace.ts`; `scripts/install-launch-agents.sh`; `deploy/launchd/run-pi-agent.sh` |
 | Agent Gateway | `apps/gateway/src/voice_gateway/main.py`; `apps/gateway/Dockerfile` |
@@ -107,7 +127,7 @@ access to proposal records, and Habitat has no direct host port.
 | Image Build Orchestration | `apps/worker/src/voice_worker/main.py`; `infrastructure/gitea_actions.py`; `domain/execution_images.py`; `infrastructure/image_packages.py` |
 | Shared Image Builder | image-builder LaunchAgent; `builder-manager.ts`; `image-builder-workflow.ts`; `image-builder-guest.ts`; builder image definitions |
 | Git and Image Package Store | Compose Gitea service; `scripts/gitea-sync.sh`; `packages/tasking/src/voice_agent/tasking/infrastructure/image_packages.py` |
-| Task Tool Runtime | `platform/agent-execution/gondolin-session/pi-extension.ts` and its MCP clients |
+| Pi Task Session tool components | `platform/agent-execution/gondolin-session/pi-extension.ts` and its MCP clients |
 | Metrics and Traces | `apps/edge/otel_bridge.py`; `packages/telemetry/src/voice_agent/shared/telemetry.py`; Compose `otel-lgtm` service |
 | Platform Resource Metrics | `apps/host-observability/gondolin-exporter.mjs`; `deploy/observability/fluent-bit-host.yaml`; `deploy/observability/fluent-bit.yaml`; `deploy/observability/otelcol-config.yaml`; host-observability LaunchAgent; Compose `fluent-bit` service |
 
@@ -135,7 +155,9 @@ MLX and host-held Pi credentials stay in native loopback-only services because D
 provide those host capabilities directly. The broker exposes bounded STT, TTS, Pi completion, and
 transcript APIs to the edge; it does not expose a generic filesystem, shell, queue, session, or model
 selection API. Native Pi tools run inside Gondolin micro-VMs. Optional integration tools run through
-Wassette with declared network and secret permissions.
+Wassette in separate native subprocesses with declared network and environment permissions. Wassette
+is not inside a Gondolin VM: the Pi Voice Service and each Pi task session reach it over stdio, while
+native file, shell, and browser tools remain routed into their corresponding Gondolin VM.
 
 The persistent voice VM receives writable runtime state at `/workspace` and read-only reusable
 skills at `/skills`. Source code is not mounted from the host. Deployment mirrors committed refs to

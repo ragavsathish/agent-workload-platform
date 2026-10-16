@@ -1,0 +1,68 @@
+package pipecat:c4-grafana@0.1.0;
+
+interface types {
+    /// Strength of source-backed automated evidence for one diagram element.
+    enum evidence-status {
+        strong,
+        partial,
+        observed,
+        weak,
+    }
+
+    /// One authoritative Mermaid C4 or flowchart source.
+    record diagram-source {
+        /// Stable identifier used by evidence and activity mappings.
+        id: string,
+        /// Human-readable Grafana panel title.
+        title: string,
+        /// Complete Mermaid source. Do not include Markdown fences.
+        mermaid: string,
+        /// Grafana grid width from 1 through 24.
+        width: u32,
+        /// Grafana grid height from 6 through 40.
+        height: u32,
+    }
+
+    /// Static source-backed evidence coloring for a Mermaid element.
+    record evidence-style {
+        diagram-id: string,
+        element-id: string,
+        status: evidence-status,
+    }
+
+    /// Live Prometheus activity coloring for a Mermaid element.
+    record activity-overlay {
+        diagram-id: string,
+        element-id: string,
+        /// Unique single-letter Grafana query reference from A through Z within this diagram.
+        ref-id: string,
+        /// Exact OpenTelemetry service_name. Use * for all services.
+        service-name: string,
+    }
+
+    /// Stable dashboard metadata and optional source-backed evidence prose.
+    record build-options {
+        dashboard-title: string,
+        dashboard-uid: string,
+        description: string,
+        refresh: string,
+        time-from: string,
+        evidence-markdown: string,
+    }
+}
+
+world c4-grafana {
+    use types.{activity-overlay, build-options, diagram-source, evidence-style};
+
+    /// Compile authoritative Mermaid sources into a provisionable Grafana dashboard JSON document.
+    ///
+    /// The component is deterministic and capability-free. It does not read files, call Grafana,
+    /// query Prometheus, or render Mermaid. Grafana's pinned Grafmaid panel performs rendering and
+    /// executes the generated fixed PromQL queries after the caller provisions the returned JSON.
+    export compile-dashboard: func(
+        options: build-options,
+        diagrams: list<diagram-source>,
+        evidence: list<evidence-style>,
+        activity: list<activity-overlay>,
+    ) -> result<string, string>;
+}
