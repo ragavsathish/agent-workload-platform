@@ -32,9 +32,19 @@ Override the production workspace at build time when needed:
 ./tool/flutterw test
 ./tool/flutterw build bundle
 npm run build
+npx playwright install chromium
+npm run test:browser
 npm run test:patrol
 npm run profile:web
 ```
+
+`test:browser` exercises the MCP App bridge and the Mermaid, Marp, and
+Excalidraw renderers with Vitest Browser Mode using its Playwright provider.
+The tests keep the production opaque-origin iframe sandbox intact, verify its
+least-privilege permissions and resource allowlist, and inspect renderer output
+through Playwright's server-side frame API. A Playwright trace is attached for
+every test and retained under `build/vitest-playwright-traces/`; Vitest copies
+reporter attachments to `build/vitest-attachments/`.
 
 The Patrol web run always records a Playwright trace for two isolated journeys:
 the responsive voice shell and the typed Pi/task workspace. The workspace uses

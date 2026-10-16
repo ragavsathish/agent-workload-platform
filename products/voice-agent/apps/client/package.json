@@ -4,22 +4,30 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "build": "npm run build:mermaid && npm run build:excalidraw && npm run build:bridge && ./tool/flutterw build web --release --wasm",
+    "build": "npm run build:mermaid && npm run build:marp && npm run build:excalidraw && npm run build:bridge && ./tool/flutterw build web --release --wasm",
     "build:mermaid": "node tool/build-mermaid-app.mjs",
+    "build:marp": "node tool/build-marp-app.mjs",
     "build:excalidraw": "node tool/build-excalidraw-app.mjs",
     "build:bridge": "node tool/build-bridge.mjs",
     "lint": "./tool/flutterw analyze",
     "test": "./tool/flutterw test",
-    "test:patrol": "npm run build:mermaid && npm run build:bridge && ./tool/run-patrol-web",
+    "test:browser": "npm run build:mermaid && npm run build:marp && npm run build:excalidraw && npm run build:bridge && vitest run --config vitest.browser.config.mjs",
+    "test:patrol": "npm run build:mermaid && npm run build:marp && npm run build:bridge && ./tool/run-patrol-web",
     "profile:web": "./tool/profile-web"
   },
   "dependencies": {
+    "@marp-team/marp-core": "5.0.2",
     "@modelcontextprotocol/ext-apps": "0.4.2",
     "@pipecat-ai/client-js": "1.13.1",
     "@pipecat-ai/small-webrtc-transport": "1.10.8",
+    "beautiful-mermaid": "1.1.3",
+    "katex": "0.18.10",
     "mermaid": "12.2.0"
   },
   "devDependencies": {
-    "esbuild": "0.28.2"
+    "@vitest/browser-playwright": "4.1.11",
+    "esbuild": "0.28.2",
+    "playwright": "1.58.2",
+    "vitest": "4.1.11"
   }
 }

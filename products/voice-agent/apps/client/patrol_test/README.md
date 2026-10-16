@@ -4,15 +4,10 @@ The Patrol suite exercises the production Flutter widget tree and `VoiceApi`
 through observable UI behavior. Patrol owns the Flutter test binding, so tests
 pump `VoiceAgentApp` rather than calling the production `main()` function.
 
-Journeys follow the functional DDD decision chain:
-
-```text
-command -> Patrol interpreter -> past-tense event -> pure reducer -> policy
-```
-
-The interpreter is the imperative shell. Command and event types, immutable
-journey state, reducers, and policy validation live under `support/` and do not
-perform browser or network effects.
+Tests describe user behavior directly and keep repeated browser interactions in
+small, named helper functions. Assertions stay beside the behavior they verify
+so Patrol reports the failing interaction and expectation without an additional
+command/event/reducer layer.
 
 The workspace journey talks to the external fixture server through the real
 HTTP client. The fixture keeps domain transitions in

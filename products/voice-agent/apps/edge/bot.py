@@ -62,6 +62,7 @@ PROMPT_LAYER_ORDER = (
     "identity",
     "response_contract",
     "standard_presentation",
+    "slides_presentation",
     "excalidraw_presentation",
     "execution",
     "environment",
@@ -741,7 +742,7 @@ if __name__ == "__main__":
             except HTTPException as exc:
                 return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
         response = await call_next(request)
-        if path.startswith(("/mermaid/", "/excalidraw/")):
+        if path.startswith(("/mermaid/", "/marp/", "/excalidraw/")):
             # The MCP App runs in an opaque-origin sandbox. Permit only its
             # immutable static assets to load across that sandbox boundary.
             response.headers["Access-Control-Allow-Origin"] = "*"
@@ -768,6 +769,12 @@ if __name__ == "__main__":
             "/mermaid",
             StaticFiles(directory=client_dist / "mermaid", html=True),
             name="mermaid",
+        )
+    if (client_dist / "marp").is_dir():
+        app.mount(
+            "/marp",
+            StaticFiles(directory=client_dist / "marp", html=True),
+            name="marp",
         )
     if (client_dist / "excalidraw").is_dir():
         app.mount(

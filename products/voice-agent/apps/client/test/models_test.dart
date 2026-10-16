@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_agent_client/models.dart';
 
@@ -21,6 +23,70 @@ void main() {
     );
 
     expect(response?.resourceUri, 'ui://excalidraw/mcp-app.html');
+  });
+
+  test('routes a Marp transcript response to the slides app', () {
+    final response = VisualResponse.fromValue({
+      'spoken': 'Slides ready.',
+      'presentation': {
+        'kind': 'slides',
+        'title': 'Voice path',
+        'markdown': '# Voice path\n\n---\n\n# Result',
+      },
+    });
+
+    expect(response?.resourceUri, 'ui://slides/marp.html');
+  });
+
+  test('unwraps a JSON-encoded Marp transcript response', () {
+    final response = VisualResponse.fromValue(
+      jsonEncode(
+        jsonEncode({
+          'spoken': 'Slides ready.',
+          'presentation': {
+            'kind': 'slides',
+            'title': 'Live check',
+            'markdown': '# Live check',
+          },
+        }),
+      ),
+    );
+
+    expect(response?.spoken, 'Slides ready.');
+    expect(response?.resourceUri, 'ui://slides/marp.html');
+  });
+
+  test('unwraps a Marp response nested in spoken', () {
+    final response = VisualResponse.fromValue({
+      'spoken': jsonEncode({
+        'spoken': 'Slides ready.',
+        'presentation': {
+          'kind': 'slides',
+          'title': 'Live check',
+          'markdown': '# Live check',
+        },
+      }),
+    });
+
+    expect(response?.spoken, 'Slides ready.');
+    expect(response?.presentation['kind'], 'slides');
+    expect(response?.resourceUri, 'ui://slides/marp.html');
+  });
+
+  test('repairs one extra trailing brace in a nested Marp response', () {
+    final nested = '${jsonEncode({
+      'spoken': 'Slides ready.',
+      'presentation': {
+        'kind': 'slides',
+        'title': 'Live check',
+        'markdown': '# Live check',
+      },
+    })}}';
+    final response = VisualResponse.fromValue({'spoken': nested});
+
+    expect(response?.spoken, 'Slides ready.');
+    expect(response?.presentation['kind'], 'slides');
+    expect(response?.resourceUri, 'ui://slides/marp.html');
   });
 
   test('derives an active task from worker state', () {

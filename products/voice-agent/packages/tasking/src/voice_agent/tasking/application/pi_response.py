@@ -10,6 +10,7 @@ MAX_RESPONSE_LENGTH = 70_000
 MAX_SPOKEN_LENGTH = 2_000
 MERMAID_URI = "ui://mermaid/main"
 EXCALIDRAW_URI = "ui://excalidraw/mcp-app.html"
+MARP_URI = "ui://slides/marp.html"
 EXCALIDRAW_TYPES = {
     "cameraUpdate", "rectangle", "ellipse", "diamond", "text", "arrow", "line"
 }
@@ -23,7 +24,13 @@ a short "title", "nodes" with unique "id" and "label" strings, and "edges" with
 "from", "to", and optional "label" strings. When the user explicitly requests a
 rich, editable, or Excalidraw diagram, use kind "excalidraw" with a title and at
 most 80 cameraUpdate, rectangle, ellipse, diamond, text, arrow, or line elements.
-Do not use Markdown fences.
+Only when the user explicitly requests slides, a slide deck, or a presentation,
+use kind "slides" with a title and at most 64 KiB of Marp Markdown in "markdown".
+Separate slides with `---`; Marp slides may contain fenced Mermaid diagrams. In
+Mermaid fences, use node IDs with bracket labels, one statement per line, and no
+prose punctuation such as a trailing period on a statement.
+If editable or whiteboard output is requested, use Excalidraw instead. Do not
+wrap the final JSON object in a Markdown fence.
 """.strip()
 
 
@@ -69,10 +76,29 @@ def fallback_presentation(spoken: str) -> dict[str, object]:
 
 def response_from_text(text: str) -> PiResponse:
     text = text.strip()[:MAX_RESPONSE_LENGTH]
-    try:
-        payload = json.loads(text)
-    except (json.JSONDecodeError, TypeError):
-        payload = None
+    payload: object = text
+    for _ in range(4):
+        if isinstance(payload, dict):
+            nested = payload.get("spoken")
+            if not isinstance(nested, str):
+                break
+            try:
+                nested_payload = json.loads(nested)
+            except (json.JSONDecodeError, TypeError):
+                break
+            if not isinstance(nested_payload, dict) or not isinstance(
+                nested_payload.get("presentation"), dict
+            ):
+                break
+            payload = nested_payload
+            continue
+        if not isinstance(payload, str):
+            break
+        try:
+            payload = json.loads(payload)
+        except (json.JSONDecodeError, TypeError):
+            payload = None
+            break
 
     if isinstance(payload, dict):
         spoken_value = payload.get("spoken")
@@ -98,13 +124,27 @@ def response_from_text(text: str) -> PiResponse:
         )
         if not valid_elements:
             presentation = None
-    if not presentation or presentation.get("kind") not in {"flow", "status", "excalidraw"}:
+    if presentation and presentation.get("kind") == "slides":
+        markdown = presentation.get("markdown")
+        if (
+            not isinstance(markdown, str)
+            or not markdown.strip()
+            or len(markdown.encode()) > 64 * 1024
+        ):
+            presentation = None
+        else:
+            presentation = {**presentation, "markdown": markdown.strip()}
+    if not presentation or presentation.get("kind") not in {
+        "flow", "status", "excalidraw", "slides"
+    }:
         presentation = fallback_presentation(spoken)
-    resource_uri = (
-        EXCALIDRAW_URI
-        if presentation.get("kind") == "excalidraw"
-        else MERMAID_URI
-    )
+    kind = presentation.get("kind")
+    if kind == "excalidraw":
+        resource_uri = EXCALIDRAW_URI
+    elif kind == "slides":
+        resource_uri = MARP_URI
+    else:
+        resource_uri = MERMAID_URI
     return PiResponse(
         text=text or spoken,
         spoken=spoken,

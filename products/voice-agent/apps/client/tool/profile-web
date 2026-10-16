@@ -32,11 +32,14 @@ curl --fail --silent "http://127.0.0.1:$port/" >/dev/null
 docker run --rm \
   --add-host=host.docker.internal:host-gateway \
   -e NODE_PATH=/app/node_modules \
+  -e VOICE_E2E_OUTPUT=/output/playwright-profile \
   -e UX_PROFILE_ENFORCE=1 \
   -e UX_PROFILE_OUTPUT=/output/ux-profile.json \
   -e "UX_PROFILE_URL=http://host.docker.internal:$port" \
   -v "$client_dir/build:/output" \
-  -v "$repo_dir/products/voice-agent/tests/e2e/playwright-ux-profile.cjs:/tests/playwright-ux-profile.cjs:ro" \
+  -v "$repo_dir/products/voice-agent/tests/e2e:/tests:ro" \
   --entrypoint node \
   mcr.microsoft.com/playwright/mcp:v0.0.79@sha256:18c0a9c934004fe9580cc79f1e8e6e6cde7c667348b215335e8a23fd3e509804 \
-  /tests/playwright-ux-profile.cjs
+  /app/node_modules/playwright/cli.js test \
+  --config=/tests/playwright.config.ts \
+  --project=ux-profile

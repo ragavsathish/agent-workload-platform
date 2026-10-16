@@ -32,6 +32,7 @@ class _McpAppViewState extends State<McpAppView> {
   late final String _viewType = 'mcp-app-view-$_elementId';
   late String _presentationJson;
   String? _error;
+  int _mountRevision = 0;
 
   @override
   void initState() {
@@ -66,6 +67,7 @@ class _McpAppViewState extends State<McpAppView> {
 
   Future<void> _mount() async {
     if (widget.presentation.isEmpty) return;
+    final revision = ++_mountRevision;
     final started = Stopwatch()..start();
     try {
       final result = await BrowserBridge.mountMcpApp(
@@ -73,7 +75,7 @@ class _McpAppViewState extends State<McpAppView> {
         _presentationJson,
         widget.resourceUri,
       );
-      if (mounted) {
+      if (mounted && revision == _mountRevision) {
         setState(
           () => _error = result.contains('"ok":true')
               ? null
@@ -87,8 +89,16 @@ class _McpAppViewState extends State<McpAppView> {
         duration: started.elapsed,
         outcome: 'error',
       );
-      if (mounted) setState(() => _error = 'Visual unavailable');
+      if (mounted && revision == _mountRevision) {
+        setState(() => _error = 'Visual unavailable');
+      }
     }
+  }
+
+  @override
+  void dispose() {
+    _mountRevision++;
+    super.dispose();
   }
 
   @override

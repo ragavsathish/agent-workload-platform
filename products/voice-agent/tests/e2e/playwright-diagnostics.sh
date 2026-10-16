@@ -24,6 +24,5 @@ export PLAYWRIGHT_OUTPUT_DIR="$output_dir"
 
 "${compose[@]}" up -d --no-deps e2e-tailnet-bridge
 "${compose[@]}" run --rm --no-deps \
-  --entrypoint node \
-  -v "$repo_dir/tests/e2e/playwright-diagnostics.cjs:/tests/playwright-diagnostics.cjs:ro" \
-  playwright-e2e /tests/playwright-diagnostics.cjs
+  -e PLAYWRIGHT_PROJECT=diagnostics \
+  playwright-e2e

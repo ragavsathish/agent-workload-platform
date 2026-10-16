@@ -1,0 +1,35 @@
+import { createHash } from 'node:crypto';
+import { copyFile, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+
+import { build } from 'esbuild';
+
+const outputDirectory = new URL('../web/marp/', import.meta.url);
+const index = new URL('../web/marp/marp.html', import.meta.url);
+const template = new URL('../marp_app/index.html', import.meta.url);
+const fontsSource = new URL('../node_modules/katex/dist/fonts/', import.meta.url);
+const fontsOutput = new URL('../web/marp/fonts/', import.meta.url);
+const htmlTemplate = await readFile(template, 'utf8');
+
+const result = await build({
+  bundle: true,
+  entryPoints: [new URL('../bridge/marp_app.js', import.meta.url).pathname],
+  format: 'iife',
+  minify: true,
+  target: 'es2022',
+  write: false,
+});
+const script = result.outputFiles[0].text.replace(/<\/script/gi, '<\\\\/script');
+const scriptHash = `sha256-${createHash('sha256').update(script).digest('base64')}`;
+const html = htmlTemplate
+  .replace('__MCP_APP_SCRIPT_HASH__', scriptHash)
+  .replace('__MCP_APP_SCRIPT__', () => script);
+
+await rm(outputDirectory, { force: true, recursive: true });
+await mkdir(outputDirectory, { recursive: true });
+await mkdir(fontsOutput, { recursive: true });
+for (const font of await readdir(fontsSource)) {
+  if (font.endsWith('.woff2')) {
+    await copyFile(new URL(font, fontsSource), new URL(font, fontsOutput));
+  }
+}
+await writeFile(index, html);

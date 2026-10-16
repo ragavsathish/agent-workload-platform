@@ -4,9 +4,6 @@ import 'package:patrol/patrol.dart';
 import 'package:voice_agent_client/main.dart' as app;
 import 'package:web/web.dart' as web;
 
-import 'support/journey.dart';
-import 'support/workspace_journey.dart';
-
 void main() {
   patrolTest('observes typed conversation and durable work through HTTP', (
     $,
@@ -17,71 +14,28 @@ void main() {
     expect(
       find.byKey(const Key('message-fixture-assistant')),
       findsOneWidget,
-      reason: 'A restored 200-entry mobile transcript must open at its latest entry.',
+      reason:
+          'A restored large mobile transcript must open at its latest entry.',
     );
     await $.platform.web.resizeWindow(size: const Size(1440, 1000));
 
-    final result =
-        await runJourney<
-          WorkspaceCommand,
-          WorkspaceEvent,
-          WorkspaceJourneyState
-        >(
-          patrol: $,
-          commands: workspaceJourney,
-          initialState: const WorkspaceJourneyState(),
-          interpret: _interpretWorkspace,
-          reduce: reduceWorkspaceJourney,
-        );
-
-    switch (result) {
-      case JourneyFailed<WorkspaceCommand, WorkspaceJourneyState>():
-        fail('$result\n${result.stackTrace}');
-      case JourneySucceeded<WorkspaceCommand, WorkspaceJourneyState>(
-        :final state,
-      ):
-        final violations = validateWorkspaceJourney(state);
-        expect(violations, isEmpty, reason: violations.join('\n'));
-    }
+    await _observeWorkspace($);
+    await _viewHistoricalSession($, 'fixture-history');
+    await _resumeHistoricalSession($, 'fixture-history');
+    await _compactSessionContext($);
+    await _completeTypedTurn($, 'Inspect the fixture');
+    await _interruptTypedTurn($, 'Interrupt the fixture');
+    await _openTaskBoard($);
+    await _approveTaskProposal($, 'fixture-task');
+    await _createAgentTask($, 'fixture-task-2', 'Publish the fixture report');
+    await _cancelAgentTask($, 'fixture-task-2');
+    await _inspectMobileSessionHistory($, 'fixture-live');
+    await _startFreshVoiceSession($);
+    await _completeFreshSessionTurn($, 'Start the fresh session');
   });
 }
 
-Future<WorkspaceEvent> _interpretWorkspace(
-  PatrolIntegrationTester $,
-  WorkspaceCommand command,
-) => switch (command) {
-  ObserveWorkspace() => _observeWorkspace($),
-  ViewHistoricalSession(:final sessionId) => _viewHistoricalSession(
-    $,
-    sessionId,
-  ),
-  ResumeHistoricalSession(:final sessionId) => _resumeHistoricalSession(
-    $,
-    sessionId,
-  ),
-  CompactSessionContext() => _compactSessionContext($),
-  CompleteTypedTurn(:final message) => _completeTypedTurn($, message),
-  InterruptTypedTurn(:final message) => _interruptTypedTurn($, message),
-  OpenTaskBoard() => _openTaskBoard($),
-  ApproveTaskProposal(:final taskId) => _approveTaskProposal($, taskId),
-  CreateAgentTask(:final taskId, :final instruction) => _createAgentTask(
-    $,
-    taskId,
-    instruction,
-  ),
-  CancelAgentTask(:final taskId) => _cancelAgentTask($, taskId),
-  InspectMobileSessionHistory(:final sessionId) => _inspectMobileSessionHistory(
-    $,
-    sessionId,
-  ),
-  StartFreshVoiceSession() => _startFreshVoiceSession($),
-  CompleteFreshSessionTurn(:final message) => _completeFreshSessionTurn(
-    $,
-    message,
-  ),
-};
-
-Future<WorkspaceEvent> _observeWorkspace(PatrolIntegrationTester $) async {
+Future<void> _observeWorkspace(PatrolIntegrationTester $) async {
   await $(const Key('session-fixture-live')).waitUntilExists();
   await $(const Key('tool-activity-fixture-tool')).waitUntilExists();
   await $('read_workspace').waitUntilVisible();
@@ -91,11 +45,15 @@ Future<WorkspaceEvent> _observeWorkspace(PatrolIntegrationTester $) async {
   await $(const Key('diagram-fixture-assistant')).tap();
   await $(const Key('mcp-app-fixture-assistant')).waitUntilExists();
   expect($('Visual unavailable'), findsNothing);
+  await $(const Key('message-fixture-slides')).waitUntilExists();
+  await $('Requested slides ready.').waitUntilVisible();
+  await $(const Key('diagram-fixture-slides')).tap();
+  await $(const Key('mcp-app-fixture-slides')).waitUntilExists();
+  expect($('Visual unavailable'), findsNothing);
   await $('1k / 8k').waitUntilVisible();
-  return const WorkspaceObserved();
 }
 
-Future<WorkspaceEvent> _viewHistoricalSession(
+Future<void> _viewHistoricalSession(
   PatrolIntegrationTester $,
   String sessionId,
 ) async {
@@ -105,10 +63,9 @@ Future<WorkspaceEvent> _viewHistoricalSession(
   await $('The release completed successfully.').waitUntilVisible();
   expect($(const Key('message-pi')), findsNothing);
   expect($(const Key('compact-session')), findsNothing);
-  return HistoricalSessionViewed(sessionId);
 }
 
-Future<WorkspaceEvent> _resumeHistoricalSession(
+Future<void> _resumeHistoricalSession(
   PatrolIntegrationTester $,
   String sessionId,
 ) async {
@@ -117,16 +74,14 @@ Future<WorkspaceEvent> _resumeHistoricalSession(
   expect($(const Key('read-only-history')), findsNothing);
   await $('The release completed successfully.').waitUntilVisible();
   await $(const Key('message-pi')).waitUntilExists();
-  return HistoricalSessionResumed(sessionId);
 }
 
-Future<WorkspaceEvent> _compactSessionContext(PatrolIntegrationTester $) async {
+Future<void> _compactSessionContext(PatrolIntegrationTester $) async {
   await $(const Key('compact-session')).tap();
   await $('600 / 8k').waitUntilVisible();
-  return const SessionContextCompacted();
 }
 
-Future<WorkspaceEvent> _completeTypedTurn(
+Future<void> _completeTypedTurn(
   PatrolIntegrationTester $,
   String message,
 ) async {
@@ -136,10 +91,9 @@ Future<WorkspaceEvent> _completeTypedTurn(
   await $(const Key('stop-response')).waitUntilExists();
   await $('Fixture response to: $message').waitUntilVisible();
   await $(const Key('send-message')).waitUntilExists();
-  return TypedTurnCompleted(message);
 }
 
-Future<WorkspaceEvent> _interruptTypedTurn(
+Future<void> _interruptTypedTurn(
   PatrolIntegrationTester $,
   String message,
 ) async {
@@ -150,26 +104,23 @@ Future<WorkspaceEvent> _interruptTypedTurn(
   await $(const Key('stop-response')).tap();
   await $('Response stopped.').waitUntilVisible();
   await $(const Key('send-message')).waitUntilExists();
-  return TypedTurnInterrupted(message);
 }
 
-Future<WorkspaceEvent> _openTaskBoard(PatrolIntegrationTester $) async {
+Future<void> _openTaskBoard(PatrolIntegrationTester $) async {
   await $(const Key('tasks-section')).tap();
   await $(const Key('task-fixture-task')).waitUntilVisible();
   await $('Review the fixture deployment').waitUntilVisible();
-  return const TaskBoardOpened();
 }
 
-Future<WorkspaceEvent> _approveTaskProposal(
+Future<void> _approveTaskProposal(
   PatrolIntegrationTester $,
   String taskId,
 ) async {
   await $(Key('approve-$taskId')).tap();
   await $('APPROVED').waitUntilVisible();
-  return TaskProposalApproved(taskId);
 }
 
-Future<WorkspaceEvent> _createAgentTask(
+Future<void> _createAgentTask(
   PatrolIntegrationTester $,
   String taskId,
   String instruction,
@@ -179,19 +130,14 @@ Future<WorkspaceEvent> _createAgentTask(
   await $(const Key('submit-new-task')).tap();
   await $(Key('task-$taskId')).waitUntilVisible();
   await $(instruction).waitUntilVisible();
-  return AgentTaskCreated(taskId);
 }
 
-Future<WorkspaceEvent> _cancelAgentTask(
-  PatrolIntegrationTester $,
-  String taskId,
-) async {
+Future<void> _cancelAgentTask(PatrolIntegrationTester $, String taskId) async {
   await $(Key('cancel-$taskId')).tap();
   await $('CANCELLED').waitUntilVisible();
-  return AgentTaskCancelled(taskId);
 }
 
-Future<WorkspaceEvent> _inspectMobileSessionHistory(
+Future<void> _inspectMobileSessionHistory(
   PatrolIntegrationTester $,
   String sessionId,
 ) async {
@@ -204,12 +150,9 @@ Future<WorkspaceEvent> _inspectMobileSessionHistory(
   await $('Ready from the HTTP fixture.').waitUntilVisible();
   await $(const Key('return-live-session')).tap();
   await $(const Key('message-pi')).waitUntilExists();
-  return MobileSessionHistoryInspected(sessionId);
 }
 
-Future<WorkspaceEvent> _startFreshVoiceSession(
-  PatrolIntegrationTester $,
-) async {
+Future<void> _startFreshVoiceSession(PatrolIntegrationTester $) async {
   await $.platform.web.resizeWindow(size: const Size(1440, 1000));
   await $(const Key('new-voice-session')).tap();
   await $(const Key('confirm-new-voice-session')).tap();
@@ -218,15 +161,13 @@ Future<WorkspaceEvent> _startFreshVoiceSession(
   await $('Context unavailable').waitUntilVisible();
   await $(const Key('session-fixture-live')).waitUntilExists();
   await $(const Key('message-pi')).waitUntilExists();
-  return const FreshVoiceSessionStarted();
 }
 
-Future<WorkspaceEvent> _completeFreshSessionTurn(
+Future<void> _completeFreshSessionTurn(
   PatrolIntegrationTester $,
   String message,
 ) async {
   await $(const Key('message-pi')).enterText(message);
   await $(const Key('send-message')).tap(settlePolicy: SettlePolicy.noSettle);
   await $('Fixture response to: $message').waitUntilVisible();
-  return FreshSessionTurnCompleted(message);
 }

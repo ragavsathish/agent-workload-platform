@@ -46,12 +46,18 @@ services:
       - "pipecat-edge.tailf6d713.ts.net:172.30.90.2"
     environment:
       NODE_PATH: /app/node_modules
+      PLAYWRIGHT_PROJECT: voice
       VOICE_E2E_URL: https://pipecat-edge.tailf6d713.ts.net
       VOICE_E2E_AUDIO: /fixtures/voice.wav
       VOICE_E2E_OUTPUT: /output
-    entrypoint: ["node", "/tests/playwright-voice.cjs"]
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        exec node /app/node_modules/playwright/cli.js test
+        --config=/tests/playwright.config.ts
+        --project="$${PLAYWRIGHT_PROJECT:-voice}"
     volumes:
-      - ../tests/e2e/playwright-voice.cjs:/tests/playwright-voice.cjs:ro
+      - ../tests/e2e:/tests:ro
       - ${PLAYWRIGHT_AUDIO_FILE:?set PLAYWRIGHT_AUDIO_FILE}:/fixtures/voice.wav:ro
       - ${PLAYWRIGHT_OUTPUT_DIR:?set PLAYWRIGHT_OUTPUT_DIR}:/output
     read_only: true

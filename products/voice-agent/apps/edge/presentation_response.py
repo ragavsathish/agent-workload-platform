@@ -14,8 +14,10 @@ MAX_NODES = 24
 MAX_EDGES = 48
 MAX_EXCALIDRAW_ELEMENTS = 80
 MAX_EXCALIDRAW_BYTES = 64 * 1024
+MAX_MARP_BYTES = 64 * 1024
 MERMAID_URI = "ui://mermaid/main"
 EXCALIDRAW_URI = "ui://excalidraw/mcp-app.html"
+MARP_URI = "ui://slides/marp.html"
 EXCALIDRAW_TYPES = {
     "cameraUpdate", "rectangle", "ellipse", "diamond", "text", "arrow", "line"
 }
@@ -112,6 +114,25 @@ def _strip_code_fence(value: str) -> str:
     return "\n".join(lines).strip()
 
 
+def _decode_json(value: str) -> object:
+    candidate = _strip_code_fence(value)
+    try:
+        return json.loads(candidate, strict=False)
+    except json.JSONDecodeError as original_error:
+        # Pi occasionally appends a closing brace to an otherwise complete
+        # response. Repair only that bounded suffix; never guess inside JSON.
+        repaired = candidate
+        for _ in range(2):
+            if not repaired.endswith("}"):
+                break
+            repaired = repaired[:-1].rstrip()
+            try:
+                return json.loads(repaired, strict=False)
+            except json.JSONDecodeError:
+                continue
+        raise original_error
+
+
 def fallback_presentation(spoken: str) -> dict[str, object]:
     label = " ".join(spoken.split()) or "Ready"
     return {
@@ -131,6 +152,8 @@ def _normalize_presentation(value: object, spoken: str) -> dict[str, object]:
     raw_edges = value.get("edges")
     if kind == "excalidraw":
         return _normalize_excalidraw(value, spoken)
+    if kind == "slides":
+        return _normalize_slides(value, spoken)
     if kind not in {"flow", "status"} or not isinstance(raw_nodes, list):
         return fallback_presentation(spoken)
 
@@ -297,13 +320,55 @@ def _normalize_excalidraw(value: dict[object, object], spoken: str) -> dict[str,
     return presentation
 
 
+def _normalize_slides(value: dict[object, object], spoken: str) -> dict[str, object]:
+    markdown = value.get("markdown")
+    if not isinstance(markdown, str):
+        return fallback_presentation(spoken)
+    markdown = markdown.strip()
+    if not markdown or len(markdown.encode()) > MAX_MARP_BYTES:
+        return fallback_presentation(spoken)
+    title = value.get("title")
+    return {
+        "kind": "slides",
+        "title": (
+            title.strip()[:MAX_TITLE_LENGTH]
+            if isinstance(title, str) and title.strip()
+            else "Pi slides"
+        ),
+        "markdown": markdown,
+    }
+
+
 def parse_presentation_response(raw: str) -> PresentationResponse:
     """Return safe speech and a bounded structured MCP App presentation."""
     candidate = _strip_code_fence(raw)
-    try:
-        payload = json.loads(candidate, strict=False)
-    except (json.JSONDecodeError, TypeError):
-        payload = None
+    payload: object = candidate
+    # Pi's OpenAI-compatible transport can JSON-encode an already structured
+    # assistant response more than once. Keep this deliberately shallow so a
+    # valid response is recovered without recursively interpreting arbitrary
+    # model text.
+    for _ in range(4):
+        if isinstance(payload, dict):
+            nested = payload.get("spoken")
+            if not isinstance(nested, str):
+                break
+            try:
+                nested_payload = _decode_json(nested)
+            except (json.JSONDecodeError, TypeError):
+                break
+            if not isinstance(nested_payload, dict) or not isinstance(
+                nested_payload.get("presentation"), dict
+            ):
+                break
+            payload = nested_payload
+            continue
+        if not isinstance(payload, str):
+            break
+        try:
+            payload = _decode_json(payload)
+        except (json.JSONDecodeError, TypeError):
+            payload = None
+            break
 
     if isinstance(payload, dict):
         spoken_value = payload.get("spoken")
@@ -315,11 +380,13 @@ def parse_presentation_response(raw: str) -> PresentationResponse:
         payload.get("presentation") if isinstance(payload, dict) else None,
         spoken,
     )
-    resource_uri = (
-        EXCALIDRAW_URI
-        if presentation.get("kind") == "excalidraw"
-        else MERMAID_URI
-    )
+    kind = presentation.get("kind")
+    if kind == "excalidraw":
+        resource_uri = EXCALIDRAW_URI
+    elif kind == "slides":
+        resource_uri = MARP_URI
+    else:
+        resource_uri = MERMAID_URI
     return PresentationResponse(
         spoken=spoken,
         presentation=presentation,

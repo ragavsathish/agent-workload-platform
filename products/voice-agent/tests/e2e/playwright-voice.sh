@@ -21,9 +21,9 @@ trap cleanup EXIT
 
 mkdir -p "$output_dir"
 ffmpeg -hide_banner -loglevel error \
-  -f lavfi -t 30 -i anullsrc=r=16000:cl=mono \
+  -f lavfi -t 10 -i anullsrc=r=16000:cl=mono \
   -i "$repo_dir/deploy/secrets/voxlock-voice-sample.wav" \
-  -filter_complex '[0:a][1:a]concat=n=2:v=0:a=1[out]' \
+  -filter_complex '[1:a]volume=12dB[voice];[0:a][voice]concat=n=2:v=0:a=1[out]' \
   -map '[out]' -c:a pcm_s16le -ar 16000 -ac 1 -y "$audio_file"
 
 export PLAYWRIGHT_AUDIO_FILE="$audio_file"

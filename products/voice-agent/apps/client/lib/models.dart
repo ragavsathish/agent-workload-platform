@@ -5,6 +5,19 @@ typedef JsonMap = Map<String, dynamic>;
 JsonMap asMap(Object? value) =>
     value is Map<String, dynamic> ? value : const {};
 
+Object? decodeModelJson(String value) {
+  var candidate = value.trim();
+  for (var removedBraces = 0; removedBraces <= 2; removedBraces++) {
+    try {
+      return jsonDecode(candidate);
+    } on FormatException {
+      if (!candidate.endsWith('}') || removedBraces == 2) return null;
+      candidate = candidate.substring(0, candidate.length - 1).trimRight();
+    }
+  }
+  return null;
+}
+
 class VisualResponse {
   const VisualResponse({
     required this.spoken,
@@ -17,22 +30,31 @@ class VisualResponse {
   final String resourceUri;
 
   static VisualResponse? fromValue(Object? value) {
-    JsonMap body;
-    if (value is String) {
-      try {
-        body = asMap(jsonDecode(value));
-      } on FormatException {
-        return null;
+    Object? decoded = value;
+    for (var depth = 0; depth < 4; depth++) {
+      final decodedMap = asMap(decoded);
+      if (decodedMap.isNotEmpty) {
+        final nested = decodedMap['spoken'];
+        if (nested is! String) break;
+        final nestedDecoded = decodeModelJson(nested);
+        final nestedMap = asMap(nestedDecoded);
+        if (nestedMap['presentation'] is! Map<String, dynamic>) break;
+        decoded = nestedDecoded;
+        continue;
       }
-    } else {
-      body = asMap(value);
+      if (decoded is! String) break;
+      decoded = decodeModelJson(decoded);
+      if (decoded == null) return null;
     }
+    final body = asMap(decoded);
     final spoken = body['spoken'];
     final presentation = asMap(body['presentation']);
     final resourceUri = body['resourceUri'];
-    final inferredResourceUri = presentation['kind'] == 'excalidraw'
-        ? 'ui://excalidraw/mcp-app.html'
-        : 'ui://mermaid/main';
+    final inferredResourceUri = switch (presentation['kind']) {
+      'excalidraw' => 'ui://excalidraw/mcp-app.html',
+      'slides' => 'ui://slides/marp.html',
+      _ => 'ui://mermaid/main',
+    };
     return spoken is String && presentation.isNotEmpty
         ? VisualResponse(
             spoken: spoken,

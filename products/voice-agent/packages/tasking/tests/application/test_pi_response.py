@@ -57,6 +57,37 @@ def test_routes_valid_excalidraw_response_to_the_excalidraw_app() -> None:
     assert response.resource_uri == "ui://excalidraw/mcp-app.html"
 
 
+def test_routes_explicit_marp_slides_to_the_slides_app() -> None:
+    response = response_from_text(json.dumps({
+        "spoken": "Slides ready.",
+        "presentation": {
+            "kind": "slides",
+            "title": "Task path",
+            "markdown": "# Task path\n\n---\n\n```mermaid\nflowchart LR\nTask --> Done\n```",
+        },
+    }))
+
+    assert response.presentation["kind"] == "slides"
+    assert response.resource_uri == "ui://slides/marp.html"
+
+
+def test_unwraps_a_json_encoded_slides_response() -> None:
+    inner = json.dumps({
+        "spoken": "Slides ready.",
+        "presentation": {
+            "kind": "slides",
+            "title": "Live check",
+            "markdown": "# Live check",
+        },
+    })
+
+    response = response_from_text(json.dumps(inner))
+
+    assert response.spoken == "Slides ready."
+    assert response.presentation["kind"] == "slides"
+    assert response.resource_uri == "ui://slides/marp.html"
+
+
 def test_plain_response_gets_safe_presentation_fallback() -> None:
     response = response_from_text('Completed <unsafe> "work".')
 

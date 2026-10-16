@@ -2,6 +2,7 @@ import { AppBridge, PostMessageTransport } from '@modelcontextprotocol/ext-apps/
 
 const events = [];
 const mcpAppHosts = new WeakMap();
+const mcpAppMountQueues = new WeakMap();
 const excalidrawCameraSizes = [
   { width: 400, height: 300 },
   { width: 600, height: 450 },
@@ -75,6 +76,12 @@ const mcpApps = Object.freeze({
     toolInput: (presentation) => ({ presentation }),
     toolResult: (presentation) => ({ presentation }),
   },
+  'ui://slides/marp.html': {
+    src: '/marp/marp.html',
+    title: 'Pi Marp slides',
+    toolInput: (presentation) => ({ presentation }),
+    toolResult: (presentation) => ({ presentation }),
+  },
   'ui://excalidraw/mcp-app.html': {
     src: '/excalidraw/mcp-app.html',
     title: 'Editable Excalidraw diagram',
@@ -118,7 +125,9 @@ const messagePresentation = (value) => {
       ? payload.resourceUri
       : payload.presentation.kind === 'excalidraw'
         ? 'ui://excalidraw/mcp-app.html'
-        : 'ui://mermaid/main',
+        : payload.presentation.kind === 'slides'
+          ? 'ui://slides/marp.html'
+          : 'ui://mermaid/main',
   };
 };
 
@@ -228,6 +237,11 @@ window.voiceBridge = {
   async mountMcpApp(elementId, rawPresentation, resourceUri = 'ui://mermaid/main') {
     const target = await waitForElement(elementId);
     if (!target) return JSON.stringify({ ok: false, error: 'MCP App host unavailable' });
+    const precedingMount = mcpAppMountQueues.get(target) ?? Promise.resolve();
+    let releaseMount;
+    const mountSlot = new Promise((resolve) => { releaseMount = resolve; });
+    mcpAppMountQueues.set(target, mountSlot);
+    await precedingMount.catch(() => undefined);
     try {
       const appDefinition = mcpApps[resourceUri];
       if (!appDefinition) throw new Error('Unsupported MCP App resource');
@@ -336,6 +350,9 @@ window.voiceBridge = {
     } catch (error) {
       target.textContent = 'Visual unavailable';
       return JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      releaseMount();
+      if (mcpAppMountQueues.get(target) === mountSlot) mcpAppMountQueues.delete(target);
     }
   },
   openView(view) {
