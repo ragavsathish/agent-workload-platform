@@ -525,7 +525,7 @@ class _HeaderIconButton extends StatelessWidget {
     tooltip: tooltip,
     onPressed: onPressed,
     icon: Icon(icon, size: 18),
-    visualDensity: VisualDensity.compact,
+    constraints: const BoxConstraints.tightFor(width: 44, height: 44),
     style: IconButton.styleFrom(
       foregroundColor: PiColors.text,
       side: const BorderSide(color: PiColors.border),

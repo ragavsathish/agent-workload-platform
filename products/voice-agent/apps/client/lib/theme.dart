@@ -75,6 +75,8 @@ ThemeData buildTheme() => ThemeData(
     style: ElevatedButton.styleFrom(
       backgroundColor: PiColors.green,
       foregroundColor: PiColors.background,
+      minimumSize: const Size(0, 44),
+      visualDensity: VisualDensity.standard,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
       textStyle: const TextStyle(
         fontFamily: 'monospace',
@@ -87,6 +89,8 @@ ThemeData buildTheme() => ThemeData(
   outlinedButtonTheme: OutlinedButtonThemeData(
     style: OutlinedButton.styleFrom(
       foregroundColor: PiColors.text,
+      minimumSize: const Size(0, 44),
+      visualDensity: VisualDensity.standard,
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
       side: const BorderSide(color: PiColors.border),
       textStyle: const TextStyle(

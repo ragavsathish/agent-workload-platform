@@ -6,6 +6,40 @@ import {
   expectCleanBrowser,
 } from './fixtures';
 
+test('keeps the primary voice controls usable on a phone viewport', async ({
+  page,
+  browserEvidence,
+}, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await enableFlutterSemantics(page);
+
+  for (const name of ['Replays', 'System health', 'Chat', 'Start conversation']) {
+    const button = page.getByRole('button', { name, exact: true });
+    await expect(button).toBeVisible();
+    const box = await button.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) throw new Error(`${name} button has no layout box`);
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
+    expect(box.y + box.height).toBeLessThanOrEqual(844);
+  }
+
+  const layout = await page.evaluate(() => ({
+    viewportWidth: window.innerWidth,
+    documentWidth: document.documentElement.scrollWidth,
+  }));
+  expect(layout).toEqual({ viewportWidth: 390, documentWidth: 390 });
+
+  await testInfo.attach('voice-mobile', {
+    body: await page.screenshot(),
+    contentType: 'image/png',
+  });
+  expectCleanBrowser(browserEvidence);
+});
+
 test('completes a deployed voice session and retains its diagnostics', async ({
   page,
   browserEvidence,
