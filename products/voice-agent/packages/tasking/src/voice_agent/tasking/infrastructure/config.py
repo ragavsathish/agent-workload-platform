@@ -58,6 +58,8 @@ class Settings:
     gitea_builder_token: str = ""
     gitea_actions_token: str = ""
     node_binary: str = "/opt/homebrew/bin/node"
+    digital_twin_runner: Path | None = None
+    digital_twin_timeout_seconds: int = 120
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -112,6 +114,14 @@ class Settings:
             gitea_builder_token=_value("GITEA_BUILDER_TOKEN"),
             gitea_actions_token=_value("GITEA_ACTIONS_TOKEN"),
             node_binary=_value("NODE_BINARY", "/opt/homebrew/bin/node"),
+            digital_twin_runner=(
+                Path(_value("DIGITAL_TWIN_RUNNER")).expanduser().resolve()
+                if _value("DIGITAL_TWIN_RUNNER")
+                else None
+            ),
+            digital_twin_timeout_seconds=int(
+                os.getenv("DIGITAL_TWIN_TIMEOUT_SECONDS", "120")
+            ),
         )
 
     @property

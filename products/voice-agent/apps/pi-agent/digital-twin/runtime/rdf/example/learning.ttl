@@ -1,0 +1,22 @@
+@prefix schema: <https://schema.org/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex: <urn:example:digital-twin:> .
+
+ex:topic-domain-modeling a schema:DefinedTerm ;
+  schema:name "Domain modeling"@en .
+
+ex:learning-video a schema:VideoObject, schema:LearningResource, prov:Entity ;
+  schema:name "Example domain-modeling talk"@en ;
+  schema:url <https://example.com/domain-modeling-talk> ;
+  schema:teaches ex:topic-domain-modeling .
+
+ex:watch-domain-modeling a schema:WatchAction, prov:Activity ;
+  schema:agent ex:person ;
+  schema:object ex:learning-video .
+
+ex:claim-domain-modeling a schema:Claim, prov:Entity ;
+  schema:text "The example talk connects collaborative modeling to implementation."@en ;
+  schema:about ex:topic-domain-modeling ;
+  prov:wasDerivedFrom ex:learning-video ;
+  prov:generatedAtTime "2026-01-01T00:00:00Z"^^xsd:dateTime .

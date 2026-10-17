@@ -53,7 +53,7 @@ services:
     volumes: [s3mock-data:/s3mockroot]
     network_mode: none
     cap_drop: [ALL]
-    cap_add: [CHOWN]
+    cap_add: [CHOWN, FOWNER]
     security_opt: [no-new-privileges:true]
     restart: "no"
 
@@ -101,6 +101,41 @@ services:
       timeout: 3s
       retries: 20
     security_opt: [no-new-privileges:true]
+
+  oxigraph-init:
+    image: busybox:1.37.0@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["chown -R 65532:65532 /data"]
+    volumes: [oxigraph-data:/data]
+    network_mode: none
+    cap_drop: [ALL]
+    cap_add: [CHOWN]
+    security_opt: [no-new-privileges:true]
+    restart: "no"
+
+  oxigraph:
+    image: oxigraph/oxigraph:0.5.11@sha256:7532c1f9aa5f28c0dc6a4243198f7f6144017fab7429bf6c164a89fec9411767
+    command: ["serve", "--location", "/data", "--bind", "0.0.0.0:7878"]
+    restart: unless-stopped
+    depends_on:
+      oxigraph-init:
+        condition: service_completed_successfully
+    volumes: [oxigraph-data:/data]
+    networks: [data]
+    user: "65532:65532"
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=32m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 1g
+    cpus: 1
+    stop_grace_period: 30s
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   habitat:
     image: local/absurd-habitat:0.5.0
@@ -239,6 +274,8 @@ services:
         condition: service_healthy
       otel-lgtm:
         condition: service_healthy
+      oxigraph:
+        condition: service_started
     environment:
       AGENT_GATEWAY_HOST: 0.0.0.0
       AGENT_GATEWAY_PORT: "9444"
@@ -255,13 +292,18 @@ services:
       ARTIFACT_BUCKET: ${ARTIFACT_BUCKET:-agent-artifacts}
       ARTIFACT_ACCESS_KEY: ${ARTIFACT_ACCESS_KEY:-local-test}
       ARTIFACT_SECRET_KEY: ${ARTIFACT_SECRET_KEY:-local-test}
+      OXIGRAPH_QUERY_URL: http://oxigraph:7878/query
+      OXIGRAPH_UPDATE_URL: http://oxigraph:7878/update
+      DIGITAL_TWIN_READER_TOKEN_FILE: /run/secrets/digital-twin-reader-token
+      DIGITAL_TWIN_WRITER_TOKEN_FILE: /run/secrets/digital-twin-writer-token
       ORCHESTRATOR_ALLOWED_WORKSPACES: ${ORCHESTRATOR_ALLOWED_WORKSPACES:?set ORCHESTRATOR_ALLOWED_WORKSPACES in deploy/.env}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-lgtm:4318
       OTEL_LOGS_EXPORTER: none
       OTEL_METRIC_EXPORT_INTERVAL: "5000"
-    secrets: [agent-gateway-token, database-url, approval-secret]
-    # Native Pi voice RPC receives only this bearer-protected, loopback-bound
-    # task lifecycle capability. It is never exposed on the Mac LAN.
+    secrets: [agent-gateway-token, digital-twin-reader-token, digital-twin-writer-token, database-url, approval-secret]
+    # Native Pi voice RPC receives only these bearer-protected, loopback-bound
+    # task and read-only personal-knowledge capabilities. They are never exposed
+    # on the Mac LAN.
     ports: ["127.0.0.1:9444:9444"]
     networks:
       control:
@@ -402,6 +444,7 @@ volumes:
   gitea-config:
   gitea-data:
   otel-lgtm-data:
+  oxigraph-data:
   s3mock-data:
   postgres-data:
   tailscale-state:
@@ -423,6 +466,10 @@ secrets:
     file: ./secrets/broker-token
   agent-gateway-token:
     file: ./secrets/agent-gateway-token
+  digital-twin-reader-token:
+    file: ./secrets/digital-twin-reader-token
+  digital-twin-writer-token:
+    file: ./secrets/digital-twin-writer-token
   postgres-password:
     file: ./secrets/postgres-password
   database-url:

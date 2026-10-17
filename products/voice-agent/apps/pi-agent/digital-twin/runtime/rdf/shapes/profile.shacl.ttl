@@ -1,0 +1,160 @@
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix org: <http://www.w3.org/ns/org#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix schema: <https://schema.org/> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix twinshape: <urn:awp:digital-twin:shape:> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+twinshape:PersonShape a sh:NodeShape ;
+  sh:targetClass schema:Person ;
+  sh:property [
+    sh:path schema:name ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:nodeKind sh:Literal
+  ] ;
+  sh:property [
+    sh:path schema:knowsAbout ;
+    sh:class schema:DefinedTerm ;
+    sh:nodeKind sh:IRI
+  ] .
+
+twinshape:DefinedTermShape a sh:NodeShape ;
+  sh:targetClass schema:DefinedTerm ;
+  sh:property [
+    sh:path schema:name ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:nodeKind sh:Literal
+  ] .
+
+twinshape:MessageShape a sh:NodeShape ;
+  sh:targetClass schema:Message ;
+  sh:property [
+    sh:path schema:sender ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:class schema:Person ;
+    sh:nodeKind sh:IRI
+  ] ;
+  sh:property [
+    sh:path schema:dateSent ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:or (
+      [ sh:datatype xsd:date ]
+      [ sh:datatype xsd:dateTime ]
+    )
+  ] ;
+  sh:property [
+    sh:path schema:about ;
+    sh:minCount 1 ;
+    sh:class schema:DefinedTerm ;
+    sh:nodeKind sh:IRI
+  ] ;
+  sh:property [
+    sh:path schema:text ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:nodeKind sh:Literal
+  ] .
+
+twinshape:LearningResourceShape a sh:NodeShape ;
+  sh:targetClass schema:LearningResource ;
+  sh:property [
+    sh:path schema:name ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:nodeKind sh:Literal
+  ] ;
+  sh:property [
+    sh:path schema:teaches ;
+    sh:minCount 1 ;
+    sh:class schema:DefinedTerm ;
+    sh:nodeKind sh:IRI
+  ] .
+
+twinshape:WatchActionShape a sh:NodeShape ;
+  sh:targetClass schema:WatchAction ;
+  sh:property [
+    sh:path schema:agent ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:class schema:Person ;
+    sh:nodeKind sh:IRI
+  ] ;
+  sh:property [
+    sh:path schema:object ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:class schema:LearningResource ;
+    sh:nodeKind sh:IRI
+  ] .
+
+twinshape:SourceClaimShape a sh:NodeShape ;
+  sh:targetClass schema:Claim ;
+  sh:property [
+    sh:path schema:text ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:nodeKind sh:Literal
+  ] ;
+  sh:property [
+    sh:path schema:about ;
+    sh:minCount 1 ;
+    sh:class schema:DefinedTerm ;
+    sh:nodeKind sh:IRI
+  ] ;
+  sh:property [
+    sh:path prov:wasDerivedFrom ;
+    sh:minCount 1 ;
+    sh:class prov:Entity ;
+    sh:nodeKind sh:IRI
+  ] ;
+  sh:property [
+    sh:path prov:generatedAtTime ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:datatype xsd:dateTime
+  ] .
+
+twinshape:MembershipShape a sh:NodeShape ;
+  sh:targetClass org:Membership ;
+  sh:property [
+    sh:path org:member ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:class schema:Person ;
+    sh:nodeKind sh:IRI
+  ] ;
+  sh:property [
+    sh:path org:organization ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:class schema:Organization ;
+    sh:nodeKind sh:IRI
+  ] ;
+  sh:property [
+    sh:path org:role ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:class org:Role ;
+    sh:nodeKind sh:IRI
+  ] .
+
+twinshape:DerivedGraphShape a sh:NodeShape ;
+  sh:targetSubjectsOf prov:wasDerivedFrom ;
+  sh:property [
+    sh:path prov:wasDerivedFrom ;
+    sh:minCount 1 ;
+    sh:class prov:Entity ;
+    sh:nodeKind sh:IRI
+  ] ;
+  sh:property [
+    sh:path prov:generatedAtTime ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:datatype xsd:dateTime
+  ] .

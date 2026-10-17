@@ -2,8 +2,9 @@
 
 Agent Execution owns the reusable boundary for running agent tools in an
 isolated session. Products choose their own prompts, policies, and workflows;
-this context supplies the session, workspace mount, browser bridge, memory
-bridge, and optional capability providers.
+this context supplies the session, workspace mount, browser bridge, and
+optional capability providers. Standard host MCP servers are Pi configuration,
+not Agent Execution adapters.
 
 `gondolin-session/` is the current implementation. Build it from the repository
 root with:
@@ -21,5 +22,4 @@ egress or credentials. The Voice Agent task worker sets
 Gondolin continues to reject private, loopback, link-local, and metadata IP
 ranges. Voice-conversation VMs do not inherit that worker-only setting.
 
-The package is consumed by both Voice Agent workers and Architecture
-Visualization's optional browser fallback.
+The package is consumed by Voice Agent workers.

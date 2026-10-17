@@ -51,14 +51,19 @@ async function gitObject(revision: string, file: string): Promise<string> {
   return run("git", ["rev-parse", spec], process.cwd());
 }
 
-export async function workflowPlan(requestedVersion: string) {
+export async function workflowPlan(
+  requestedVersion: string,
+  requestedConfig = ".pi/gondolin.json",
+) {
   const revision = await run("git", ["rev-parse", "HEAD"], process.cwd());
-  const config = JSON.parse(fs.readFileSync(".pi/gondolin.json", "utf8")) as {
+  const configPath = relative(requestedConfig, "imageConfig");
+  if (!configPath.endsWith(".json")) throw new Error("image config must be a JSON file");
+  const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as {
     image?: unknown;
     build?: BuildConfig;
   };
   if (typeof config.image !== "string" || !config.build) {
-    throw new Error(".pi/gondolin.json must declare image and build");
+    throw new Error(`${configPath} must declare image and build`);
   }
   const build = config.build;
   const context = relative(build.context, "context");
@@ -90,6 +95,7 @@ export async function workflowPlan(requestedVersion: string) {
   return {
     artifactVersion: version,
     assetConfig,
+    configPath,
     context,
     dockerfile,
     imageRef: config.image,
@@ -148,9 +154,10 @@ async function sha256Url(url: string, token: string): Promise<string> {
 
 async function main() {
   const requestedVersion = process.env.ARTIFACT_VERSION;
+  const imageConfig = process.env.IMAGE_CONFIG ?? ".pi/gondolin.json";
   const token = process.env.IMAGE_BUILDER_TOKEN;
   if (!requestedVersion || !token) throw new Error("ARTIFACT_VERSION and IMAGE_BUILDER_TOKEN are required");
-  const plan = await workflowPlan(requestedVersion);
+  const plan = await workflowPlan(requestedVersion, imageConfig);
   fs.rmSync("/workspace", { recursive: true, force: true });
   fs.rmSync("/output", { recursive: true, force: true });
   fs.symlinkSync(process.cwd(), "/workspace", "dir");

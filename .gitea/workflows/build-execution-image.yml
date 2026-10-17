@@ -11,6 +11,11 @@ on:
         description: Immutable Git commit containing the declared build inputs
         required: true
         type: string
+      image_config:
+        description: Repository-relative trusted Gondolin image declaration
+        required: false
+        default: .pi/gondolin.json
+        type: string
 
 jobs:
   build:
@@ -24,5 +29,6 @@ jobs:
       - name: Build and publish the voice runtime image
         env:
           ARTIFACT_VERSION: ${{ inputs.artifact_version }}
+          IMAGE_CONFIG: ${{ inputs.image_config }}
           IMAGE_BUILDER_TOKEN: ${{ secrets.IMAGE_BUILDER_TOKEN }}
         run: node /runner/dist/image-builder/workflow.js

@@ -1,0 +1,12 @@
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex: <urn:example:digital-twin:> .
+
+ex:source-cv a prov:Entity ;
+  dcterms:title "Example CV"@en ;
+  dcterms:format "text/markdown" .
+
+<urn:awp:digital-twin:graph:cv> a prov:Entity ;
+  prov:wasDerivedFrom ex:source-cv ;
+  prov:generatedAtTime "2026-01-01T00:00:00Z"^^xsd:dateTime .

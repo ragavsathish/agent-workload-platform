@@ -1,8 +1,8 @@
-"""Narrow host task API for the isolated voice VM.
+"""Narrow host capability API for the isolated voice VM.
 
-The gateway deliberately exposes only propose, inspect, approve, and cancel for
-the authenticated tailnet identity supplied by the edge. It owns the database
-and approval secrets; neither crosses into the VM.
+The gateway exposes task lifecycle operations and bounded, read-only personal
+knowledge queries for the authenticated owner identity. It owns the database,
+knowledge-store connection, and approval secrets; none crosses into the VM.
 """
 
 from __future__ import annotations
@@ -11,9 +11,11 @@ import asyncio
 import json
 import os
 import secrets
+import urllib.request
+from datetime import datetime
 from io import StringIO
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
@@ -43,6 +45,93 @@ app = FastAPI(
     openapi_url=None,
 )
 telemetry = configure_telemetry("pipecat-agent-gateway")
+OXIGRAPH_QUERY_URL = os.getenv("OXIGRAPH_QUERY_URL", "http://oxigraph:7878/query").strip()
+OXIGRAPH_UPDATE_URL = os.getenv("OXIGRAPH_UPDATE_URL", "http://oxigraph:7878/update").strip()
+DIGITAL_TWIN_READER_TOKEN_FILE = os.getenv("DIGITAL_TWIN_READER_TOKEN_FILE")
+DIGITAL_TWIN_READER_TOKEN = (
+    Path(DIGITAL_TWIN_READER_TOKEN_FILE).read_text(encoding="utf-8").strip()
+    if DIGITAL_TWIN_READER_TOKEN_FILE
+    else os.getenv("DIGITAL_TWIN_READER_TOKEN", "")
+)
+if len(DIGITAL_TWIN_READER_TOKEN) < 32:
+    raise RuntimeError("DIGITAL_TWIN_READER_TOKEN must contain at least 32 characters")
+DIGITAL_TWIN_WRITER_TOKEN_FILE = os.getenv("DIGITAL_TWIN_WRITER_TOKEN_FILE")
+DIGITAL_TWIN_WRITER_TOKEN = (
+    Path(DIGITAL_TWIN_WRITER_TOKEN_FILE).read_text(encoding="utf-8").strip()
+    if DIGITAL_TWIN_WRITER_TOKEN_FILE
+    else os.getenv("DIGITAL_TWIN_WRITER_TOKEN", "")
+)
+if len(DIGITAL_TWIN_WRITER_TOKEN) < 32:
+    raise RuntimeError("DIGITAL_TWIN_WRITER_TOKEN must contain at least 32 characters")
+MAX_DIGITAL_TWIN_FACTS = 100
+
+PROFILE_FACTS_QUERY = """
+PREFIX schema: <https://schema.org/>
+PREFIX org: <http://www.w3.org/ns/org#>
+
+SELECT ?kind ?label ?source WHERE {
+  GRAPH <urn:awp:digital-twin:graph:cv> {
+    {
+      ?source a schema:Person ; schema:name ?label .
+      BIND("person" AS ?kind)
+    }
+    UNION
+    {
+      ?source a org:Membership ; org:role/schema:roleName ?label .
+      BIND("role" AS ?kind)
+    }
+    UNION
+    {
+      ?person schema:knowsAbout ?source .
+      ?source schema:name ?label .
+      BIND("profile skill" AS ?kind)
+    }
+  }
+}
+ORDER BY ?kind ?label ?source
+LIMIT 200
+"""
+
+LEARNING_FACTS_QUERY = """
+PREFIX schema: <https://schema.org/>
+
+SELECT ?kind ?label ?source WHERE {
+  GRAPH <urn:awp:digital-twin:graph:learning> {
+    {
+      ?watch a schema:WatchAction ; schema:object ?source .
+      ?source schema:name ?label .
+      BIND("watched resource" AS ?kind)
+    }
+    UNION
+    {
+      ?source a schema:LearningResource ; schema:teaches ?topic .
+      ?topic schema:name ?label .
+      BIND("learning topic" AS ?kind)
+    }
+    UNION
+    {
+      ?source a schema:Claim ; schema:text ?label .
+      BIND("source claim" AS ?kind)
+    }
+  }
+}
+ORDER BY ?kind ?label ?source
+LIMIT 200
+"""
+
+JOURNAL_FACTS_QUERY = """
+PREFIX schema: <https://schema.org/>
+
+SELECT ?kind ?label ?source WHERE {
+  GRAPH <urn:awp:digital-twin:graph:journal> {
+    ?source a schema:CreativeWork ;
+      schema:additionalType ?kind ;
+      schema:text ?label .
+  }
+}
+ORDER BY DESC(?source)
+LIMIT 200
+"""
 
 
 class IdentityRequest(BaseModel):
@@ -54,10 +143,50 @@ class ProposalRequest(IdentityRequest):
     workspace: str = Field(min_length=1, max_length=4_096)
 
 
+class DigitalTwinIngestionRequest(IdentityRequest):
+    session_id: str = Field(alias="sessionId", min_length=1, max_length=128)
+    message_id: str = Field(alias="messageId", min_length=1, max_length=128)
+    transcript: str = Field(min_length=1, max_length=20_000)
+    captured_at: datetime = Field(alias="capturedAt")
+
+
+class JournalEntry(BaseModel):
+    id: str = Field(pattern=r"^[a-f0-9]{32}:entry:[1-9][0-9]*$")
+    type: Literal[
+        "thought", "idea", "question", "decision", "goal", "learning", "unclassified"
+    ]
+    text: str = Field(min_length=1, max_length=1_000)
+    topics: list[str] = Field(max_length=8)
+
+
+class JournalCapture(IdentityRequest):
+    id: str = Field(pattern=r"^[a-f0-9]{32}$")
+    source_ref: str = Field(alias="sourceRef", min_length=1, max_length=300)
+    captured_at: datetime = Field(alias="capturedAt")
+    transcript: str = Field(min_length=1, max_length=20_000)
+    entries: list[JournalEntry] = Field(max_length=12)
+
+
 async def authenticate(authorization: Annotated[str | None, Header()] = None) -> None:
     expected = f"Bearer {GATEWAY_TOKEN}"
     if authorization is None or not secrets.compare_digest(authorization, expected):
         raise HTTPException(status_code=401, detail="invalid agent gateway credential")
+
+
+async def authenticate_digital_twin_writer(
+    authorization: Annotated[str | None, Header()] = None,
+) -> None:
+    expected = f"Bearer {DIGITAL_TWIN_WRITER_TOKEN}"
+    if authorization is None or not secrets.compare_digest(authorization, expected):
+        raise HTTPException(status_code=401, detail="invalid digital twin writer credential")
+
+
+async def authenticate_digital_twin_reader(
+    authorization: Annotated[str | None, Header()] = None,
+) -> None:
+    expected = f"Bearer {DIGITAL_TWIN_READER_TOKEN}"
+    if authorization is None or not secrets.compare_digest(authorization, expected):
+        raise HTTPException(status_code=401, detail="invalid digital twin reader credential")
 
 
 def normalized_identity(identity: str) -> str:
@@ -133,9 +262,159 @@ def service() -> TaskService:
     return TaskService(settings)
 
 
+def _sparql_rows(query: str) -> list[dict[str, str]]:
+    request = urllib.request.Request(
+        OXIGRAPH_QUERY_URL,
+        data=query.encode("utf-8"),
+        headers={
+            "Accept": "application/sparql-results+json",
+            "Content-Type": "application/sparql-query",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("personal knowledge store is unavailable") from exc
+
+    bindings = payload.get("results", {}).get("bindings", []) if isinstance(payload, dict) else []
+    if not isinstance(bindings, list):
+        raise RuntimeError("personal knowledge store returned invalid results")
+    rows: list[dict[str, str]] = []
+    for binding in bindings:
+        if not isinstance(binding, dict):
+            continue
+        row = {
+            str(name): str(cell["value"])
+            for name, cell in binding.items()
+            if isinstance(cell, dict) and isinstance(cell.get("value"), str)
+        }
+        if row:
+            rows.append(row)
+    return rows
+
+
+def _rdf_literal(value: str) -> str:
+    return json.dumps(value, ensure_ascii=False).replace("/", "\\/")
+
+
+def _journal_update(capture: JournalCapture) -> str:
+    source = f"urn:awp:digital-twin:journal:{capture.id}"
+    captured_at = capture.captured_at.isoformat()
+    triples = [
+        f"<{source}> a schema:Message ;",
+        f"  schema:identifier {_rdf_literal(capture.source_ref)} ;",
+        f"  schema:text {_rdf_literal(capture.transcript)} ;",
+        f"  schema:dateSent {_rdf_literal(captured_at)}^^xsd:dateTime .",
+    ]
+    for entry in capture.entries:
+        entry_iri = f"urn:awp:digital-twin:journal:{entry.id}"
+        properties = [
+            f"  schema:additionalType {_rdf_literal(entry.type)}",
+            f"  schema:text {_rdf_literal(entry.text)}",
+            f"  schema:dateCreated {_rdf_literal(captured_at)}^^xsd:dateTime",
+            f"  schema:isBasedOn <{source}>",
+            *(f"  schema:keywords {_rdf_literal(topic)}" for topic in entry.topics),
+        ]
+        triples.append(f"<{entry_iri}> a schema:CreativeWork ;\n" + " ;\n".join(properties) + " .")
+    return "\n".join(
+        [
+            "PREFIX schema: <https://schema.org/>",
+            "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>",
+            "INSERT DATA { GRAPH <urn:awp:digital-twin:graph:journal> {",
+            *(f"  {triple.replace(chr(10), chr(10) + '  ')}" for triple in triples),
+            "} }",
+            "",
+        ]
+    )
+
+
+def _sparql_update(update: str) -> None:
+    request = urllib.request.Request(
+        OXIGRAPH_UPDATE_URL,
+        data=update.encode("utf-8"),
+        headers={"Content-Type": "application/sparql-update"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            if response.status not in {200, 204}:
+                raise RuntimeError("personal knowledge store rejected the journal update")
+    except OSError as exc:
+        raise RuntimeError("personal knowledge store is unavailable") from exc
+
+
+def _filter_facts(rows: list[dict[str, str]], search: str) -> list[dict[str, str]]:
+    terms = search.casefold().split()
+    if not terms:
+        return rows[:MAX_DIGITAL_TWIN_FACTS]
+    matches = [
+        row
+        for row in rows
+        if all(term in " ".join(row.values()).casefold() for term in terms)
+    ]
+    return matches[:MAX_DIGITAL_TWIN_FACTS]
+
+
 @app.get("/health")
 async def health(_: None = Depends(authenticate)) -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/v1/digital-twin")
+async def query_digital_twin(
+    identity: str = Query(min_length=3, max_length=320),
+    scope: Literal["profile", "learning", "journal", "all"] = Query(default="all"),
+    query: str = Query(default="", max_length=200),
+    _: None = Depends(authenticate_digital_twin_reader),
+):
+    normalized_identity(identity)
+    with telemetry.observe("digital_twin.query"):
+        try:
+            rows: list[dict[str, str]] = []
+            if scope in {"profile", "all"}:
+                rows.extend(await asyncio.to_thread(_sparql_rows, PROFILE_FACTS_QUERY))
+            if scope in {"learning", "all"}:
+                rows.extend(await asyncio.to_thread(_sparql_rows, LEARNING_FACTS_QUERY))
+            if scope in {"journal", "all"}:
+                rows.extend(await asyncio.to_thread(_sparql_rows, JOURNAL_FACTS_QUERY))
+            return {"scope": scope, "query": query.strip(), "facts": _filter_facts(rows, query)}
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/v1/digital-twin/ingestions", status_code=202)
+async def enqueue_digital_twin(
+    body: DigitalTwinIngestionRequest,
+    _: None = Depends(authenticate),
+):
+    with telemetry.observe("digital_twin.enqueue"):
+        try:
+            return await asyncio.to_thread(
+                service().enqueue_digital_twin,
+                identity=normalized_identity(body.identity),
+                session_id=body.session_id,
+                message_id=body.message_id,
+                transcript=body.transcript,
+                captured_at=body.captured_at.isoformat(),
+            )
+        except ProposalError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/v1/digital-twin/journal")
+async def write_digital_twin_journal(
+    body: JournalCapture,
+    _: None = Depends(authenticate_digital_twin_writer),
+):
+    normalized_identity(body.identity)
+    with telemetry.observe("digital_twin.write"):
+        try:
+            await asyncio.to_thread(_sparql_update, _journal_update(body))
+            return {"captureId": body.id, "entries": len(body.entries)}
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @app.post("/v1/tasks", status_code=201)

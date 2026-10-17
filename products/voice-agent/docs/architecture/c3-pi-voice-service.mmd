@@ -1,7 +1,7 @@
 flowchart LR
     BROKER[External container<br/><b>Inference Broker</b><br/>turn, transcript, and context API caller]
     PROVIDER[External system<br/><b>Model Provider</b>]
-    GATEWAY[External container<br/><b>Agent Gateway</b><br/>task lifecycle]
+    GATEWAY[External container<br/><b>Agent Gateway</b><br/>task lifecycle and personal knowledge]
     VM[External container<br/><b>Voice Tool Sandbox</b><br/>Gondolin VM]
     WASSETTE[External container<br/><b>Wassette Integration Runtime</b><br/>native MCP subprocess with capability-scoped WASM components]
     STATE[(External data store<br/><b>Voice Runtime Data</b><br/>sessions, workspace, skills)]
@@ -13,10 +13,10 @@ flowchart LR
         SESSION["Component<br/><b>Agent Session</b><br/>persistent Pi context and streamed model events"]
         MODEL["Component<br/><b>Model Runtime</b><br/>host credentials with model network disabled"]
         SKILLS["Component<br/><b>Skill Resource Loader</b><br/>discovers trusted read-only SKILL.md resources"]
-        TOOLS["Component<br/><b>Task Lifecycle Tools</b><br/>propose, submit, inspect, approve, and cancel"]
+        KNOWLEDGE["Component<br/><b>Personal Knowledge Tool</b><br/>bounded read-only digital-twin queries"]
         WORKSPACE["Component<br/><b>Gondolin Workspace Adapter</b><br/>creates VM-backed read, write, edit, and bash tools"]
         SEARCH["Component<br/><b>Deferred Tool Search</b><br/>reveals MCP tools only when the model searches for them"]
-        MCP["Component<br/><b>Wassette MCP Registration</b><br/>stdio child process with orchestrator credentials scrubbed"]
+        MCP["Component<br/><b>Wassette MCP Registration</b><br/>stdio child with a dedicated mode-0600 task env file"]
         TRANSCRIPT["Component<br/><b>Public Transcript Projection</b><br/>bounded user, assistant, and tool-status entries"]
         USAGE["Component<br/><b>Context Usage Projection</b><br/>tokens, window, percentage, and compactability"]
         PERSIST["Component<br/><b>Session Manager</b><br/>loads and persists the voice session branch"]
@@ -24,7 +24,7 @@ flowchart LR
         HTTP --> QUEUE --> SESSION
         MODEL --> SESSION
         SKILLS --> SESSION
-        TOOLS --> SESSION
+        KNOWLEDGE --> SESSION
         WORKSPACE --> SESSION
         SESSION --> SEARCH --> MCP
         SESSION --> TRANSCRIPT
@@ -34,9 +34,10 @@ flowchart LR
 
     BROKER -->|"private turn and projection HTTP"| HTTP
     SESSION -->|"model requests"| PROVIDER
-    TOOLS -->|"identity-bound task commands and queries"| GATEWAY
+    KNOWLEDGE -->|"identity-bound read-only knowledge queries"| GATEWAY
     WORKSPACE -->|"VM lifecycle and tools"| VM
     MCP -->|"MCP over stdio<br/>configured component directory"| WASSETTE
+    WASSETTE -->|"composed tasking component<br/>identity-bound task commands"| GATEWAY
     SKILLS -->|"read only"| STATE
     PERSIST -->|"session files"| STATE
     TRANSCRIPT -->|"bounded display projection"| HTTP
@@ -45,6 +46,6 @@ flowchart LR
     classDef component fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
     classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
-    class HTTP,QUEUE,SESSION,MODEL,SKILLS,TOOLS,WORKSPACE,SEARCH,MCP,TRANSCRIPT,USAGE,PERSIST component;
+    class HTTP,QUEUE,SESSION,MODEL,SKILLS,KNOWLEDGE,WORKSPACE,SEARCH,MCP,TRANSCRIPT,USAGE,PERSIST component;
     class BROKER,PROVIDER,GATEWAY,VM,WASSETTE external;
     class STATE data;

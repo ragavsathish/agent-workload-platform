@@ -1,0 +1,11 @@
+PREFIX schema: <https://schema.org/>
+
+SELECT ?kind ?label ?source WHERE {
+  GRAPH <urn:awp:digital-twin:graph:journal> {
+    ?source a schema:CreativeWork ;
+      schema:additionalType ?kind ;
+      schema:text ?label .
+  }
+}
+ORDER BY DESC(?source)
+LIMIT 200

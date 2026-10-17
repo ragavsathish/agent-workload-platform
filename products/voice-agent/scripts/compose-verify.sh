@@ -8,10 +8,10 @@ pass() { printf 'PASS  %s\n' "$*"; }
 warn() { printf 'WARN  %s\n' "$*"; }
 fail() { printf 'FAIL  %s\n' "$*"; failures=$((failures + 1)); }
 
-services=(gitea habitat s3mock postgres fluent-bit otel-lgtm agent-gateway tailscale voice-edge traefik)
-secure_services=(gitea habitat s3mock fluent-bit agent-gateway tailscale voice-edge traefik)
+services=(gitea habitat s3mock postgres oxigraph fluent-bit otel-lgtm agent-gateway tailscale voice-edge traefik)
+secure_services=(gitea habitat s3mock oxigraph fluent-bit agent-gateway tailscale voice-edge traefik)
 no_log_services=(otel-lgtm)
-bounded_log_services=(gitea habitat fluent-bit agent-gateway voice-edge traefik)
+bounded_log_services=(gitea habitat oxigraph fluent-bit agent-gateway voice-edge traefik)
 
 for service in "${services[@]}"; do
   cid="$("${compose[@]}" ps -q "$service")"
@@ -95,6 +95,29 @@ habitat_cid="$("${compose[@]}" ps -q habitat)"
 [[ -z "$(docker port "$habitat_cid" 2>/dev/null)" ]] \
   && pass "Habitat publishes no Docker port" \
   || fail "Habitat publishes a Docker port"
+oxigraph_cid="$("${compose[@]}" ps -q oxigraph)"
+[[ -z "$(docker port "$oxigraph_cid" 2>/dev/null)" ]] \
+  && pass "Oxigraph publishes no Docker port" \
+  || fail "Oxigraph publishes a Docker port"
+if docker inspect -f '{{range .Mounts}}{{println .Type .Destination}}{{end}}' "$oxigraph_cid" \
+  | grep -Fxq 'volume /data'; then
+  pass "Oxigraph persists RDF data in a named volume"
+else
+  fail "Oxigraph persistent named volume is missing"
+fi
+oxigraph_ready=false
+for _ in {1..30}; do
+  if "${compose[@]}" exec -T gitea wget -q -O - \
+    'http://oxigraph:7878/query?query=ASK%20%7B%20%7D' 2>/dev/null \
+    | grep -Eq 'true|boolean'; then
+    oxigraph_ready=true
+    break
+  fi
+  sleep 1
+done
+[[ "$oxigraph_ready" == true ]] \
+  && pass "Oxigraph answers SPARQL on the private data network" \
+  || fail "Oxigraph SPARQL endpoint is unavailable"
 habitat_password="$(<"$root/deploy/secrets/habitat-database-password")"
 habitat_privileges="$(docker exec -e PGPASSWORD="$habitat_password" \
   "$("${compose[@]}" ps -q postgres)" \

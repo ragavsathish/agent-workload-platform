@@ -31,6 +31,7 @@ flowchart LR
                 POSTGRES[("PostgreSQL<br/>proposals · queue · checkpoints")]
                 S3[("S3Mock<br/>workspaces · results")]
                 GITEA[("Gitea<br/>Git · Actions · packages")]
+                OXIGRAPH[("Oxigraph<br/>private SPARQL · persistent RDF")]
             end
 
             subgraph MONITOR_NET["monitoring · internal"]
@@ -42,6 +43,7 @@ flowchart LR
             EDGE -->|"task API"| GATEWAY
             GATEWAY --> POSTGRES
             GATEWAY --> S3
+            GATEWAY -->|"fixed read-only SPARQL"| OXIGRAPH
             HABITAT -->|"scoped queue SQL"| POSTGRES
             ROUTER -->|"/queue/"| HABITAT
             ROUTER -->|"/git/"| GITEA
@@ -85,6 +87,8 @@ flowchart LR
         end
 
         EDGE -->|"bearer · host-access"| BROKER
+        PI -->|"bearer · bounded knowledge tool"| GATEWAY
+        VOICE_WASSETTE -->|"component-scoped bearer · task tools"| GATEWAY
         PI -->|"native tools"| VOICE_TOOLS
         TASK_PI -->|"isolated tools"| TASK_TOOLS
         BUILDER_MANAGER -->|"resume · checkpoint"| RUNNER
@@ -123,4 +127,4 @@ flowchart LR
     class BROWSER,BROKER,PI,WORKER,TASK_PI,BUILDER_MANAGER,VOICE_WASSETTE,TASK_WASSETTE,HOST_METRICS,VOICE_TOOLS,TASK_TOOLS,RUNNER,DOCKERD,HABITAT,DOCKER_METRICS,OTEL runtime;
     class INGRESS,ROUTER,EDGE,GATEWAY security;
     class TRUST_RISK warning;
-    class POSTGRES,S3,GITEA,RUNTIME data;
+    class POSTGRES,S3,GITEA,OXIGRAPH,RUNTIME data;

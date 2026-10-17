@@ -1,0 +1,11 @@
+{
+  "image": "digital-twin-ingest:v1",
+  "build": {
+    "context": "products/voice-agent/apps/pi-agent/digital-twin/runtime/image",
+    "dockerfile": "products/voice-agent/apps/pi-agent/digital-twin/runtime/image/Dockerfile",
+    "assetConfig": "products/voice-agent/apps/pi-agent/digital-twin/runtime/image/gondolin.aarch64.json",
+    "publish": true
+  },
+  "memory": "1G",
+  "cpus": 1
+}

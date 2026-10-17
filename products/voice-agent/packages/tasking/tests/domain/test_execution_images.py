@@ -57,6 +57,7 @@ def test_loads_a_deterministic_project_image_build_plan(tmp_path: Path) -> None:
     plan = load_execution_image_plan(tmp_path, source_revision=revision)
 
     assert plan is not None
+    assert plan.config_path == Path(".pi/gondolin.json")
     assert plan.image_ref == "project-build:v1"
     assert plan.context == Path("container")
     assert plan.dockerfile == Path("container/Dockerfile")
@@ -188,3 +189,33 @@ def test_requires_build_contract_for_a_project_image(tmp_path: Path) -> None:
 
     with pytest.raises(ExecutionImageConfigurationError, match="build"):
         load_execution_image_plan(tmp_path, source_revision="abc123")
+
+
+def test_loads_an_explicit_workload_image_declaration(tmp_path: Path) -> None:
+    (tmp_path / "workload").mkdir()
+    (tmp_path / "workload" / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    (tmp_path / "workload" / "assets.json").write_text("{}\n", encoding="utf-8")
+    config_path = Path("workload/gondolin.json")
+    (tmp_path / config_path).write_text(
+        json.dumps({
+            "image": "digital-twin-ingest:v1",
+            "build": {
+                "context": "workload",
+                "dockerfile": "workload/Dockerfile",
+                "assetConfig": "workload/assets.json",
+                "publish": True,
+            },
+        }),
+        encoding="utf-8",
+    )
+    revision = commit_workspace(tmp_path)
+
+    plan = load_execution_image_plan(
+        tmp_path,
+        source_revision=revision,
+        config_path=config_path,
+    )
+
+    assert plan is not None
+    assert plan.config_path == config_path
+    assert plan.image_ref == "digital-twin-ingest:v1"

@@ -1,4 +1,4 @@
-.PHONY: setup build up start logs down recreate verify cycle-test login status grafana-password warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e playwright-voice playwright-diagnostics playwright-grafana host-preflight install-host-services wassette-arxiv-build wassette-arxiv-install wassette-c4-grafana-build wassette-c4-grafana-install grafana-c4-dashboard db-init broker worker pull-model check
+.PHONY: setup build up start logs down recreate verify cycle-test login status grafana-password warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e playwright-voice playwright-diagnostics playwright-grafana host-preflight install-host-services wassette-arxiv-build wassette-arxiv-install wassette-c4-grafana-build wassette-c4-grafana-install wassette-tasking-build wassette-tasking-install grafana-c4-dashboard digital-twin-image-build digital-twin-load digital-twin-query digital-twin-validate digital-twin-test digital-twin-identify-skills digital-twin-capture-journal digital-twin-eval db-init broker worker pull-model check
 
 COMPOSE = docker compose --env-file deploy/.env -f deploy/compose.yml
 
@@ -28,7 +28,7 @@ start:
 
 logs:
 	@mkdir -p "$$HOME/Library/Logs/PipecatEdge"
-	@touch "$$HOME/Library/Logs/PipecatEdge/broker.log" "$$HOME/Library/Logs/PipecatEdge/pi-voice.log" "$$HOME/Library/Logs/PipecatEdge/worker.log" "$$HOME/Library/Logs/PipecatEdge/image-builder.log" "$$HOME/Library/Logs/PipecatEdge/host-observability.log"
+	@touch "$$HOME/Library/Logs/PipecatEdge/broker.log" "$$HOME/Library/Logs/PipecatEdge/pi-voice.log" "$$HOME/Library/Logs/PipecatEdge/worker.log" "$$HOME/Library/Logs/PipecatEdge/image-builder.log" "$$HOME/Library/Logs/PipecatEdge/host-observability.log" "$$HOME/Library/Logs/PipecatEdge/digital-twin-listener.log"
 	@chmod 600 "$$HOME/Library/Logs/PipecatEdge/"*.log
 	@interrupted=0; \
 	tail -n 100 -F "$$HOME/Library/Logs/PipecatEdge/"*.log & tail_pid=$$!; \
@@ -97,7 +97,7 @@ playwright-grafana:
 host-preflight:
 	./scripts/host-preflight.sh
 
-install-host-services: wassette-arxiv-install wassette-c4-grafana-install
+install-host-services: wassette-arxiv-install wassette-c4-grafana-install wassette-tasking-install digital-twin-image-build
 	./scripts/install-launch-agents.sh
 
 wassette-arxiv-build:
@@ -112,8 +112,58 @@ wassette-c4-grafana-build:
 wassette-c4-grafana-install: wassette-c4-grafana-build
 	$(MAKE) -C components/c4-grafana-ts install
 
+wassette-tasking-build:
+	$(MAKE) -C components/tasking-ts build
+
+wassette-tasking-install: wassette-tasking-build
+	$(MAKE) -C components/tasking-ts install
+
 grafana-c4-dashboard: wassette-c4-grafana-build
 	C4_GRAFANA_WASM="$(CURDIR)/components/c4-grafana-ts/dist/c4-grafana.wasm" node deploy/observability/generate-c4-heatmap.mjs
+
+digital-twin-image-build:
+	./scripts/gitea-sync.sh
+	pnpm --dir ../.. --filter @agent-workload-platform/gondolin-session build
+	PYTHONPATH=packages/tasking/src uv run --project apps/worker python scripts/install-digital-twin-image.py
+
+digital-twin-load:
+	./apps/pi-agent/digital-twin/runtime/scripts/load.sh
+
+digital-twin-query:
+	./apps/pi-agent/digital-twin/runtime/scripts/query.sh $(QUERY)
+
+digital-twin-validate:
+	uv run --with 'pyshacl>=0.30,<1' python apps/pi-agent/digital-twin/runtime/scripts/validate.py \
+		--shapes apps/pi-agent/digital-twin/runtime/rdf/shapes/profile.shacl.ttl \
+		$(or $(DATA),apps/pi-agent/digital-twin/runtime/rdf/private)
+
+digital-twin-test:
+	./apps/pi-agent/digital-twin/tests/e2e.sh
+
+digital-twin-identify-skills:
+	pnpm --dir apps/pi-agent digital-twin:skills
+
+digital-twin-capture-journal:
+	./apps/pi-agent/digital-twin/runtime/scripts/capture-journal.sh
+
+digital-twin-eval:
+	pnpm --dir apps/pi-agent eval:classifier $(ARGS)
+
+digital-twin-judge-calibration:
+	pnpm --dir apps/pi-agent eval:judge-calibration $(ARGS)
+
+digital-twin-judge-report:
+	pnpm --dir apps/pi-agent eval:judge-report -- $(RESULTS)
+
+digital-twin-pull-judge:
+	lms get --gguf --yes https://huggingface.co/AtlaAI/Selene-1-Mini-Llama-3.1-8B-Q4_K_M-GGUF
+
+digital-twin-load-judge:
+	@if lms ps | rg -q '^selene-1-mini-llama-3.1-8b'; then \
+		echo 'Selene judge is already loaded.'; \
+	else \
+		lms load selene-1-mini-llama-3.1-8b --identifier selene-1-mini-llama-3.1-8b --yes; \
+	fi
 
 db-init:
 	./scripts/db-init.sh
@@ -129,10 +179,12 @@ pull-model:
 
 check:
 	$(MAKE) -C components/c4-grafana-ts check
+	$(MAKE) -C components/tasking-ts check
 	pnpm --dir ../.. --filter @agent-workload-platform/otel test
 	pnpm --dir ../.. --filter @agent-workload-platform/gondolin-session check
 	pnpm --dir ../.. --filter @agent-workload-platform/voice-pi-agent check
 	pnpm --dir ../.. --filter @agent-workload-platform/voice-pi-agent test
+	pnpm --dir apps/pi-agent exec promptfoo validate config -c digital-twin/eval/promptfooconfig.mjs
 	uv sync --project apps/broker --python 3.13
 	uv run --project apps/broker ruff check --config apps/broker/pyproject.toml apps/broker packages/telemetry deploy/test_prepare_compose.py deploy/test_finalize_edge.py
 	uv run --project apps/broker pyright --project apps/broker/pyproject.toml apps/broker packages/telemetry

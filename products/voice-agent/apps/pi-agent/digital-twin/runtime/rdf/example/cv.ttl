@@ -1,0 +1,23 @@
+@prefix schema: <https://schema.org/> .
+@prefix org: <http://www.w3.org/ns/org#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex: <urn:example:digital-twin:> .
+
+ex:person a schema:Person ;
+  schema:name "Example Person" ;
+  schema:knowsAbout ex:skill-rdf .
+
+ex:employer a schema:Organization ;
+  schema:name "Example Organization" .
+
+ex:role-engineer a org:Role ;
+  schema:roleName "Engineer"@en .
+
+ex:membership-example a org:Membership ;
+  org:member ex:person ;
+  org:organization ex:employer ;
+  org:role ex:role-engineer ;
+  schema:startDate "2024-01"^^xsd:gYearMonth .
+
+ex:skill-rdf a schema:DefinedTerm ;
+  schema:name "Resource Description Framework"@en .

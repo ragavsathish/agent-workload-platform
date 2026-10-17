@@ -154,6 +154,9 @@ activemq-data/
 deploy/keys/
 deploy/secrets/
 deploy/edge-bundle/
+apps/pi-agent/digital-twin/runtime/rdf/private/
+apps/pi-agent/.promptfoo/
+apps/pi-agent/digital-twin/eval/results/
 apps/edge/.env
 apps/edge/.venv/
 apps/edge/client-dist/

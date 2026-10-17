@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import tempfile
@@ -98,6 +99,29 @@ def run_pi(
     }
 
 
+def run_digital_twin(settings: Settings, payload: dict[str, Any]) -> dict[str, Any]:
+    if settings.digital_twin_runner is None:
+        raise RuntimeError("DIGITAL_TWIN_RUNNER is required for digital twin tasks")
+    completed = subprocess.run(
+        [settings.node_binary, str(settings.digital_twin_runner)],
+        input=json.dumps(payload),
+        text=True,
+        capture_output=True,
+        timeout=settings.digital_twin_timeout_seconds,
+        check=False,
+        env=os.environ.copy(),
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"digital twin runner exited with {completed.returncode}: "
+            f"{completed.stderr[-2_000:]}"
+        )
+    result = json.loads(completed.stdout)
+    if not isinstance(result, dict):
+        raise RuntimeError("digital twin runner returned an invalid result")
+    return cast(dict[str, Any], result)
+
+
 def create_worker(settings: Settings) -> Absurd:
     validate_worker(settings)
     absurd = Absurd(settings.database_url, queue_name=settings.queue, default_max_attempts=1)
@@ -121,6 +145,19 @@ def create_worker(settings: Settings) -> Absurd:
     def agent_run(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
         with telemetry.observe("task.run"):
             return run_agent_task(params, ctx)
+
+    @absurd.register_task(
+        "digital-twin-ingest",
+        queue=settings.queue,
+        default_max_attempts=3,
+        default_cancellation={"max_duration": settings.digital_twin_timeout_seconds + 30},
+    )
+    def digital_twin_ingest(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
+        with telemetry.observe("digital_twin.ingest"):
+            return cast(
+                dict[str, Any],
+                ctx.step("run-digital-twin-vm", lambda: run_digital_twin(settings, params)),
+            )
 
     def run_agent_task(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
         task_id = str(ctx.task_id)

@@ -77,6 +77,22 @@ def main() -> None:
 
     secrets_dir = root / "deploy/secrets"
     secrets_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    writer_token_path = secrets_dir / "digital-twin-writer-token"
+    configured_writer_token = values.get("DIGITAL_TWIN_WRITER_TOKEN") or ""
+    if configured_writer_token and not configured_writer_token.startswith("replace-with-"):
+        writer_token = configured_writer_token
+    elif writer_token_path.is_file():
+        writer_token = writer_token_path.read_text(encoding="utf-8").strip()
+    else:
+        writer_token = secrets.token_urlsafe(32)
+    reader_token_path = secrets_dir / "digital-twin-reader-token"
+    configured_reader_token = values.get("DIGITAL_TWIN_READER_TOKEN") or ""
+    if configured_reader_token and not configured_reader_token.startswith("replace-with-"):
+        reader_token = configured_reader_token
+    elif reader_token_path.is_file():
+        reader_token = reader_token_path.read_text(encoding="utf-8").strip()
+    else:
+        reader_token = secrets.token_urlsafe(32)
     input_filter = (values.get("VOICE_INPUT_FILTER") or "rnnoise").strip().lower()
     if input_filter not in {"rnnoise", "voxlock"}:
         raise SystemExit("VOICE_INPUT_FILTER must be rnnoise or voxlock")
@@ -133,6 +149,8 @@ def main() -> None:
     files = {
         "broker-token": broker,
         "agent-gateway-token": gateway,
+        "digital-twin-reader-token": reader_token,
+        "digital-twin-writer-token": writer_token,
         "approval-secret": approval,
         "postgres-password": postgres,
         "database-url": (

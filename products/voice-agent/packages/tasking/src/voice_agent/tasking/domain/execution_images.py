@@ -17,6 +17,7 @@ class ExecutionImageConfigurationError(ValueError):
 
 @dataclass(frozen=True)
 class ExecutionImagePlan:
+    config_path: Path
     image_ref: str
     context: Path
     dockerfile: Path
@@ -47,8 +48,8 @@ def _relative_path(workspace: Path, value: object, field: str) -> Path:
     return relative
 
 
-def _read_config(workspace: Path) -> dict[str, Any] | None:
-    path = workspace / ".pi" / "gondolin.json"
+def _read_config(workspace: Path, config_path: Path) -> dict[str, Any] | None:
+    path = workspace / config_path
     if not path.is_file():
         return None
     try:
@@ -81,11 +82,15 @@ def _git_object_id(workspace: Path, source_revision: str, path: Path) -> str:
 
 
 def load_execution_image_plan(
-    workspace: Path, *, source_revision: str
+    workspace: Path,
+    *,
+    source_revision: str,
+    config_path: Path = Path(".pi/gondolin.json"),
 ) -> ExecutionImagePlan | None:
     """Return a build plan without granting the repository arbitrary host paths."""
 
-    config = _read_config(workspace)
+    config_relative = _relative_path(workspace, str(config_path), "imageConfig")
+    config = _read_config(workspace, config_relative)
     if config is None or "image" not in config:
         return None
     image_ref = config["image"]
@@ -139,6 +144,7 @@ def load_execution_image_plan(
     )
     digest = hashlib.sha256(cache_contract.encode()).hexdigest()[:32]
     return ExecutionImagePlan(
+        config_path=config_relative,
         image_ref=image_ref,
         context=context,
         dockerfile=dockerfile,

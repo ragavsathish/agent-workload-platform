@@ -4,34 +4,33 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+import { canManuallyCompact } from "./dist/voice-agent/voice-agent.js";
 import {
-  canManuallyCompact,
   createWassetteMcpRegistration,
   isolatedVoiceMcpConfig,
-  latestConversationPrompt,
-  listVoiceSessions,
-  normalizeMessages,
-  openVoiceSessionManager,
-  parseEnvFile,
+  skillResourceLoader,
+} from "./dist/voice-agent/pi-session.js";
+import {
   PublicTranscript,
   publicSessionTranscript,
-  readVoiceSession,
   restorePublicTranscript,
-  skillResourceLoader,
-  splitConversation,
-  submitAgentTask,
-} from "./dist/voice-agent-service.js";
+} from "./dist/voice-agent/public-transcript.js";
+import { parseVoiceTurn } from "./dist/voice-agent/conversation.js";
+import { createPersonalKnowledge } from "./dist/voice-agent/personal-knowledge.js";
+import { parseEnvFile } from "./dist/voice-agent/voice-config.js";
+import { matchVoiceRoute } from "./dist/voice-agent/voice-http-server.js";
 import {
-  createGondolinMounts,
-  createGondolinServiceAccess,
-  createGondolinTools,
-  createGondolinVmOptions,
+  createVoiceGondolinConfig,
   GUEST_GITEA_ENDPOINT,
   GUEST_PROMETHEUS_ENDPOINT,
   GUEST_S3MOCK_ENDPOINT,
   GUEST_SKILLS,
-  toGondolinPath,
-} from "./dist/gondolin-workspace.js";
+} from "./dist/voice-agent/voice-gondolin.js";
+import {
+  listVoiceSessions,
+  openVoiceSessionManager,
+  readVoiceSession,
+} from "./dist/voice-agent/voice-sessions.js";
 
 test("orchestrator Pi registers Wassette through native deferred MCP", async () => {
   const registrations = [];
@@ -39,6 +38,7 @@ test("orchestrator Pi registers Wassette through native deferred MCP", async () 
     cwd: "/host/voice-workspace",
     wassetteBin: "/host/bin/wassette",
     wassetteComponentDir: "/host/runtime/wassette-components",
+    wassetteEnvFile: "/host/runtime/wassette-tasking.env",
   })({
     registerMcpServer(name, config) {
       registrations.push({ name, config });
@@ -51,6 +51,8 @@ test("orchestrator Pi registers Wassette through native deferred MCP", async () 
     "run",
     "--component-dir",
     "/host/runtime/wassette-components",
+    "--env-file",
+    "/host/runtime/wassette-tasking.env",
   ]);
   assert.equal(registrations[0].config.exposure, "deferred");
   assert.equal(registrations[0].config.env.GITEA_TOKEN, "");
@@ -60,6 +62,18 @@ test("orchestrator Pi registers Wassette through native deferred MCP", async () 
 
 test("voice MCP ignores shared host and project MCP configuration", () => {
   assert.deepEqual(isolatedVoiceMcpConfig(), { servers: [], errors: [] });
+});
+
+test("voice HTTP routes parse into typed commands", () => {
+  assert.deepEqual(
+    matchVoiceRoute("POST", "/v1/sessions/session-1/resume"),
+    { kind: "resume-session", sessionId: "session-1" },
+  );
+  assert.deepEqual(
+    matchVoiceRoute("POST", "/v1/turn/stream"),
+    { kind: "turn", stream: true },
+  );
+  assert.deepEqual(matchVoiceRoute("DELETE", "/v1/turn"), { kind: "not-found" });
 });
 
 test("persisted session history exposes text and tool status without private payloads", () => {
@@ -185,7 +199,7 @@ test("session catalog always includes the current in-memory voice session", asyn
 });
 
 test("persistent voice VM disables broken macOS QEMU idle resume", () => {
-  const options = createGondolinVmOptions({
+  const options = createVoiceGondolinConfig({
     giteaEndpointUrl: "http://127.0.0.1:3001",
     giteaOwner: "source-publisher",
     giteaToken: "read-only-token",
@@ -200,23 +214,6 @@ test("persistent voice VM disables broken macOS QEMU idle resume", () => {
   });
 
   assert.equal(options.sandbox.qemuIdlePauseMs, 0);
-});
-
-test("voice Pi exposes its native coding tools through Gondolin", () => {
-  const tools = createGondolinTools({ fs: {} }, "/host/workspace");
-  assert.deepEqual(tools.map((tool) => tool.name), ["read", "write", "edit", "bash"]);
-});
-
-test("Gondolin tool paths stay inside the mounted workspace", () => {
-  assert.equal(toGondolinPath("/host/workspace", "/host/workspace"), "/workspace");
-  assert.equal(
-    toGondolinPath("/host/workspace", "/host/workspace/src/app.ts"),
-    "/workspace/src/app.ts",
-  );
-  assert.throws(
-    () => toGondolinPath("/host/workspace", "/host/private.txt"),
-    /path escapes workspace/,
-  );
 });
 
 test("reusable skills have a dedicated guest mount", () => {
@@ -271,7 +268,7 @@ test("Gondolin mounts only writable runtime state and read-only skills", async (
       mkdir(workspace),
       mkdir(skills),
     ]);
-    const mounts = createGondolinMounts({
+    const mounts = createVoiceGondolinConfig({
       giteaEndpointUrl: "http://127.0.0.1:3001",
       giteaOwner: "source-publisher",
       giteaToken: "read-only-token",
@@ -283,9 +280,9 @@ test("Gondolin mounts only writable runtime state and read-only skills", async (
       s3MockBucket: "agent-artifacts",
       s3MockEndpointUrl: "http://127.0.0.1:9090",
       s3MockSecretKey: "local-test",
-    });
-    assert.equal(mounts["/workspace"].readonly, false);
-    assert.equal(mounts["/skills"].readonly, true);
+    }).mounts;
+    assert.equal(mounts["/workspace"], workspace);
+    assert.deepEqual(mounts["/skills"], { hostPath: skills, readonly: true });
     assert.deepEqual(Object.keys(mounts).sort(), ["/skills", "/workspace"]);
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -293,7 +290,7 @@ test("Gondolin mounts only writable runtime state and read-only skills", async (
 });
 
 test("voice Gondolin exposes only loopback S3Mock and read-only Gitea", async () => {
-  const access = createGondolinServiceAccess({
+  const config = createVoiceGondolinConfig({
     giteaEndpointUrl: "http://127.0.0.1:3001",
     giteaOwner: "source-publisher",
     giteaToken: "read-only-token",
@@ -307,34 +304,34 @@ test("voice Gondolin exposes only loopback S3Mock and read-only Gitea", async ()
     s3MockSecretKey: "local-secret",
   });
   assert.equal(GUEST_S3MOCK_ENDPOINT, "http://s3mock.local:9090");
-  assert.equal(access.env.S3_ENDPOINT_URL, GUEST_S3MOCK_ENDPOINT);
-  assert.equal(access.env.S3_BUCKET, "agent-artifacts");
-  assert.equal(access.env.GITEA_BASE_URL, GUEST_GITEA_ENDPOINT);
-  assert.equal(access.env.GITEA_OWNER, "source-publisher");
-  assert.equal(access.env.PROMETHEUS_URL, GUEST_PROMETHEUS_ENDPOINT);
+  assert.equal(config.environment.S3_ENDPOINT_URL, GUEST_S3MOCK_ENDPOINT);
+  assert.equal(config.environment.S3_BUCKET, "agent-artifacts");
+  assert.equal(config.environment.GITEA_BASE_URL, GUEST_GITEA_ENDPOINT);
+  assert.equal(config.environment.GITEA_OWNER, "source-publisher");
+  assert.equal(config.environment.PROMETHEUS_URL, GUEST_PROMETHEUS_ENDPOINT);
 
-  const rewritten = await access.httpHooks.onRequest(
+  const rewritten = await config.network.onRequest(
     new Request("http://s3mock.local:9090/agent-artifacts"),
   );
   assert.equal(rewritten.url, "http://127.0.0.1:9090/agent-artifacts");
-  const gitea = await access.httpHooks.onRequest(
+  const gitea = await config.network.onRequest(
     new Request("http://gitea.local:3001/source-publisher/repository.git/info/refs"),
   );
   assert.equal(
     gitea.url,
     "http://127.0.0.1:3001/source-publisher/repository.git/info/refs",
   );
-  const prometheus = await access.httpHooks.onRequest(
+  const prometheus = await config.network.onRequest(
     new Request("http://prometheus.local:9091/api/v1/query?query=up"),
   );
   assert.equal(
     prometheus.url,
     "http://127.0.0.1:9091/api/v1/query?query=up",
   );
-  const denied = await access.httpHooks.onRequest(new Request("http://example.com/"));
+  const denied = await config.network.onRequest(new Request("http://example.com/"));
   assert.equal(denied.status, 403);
   assert.throws(
-    () => createGondolinServiceAccess({
+    () => createVoiceGondolinConfig({
       giteaEndpointUrl: "http://127.0.0.1:3001",
       giteaOwner: "source-publisher",
       giteaToken: "read-only-token",
@@ -350,37 +347,26 @@ test("voice Gondolin exposes only loopback S3Mock and read-only Gitea", async ()
   );
 });
 
-test("voice Pi can submit durable work directly to another Pi worker", async () => {
+test("voice Pi queries bounded personal knowledge through the gateway", async () => {
   const requests = [];
-  const result = await submitAgentTask(
-    async (method, path, body) => {
-      requests.push({ method, path, body });
-      return path === "/tasks"
-        ? { id: "proposal-1", status: "pending" }
-        : { id: "proposal-1", status: "queued" };
+  const knowledge = createPersonalKnowledge({
+    baseUrl: "http://gateway.test/v1",
+    token: "gateway-token",
+    identity: "owner@example.com",
+    fetch: async (url, init) => {
+      requests.push({ url: String(url), method: init.method });
+      return Response.json({ results: [] });
     },
-    "owner@example.com",
-    "Run the complete test suite.",
-    "default",
-  );
+  });
 
-  assert.deepEqual(requests, [
-    {
-      method: "POST",
-      path: "/tasks",
-      body: {
-        identity: "owner@example.com",
-        instruction: "Run the complete test suite.",
-        workspace: "default",
-      },
-    },
-    {
-      method: "POST",
-      path: "/tasks/proposal-1/approve",
-      body: { identity: "owner@example.com" },
-    },
-  ]);
-  assert.deepEqual(result, { id: "proposal-1", status: "queued" });
+  assert.deepEqual(
+    await knowledge.query({ scope: "learning", query: " DDD & EventStorming " }),
+    { results: [] },
+  );
+  assert.deepEqual(requests, [{
+    url: "http://gateway.test/v1/digital-twin?identity=owner%40example.com&scope=learning&query=DDD+%26+EventStorming",
+    method: "GET",
+  }]);
 });
 
 test("parseEnvFile accepts the installed quoted environment format", () => {
@@ -456,37 +442,35 @@ test("a fresh voice session preserves the previous persisted conversation", asyn
   }
 });
 
-test("voice messages keep the system prompt separate from the transcript", () => {
-  const messages = normalizeMessages([
+test("voice messages keep the system prompt separate from the turn prompt", () => {
+  assert.deepEqual(parseVoiceTurn([
     { role: "system", content: "Be exact." },
     { role: "user", content: "Check p-1." },
-  ]);
-  assert.deepEqual(splitConversation(messages), {
+  ]), {
     systemPrompt: "Be exact.",
-    transcript: [{ role: "user", content: "Check p-1." }],
+    prompt: "Check p-1.",
   });
 });
 
 test("voice messages require an actionable user or developer turn", () => {
   assert.throws(
-    () => normalizeMessages([{ role: "system", content: "Be exact." }]),
+    () => parseVoiceTurn([{ role: "system", content: "Be exact." }]),
     /user or developer message/,
   );
 });
 
 test("a Pipecat developer bootstrap becomes the first agent turn", () => {
-  const messages = normalizeMessages([
+  assert.deepEqual(parseVoiceTurn([
     { role: "system", content: "Be exact." },
     { role: "developer", content: "Say ready." },
-  ]);
-  assert.deepEqual(splitConversation(messages), {
+  ]), {
     systemPrompt: "Be exact.",
-    transcript: [{ role: "user", content: "Say ready." }],
+    prompt: "Say ready.",
   });
 });
 
 test("a persistent Pi session receives only the newest user turn", () => {
-  const messages = normalizeMessages([
+  const turn = parseVoiceTurn([
     { role: "system", content: "Be exact." },
     { role: "developer", content: "Say ready." },
     { role: "assistant", content: "Voice interface ready." },
@@ -494,8 +478,7 @@ test("a persistent Pi session receives only the newest user turn", () => {
     { role: "assistant", content: "Remembered proposal p-1." },
     { role: "user", content: "Which proposal?" },
   ]);
-  const { transcript } = splitConversation(messages);
-  assert.equal(latestConversationPrompt(transcript), "Which proposal?");
+  assert.equal(turn.prompt, "Which proposal?");
 });
 
 test("manual compaction follows Pi's retained-context boundary instead of a 64k gate", () => {
@@ -507,7 +490,10 @@ test("manual compaction follows Pi's retained-context boundary instead of a 64k 
 
 test("a persistent Pi session rejects a conversation without a final user turn", () => {
   assert.throws(
-    () => latestConversationPrompt([{ role: "assistant", content: "Done." }]),
+    () => parseVoiceTurn([
+      { role: "user", content: "Do the work." },
+      { role: "assistant", content: "Done." },
+    ]),
     /conversation must end with a user message/,
   );
 });

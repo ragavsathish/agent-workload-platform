@@ -1,0 +1,21 @@
+{
+  "arch": "aarch64",
+  "distro": "alpine",
+  "alpine": {
+    "version": "3.23.0",
+    "kernelPackage": "linux-virt",
+    "kernelImage": "vmlinuz-virt",
+    "initramfsPackages": ["linux-virt"],
+    "krunfwVersion": "v5.2.1"
+  },
+  "oci": {
+    "image": "digital-twin-ingest:v1",
+    "runtime": "docker",
+    "platform": "linux/arm64",
+    "pullPolicy": "never"
+  },
+  "rootfs": {
+    "label": "digital-twin-ingest",
+    "sizeMb": 512
+  }
+}

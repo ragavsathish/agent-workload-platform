@@ -1,0 +1,27 @@
+PREFIX schema: <https://schema.org/>
+
+SELECT ?kind ?label ?source WHERE {
+  GRAPH <urn:awp:digital-twin:graph:learning> {
+    {
+      ?watch a schema:WatchAction ;
+        schema:object ?source .
+      ?source schema:name ?label .
+      BIND("watched resource" AS ?kind)
+    }
+    UNION
+    {
+      ?resource a schema:LearningResource ;
+        schema:teaches ?topic .
+      ?topic schema:name ?label .
+      BIND(?resource AS ?source)
+      BIND("learning topic" AS ?kind)
+    }
+    UNION
+    {
+      ?source a schema:Claim ;
+        schema:text ?label .
+      BIND("source claim" AS ?kind)
+    }
+  }
+}
+ORDER BY ?kind ?label ?source

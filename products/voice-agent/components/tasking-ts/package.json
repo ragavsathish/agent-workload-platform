@@ -1,0 +1,19 @@
+{
+  "name": "@agent-workload-platform/tasking-component",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm run clean && npm run types && npm run compile && npm run componentize",
+    "clean": "node scripts/clean.mjs",
+    "compile": "tsc -p tsconfig.core.json",
+    "componentize": "mkdir -p dist && jco componentize build/core/index.js --wit wit --world-name tasking-core -o dist/tasking-core.wasm",
+    "typecheck": "npm run types && npm run compile",
+    "types": "jco guest-types wit -o src/core/generated --world-name tasking-core"
+  },
+  "devDependencies": {
+    "@bytecodealliance/componentize-js": "0.19.3",
+    "@bytecodealliance/jco": "1.17.0",
+    "typescript": "5.9.3"
+  }
+}

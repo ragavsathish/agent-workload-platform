@@ -1,0 +1,33 @@
+PREFIX schema: <https://schema.org/>
+PREFIX org: <http://www.w3.org/ns/org#>
+
+SELECT ?kind ?label WHERE {
+  {
+    GRAPH <urn:awp:digital-twin:graph:cv> {
+      ?person a schema:Person ; schema:name ?label .
+    }
+    BIND("person" AS ?kind)
+  }
+  UNION
+  {
+    GRAPH <urn:awp:digital-twin:graph:cv> {
+      ?membership a org:Membership ; org:role/schema:roleName ?label .
+    }
+    BIND("role" AS ?kind)
+  }
+  UNION
+  {
+    GRAPH <urn:awp:digital-twin:graph:cv> {
+      ?person schema:knowsAbout/schema:name ?label .
+    }
+    BIND("skill" AS ?kind)
+  }
+  UNION
+  {
+    GRAPH <urn:awp:digital-twin:graph:conversation> {
+      ?message a schema:Message ; schema:about/schema:name ?label .
+    }
+    BIND("conversation topic" AS ?kind)
+  }
+}
+ORDER BY ?kind ?label

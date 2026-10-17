@@ -64,6 +64,28 @@ An immutable output produced by an Agent Task, such as a patch or result
 document.
 _Avoid_: Transcript, workspace file
 
+## Personal knowledge
+
+**Candidate Assertion**:
+An evidence-bound statement derived from owner speech that may describe a conversation topic, skill,
+or profile change but has not been accepted as a durable profile fact.
+_Avoid_: Fact, memory
+
+**Profile Fact**:
+A reviewed, durable statement about the owner retained independently of the conversation that
+provided its evidence.
+_Avoid_: Candidate assertion, transcript
+
+**Learning Evidence**:
+An owner-confirmed interaction with a learning resource that supports an evolving topic-level view
+of what the owner is learning without, by itself, asserting mastery.
+_Avoid_: Profile fact, skill, watch history
+
+**Source Claim**:
+A proposition attributed to a learning resource and retained with its source lineage; it describes
+what the source says rather than what the owner necessarily believes or knows.
+_Avoid_: Profile fact, ground truth
+
 ## Isolation
 
 **Voice Workspace**:

@@ -53,6 +53,10 @@ ownership and planned extractions are documented in
   exception message, URL parameter, request body, or response body.
 - Database credentials, Pi/provider authentication, sessions, and writable workspaces never enter the voice
   container.
+- Oxigraph runs as an internal-only SPARQL 1.1/RDF store on the Compose `data` network. It publishes
+  no host port and persists only through the `oxigraph-data` named volume. The Agent Gateway is its
+  only application consumer and exposes fixed, bounded, read-only profile and learning queries to
+  the authenticated owner through the Pi Voice Service.
 - The Pi worker runs on macOS, but Pi's standard `read`, `write`, `edit`, and
   `bash` tools are backed by a Gondolin micro-VM with only the immutable task
   workspace mounted at `/workspace`; browser and permission-scoped Wassette
@@ -132,13 +136,19 @@ make publish-workspace WORKSPACE_ID=agent-workload-platform REPOSITORY=/path/to/
 make blackbox-voice UTTERANCE="Propose a task in the default workspace to inspect it"
 make blackbox-e2e # synthetic voice through Pipecat plus a Postgres assertion
 make playwright-grafana # render every C4 panel and attach colors, screenshot, and trace
+make digital-twin-pull-judge # download the official Selene 1 Mini Q4 judge for LM Studio
+make digital-twin-load-judge # load Selene with the API identifier used by the eval
+make digital-twin-eval # compare Von, optional Jev, and local Clef; LM Studio Selene judges outputs
+make digital-twin-judge-calibration # run grouped development/holdout judge calibration
+make digital-twin-judge-report RESULTS=digital-twin/eval/results/judge-calibration.json
 make down         # stop Compose services; preserve Postgres and Tailscale volumes
 make check        # tests, lint, type checks, build, Compose and plist validation
 ```
 
 Postgres and S3Mock are published only on host loopback so the native Pi worker can consume the
 queue and immutable workspace bundles. The bearer-protected agent gateway is also published on
-host loopback so the optional Pi voice backend can use only its four task-lifecycle operations.
+host loopback so the optional Pi voice backend can use bounded task-lifecycle and read-only
+personal-knowledge operations.
 The native inference broker listens on `127.0.0.1:9443`; Docker Desktop makes that protected
 capability available through the private `inference-broker` host-gateway alias. No service listens
 on the Mac LAN interface; browser access is available only through the tailnet listener.
@@ -243,10 +253,10 @@ set `BLACKBOX_USE_TAILSCALE=true` to test an authenticated tunnel namespace. See
 [TESTING.md](TESTING.md) for assertions and failure interpretation.
 
 Set `VOICE_LLM_BACKEND=pi` in `apps/edge/.env` to select the alternate
-`Parakeet v3 -> Pi agent -> restricted Pi task tools -> Kokoro` path. The default remains `ollama`.
+`Parakeet v3 -> Pi agent -> capability-scoped Wassette task component -> Kokoro` path. The default remains `ollama`.
 Pi voice uses a dedicated long-running Node service built on Pi's `createAgentSession()` SDK. The
 service keeps conversation state between turns, reconciles a restarted or reset Pipecat transcript,
-and owns the product's proposal, submission, status, approval, and cancellation tools. Its native
+and consumes submission, status, and cancellation tools from Wassette. Its native
 read, write, edit, and bash operations run only inside the persistent Gondolin Voice Workspace;
 reusable skills are mounted read-only at `/skills`. Committed source is published to the private,
 loopback-only Gitea service during `make start`; the VM may anonymously clone that public-in-Gitea
@@ -255,7 +265,9 @@ ignored files, local secrets, and uncommitted changes are not exposed. It disabl
 host extensions, prompt templates, themes, and context files. The service explicitly registers
 Wassette through Pi's native MCP extension as a deferred tool provider; `tool_search` discovers
 tools from the configured component directory without adding every schema to each turn, and the
-host-native Wassette child process receives a credential-scrubbed environment. Wassette is separate
+host-native Wassette child process receives only a dedicated tasking env file. WAC composes the
+TypeScript task core with its authenticated gateway adapter into the single component loaded by
+Wassette. Wassette is separate
 from the Gondolin VM used for native file and shell tools.
 Kokoro speaks the final text produced
 by Pi after any tool calls complete. `PI_VOICE_MODEL` selects the model; when blank, Pi uses its

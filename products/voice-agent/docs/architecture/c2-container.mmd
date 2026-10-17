@@ -52,6 +52,7 @@ flowchart TB
             VOICE_DATA[("Container data store<br/><b>Voice Runtime Data</b><br/>sessions · workspace · skills")]
             GITEA[("Container data store<br/><b>Git and Image Packages</b><br/>rootless Gitea · refs · immutable assets")]
             ARTIFACTS[("Container data store<br/><b>Workspace and Result Store</b><br/>S3-compatible object storage")]
+            OXIGRAPH[("Container data store<br/><b>Knowledge Graph Store</b><br/>Oxigraph · private SPARQL 1.1 · persistent RDF")]
             DOCKER_METRICS["Container<br/><b>Docker VM Metrics</b><br/>Fluent Bit · Linux VM aggregate"]
             HOST_METRICS["Container<br/><b>Host and Gondolin Metrics</b><br/>Fluent Bit · QEMU process exporter"]
             WASSETTE["Container<br/><b>Wassette Integration Runtime</b><br/>native per-session MCP subprocesses · WebAssembly"]
@@ -59,13 +60,15 @@ flowchart TB
         end
 
         EDGE -->|"browser task API"| GATEWAY
-        PI -->|"voice task tools"| GATEWAY
-        PI -->|"deferred MCP over stdio<br/>credential-scrubbed environment"| WASSETTE
+        PI -->|"bounded personal-knowledge tool"| GATEWAY
+        PI -->|"deferred MCP over stdio<br/>dedicated tasking env file"| WASSETTE
+        WASSETTE -->|"composed task lifecycle tools"| GATEWAY
         TASK_PI -->|"MCP over stdio<br/>allowlisted task tools"| WASSETTE
         PI -->|"session · workspace · skills"| VOICE_DATA
         VOICE_VM -->|"clone · restricted read API · synthetic allowlist"| GITEA
         VOICE_VM -->|"AWS CLI · S3Mock-only HTTP"| ARTIFACTS
         GATEWAY -->|"resolve workspace"| ARTIFACTS
+        GATEWAY -->|"fixed read-only SPARQL<br/>profile and learning facts"| OXIGRAPH
         ARTIFACTS -->|"materialize · capture result"| WORKER
         BUILDER_VM -->|"upload checksummed assets<br/>restricted workflow secret"| GITEA
         GITEA -->|"download image assets"| WORKER
@@ -99,4 +102,4 @@ flowchart TB
     class USER person;
     class TSC,MODELS,INTEGRATIONS external;
     class BROWSER,DIAGNOSTICS,INGRESS,ROUTER,EDGE,BROKER,PI,VOICE_VM,GATEWAY,HABITAT,WORKER,TASK_PI,BUILDER_MANAGER,BUILDER_VM,TASK_VM,DOCKER_METRICS,HOST_METRICS,WASSETTE,OTEL container;
-    class TASKS,VOICE_DATA,GITEA,ARTIFACTS data;
+    class TASKS,VOICE_DATA,GITEA,ARTIFACTS,OXIGRAPH data;

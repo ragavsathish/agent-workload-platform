@@ -1,0 +1,498 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "topic-ddd",
+      "expectedKind": "conversation_topic",
+      "tags": ["topic", "technology"],
+      "transcripts": [
+        "I am exploring domain-driven design at the moment.",
+        "I want to understand strategic DDD more deeply.",
+        "Domain-driven design is a subject I keep returning to.",
+        "I am currently studying bounded contexts and aggregates.",
+        "I have been investigating how DDD applies to our platform."
+      ]
+    },
+    {
+      "id": "topic-knowledge-graphs",
+      "expectedKind": "conversation_topic",
+      "tags": ["topic", "technology"],
+      "transcripts": [
+        "I am learning about RDF knowledge graphs.",
+        "Personal knowledge graphs are one of my current interests.",
+        "I want to explore how SPARQL can support a digital twin.",
+        "I have been reading about provenance in RDF.",
+        "I am investigating graph-based personal memory."
+      ]
+    },
+    {
+      "id": "topic-testing",
+      "expectedKind": "conversation_topic",
+      "tags": ["topic", "testing"],
+      "transcripts": [
+        "I am researching reliable black-box testing strategies.",
+        "Browser test architecture is something I am exploring.",
+        "I want to learn more about trace-first end-to-end tests.",
+        "I am studying how to reduce flaky Playwright tests.",
+        "Test observability is a topic I want to investigate."
+      ]
+    },
+    {
+      "id": "topic-observability",
+      "expectedKind": "conversation_topic",
+      "tags": ["topic", "observability"],
+      "transcripts": [
+        "I am currently learning OpenTelemetry.",
+        "I want to explore service traces and exemplars.",
+        "I have been investigating PromQL for operational dashboards.",
+        "Telemetry-driven architecture diagrams interest me.",
+        "I am studying how metrics and traces can share context."
+      ]
+    },
+    {
+      "id": "topic-voice",
+      "expectedKind": "conversation_topic",
+      "tags": ["topic", "voice"],
+      "transcripts": [
+        "I am exploring local voice agents.",
+        "Realtime speech pipelines are a current area of interest.",
+        "I want to understand interruption handling in voice assistants.",
+        "I am investigating private on-device speech models.",
+        "Voice-agent latency is something I am studying."
+      ]
+    },
+    {
+      "id": "topic-architecture",
+      "expectedKind": "conversation_topic",
+      "tags": ["topic", "architecture"],
+      "transcripts": [
+        "I am learning more about C4 architecture diagrams.",
+        "I want to explore deep module design.",
+        "Software boundaries are a topic I am thinking about.",
+        "I am investigating event-driven service design.",
+        "I am studying how to communicate deployment architecture."
+      ]
+    },
+    {
+      "id": "topic-safety",
+      "expectedKind": "conversation_topic",
+      "tags": ["topic", "safety"],
+      "transcripts": [
+        "I am researching medical-device risk management.",
+        "I want to learn more about ISO 14971.",
+        "Safety-case traceability is a subject I am exploring.",
+        "I have been studying threat and hazard analysis together.",
+        "I am investigating verification for safety controls."
+      ]
+    },
+    {
+      "id": "topic-ai-typing",
+      "expectedKind": "conversation_topic",
+      "tags": ["topic", "ai"],
+      "transcripts": [
+        "I am exploring type-safe AI libraries.",
+        "Structured model output is a current interest of mine.",
+        "I want to compare schema-constrained generation approaches.",
+        "I am investigating open-source classifier models.",
+        "Model confidence calibration is something I am studying."
+      ]
+    },
+    {
+      "id": "topic-learning",
+      "expectedKind": "conversation_topic",
+      "tags": ["topic", "learning"],
+      "transcripts": [
+        "I am exploring ways to learn from watched videos.",
+        "I want to build an evolving model of what I learn.",
+        "Transcript-grounded learning evidence interests me.",
+        "I am studying how to connect videos to source claims.",
+        "I am investigating open-world personal learning models."
+      ]
+    },
+    {
+      "id": "topic-infrastructure",
+      "expectedKind": "conversation_topic",
+      "tags": ["topic", "infrastructure"],
+      "transcripts": [
+        "I am learning about ephemeral build machines.",
+        "I want to explore secure container networking.",
+        "I have been investigating rootless Git hosting.",
+        "I am studying capability-based workload isolation.",
+        "Reproducible builder VMs are a topic I am exploring."
+      ]
+    },
+
+    {
+      "id": "skill-playwright",
+      "expectedKind": "skill_evidence",
+      "tags": ["skill", "explicit", "testing"],
+      "transcripts": [
+        "I use Playwright to build browser tests.",
+        "I know how to capture and inspect Playwright traces.",
+        "I write end-to-end tests with Playwright.",
+        "I can diagnose browser failures using Playwright trace viewer.",
+        "I maintain Playwright test suites for web applications."
+      ]
+    },
+    {
+      "id": "skill-typescript",
+      "expectedKind": "skill_evidence",
+      "tags": ["skill", "explicit", "programming"],
+      "transcripts": [
+        "I write production TypeScript.",
+        "I use TypeScript for service and tooling development.",
+        "I know how to design strict TypeScript APIs.",
+        "I can build Node.js applications in TypeScript.",
+        "TypeScript is one of the languages I work with."
+      ]
+    },
+    {
+      "id": "skill-python",
+      "expectedKind": "skill_evidence",
+      "tags": ["skill", "explicit", "programming"],
+      "transcripts": [
+        "I develop Python services.",
+        "I use Python for backend automation.",
+        "I can build FastAPI applications.",
+        "I write and maintain Python test suites.",
+        "I know Python packaging and dependency management."
+      ]
+    },
+    {
+      "id": "skill-observability",
+      "expectedKind": "skill_evidence",
+      "tags": ["skill", "explicit", "observability"],
+      "transcripts": [
+        "I instrument services with OpenTelemetry.",
+        "I can write PromQL queries for service metrics.",
+        "I build Grafana dashboards for distributed systems.",
+        "I know how to investigate traces in Tempo.",
+        "I operate metrics, logs, and tracing stacks."
+      ]
+    },
+    {
+      "id": "skill-containers",
+      "expectedKind": "skill_evidence",
+      "tags": ["skill", "explicit", "infrastructure"],
+      "transcripts": [
+        "I build and secure Docker Compose environments.",
+        "I know how to isolate containers with private networks.",
+        "I can troubleshoot container health and networking.",
+        "I use Docker for local service orchestration.",
+        "I design capability-restricted container deployments."
+      ]
+    },
+    {
+      "id": "skill-domain-modeling",
+      "expectedKind": "skill_evidence",
+      "tags": ["skill", "explicit", "ddd"],
+      "transcripts": [
+        "I facilitate EventStorming workshops.",
+        "I use domain-driven design in software projects.",
+        "I can identify bounded contexts with a team.",
+        "I model aggregates and domain events.",
+        "I teach tactical DDD patterns to developers."
+      ]
+    },
+    {
+      "id": "skill-rdf",
+      "expectedKind": "skill_evidence",
+      "tags": ["skill", "explicit", "knowledge-graph"],
+      "transcripts": [
+        "I write SPARQL queries against RDF stores.",
+        "I can model provenance with PROV-O.",
+        "I use SHACL to validate RDF graphs.",
+        "I know how to operate Oxigraph.",
+        "I build knowledge graphs with established vocabularies."
+      ]
+    },
+    {
+      "id": "skill-architecture",
+      "expectedKind": "skill_evidence",
+      "tags": ["skill", "explicit", "architecture"],
+      "transcripts": [
+        "I create C4 architecture models.",
+        "I can review software boundaries and dependencies.",
+        "I design event-driven service architectures.",
+        "I document deployment and trust boundaries.",
+        "I lead architecture reviews for engineering teams."
+      ]
+    },
+    {
+      "id": "skill-security",
+      "expectedKind": "skill_evidence",
+      "tags": ["skill", "explicit", "security"],
+      "transcripts": [
+        "I perform STRIDE threat modelling.",
+        "I can design least-privilege service capabilities.",
+        "I review systems for credential exposure risks.",
+        "I build authenticated service boundaries.",
+        "I know how to harden container workloads."
+      ]
+    },
+    {
+      "id": "skill-ci",
+      "expectedKind": "skill_evidence",
+      "tags": ["skill", "explicit", "delivery"],
+      "transcripts": [
+        "I build continuous-integration pipelines.",
+        "I can maintain Git-based release workflows.",
+        "I use automated quality gates before deployment.",
+        "I design reproducible build processes.",
+        "I troubleshoot failing CI jobs."
+      ]
+    },
+
+    {
+      "id": "profile-title",
+      "expectedKind": "profile_update",
+      "expectedProfileField": "job_title",
+      "tags": ["profile", "job-title", "explicit"],
+      "transcripts": [
+        "My current job title is Principal Software Engineer.",
+        "I am now a Staff Engineer.",
+        "I work as a Solutions Architect.",
+        "My role is Engineering Manager.",
+        "I was promoted to Lead Platform Engineer."
+      ]
+    },
+    {
+      "id": "profile-title-change",
+      "expectedKind": "profile_update",
+      "expectedProfileField": "job_title",
+      "tags": ["profile", "job-title", "change"],
+      "transcripts": [
+        "I changed roles and I am now a Platform Architect.",
+        "Starting this month, my title is Senior Engineer.",
+        "My new position is Head of Engineering.",
+        "I recently became a Technical Lead.",
+        "I have moved into a Developer Experience Engineer role."
+      ]
+    },
+    {
+      "id": "profile-location",
+      "expectedKind": "profile_update",
+      "expectedProfileField": "home_location",
+      "tags": ["profile", "location", "explicit"],
+      "transcripts": [
+        "I live in Helsinki, Finland.",
+        "My home is in Espoo.",
+        "I am based in Finland.",
+        "My current home city is Helsinki.",
+        "I reside in the Helsinki metropolitan area."
+      ]
+    },
+    {
+      "id": "profile-location-change",
+      "expectedKind": "profile_update",
+      "expectedProfileField": "home_location",
+      "tags": ["profile", "location", "change"],
+      "transcripts": [
+        "I moved to Helsinki last month.",
+        "I have relocated from London to Espoo.",
+        "Finland is now my home country.",
+        "I recently moved and now live in Vantaa.",
+        "My family and I relocated to Helsinki."
+      ]
+    },
+    {
+      "id": "profile-credential-degree",
+      "expectedKind": "profile_update",
+      "expectedProfileField": "credential",
+      "tags": ["profile", "credential", "education"],
+      "transcripts": [
+        "I have a master's degree in computer science.",
+        "I earned a Bachelor of Engineering degree.",
+        "My degree is in information technology.",
+        "I completed an MSc in software engineering.",
+        "I hold a doctorate in computer science."
+      ]
+    },
+    {
+      "id": "profile-credential-certification",
+      "expectedKind": "profile_update",
+      "expectedProfileField": "credential",
+      "tags": ["profile", "credential", "certification"],
+      "transcripts": [
+        "I earned the AWS Solutions Architect certification.",
+        "I am a certified Kubernetes administrator.",
+        "I completed my professional Scrum certification.",
+        "I now hold the Azure Developer certification.",
+        "I received my security architecture credential."
+      ]
+    },
+    {
+      "id": "profile-employment-current",
+      "expectedKind": "profile_update",
+      "expectedProfileField": "employment",
+      "tags": ["profile", "employment", "explicit"],
+      "transcripts": [
+        "I work at Northwind Labs.",
+        "My employer is Contoso.",
+        "I am employed by Fabrikam.",
+        "I currently work for Adventure Works.",
+        "I hold a position at Tailspin Toys."
+      ]
+    },
+    {
+      "id": "profile-employment-start",
+      "expectedKind": "profile_update",
+      "expectedProfileField": "employment",
+      "tags": ["profile", "employment", "change"],
+      "transcripts": [
+        "I started working at Northwind Labs today.",
+        "I joined Contoso as an engineer.",
+        "I have accepted a position with Fabrikam.",
+        "I began a new job at Adventure Works.",
+        "I am starting employment with Tailspin Toys next week."
+      ]
+    },
+    {
+      "id": "profile-employment-end",
+      "expectedKind": "profile_update",
+      "expectedProfileField": "employment",
+      "tags": ["profile", "employment", "change"],
+      "transcripts": [
+        "I no longer work at Northwind Labs.",
+        "I left my job at Contoso.",
+        "My employment with Fabrikam ended in June.",
+        "I resigned from Adventure Works.",
+        "I finished my role at Tailspin Toys last week."
+      ]
+    },
+    {
+      "id": "profile-combined-role-employer",
+      "expectedKind": "profile_update",
+      "expectedProfileField": "employment",
+      "tags": ["profile", "employment", "mixed-profile-fields"],
+      "transcripts": [
+        "I joined Northwind Labs as a Principal Engineer.",
+        "I work for Contoso as a Solutions Architect.",
+        "I started at Fabrikam in an Engineering Manager role.",
+        "I am a Staff Engineer at Adventure Works.",
+        "Tailspin Toys hired me as its Platform Lead."
+      ]
+    },
+
+    {
+      "id": "none-question",
+      "expectedKind": "none",
+      "tags": ["none", "question", "adversarial"],
+      "transcripts": [
+        "What is domain-driven design?",
+        "Can Playwright record a trace?",
+        "How does Oxigraph store RDF?",
+        "Where is Helsinki?",
+        "Does Contoso employ platform engineers?"
+      ]
+    },
+    {
+      "id": "none-command",
+      "expectedKind": "none",
+      "tags": ["none", "command", "adversarial"],
+      "transcripts": [
+        "Explain EventStorming to me.",
+        "Write a Playwright test.",
+        "Open the Grafana dashboard.",
+        "Query the knowledge graph.",
+        "Create a container diagram."
+      ]
+    },
+    {
+      "id": "none-hypothetical-title",
+      "expectedKind": "none",
+      "tags": ["none", "hypothetical", "profile", "adversarial"],
+      "transcripts": [
+        "Maybe I could become an architect someday.",
+        "If I were a manager, I would change the process.",
+        "I might apply for a principal engineer role.",
+        "Being a CTO would be interesting.",
+        "Suppose I became a technical lead."
+      ]
+    },
+    {
+      "id": "none-hypothetical-location",
+      "expectedKind": "none",
+      "tags": ["none", "hypothetical", "location", "adversarial"],
+      "transcripts": [
+        "I might move to Helsinki one day.",
+        "If I lived in Finland, I would learn Finnish.",
+        "I am considering a holiday in Espoo.",
+        "Perhaps London would be a good place to live.",
+        "Imagine that I relocated to Stockholm."
+      ]
+    },
+    {
+      "id": "none-negated-skill",
+      "expectedKind": "none",
+      "tags": ["none", "negation", "skill", "adversarial"],
+      "transcripts": [
+        "I do not know Playwright.",
+        "I have never used Oxigraph.",
+        "I cannot write PromQL queries yet.",
+        "I am not experienced with Kubernetes.",
+        "I do not build C4 diagrams."
+      ]
+    },
+    {
+      "id": "none-denied-profile",
+      "expectedKind": "none",
+      "tags": ["none", "negation", "profile", "adversarial"],
+      "transcripts": [
+        "I am not a principal engineer.",
+        "I do not live in Helsinki.",
+        "I never worked for Contoso.",
+        "I do not have an AWS certification.",
+        "I did not join Northwind Labs."
+      ]
+    },
+    {
+      "id": "none-correction",
+      "expectedKind": "none",
+      "tags": ["none", "correction", "adversarial"],
+      "transcripts": [
+        "Ignore my earlier claim that I know Kubernetes.",
+        "The statement that I live in London was incorrect.",
+        "Do not record me as a staff engineer.",
+        "I misspoke when I said I worked at Contoso.",
+        "Remove the claim that I have a doctorate."
+      ]
+    },
+    {
+      "id": "none-quoted-other",
+      "expectedKind": "none",
+      "tags": ["none", "quoted-speech", "adversarial"],
+      "transcripts": [
+        "The assistant said, 'I know TypeScript.'",
+        "My colleague said that she works at Contoso.",
+        "The video presenter lives in Helsinki.",
+        "The CV example says, 'I am a software architect.'",
+        "The documentation claims its author uses Playwright."
+      ]
+    },
+    {
+      "id": "none-possessive-other",
+      "expectedKind": "none",
+      "tags": ["none", "third-person", "adversarial"],
+      "transcripts": [
+        "My brother is a staff engineer.",
+        "My manager knows Kubernetes.",
+        "Our customer is based in Helsinki.",
+        "My teammate has an AWS certification.",
+        "My friend works for Contoso."
+      ]
+    },
+    {
+      "id": "none-transient",
+      "expectedKind": "none",
+      "tags": ["none", "transient"],
+      "transcripts": [
+        "Run the tests again.",
+        "That answer is too long.",
+        "Yes, continue.",
+        "Show me the latest trace.",
+        "Commit the current changes."
+      ]
+    }
+  ]
+}

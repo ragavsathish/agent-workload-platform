@@ -18,7 +18,10 @@ from voice_agent.tasking.domain.approval import (
     plan_hash,
     verify_approval,
 )
-from voice_agent.tasking.domain.workspaces import resolve_workspace, validate_workspace_boundary
+from voice_agent.tasking.domain.workspaces import (
+    resolve_workspace,
+    validate_workspace_boundary,
+)
 from voice_agent.tasking.infrastructure.artifacts import ArtifactStore
 from voice_agent.tasking.infrastructure.config import Settings
 
@@ -57,6 +60,42 @@ class TaskService:
                 else resolve_workspace(workspace, self.settings.workspace_roots)
             )
         return {"instruction": cleaned, "workspace": str(resolved)}
+
+    def enqueue_digital_twin(
+        self,
+        *,
+        identity: str,
+        session_id: str,
+        message_id: str,
+        transcript: str,
+        captured_at: str,
+    ) -> dict[str, str]:
+        """Persist one owner turn as an idempotent background ingestion task."""
+
+        text = transcript.strip()
+        if not text:
+            raise ProposalError("transcript cannot be empty")
+        if len(text) > 20_000:
+            raise ProposalError("transcript is too large")
+        if not session_id.strip() or not message_id.strip():
+            raise ProposalError("session_id and message_id are required")
+        idempotency_key = f"digital-twin:{session_id.strip()}:{message_id.strip()}"
+        with closing(Absurd(self.settings.database_url, queue_name=self.settings.queue)) as absurd:
+            spawned = absurd.spawn(
+                "digital-twin-ingest",
+                {
+                    "identity": identity,
+                    "sessionId": session_id.strip(),
+                    "messageId": message_id.strip(),
+                    "transcript": text,
+                    "capturedAt": captured_at,
+                },
+                max_attempts=3,
+                queue=self.settings.queue,
+                cancellation={"max_duration": 180},
+                idempotency_key=idempotency_key,
+            )
+        return {"task_id": str(spawned["task_id"]), "idempotency_key": idempotency_key}
 
     def propose(self, *, identity: str, instruction: str, workspace: str) -> dict[str, Any]:
         plan = self._plan(instruction, workspace)

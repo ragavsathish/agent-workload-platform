@@ -1,8 +1,11 @@
+import json
+import subprocess
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 from voice_agent.tasking.infrastructure.config import Settings
-from voice_worker.main import build_pi_command
+from voice_worker.main import build_pi_command, run_digital_twin
 
 
 def settings(tmp_path: Path, *, sandboxed: bool) -> Settings:
@@ -44,3 +47,22 @@ def test_command_uses_only_explicit_gondolin_tools(tmp_path: Path) -> None:
 def test_command_refuses_unsandboxed_execution_by_default(tmp_path: Path) -> None:
     with pytest.raises(RuntimeError, match="PI_GONDOLIN_EXTENSION"):
         build_pi_command(settings(tmp_path, sandboxed=False), task_id="abc", instruction="work")
+
+
+def test_digital_twin_task_invokes_the_dedicated_vm_runner(tmp_path: Path, monkeypatch) -> None:
+    runner = tmp_path / "task-runner.js"
+    runner.write_text("", encoding="utf-8")
+    configured = replace(settings(tmp_path, sandboxed=True), digital_twin_runner=runner)
+    observed = {}
+
+    def completed(command, **kwargs):
+        observed["command"] = command
+        observed.update(kwargs)
+        return subprocess.CompletedProcess(command, 0, stdout='{"entries": 1}\n', stderr="")
+
+    monkeypatch.setattr("voice_worker.main.subprocess.run", completed)
+    result = run_digital_twin(configured, {"sessionId": "session-7"})
+
+    assert observed["command"] == [configured.node_binary, str(runner)]
+    assert json.loads(observed["input"])["sessionId"] == "session-7"
+    assert result == {"entries": 1}

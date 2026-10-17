@@ -23,7 +23,7 @@ const evidence = {
     GATEWAY: "partial", TASKS: "observed", HABITAT: "observed", WORKER: "weak",
     TASK_PI: "weak", TASK_VM: "partial", WASSETTE: "partial",
     BUILDER_MANAGER: "strong", BUILDER_VM: "strong", VOICE_DATA: "partial",
-    GITEA: "partial", ARTIFACTS: "partial", DOCKER_METRICS: "strong",
+    GITEA: "partial", ARTIFACTS: "partial", OXIGRAPH: "observed", DOCKER_METRICS: "strong",
     HOST_METRICS: "strong", OTEL: "strong",
   },
   "c3-browser-client": { BROWSER: "strong" },
@@ -43,7 +43,7 @@ const evidence = {
     VOICE_TOOLS: "partial", WORKER: "weak", TASK_PI: "weak", TASK_TOOLS: "partial",
     VOICE_WASSETTE: "partial", TASK_WASSETTE: "partial", BUILDER_MANAGER: "strong",
     RUNNER: "strong", DOCKERD: "weak", POSTGRES: "observed", HABITAT: "observed",
-    S3: "partial", GITEA: "partial", DOCKER_METRICS: "strong",
+    S3: "partial", GITEA: "partial", OXIGRAPH: "observed", DOCKER_METRICS: "strong",
     HOST_METRICS: "strong", OTEL: "strong",
   },
 };

@@ -1,7 +1,8 @@
 flowchart LR
-    CALLERS[External containers<br/><b>Voice Edge and Pi Voice Service</b><br/>owner task requests]
+    CALLERS[External containers<br/><b>Voice Edge and Pi Voice Service</b><br/>owner task and knowledge requests]
     DB[(External data store<br/><b>PostgreSQL</b><br/>proposals and Absurd queue)]
     S3[(External data store<br/><b>S3Mock</b><br/>immutable workspace pointers)]
+    OXIGRAPH[(External data store<br/><b>Oxigraph</b><br/>private profile and learning RDF)]
     OTEL[External container<br/><b>OTel LGTM</b>]
 
     subgraph GATEWAY["Container: Agent Gateway · Python + FastAPI"]
@@ -9,6 +10,8 @@ flowchart LR
         AUTH["Component<br/><b>Capability Authenticator</b><br/>constant-time bearer-token validation"]
         IDENTITY["Component<br/><b>Identity Policy</b><br/>normalizes and requires the single configured owner"]
         API["Component<br/><b>Task API</b><br/>propose, list, inspect, approve, and cancel"]
+        KNOWLEDGE["Component<br/><b>Personal Knowledge API</b><br/>bounded profile and learning queries"]
+        SPARQL["Component<br/><b>Knowledge Store Adapter</b><br/>fixed SELECT queries and plain-text filtering"]
         SERVICE["Component<br/><b>Task Service</b><br/>owns proposal and durable-task lifecycle"]
         APPROVAL["Component<br/><b>Approval Authority</b><br/>plan hash, signed claims, expiry, and binding"]
         WORKSPACE["Component<br/><b>Workspace Resolver</b><br/>allowlisted logical name to immutable S3 URI"]
@@ -17,23 +20,27 @@ flowchart LR
         TELEMETRY["Component<br/><b>Gateway Telemetry</b><br/>content-free operation spans"]
 
         AUTH --> IDENTITY --> API --> SERVICE
+        IDENTITY --> KNOWLEDGE --> SPARQL
         SERVICE --> APPROVAL
         SERVICE --> WORKSPACE
         SERVICE --> QUEUE
         SERVICE --> VIEW
         API -.-> TELEMETRY
+        KNOWLEDGE -.-> TELEMETRY
     end
 
     CALLERS -->|"bearer-authenticated owner request"| AUTH
     SERVICE -->|"proposal transactions"| DB
     QUEUE -->|"durable task operations"| DB
     WORKSPACE -->|"read current immutable pointer"| S3
+    SPARQL -->|"fixed read-only SPARQL"| OXIGRAPH
     VIEW -->|"bounded response"| CALLERS
+    KNOWLEDGE -->|"bounded facts"| CALLERS
     TELEMETRY -.->|"OTLP"| OTEL
 
     classDef component fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
     classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
-    class AUTH,IDENTITY,API,SERVICE,APPROVAL,WORKSPACE,QUEUE,VIEW,TELEMETRY component;
+    class AUTH,IDENTITY,API,KNOWLEDGE,SPARQL,SERVICE,APPROVAL,WORKSPACE,QUEUE,VIEW,TELEMETRY component;
     class CALLERS,OTEL external;
-    class DB,S3 data;
+    class DB,S3,OXIGRAPH data;

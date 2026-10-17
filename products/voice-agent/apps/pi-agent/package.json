@@ -3,21 +3,30 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "files": [
+    "dist/"
+  ],
   "scripts": {
-    "build": "tsc",
+    "clean": "node --input-type=module -e \"import fs from 'node:fs'; fs.rmSync('dist', { recursive: true, force: true })\"",
+    "build": "pnpm run clean && tsc",
     "check": "tsc --noEmit",
-    "test": "pnpm run build && node --test voice-agent-service.test.mjs"
+    "test": "pnpm run build && node --test '*.test.mjs' 'digital-twin/tests/*.test.mjs' 'digital-twin/eval/*.test.mjs'",
+    "digital-twin:journal": "pnpm run build && node digital-twin/runtime/capture-journal.mjs",
+    "digital-twin:skills": "pnpm run build && node digital-twin/runtime/identify-skills.mjs",
+    "eval:classifier": "pnpm run build && PROMPTFOO_DISABLE_TELEMETRY=1 PROMPTFOO_DISABLE_UPDATE=1 PROMPTFOO_DISABLE_REMOTE_GENERATION=true PROMPTFOO_DISABLE_SHARING=1 PROMPTFOO_SELF_HOSTED=1 PROMPTFOO_SAFE_MODE=true promptfoo eval -c digital-twin/eval/promptfooconfig.mjs --no-share",
+    "eval:judge-calibration": "pnpm run build && PROMPTFOO_DISABLE_TELEMETRY=1 PROMPTFOO_DISABLE_UPDATE=1 PROMPTFOO_DISABLE_REMOTE_GENERATION=true PROMPTFOO_DISABLE_SHARING=1 PROMPTFOO_SELF_HOSTED=1 PROMPTFOO_SAFE_MODE=true promptfoo eval -c digital-twin/eval/judge-calibration.promptfooconfig.mjs --no-share",
+    "eval:judge-report": "node digital-twin/eval/summarize-judge-results.mjs",
+    "eval:classifier:view": "promptfoo view"
   },
   "dependencies": {
+    "@agent-workload-platform/gondolin-session": "workspace:*",
     "@agent-workload-platform/otel": "workspace:*",
     "@earendil-works/pi-coding-agent": "1.2.0",
     "typebox": "1.3.27"
   },
-  "optionalDependencies": {
-    "@earendil-works/gondolin": "0.13.0"
-  },
   "devDependencies": {
     "@types/node": "22.19.11",
+    "promptfoo": "0.124.1",
     "typescript": "5.9.3"
   }
 }

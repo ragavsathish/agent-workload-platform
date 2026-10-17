@@ -1,0 +1,12 @@
+@prefix schema: <https://schema.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex: <urn:example:digital-twin:> .
+
+ex:conversation-topic a schema:DefinedTerm ;
+  schema:name "Knowledge graphs"@en .
+
+ex:message-summary a schema:Message ;
+  schema:sender ex:person ;
+  schema:dateSent "2026-01-01"^^xsd:date ;
+  schema:about ex:conversation-topic ;
+  schema:text "Asked to explore a personal knowledge graph."@en .

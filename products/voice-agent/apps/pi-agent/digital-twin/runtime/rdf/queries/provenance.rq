@@ -1,0 +1,12 @@
+PREFIX prov: <http://www.w3.org/ns/prov#>
+PREFIX dcterms: <http://purl.org/dc/terms/>
+
+SELECT ?graph ?sourceTitle ?generatedAt WHERE {
+  GRAPH <urn:awp:digital-twin:graph:provenance> {
+    ?graph a prov:Entity ;
+      prov:wasDerivedFrom ?source ;
+      prov:generatedAtTime ?generatedAt .
+    ?source dcterms:title ?sourceTitle .
+  }
+}
+ORDER BY ?graph ?sourceTitle

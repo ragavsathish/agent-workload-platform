@@ -1,0 +1,33 @@
+package voice:tasking@0.1.0;
+
+interface types {
+    enum method {
+        get,
+        post,
+    }
+}
+
+world tasking-core {
+    use types.{method};
+
+    /// Send one authenticated request to a path beneath the configured agent gateway URL.
+    /// The adapter owns credentials, network access, timeouts, and HTTP error normalization.
+    import request: func(method: method, path: string, body: option<string>) -> result<string, string>;
+
+    /// Submit durable work for another Pi worker.
+    export submit-agent-task: func(instruction: string, workspace: string) -> result<string, string>;
+
+    /// Read the public status and bounded result of one durable task.
+    export get-agent-task: func(task-id: string) -> result<string, string>;
+
+    /// Cancel one pending or running durable task.
+    export cancel-agent-task: func(task-id: string) -> result<string, string>;
+}
+
+world gateway-http {
+    use types.{method};
+    import wasi:cli/environment@0.2.0;
+
+    /// Adapt one task-core request to authenticated HTTP.
+    export request: func(method: method, path: string, body: option<string>) -> result<string, string>;
+}
