@@ -51,7 +51,6 @@ const evidence = {
 // Grafana query references are local to a panel and must be A-Z. Service names
 // stay in the PromQL label selector rather than being overloaded as references.
 const activity = {
-  "c1-system-context": { voice_agent: ["A", "*"] },
   "c2-container": {
     EDGE: ["A", "pipecat-voice-edge"],
     BROKER: ["B", "pipecat-mlx-inference"],
@@ -61,26 +60,37 @@ const activity = {
     BUILDER_MANAGER: ["F", "pipecat-image-builder"],
     BUILDER_VM: ["G", "pipecat-gitea-runner"],
   },
-  "c3-voice-edge": { EDGE: ["A", "pipecat-voice-edge"] },
-  "c3-inference-broker": { BROKER: ["A", "pipecat-mlx-inference"] },
-  "c3-pi-voice-service": { PI: ["A", "pipecat-pi-voice"] },
-  "c3-agent-gateway": { GATEWAY: ["A", "pipecat-agent-gateway"] },
-  "c3-pi-task-worker": { WORKER: ["A", "pipecat-task-worker"] },
-  "c3-image-build-worker": { WORKER: ["A", "pipecat-task-worker"] },
-  "c3-disposable-image-builder": {
-    MANAGER: ["A", "pipecat-image-builder"],
-    RUNNER: ["B", "pipecat-gitea-runner"],
-  },
-  "deployment-security": {
-    EDGE: ["A", "pipecat-voice-edge"],
-    BROKER: ["B", "pipecat-mlx-inference"],
-    GATEWAY: ["C", "pipecat-agent-gateway"],
-    PI: ["D", "pipecat-pi-voice"],
-    WORKER: ["E", "pipecat-task-worker"],
-    BUILDER_MANAGER: ["F", "pipecat-image-builder"],
-    RUNNER: ["G", "pipecat-gitea-runner"],
-  },
 };
+
+const neutralDarkFill = "#3f3f46";
+const neutralLightFill = "#d4d4d8";
+const neutralText = "#f4f4f5";
+
+function neutralizeDiagram(source) {
+  if (/^\s*C4(?:Context|Container|Component|Dynamic|Deployment)\b/mu.test(source)) {
+    const elementIds = [...source.matchAll(
+      /^\s*(?:Person|Person_Ext|System|System_Ext|SystemDb|SystemDb_Ext|Container|ContainerDb|ContainerQueue|Component)\(\s*([A-Za-z][A-Za-z0-9_-]*)\s*,/gmu,
+    )].map((match) => match[1]);
+    const styles = elementIds.map((elementId) => (
+      `UpdateElementStyle(${elementId}, "${neutralDarkFill}", "${neutralText}")`
+    ));
+    return `${source.trim()}\n\n%% Grafana node backgrounds are intentionally neutral.\n${styles.join("\n")}\n`;
+  }
+
+  return source.replace(/^\s*classDef\s+[^\n]+$/gmu, (definition) => {
+    const [, rawFill] = definition.match(/fill:\s*#([0-9a-f]{3}|[0-9a-f]{6})\b/iu) ?? [];
+    if (!rawFill) return definition;
+    const expandedFill = rawFill.length === 3
+      ? [...rawFill].map((part) => `${part}${part}`).join("")
+      : rawFill;
+    const channels = expandedFill.match(/.{2}/gu).map((part) => Number.parseInt(part, 16));
+    const luminance = 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+    return definition.replace(
+      /fill:\s*#[0-9a-f]{3,8}/iu,
+      `fill:${luminance < 145 ? neutralDarkFill : neutralLightFill}`,
+    );
+  });
+}
 
 const views = [
   ["c1-system-context", "C1 · System context"],
@@ -105,7 +115,7 @@ const diagrams = views.map(([id, title]) => {
   return {
     id,
     title,
-    mermaid: readFileSync(join(architecture, `${id}.mmd`), "utf8"),
+    mermaid: neutralizeDiagram(readFileSync(join(architecture, `${id}.mmd`), "utf8")),
     width: isOverview ? 24 : 12,
     height: id === "c2-container" || id === "deployment-security" ? 22 : 14,
   };
@@ -132,10 +142,10 @@ const args = {
   options: {
     "dashboard-title": "C4 Operational Heat Map",
     "dashboard-uid": "voice-c4-heatmap",
-    description: "Generated from the authoritative Voice Agent Mermaid C4 sources with source-backed evidence and live Prometheus activity overlays.",
+    description: "Generated from the authoritative Voice Agent Mermaid C4 sources. The C2 container view carries live Prometheus activity overlays; detail views stay neutral gray.",
     refresh: "30s",
     "time-from": "now-15m",
-    "evidence-markdown": "## Engineering evidence\n\n| Executable surface | Line coverage |\n|---|---:|\n| Flutter client | **63.9%** |\n| Pi Voice Service | **36.4%** |\n| Gondolin workspace adapter | **53.4%** |\n| Combined Pi agent JavaScript | **40.3%** |\n\nBuild evidence snapshot · 2026-10-16. Other surfaces have test evidence but no consolidated executable-line report.\n\n## How to read this dashboard\n\n**Fill = evidence:** 🟢 strong · 🟠 partial · 🔵 observed · 🔴 weak.\n\n**Border = telemetry activity:** 🔴 missing or stale for 2 minutes · ⚪ idle · 🔵 low · 🟦 medium · 🟢 high. Activity is volume, not health. The OTel collector keeps its evidence fill and is not colored by aggregate product traffic.\n\nArchitecture and evidence remain source-controlled; operations remain live in Grafana. Use the dashboard links for RED product signals and USE resource signals.",
+    "evidence-markdown": "## Engineering evidence\n\n| Executable surface | Line coverage |\n|---|---:|\n| Flutter client | **63.9%** |\n| Pi Voice Service | **36.4%** |\n| Gondolin workspace adapter | **53.4%** |\n| Combined Pi agent JavaScript | **40.3%** |\n\nBuild evidence snapshot · 2026-10-16. Other surfaces have test evidence but no consolidated executable-line report.\n\n## How to read this dashboard\n\n**C2 fill = telemetry activity:** 🔴 missing or stale for 2 minutes · ⚪ idle · 🔵 low · 🟦 medium · 🟢 high. Activity is volume, not health.\n\n**C2 border = evidence:** 🟢 strong · 🟠 partial · 🔵 observed · 🔴 weak. All other views use neutral gray backgrounds so the live container trace remains the sole highlight.\n\nArchitecture and evidence remain source-controlled; operations remain live in Grafana. Use the dashboard links for RED product signals and USE resource signals.",
   },
   diagrams,
   evidence: evidenceStyles,

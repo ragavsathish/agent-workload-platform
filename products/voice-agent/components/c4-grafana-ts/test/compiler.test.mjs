@@ -53,10 +53,13 @@ test("compiles C4 sources into deterministic Grafana JSON", () => {
   assert.equal(dashboard.panels.length, 3);
   assert.deepEqual(dashboard.panels[1].gridPos, { h: 14, w: 12, x: 0, y: 8 });
   assert.deepEqual(dashboard.panels[2].gridPos, { h: 14, w: 12, x: 12, y: 8 });
-  assert.match(dashboard.panels[1].options.content, /UpdateElementStyle\(system/);
+  assert.match(
+    dashboard.panels[1].options.content,
+    /UpdateElementStyle\(system, "#3f3f46", "#f4f4f5", "#56e39f"\)/,
+  );
   assert.match(
     dashboard.panels[2].options.content,
-    /style EDGE fill:#7c5e27,color:#ffffff,stroke:\$\{__data\.A:color\},stroke-width:5px/,
+    /style EDGE fill:\$\{__data\.A:color\},color:#07130d,stroke:#ffbd76,stroke-width:5px/,
   );
   assert.equal(
     dashboard.panels[2].targets[0].expr,
@@ -72,7 +75,9 @@ test("compiles C4 sources into deterministic Grafana JSON", () => {
   );
   assert.equal(dashboard.links.length, 2);
   assert.equal(dashboard.annotations.list[0].name, "Deployments and E2E runs");
-  assert.equal(dashboard.version, 9);
+  assert.equal(dashboard.panels[1].description, 'No live activity overlay is applied to this architecture detail view.');
+  assert.match(dashboard.panels[2].description, /Fill shows live PromQL activity/);
+  assert.equal(dashboard.version, 12);
 });
 
 test("rejects references to diagrams that were not supplied", () => {

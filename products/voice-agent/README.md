@@ -35,9 +35,10 @@ ownership and planned extractions are documented in
   Grafana provisions a generated **C4 Operational Heat Map** containing C1, C2, every C3 view, and
   deployment, plus the dated source-backed code evidence snapshot. The build invokes the
   capability-free TypeScript WASM compiler before Compose starts. Grafana renders the repository's
-  Mermaid sources with the pinned Grafmaid plugin. Node fills show source-backed evidence while
-  fixed PromQL queries color node borders for missing/stale, idle, and increasing activity; traffic
-  volume is deliberately not presented as health. Grafana is the only system coverage and
+  Mermaid sources with the pinned Grafmaid plugin. On the C2 container view, fixed PromQL queries
+  color node fills for missing/stale, idle, and increasing activity while node borders show
+  source-backed evidence. C1, C3, and deployment backgrounds stay neutral gray so the live C2 trace
+  is the sole color highlight; traffic volume is deliberately not presented as health. Grafana is the only system coverage and
   operational-health surface.
 - Browser sessions require an exact HTTPS origin and a signed, one-use token in the WebSocket path.
   The current deployment is deliberately single-user: login pins exactly one owner identity during

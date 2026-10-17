@@ -48,11 +48,12 @@ Grafana provisions the **C4 Operational Heat Map** dashboard. At build time,
 then calls the capability-free TypeScript WASM component in `components/c4-grafana-ts/` to compile
 the provisioned dashboard JSON. Grafana uses
 the pinned Grafmaid panel plugin to render C1, C2, all twelve C3 views, and the deployment view.
-Source-backed evidence colors fill every view; instrumented elements additionally use fixed
-PromQL queries to color their borders for missing or stale telemetry, idle services, and activity
-intensity in the selected dashboard range. Traffic volume is not treated as component health. The dashboard also
-contains the dated executable-line evidence snapshot formerly shown by the React coverage page;
-Grafana is now the single coverage and operational-health UI. Regenerate
+On the C2 container view, source-backed evidence colors borders and fixed PromQL queries color
+instrumented fills for missing or stale telemetry, idle services, and activity intensity in the
+selected dashboard range. C1, C3, and deployment backgrounds remain neutral gray so only the C2
+container trace is highlighted. Traffic volume is not treated as component health. The
+dashboard also contains the dated executable-line evidence snapshot formerly shown by the React
+coverage page; Grafana is now the single coverage and operational-health UI. Regenerate
 `deploy/observability/c4-heatmap.json` with `make grafana-c4-dashboard` after changing a C4 source or evidence mapping.
 Run `make playwright-grafana` to scroll and render every lazy panel, verify the computed palette,
 and retain a screenshot, browser evidence, and Playwright trace.
