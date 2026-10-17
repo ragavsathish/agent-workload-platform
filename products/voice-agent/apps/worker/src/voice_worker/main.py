@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, cast
 
 from absurd_sdk import Absurd, TaskContext
 from dotenv import load_dotenv
+from psycopg import OperationalError
 from voice_agent.shared.telemetry import configure_telemetry
 from voice_agent.tasking.application.pi_response import parse_pi_event_stream, presentation_prompt
 from voice_agent.tasking.domain.workspaces import resolve_workspace
@@ -18,6 +21,9 @@ from voice_agent.tasking.infrastructure.artifacts import ArtifactStore
 from voice_agent.tasking.infrastructure.config import Settings
 
 telemetry = configure_telemetry("pipecat-task-worker")
+logger = logging.getLogger(__name__)
+
+DATABASE_RETRY_DELAY_SECONDS = 2.0
 
 
 def build_pi_command(settings: Settings, *, task_id: str, instruction: str) -> list[str]:
@@ -226,14 +232,33 @@ def create_worker(settings: Settings) -> Absurd:
     return absurd
 
 
+def run_worker(settings: Settings) -> None:
+    """Keep the durable worker alive across brief database lifecycle outages."""
+    while True:
+        worker: Absurd | None = None
+        try:
+            worker = create_worker(settings)
+            worker.start_worker(concurrency=1)
+            return
+        except OperationalError as error:
+            logger.warning(
+                "PostgreSQL connection unavailable; retrying worker in %.1f seconds: %s",
+                DATABASE_RETRY_DELAY_SECONDS,
+                error,
+            )
+            time.sleep(DATABASE_RETRY_DELAY_SECONDS)
+        finally:
+            if worker is not None:
+                try:
+                    worker.close()
+                except OperationalError:
+                    logger.warning("PostgreSQL connection closed during worker cleanup")
+
+
 def main() -> None:
     load_dotenv(override=True)
     settings = Settings.from_env()
-    worker = create_worker(settings)
-    try:
-        worker.start_worker(concurrency=1)
-    finally:
-        worker.close()
+    run_worker(settings)
 
 
 if __name__ == "__main__":

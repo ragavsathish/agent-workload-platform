@@ -4,8 +4,9 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from psycopg import OperationalError
 from voice_agent.tasking.infrastructure.config import Settings
-from voice_worker.main import build_pi_command, run_digital_twin
+from voice_worker.main import build_pi_command, run_digital_twin, run_worker
 
 
 def settings(tmp_path: Path, *, sandboxed: bool) -> Settings:
@@ -66,3 +67,32 @@ def test_digital_twin_task_invokes_the_dedicated_vm_runner(tmp_path: Path, monke
     assert observed["command"] == [configured.node_binary, str(runner)]
     assert json.loads(observed["input"])["sessionId"] == "session-7"
     assert result == {"entries": 1}
+
+
+def test_worker_reconnects_after_a_temporary_database_outage(
+    tmp_path: Path, monkeypatch
+) -> None:
+    events: list[str] = []
+
+    class FakeWorker:
+        def __init__(self, *, fails: bool) -> None:
+            self.fails = fails
+
+        def start_worker(self, *, concurrency: int) -> None:
+            assert concurrency == 1
+            events.append("start")
+            if self.fails:
+                raise OperationalError("database unavailable")
+
+        def close(self) -> None:
+            events.append("close")
+
+    workers = iter((FakeWorker(fails=True), FakeWorker(fails=False)))
+    monkeypatch.setattr("voice_worker.main.create_worker", lambda _settings: next(workers))
+    monkeypatch.setattr(
+        "voice_worker.main.time.sleep", lambda delay: events.append(f"sleep:{delay}")
+    )
+
+    run_worker(settings(tmp_path, sandboxed=True))
+
+    assert events == ["start", "sleep:2.0", "close", "start", "close"]

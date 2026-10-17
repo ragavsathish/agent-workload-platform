@@ -30,16 +30,21 @@
       ansible.builtin.set_fact:
         blackbox_identity: >-
           {{ lookup('ansible.builtin.env', 'BLACKBOX_IDENTITY')
-             | default((blackbox_env
-               | regex_findall('(?m)^ORCHESTRATOR_ALLOWED_USERS=([^,\\n]+)'))[0], true) }}
+             | default((blackbox_env.splitlines()
+               | select('match', '^ORCHESTRATOR_ALLOWED_USERS=')
+               | first
+               | regex_replace('^ORCHESTRATOR_ALLOWED_USERS=', '')
+               | split(','))[0], true) }}
         blackbox_utterances: >-
           {{ (lookup('ansible.builtin.env', 'BLACKBOX_UTTERANCES_JSON') | from_json)
              if lookup('ansible.builtin.env', 'BLACKBOX_UTTERANCES_JSON')
              else [lookup('ansible.builtin.env', 'BLACKBOX_UTTERANCE')
                    | default(blackbox_default_utterance, true)] }}
         blackbox_expected_workspace: >-
-          {{ (blackbox_env
-             | regex_findall('(?m)^VOICE_DEFAULT_WORKSPACE=([^\\n]+)'))[0] }}
+          {{ blackbox_env.splitlines()
+             | select('match', '^VOICE_DEFAULT_WORKSPACE=')
+             | first
+             | regex_replace('^VOICE_DEFAULT_WORKSPACE=', '') }}
       no_log: true
 
     - name: Detect an authenticated Tailscale sidecar
@@ -122,6 +127,8 @@
         env_files:
           - .env
         service: voice-edge
+        tty: false
+        stdin_add_newline: false
         argv: >-
           {{ ['/app/.venv/bin/python', '-']
              + blackbox_utterances
