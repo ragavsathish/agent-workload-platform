@@ -1,79 +1,80 @@
 # Agent Workload Platform
 
-This monorepo lets an agent running on a client machine orchestrate products
-across local tools, capability-limited WebAssembly modules, isolated Gondolin
-micro-VMs, browsers, storage systems, and remote model infrastructure.
+A private runtime for conversational agents that can safely use tools and hand
+off long-running work.
 
-C4-to-Excalidraw is delivered by the Architecture Visualization product, not
-the scope of the platform.
-Its browserless Wasm path is tested with context, container, component,
-dynamic, and deployment views. Wassette loads one composed `c4-suite.wasm`;
-WAC assembles that suite from immutable, independently reusable components.
+The first product is [Voice Agent](products/voice-agent/README.md): a
+tailnet-only browser assistant for Apple Silicon. It supports live voice and
+typed conversations, renders Mermaid, Excalidraw, and Marp MCP Apps, and can
+delegate durable coding tasks without giving the browser or voice container
+direct access to host credentials or files.
 
-The Gondolin browser extension runs the maintained MCP Memory Server beside
-Playwright so Pi can recall earlier research and retain durable browser
-findings across sessions without a platform-owned persistence implementation.
-When `GITHUB_TOKEN` is present, it also loads the published GitHub Wassette
-component by pinned OCI digest—without rebuilding it.
+![Voice Agent mobile web interface](products/voice-agent/docs/assets/voice-agent-mobile.png)
 
-![C1 system context for the Agent Workload Platform](docs/architecture/agent-workload-platform-c1.png)
+The same response surface renders structured MCP App output:
 
-_C1 system context rendered from the policy-approved Excalidraw scene._
+**Excalidraw**
 
-## Architecture Visualization product
+![Editable Voice Agent architecture in the Excalidraw MCP App](products/voice-agent/docs/assets/excalidraw-mcp-app.png)
 
-C4-to-Excalidraw is the first architecture visualization pipeline. Follow the
-[product
-README](products/architecture-visualization/README.md) for setup, build, verification, and
-the real Pi dog-food run, including supported syntax and rendering limits.
+**Marp**
 
-## Voice agent product
+![Voice Agent presentation in the Marp MCP App](products/voice-agent/docs/assets/marp-mcp-app.png)
 
-The [voice agent product](products/voice-agent/README.md) provides
-a private browser voice assistant for Apple Silicon. MLX Whisper, Ollama, and
-Kokoro stay on macOS behind a narrow authenticated inference broker, while the
-browser-facing Pipecat application, task gateway, storage, observability, and
-tailnet ingress run under Docker Compose. See its
-[host requirements](products/voice-agent/HOST_REQUIREMENTS.md) for the
-security boundary, exact prerequisites, and repeatable lifecycle checks.
+## How it works
 
-The source-controlled architecture views are:
+There are two paths through the product:
 
-- [C1 system context](products/architecture-visualization/examples/c1-system-context.mmd)
-- [C2 container view](products/architecture-visualization/examples/c2-container.mmd)
-- [C3 Pi extension components](products/architecture-visualization/examples/c3-pi-extension-components.mmd)
+1. **Interactive turns** — the browser sends audio through Tailscale to a
+   Pipecat edge. Speech inference runs on the Mac, Pi handles the conversation,
+   and file or shell tools run inside a persistent Gondolin micro-VM.
+2. **Delegated tasks** — an authenticated gateway records work in a durable
+   queue. A worker runs each task in a fresh Pi session backed by an isolated
+   Gondolin workspace, then stores the result and patch.
 
-## Layout
+MCP and permission-scoped Wassette components add optional browser, memory,
+GitHub, and other integrations. OpenTelemetry reports payload-free metrics and
+traces; it does not export audio, prompts, transcripts, or file contents.
 
-- `products/` — user-facing vertical slices. Each product owns its applications,
-  services, workers, deployment profiles, tests, documentation, and vocabulary.
-  - `voice-agent` — tailnet-only browser voice with host MLX inference and
-    Gondolin-isolated Pi tools.
-  - `architecture-visualization` — C4 models compiled into editable Excalidraw
-    scenes and portable render artifacts.
-- `platform/` — stable capabilities with more than one product consumer.
-  - `agent-execution/gondolin-session` — Pi extension that exposes Playwright MCP
-    tools from an isolated VM alongside persistent memory and optional GitHub
-    tools in Wassette, without copying their schemas.
-- `vendor/` — pinned, unmodified upstream source retained as Git submodules.
-- `runtimes/` — transitional local deployments awaiting a product boundary;
-  new shared code belongs under `platform/`.
+The deployment is currently a private, single-user Apple Silicon system. It is
+an engineering environment, not a multi-tenant hosted service.
 
-Product-specific contracts, prompts, examples, and modules remain inside the
-product until another product genuinely reuses them. Shared implementations
-then move to a platform context with a stable contract.
+## Repository
 
-The repository is migrating from technical top-level buckets to product and
-bounded-context ownership. See [Monorepo organization](docs/monorepo-organization.md)
-for the target structure and remaining moves.
+- `products/voice-agent/` — the complete user-facing product: browser client,
+  voice edge, inference broker, agent gateway, task worker, deployment, and
+  tests.
+- `platform/agent-execution/` — reusable Pi sessions and Gondolin-isolated tool
+  execution.
+- `platform/observability/` — shared payload-free telemetry.
+- `vendor/` — pinned upstream source kept as Git submodules.
+- `runtimes/` — transitional deployments that do not yet have a stable product
+  or platform boundary.
 
-There is no repository-specific dispatcher or lifecycle wrapper. A single pnpm
-workspace installs and runs every JavaScript package. Upstream lockfiles remain
-inside untouched Git submodules for provenance but are not used by the platform
-workflow. See the C4 package README for dependency setup. Imported source
-provenance is recorded in `PROVENANCE.md`.
+Product-specific code stays with its product. A capability moves into
+`platform/` only when its contract is stable and genuinely reusable.
 
-## Research
+## Run Voice Agent
 
-- [Available Wasm components and ecosystem compatibility](docs/research/available-wasm-components-ecosystem.md)
-- [WIT and TypeScript component practices](docs/research/wasm-wit-typescript-best-practices.md)
+Read the [host requirements](products/voice-agent/HOST_REQUIREMENTS.md) first.
+
+```bash
+cd products/voice-agent
+make setup
+# Configure deploy/.env from deploy/.env.example.
+make pull-model
+make host-preflight
+make start
+make login
+```
+
+Use `make status` to inspect the deployment, `make verify` to check its security
+and capability boundaries, and `make check` for the full development suite.
+
+## Documentation
+
+- [Voice Agent operations and development](products/voice-agent/README.md)
+- [Architecture views](products/voice-agent/docs/architecture/README.md)
+- [Product vocabulary](products/voice-agent/GLOSSARY.md)
+- [Repository organization](docs/monorepo-organization.md)
+- [Imported source provenance](PROVENANCE.md)
