@@ -1,4 +1,4 @@
-.PHONY: setup build up start logs down recreate verify cycle-test login status grafana-password warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e playwright-voice playwright-diagnostics host-preflight install-host-services wassette-arxiv-build wassette-arxiv-install wassette-c4-grafana-build wassette-c4-grafana-install grafana-c4-dashboard db-init broker worker pull-model check
+.PHONY: setup build up start logs down recreate verify cycle-test login status grafana-password warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e playwright-voice playwright-diagnostics playwright-grafana host-preflight install-host-services wassette-arxiv-build wassette-arxiv-install wassette-c4-grafana-build wassette-c4-grafana-install grafana-c4-dashboard db-init broker worker pull-model check
 
 COMPOSE = docker compose --env-file deploy/.env -f deploy/compose.yml
 
@@ -90,6 +90,9 @@ playwright-voice:
 
 playwright-diagnostics:
 	./tests/e2e/playwright-diagnostics.sh
+
+playwright-grafana:
+	./tests/e2e/playwright-grafana.sh
 
 host-preflight:
 	./scripts/host-preflight.sh

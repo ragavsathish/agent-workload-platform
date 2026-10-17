@@ -57,6 +57,13 @@ module.exports = defineConfig({
       },
     },
     {
+      name: 'grafana',
+      testMatch: /grafana\.spec\.ts/,
+      use: {
+        viewport: { width: 1440, height: 1000 },
+      },
+    },
+    {
       name: 'task-diagram',
       testMatch: /task-diagram\.spec\.ts/,
       use: { viewport: { width: 390, height: 844 } },

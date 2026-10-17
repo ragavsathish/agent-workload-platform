@@ -35,8 +35,10 @@ ownership and planned extractions are documented in
   Grafana provisions a generated **C4 Operational Heat Map** containing C1, C2, every C3 view, and
   deployment, plus the dated source-backed code evidence snapshot. The build invokes the
   capability-free TypeScript WASM compiler before Compose starts. Grafana renders the repository's
-  Mermaid sources with the pinned Grafmaid plugin and uses fixed PromQL queries for live activity
-  coloring. Grafana is the only system coverage and operational-health surface.
+  Mermaid sources with the pinned Grafmaid plugin. Node fills show source-backed evidence while
+  fixed PromQL queries color node borders for missing/stale, idle, and increasing activity; traffic
+  volume is deliberately not presented as health. Grafana is the only system coverage and
+  operational-health surface.
 - Browser sessions require an exact HTTPS origin and a signed, one-use token in the WebSocket path.
   The current deployment is deliberately single-user: login pins exactly one owner identity during
   setup, while tailnet ACLs authenticate which devices can reach the listener.
@@ -128,6 +130,7 @@ make benchmark-mlx # warm CPU, RSS, tokens/s, and realtime-factor benchmark
 make publish-workspace WORKSPACE_ID=agent-workload-platform REPOSITORY=/path/to/repository
 make blackbox-voice UTTERANCE="Propose a task in the default workspace to inspect it"
 make blackbox-e2e # synthetic voice through Pipecat plus a Postgres assertion
+make playwright-grafana # render every C4 panel and attach colors, screenshot, and trace
 make down         # stop Compose services; preserve Postgres and Tailscale volumes
 make check        # tests, lint, type checks, build, Compose and plist validation
 ```
