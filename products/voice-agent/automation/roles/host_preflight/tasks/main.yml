@@ -1,0 +1,108 @@
+---
+- name: Require Apple Silicon macOS
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.system == "Darwin"
+      - ansible_facts.architecture in ["arm64", "aarch64"]
+      - ansible_facts.memtotal_mb | int >= 8192
+    fail_msg: Voice-agent requires Apple Silicon macOS with at least 8 GiB RAM.
+
+- name: Verify required command-line tools
+  ansible.builtin.command:
+    argv: ["{{ item }}", "--version"]
+  loop:
+    - docker
+    - uv
+    - node
+    - npm
+    - ollama
+    - curl
+    - python3
+    - wassette
+  loop_control:
+    label: "{{ item }}"
+  changed_when: false
+  register: host_preflight_command_checks
+
+- name: Verify Docker Desktop is running
+  ansible.builtin.command:
+    argv: [docker, info]
+  changed_when: false
+
+- name: Verify Docker Compose is available
+  ansible.builtin.command:
+    argv: [docker, compose, version]
+  changed_when: false
+
+- name: Inspect the Homebrew PostgreSQL client
+  ansible.builtin.stat:
+    path: /opt/homebrew/opt/libpq/bin/psql
+  register: host_preflight_psql
+
+- name: Require the Homebrew PostgreSQL client
+  ansible.builtin.assert:
+    that:
+      - host_preflight_psql.stat.exists
+      - host_preflight_psql.stat.executable
+    fail_msg: Install the PostgreSQL client with `brew install libpq`.
+
+- name: Read repository filesystem capacity
+  ansible.builtin.command:
+    argv: [df, -Pk, "{{ voice_agent_root }}"]
+  changed_when: false
+  register: host_preflight_disk
+
+- name: Require at least 15 GiB free disk
+  ansible.builtin.assert:
+    that:
+      - (host_preflight_disk.stdout_lines[-1].split()[3] | int) >= 15 * 1024 * 1024
+    fail_msg: Voice-agent requires at least 15 GiB free disk space.
+
+- name: Inspect the deployment environment file
+  ansible.builtin.stat:
+    path: "{{ voice_agent_root }}/deploy/.env"
+  register: host_preflight_environment_file
+
+- name: Require the deployment environment file
+  ansible.builtin.assert:
+    that:
+      - host_preflight_environment_file.stat.exists
+    fail_msg: Run `make setup` to create deploy/.env.
+
+- name: Read deployment configuration for validation
+  ansible.builtin.set_fact:
+    host_preflight_environment: "{{ lookup('ansible.builtin.file', voice_agent_root + '/deploy/.env') }}"
+  no_log: true
+
+- name: Require deployment configuration keys
+  ansible.builtin.assert:
+    that:
+      - host_preflight_environment is regex('(?m)^' + item + '=.+$')
+    fail_msg: "deploy/.env is missing required key {{ item }}."
+    quiet: true
+  loop:
+    - INFERENCE_BROKER_TOKEN
+    - AGENT_GATEWAY_TOKEN
+    - POSTGRES_PASSWORD
+    - OLLAMA_MODEL
+    - MLX_STT_MODEL
+    - MLX_TTS_MODEL
+    - VOICE_DEFAULT_WORKSPACE
+    - ORCHESTRATOR_ALLOWED_WORKSPACES
+    - ARTIFACT_ENDPOINT_URL
+    - ARTIFACT_BUCKET
+  no_log: true
+
+- name: Probe the local Ollama endpoint
+  ansible.builtin.uri:
+    url: http://127.0.0.1:11434/api/version
+    status_code: 200
+    return_content: false
+    use_netrc: false
+  register: host_preflight_ollama
+  failed_when: false
+
+- name: Report an unavailable Ollama endpoint
+  ansible.builtin.debug:
+    msg: Ollama is not responding on 127.0.0.1:11434; model-backed checks will not run.
+  when: host_preflight_ollama.status | default(0) != 200

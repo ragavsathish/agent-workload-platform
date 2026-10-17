@@ -4,7 +4,10 @@
 <dict>
   <key>Label</key><string>com.sathish.pipecat-host-observability</string>
   <key>ProgramArguments</key>
-  <array><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/scripts/run-host-observability.sh</string></array>
+  <array>
+    <string>/opt/homebrew/bin/node</string>
+    <string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/apps/host-observability/gondolin-exporter.mjs</string>
+  </array>
   <key>RunAtLoad</key><true/>
   <key>EnvironmentVariables</key>
   <dict>
@@ -16,6 +19,7 @@
     <key>GONDOLIN_METRICS_PORT</key><string>9465</string>
   </dict>
   <key>KeepAlive</key><true/>
+  <key>Umask</key><integer>63</integer>
   <key>ThrottleInterval</key><integer>10</integer>
   <key>StandardOutPath</key><string>/Users/sathish.narayanan/Library/Logs/PipecatEdge/host-observability.log</string>
   <key>StandardErrorPath</key><string>/Users/sathish.narayanan/Library/Logs/PipecatEdge/host-observability.log</string>

@@ -4,11 +4,20 @@
 <dict>
   <key>Label</key><string>com.sathish.pipecat-worker</string>
   <key>ProgramArguments</key>
-  <array><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/scripts/run-worker.sh</string></array>
+  <array>
+    <string>/opt/homebrew/bin/uv</string>
+    <string>run</string>
+    <string>--no-sync</string>
+    <string>--env-file</string><string>worker.env</string>
+    <string>python</string><string>-m</string><string>voice_worker.main</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/apps/worker</string>
   <key>RunAtLoad</key><true/>
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>HOME</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/runtime-home</string>
+    <key>PYTHONPATH</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/apps/worker/src:/Users/sathish.narayanan/Library/Application Support/PipecatEdge/packages/tasking/src:/Users/sathish.narayanan/Library/Application Support/PipecatEdge/packages/telemetry/src</string>
   </dict>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>10</integer>

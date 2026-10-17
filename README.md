@@ -59,9 +59,8 @@ Product-specific code stays with its product. A capability moves into
 Read the [host requirements](products/voice-agent/HOST_REQUIREMENTS.md) first.
 
 ```bash
-cd products/voice-agent
 make setup
-# Configure deploy/.env from deploy/.env.example.
+# Configure products/voice-agent/deploy/.env from its .env.example.
 make pull-model
 make host-preflight
 make start
@@ -70,6 +69,9 @@ make login
 
 Use `make status` to inspect the deployment, `make verify` to check its security
 and capability boundaries, and `make check` for the full development suite.
+The repository Makefile is the main orchestrator and delegates product work to
+`products/voice-agent`. Additional product targets are available as
+`make voice-TARGET`; for example, `make voice-pull-model`.
 
 ## Documentation
 

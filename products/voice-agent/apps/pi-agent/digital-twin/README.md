@@ -20,19 +20,21 @@ present.
 ## Durable Pi-session ingestion
 
 The digital twin listens outside the Pi voice service. A separate launch agent scans persisted Pi
-sessions and submits each completed owner turn to the existing Absurd queue. The stable Pi session
-and message IDs form the task's idempotency identity, so listener restarts and queue retries cannot
-create duplicate journal facts.
+sessions and fans each completed owner turn into independently retryable `digital-twin-journal` and
+`digital-twin-classify` Absurd tasks. The stable Pi session and message IDs form each branch's
+idempotency identity, so listener restarts and queue retries cannot create duplicate journal facts
+or review candidates.
 
-The `digital-twin-ingest` handler runs the transcript in its own disposable Gondolin microVM. The
+Each handler runs the transcript in its own disposable Gondolin microVM. The
 guest has no workspace mount or public internet access. Synthetic networking permits only:
 
-- the configured loopback local-model endpoint; and
-- the fixed-shape journal writer exposed by the agent gateway under a separate writer credential.
+- the configured loopback Qwen endpoint;
+- the configured loopback Von/Clef-compatible classifier endpoint; and
+- fixed-shape journal and review writers exposed by the agent gateway under a separate credential.
 
 The guest never receives Postgres credentials, the general agent-gateway credential, or Oxigraph's
-SPARQL endpoint. The host writer validates the structured journal and generates an idempotent
-`INSERT DATA` for the fixed journal graph.
+SPARQL endpoint. The host writer validates the structured payload. Journal entries go only to the
+journal graph; classifier output goes only to the pending-review graph.
 
 The guest image is not built by a runtime worker. Its declaration lives in
 `runtime/image/gondolin.json`; the trusted Gitea Actions builder publishes a digest-addressed OCI
@@ -60,6 +62,11 @@ The model deliberately uses only three established vocabularies:
 - [W3C Organization Ontology](https://www.w3.org/TR/vocab-org/) for employment memberships and
   organizational roles.
 - [PROV-O](https://www.w3.org/TR/prov-o/) with Dublin Core Terms for source lineage.
+
+Two operational named graphs complete the review lifecycle:
+
+- `urn:awp:digital-twin:graph:review` stores pending or rejected candidates and classifier metadata.
+- `urn:awp:digital-twin:graph:accepted` stores only owner-accepted `schema:Claim` resources.
 
 ## Lightweight cognitive journal
 
@@ -97,13 +104,20 @@ The Pi transcript pipeline makes one bounded decision before extraction:
 | `profile_update` | An explicit change to job title, location, credential, or employment | Existing Schema.org or ORG profile shape |
 | `none` | A transient instruction, question, assistant statement, or uncertain claim | Nothing |
 
-[Von](https://github.com/wfzyx/von) selects the assertion kind and profile field. Decisions below
-the configured confidence threshold are review items and do not reach extraction. Ollama then uses
+[Von](https://github.com/wfzyx/von) selects the assertion kind and profile field through a pinned
+local SystemOne service on port `8010`; port `8000` belongs to Grafana MCP. Decisions below the
+configured confidence threshold do not reach extraction. Ollama then uses
 the checked TypeBox schema in `apps/pi-agent/digital-twin/runtime/ingestion.ts` to extract labels and exact
 evidence quotes. A quote that is not present verbatim in the transcript is rejected.
 
+The default `0.60` confidence gate is calibrated against the pinned Von 1.3.7 runtime: 19 of the
+200 grouped gold examples reach extraction, all 19 are correctly routed, and no `none` example
+becomes a durable candidate. Recalibrate before changing the model, prompt, or threshold.
+
 This is intentionally a candidate pipeline. Classification never promotes a conversation claim into
-the durable CV graph by itself.
+durable knowledge by itself. High-confidence extracted candidates still enter the review graph as
+`pending`; only an owner-authenticated accept decision copies one into the accepted graph. The
+journal and classifier jobs retry independently, so failure in either branch cannot block the other.
 
 For the first narrow ingestion slice, identify explicit skill candidates from transcript text on
 standard input. Results include verbatim evidence and are not written to Oxigraph:

@@ -1,0 +1,170 @@
+---
+- name: Run browser infrastructure tests
+  hosts: localhost
+  gather_facts: false
+  vars:
+    playwright_supported_projects:
+      - voice
+      - diagnostics
+      - grafana
+    playwright_output_defaults:
+      voice: /tmp/pipecat-playwright-voice
+      diagnostics: /tmp/pipecat-react-diagnostics
+      grafana: /tmp/pipecat-grafana
+  tasks:
+    - name: Validate the requested browser project
+      ansible.builtin.assert:
+        that:
+          - playwright_project is defined
+          - playwright_project in playwright_supported_projects
+        fail_msg: >-
+          Set playwright_project to one of:
+          {{ playwright_supported_projects | join(', ') }}.
+
+    - name: Select browser test paths
+      ansible.builtin.set_fact:
+        playwright_output_dir: >-
+          {{ lookup('ansible.builtin.env', 'PLAYWRIGHT_OUTPUT_DIR')
+             | default(playwright_output_defaults[playwright_project], true) }}
+        playwright_fixture: "{{ voice_agent_root }}/deploy/secrets/voxlock-voice-sample.wav"
+
+    - name: Verify the recorded voice fixture exists
+      ansible.builtin.stat:
+        path: "{{ playwright_fixture }}"
+      register: playwright_fixture_stat
+
+    - name: Require the recorded voice fixture
+      ansible.builtin.assert:
+        that:
+          - playwright_fixture_stat.stat.isreg | default(false)
+          - playwright_fixture_stat.stat.size | default(0) > 0
+        fail_msg: "Missing voice fixture: {{ playwright_fixture }}"
+
+    - name: Create the browser artifact directory
+      ansible.builtin.file:
+        path: "{{ playwright_output_dir }}"
+        state: directory
+        mode: "0700"
+
+    - name: Create a temporary voice audio path
+      ansible.builtin.tempfile:
+        state: file
+        suffix: .wav
+      register: playwright_audio_temp
+      when: playwright_project == 'voice'
+
+    - name: Build the voice browser fixture
+      ansible.builtin.command:
+        argv:
+          - ffmpeg
+          - -hide_banner
+          - -loglevel
+          - error
+          - -f
+          - lavfi
+          - -t
+          - "10"
+          - -i
+          - anullsrc=r=16000:cl=mono
+          - -i
+          - "{{ playwright_fixture }}"
+          - -filter_complex
+          - "[1:a]volume=12dB[voice];[0:a][voice]concat=n=2:v=0:a=1[out]"
+          - -map
+          - "[out]"
+          - -c:a
+          - pcm_s16le
+          - -ar
+          - "16000"
+          - -ac
+          - "1"
+          - -y
+          - "{{ playwright_audio_temp.path }}"
+      changed_when: true
+      when: playwright_project == 'voice'
+
+    - name: Fetch a real trace for the voice browser test
+      ansible.builtin.command:
+        argv:
+          - python3
+          - "{{ voice_agent_root }}/tests/e2e/grafana-mcp.py"
+      register: playwright_trace_probe
+      changed_when: false
+      when: playwright_project == 'voice'
+      no_log: true
+
+    - name: Select the browser test inputs
+      ansible.builtin.set_fact:
+        playwright_audio_file: >-
+          {{ playwright_audio_temp.path
+             if playwright_project == 'voice'
+             else playwright_fixture }}
+        playwright_trace_id: >-
+          {{ (playwright_trace_probe.stdout | from_json).traceId
+             if playwright_project == 'voice'
+             else '' }}
+      no_log: true
+
+    - name: Require a trace for the voice browser test
+      ansible.builtin.assert:
+        that:
+          - playwright_trace_id | length > 0
+          - playwright_trace_id != 'null'
+        fail_msg: Grafana did not return a trace for the voice browser test.
+      when: playwright_project == 'voice'
+
+    - name: Run the browser test with its network bridge
+      block:
+        - name: Start the browser tailnet bridge
+          community.docker.docker_compose_v2:
+            project_src: "{{ compose_project_src }}"
+            project_name: "{{ compose_project_name }}"
+            files:
+              - compose.yml
+              - compose.playwright.yml
+            env_files:
+              - .env
+            profiles:
+              - e2e
+            services:
+              - e2e-tailnet-bridge
+            dependencies: false
+            state: present
+          environment:
+            PLAYWRIGHT_AUDIO_FILE: "{{ playwright_audio_file }}"
+            PLAYWRIGHT_OUTPUT_DIR: "{{ playwright_output_dir }}"
+            GRAFANA_TRACE_ID: "{{ playwright_trace_id }}"
+
+        - name: Run the selected Playwright project
+          community.docker.docker_compose_v2_run:
+            project_src: "{{ compose_project_src }}"
+            project_name: "{{ compose_project_name }}"
+            files:
+              - compose.yml
+              - compose.playwright.yml
+            env_files:
+              - .env
+            profiles:
+              - e2e
+            service: playwright-e2e
+            cleanup: true
+            no_deps: true
+            env:
+              PLAYWRIGHT_PROJECT: "{{ playwright_project }}"
+          environment:
+            PLAYWRIGHT_AUDIO_FILE: "{{ playwright_audio_file }}"
+            PLAYWRIGHT_OUTPUT_DIR: "{{ playwright_output_dir }}"
+            GRAFANA_TRACE_ID: "{{ playwright_trace_id }}"
+          changed_when: false
+      always:
+        - name: Remove the browser tailnet bridge
+          community.docker.docker_container:
+            name: "{{ compose_project_name }}-e2e-tailnet-bridge-1"
+            state: absent
+            force_kill: true
+
+        - name: Remove the generated voice fixture
+          ansible.builtin.file:
+            path: "{{ playwright_audio_temp.path }}"
+            state: absent
+          when: playwright_project == 'voice'

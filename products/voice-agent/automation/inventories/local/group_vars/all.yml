@@ -1,0 +1,90 @@
+---
+voice_agent_root: "{{ inventory_dir }}/../../.."
+compose_project_name: pipecat-mlx-voice
+compose_project_src: "{{ voice_agent_root }}/deploy"
+compose_files:
+  - compose.yml
+compose_env_files:
+  - "{{ voice_agent_root }}/deploy/.env"
+
+compose_services:
+  - name: gitea
+    read_only: true
+    log_driver: local
+    published_ports:
+      - { container: 3000, host: 127.0.0.1, published: 3001 }
+  - name: habitat
+    read_only: true
+    log_driver: local
+    published_ports: []
+  - name: s3mock
+    read_only: true
+    published_ports:
+      - { container: 9090, host: 127.0.0.1, published: 9090 }
+  - name: postgres
+    read_only: false
+    cap_drop_all: false
+    published_ports:
+      - { container: 5432, host: 127.0.0.1, published: 54329 }
+  - name: oxigraph
+    read_only: true
+    log_driver: local
+    published_ports:
+      - { container: 7878, host: 127.0.0.1, published: 7878 }
+  - name: fluent-bit
+    read_only: true
+    log_driver: local
+    published_ports: []
+  - name: otel-lgtm
+    read_only: false
+    log_driver: none
+    published_ports:
+      - { container: 3000, host: 127.0.0.1, published: 3300 }
+      - { container: 4318, host: 127.0.0.1, published: 4318 }
+      - { container: 9090, host: 127.0.0.1, published: 9091 }
+  - name: grafana-mcp
+    read_only: true
+    log_driver: local
+    published_ports:
+      - { container: 8000, host: 127.0.0.1, published: 8000 }
+  - name: agent-gateway
+    read_only: true
+    log_driver: local
+    published_ports:
+      - { container: 9444, host: 127.0.0.1, published: 9444 }
+  - name: tailscale
+    read_only: true
+    published_ports: []
+  - name: voice-edge
+    read_only: true
+    log_driver: local
+    published_ports: []
+  - name: traefik
+    read_only: true
+    log_driver: local
+    published_ports: []
+
+capability_protected_endpoints:
+  - { name: Grafana MCP, url: "http://127.0.0.1:8000/mcp", status: 401 }
+  - { name: Grafana, url: "http://127.0.0.1:3300/api/user", status: 401 }
+  - { name: inference broker, url: "http://127.0.0.1:9443/health", status: 401 }
+  - { name: Pi voice, url: "http://127.0.0.1:9446/health", status: 401 }
+  - { name: agent gateway, url: "http://127.0.0.1:9444/health", status: 401 }
+
+launch_agents:
+  - com.sathish.pipecat-broker
+  - com.sathish.pipecat-digital-twin-classifier
+  - com.sathish.pipecat-digital-twin-listener
+  - com.sathish.pipecat-host-observability
+  - com.sathish.pipecat-image-builder
+  - com.sathish.pipecat-pi-voice
+  - com.sathish.pipecat-worker
+
+compose_one_shot_services:
+  - s3mock-init
+  - oxigraph-init
+  - grafana-mcp-bootstrap
+
+gitea_endpoint: http://127.0.0.1:3001
+gitea_repository_owner: source-publisher
+gitea_repository_name: agent-workload-platform

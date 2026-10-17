@@ -123,18 +123,18 @@ access to proposal records, and Habitat has no direct host port.
 | Input Diagnostics | `apps/diagnostics/`; React bundle emitted to `apps/diagnostics/dist/` |
 | Engineering Evidence and C4 Explorer | `deploy/observability/generate-c4-heatmap.mjs`; `deploy/observability/c4-dashboard.mjs`; provisioned Grafana dashboard generated from these Mermaid sources |
 | Grafana MCP | Official pinned `grafana/mcp-grafana` Compose service; Viewer service account; authenticated loopback streamable HTTP; PromQL tools and Tempo trace MCP App |
-| Tailnet Ingress | `deploy/compose.yml`; `scripts/compose-login.sh` |
+| Tailnet Ingress | `deploy/compose.yml`; `tools/ops/login.py` |
 | Path Router | `deploy/traefik/traefik.yml`; `deploy/traefik/routes.yml` |
 | Voice Edge | `apps/edge/bot.py`; `apps/edge/Containerfile` |
 | Voice Edge components | `apps/edge/bot.py`; `apps/edge/audio_filter.py`; `apps/edge/audio_diagnostics.py`; `apps/edge/presentation_response.py`; `apps/edge/otel_bridge.py` |
-| Input Audio Filter | `apps/edge/audio_filter.py`; `deploy/prepare_compose.py`; `apps/edge/Containerfile` |
+| Input Audio Filter | `apps/edge/audio_filter.py`; `tools/config/init_secrets.py`; `apps/edge/Containerfile` |
 | Inference Broker | `apps/broker/src/voice_agent/speech/presentation/http.py`; broker LaunchAgent |
 | Inference Broker components | `apps/broker/src/voice_agent/speech/presentation/http.py`; `application/transcription.py`; `infrastructure/parakeet_stt.py`; `infrastructure/mlx_tts.py` |
 | Pi Voice Service | `apps/pi-agent/voice-agent-service.ts`; Pi voice LaunchAgent |
 | Pi Voice Service components | `apps/pi-agent/voice-agent-service.ts`; `apps/pi-agent/voice-agent/`; `platform/agent-execution/gondolin-session/session.ts` |
 | Tasking Wassette component | `components/tasking-ts/src/core/index.ts`; `components/tasking-ts/src/gateway-http/lib.rs`; `components/tasking-ts/wit/world.wit` |
 | Pi Context Usage and Compaction | `apps/client/lib/views/voice_view.dart`; `apps/edge/bot.py`; broker HTTP adapter; `apps/pi-agent/voice-agent-service.ts` |
-| Voice Tool Sandbox and Runtime Data | `apps/pi-agent/voice-agent/voice-gondolin.ts`; `platform/agent-execution/gondolin-session/session.ts`; `scripts/install-launch-agents.sh`; `deploy/launchd/run-pi-agent.sh` |
+| Voice Tool Sandbox and Runtime Data | `apps/pi-agent/voice-agent/voice-gondolin.ts`; `platform/agent-execution/gondolin-session/session.ts`; `automation/roles/host_services`; `deploy/launchd/com.sathish.pipecat-pi-voice.plist` |
 | Agent Gateway | `apps/gateway/src/voice_gateway/main.py`; `apps/gateway/Dockerfile` |
 | Agent Gateway components | `apps/gateway/src/voice_gateway/main.py`; `packages/tasking/src/voice_agent/tasking/application/service.py`; `domain/approval.py`; `infrastructure/artifacts.py` |
 | Task Database and Queue | `packages/tasking/migrations/`; `packages/tasking/src/voice_agent/tasking/application/service.py`; Compose Postgres service |
@@ -144,7 +144,7 @@ access to proposal records, and Habitat has no direct host port.
 | Pi Task Worker components | `apps/worker/src/voice_worker/main.py`; `packages/tasking/src/voice_agent/tasking/application/pi_response.py`; `domain/execution_images.py`; `infrastructure/artifacts.py`; `infrastructure/image_packages.py` |
 | Image Build Orchestration | `apps/worker/src/voice_worker/main.py`; `infrastructure/gitea_actions.py`; `domain/execution_images.py`; `infrastructure/image_packages.py` |
 | Shared Image Builder | image-builder LaunchAgent; `platform/agent-execution/gondolin-session/image-builder/` |
-| Git and Image Package Store | Compose Gitea service; `scripts/gitea-sync.sh`; `packages/tasking/src/voice_agent/tasking/infrastructure/image_packages.py` |
+| Git and Image Package Store | Compose Gitea service; `tools/ops/gitea_sync.py`; `packages/tasking/src/voice_agent/tasking/infrastructure/image_packages.py` |
 | Pi Task Session tools | `platform/agent-execution/gondolin-session/pi-extension.ts`; MCP servers from Pi configuration |
 | Metrics and Traces | `apps/edge/otel_bridge.py`; `packages/telemetry/src/voice_agent/shared/telemetry.py`; Compose `otel-lgtm` service |
 | Platform Resource Metrics | `apps/host-observability/gondolin-exporter.mjs`; `deploy/observability/fluent-bit-host.yaml`; `deploy/observability/fluent-bit.yaml`; `deploy/observability/otelcol-config.yaml`; host-observability LaunchAgent; Compose `fluent-bit` service |

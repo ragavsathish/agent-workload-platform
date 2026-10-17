@@ -1,0 +1,7 @@
+---
+- name: Verify the deployed voice-agent infrastructure
+  hosts: localhost
+  gather_facts: true
+  any_errors_fatal: true
+  roles:
+    - role: verify_infrastructure

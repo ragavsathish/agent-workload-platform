@@ -1,4 +1,5 @@
 import json
+from typing import cast
 from urllib.request import Request
 
 from voice_agent.tasking.infrastructure.gitea_actions import GiteaActions, WorkflowRun
@@ -43,7 +44,7 @@ def test_dispatch_returns_the_checkpointable_workflow_run_id(monkeypatch) -> Non
         "/api/v1/repos/source-publisher/full-wasm-server/actions/workflows/"
         "build-execution-image.yml/dispatches?return_run_details=true"
     )
-    assert json.loads(request.data or b"") == {
+    assert json.loads(cast(bytes, request.data or b"")) == {
         "ref": "0123456789abcdef",
         "inputs": {"artifact_version": "v2-abc"},
     }

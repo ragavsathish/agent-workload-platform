@@ -153,6 +153,7 @@ activemq-data/
 .venv
 deploy/keys/
 deploy/secrets/
+deploy/host-env/
 deploy/edge-bundle/
 apps/pi-agent/digital-twin/runtime/rdf/private/
 apps/pi-agent/.promptfoo/

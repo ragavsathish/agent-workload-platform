@@ -161,7 +161,10 @@ def test_completed_turn_is_enqueued_as_an_idempotent_digital_twin_task(monkeypat
     class Tasks:
         def enqueue_digital_twin(self, **kwargs):
             observed.update(kwargs)
-            return {"task_id": "task-1", "idempotency_key": "digital-twin:session-7:user-3"}
+            return {"tasks": {
+                "journal": {"task_id": "task-1"},
+                "classify": {"task_id": "task-2"},
+            }}
 
     monkeypatch.setattr(gateway, "service", lambda: Tasks())
     client = TestClient(gateway.app)
@@ -189,7 +192,10 @@ def test_completed_turn_is_enqueued_as_an_idempotent_digital_twin_task(monkeypat
     )
 
     assert response.status_code == 202
-    assert response.json()["task_id"] == "task-1"
+    assert response.json()["tasks"] == {
+        "journal": {"task_id": "task-1"},
+        "classify": {"task_id": "task-2"},
+    }
     assert observed == {
         "identity": "owner@example.com",
         "session_id": "session-7",
@@ -239,3 +245,98 @@ def test_journal_writer_has_a_separate_capability_and_fixed_graph(monkeypatch):
     assert len(observed) == 1
     assert "GRAPH <urn:awp:digital-twin:graph:journal>" in observed[0]
     assert "capability security" in observed[0]
+
+
+def test_classifier_candidates_are_written_only_to_the_review_graph(monkeypatch):
+    gateway = load_gateway(monkeypatch)
+    observed = []
+    monkeypatch.setattr(gateway, "_sparql_update", observed.append)
+    client = TestClient(gateway.app)
+    capture_id = "b" * 32
+    candidate_id = f"{capture_id}:candidate:1"
+    response = client.post(
+        "/v1/digital-twin/reviews",
+        headers={"Authorization": f"Bearer {'w' * 32}"},
+        json={
+            "id": capture_id,
+            "identity": "owner@example.com",
+            "sourceRef": "pi-session:session-8:user-4",
+            "capturedAt": "2026-10-17T10:00:00Z",
+            "classification": {
+                "kind": "skill_evidence",
+                "confidence": 0.91,
+                "probabilities": {
+                    "conversation_topic": 0.0,
+                    "skill_evidence": 0.91,
+                    "profile_update": 0.0,
+                    "none": 0.09,
+                },
+                "profileField": "none",
+                "profileFieldConfidence": 0.99,
+                "lowConfidence": False,
+                "model": "Cloudflare/clef-flash",
+            },
+            "candidates": [{
+                "id": candidate_id,
+                "label": "Playwright",
+                "evidenceQuote": "I use Playwright.",
+            }],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"captureId": capture_id, "candidates": 1}
+    assert len(observed) == 1
+    assert "GRAPH <urn:awp:digital-twin:graph:review>" in observed[0]
+    assert "graph:accepted" not in observed[0]
+    assert candidate_id in observed[0]
+
+
+def test_owner_can_accept_a_pending_candidate_into_the_accepted_graph(monkeypatch):
+    gateway = load_gateway(monkeypatch)
+    updates = []
+    candidate_id = f"{'c' * 32}:candidate:1"
+
+    def query(query):
+        assert candidate_id in query
+        return [{
+            "kind": "skill_evidence",
+            "label": "Playwright",
+            "evidence": "I use Playwright.",
+            "status": "pending",
+        }]
+
+    monkeypatch.setattr(gateway, "_sparql_rows", query)
+    monkeypatch.setattr(gateway, "_sparql_update", updates.append)
+    client = TestClient(gateway.app)
+    response = client.post(
+        f"/v1/digital-twin/reviews/{candidate_id}",
+        headers={"Authorization": f"Bearer {'g' * 32}"},
+        json={"identity": "owner@example.com", "decision": "accept"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"candidateId": candidate_id, "status": "accepted"}
+    assert len(updates) == 1
+    assert "GRAPH <urn:awp:digital-twin:graph:accepted>" in updates[0]
+    assert 'awp:status "accepted"' in updates[0]
+
+
+def test_reader_can_list_pending_candidates_but_cannot_decide_them(monkeypatch):
+    gateway = load_gateway(monkeypatch)
+    monkeypatch.setattr(gateway, "_sparql_rows", lambda query: [{"id": "candidate-1"}])
+    client = TestClient(gateway.app)
+
+    listed = client.get(
+        "/v1/digital-twin/reviews?identity=owner@example.com",
+        headers={"Authorization": f"Bearer {'r' * 32}"},
+    )
+    assert listed.status_code == 200
+    assert listed.json() == {"reviews": [{"id": "candidate-1"}]}
+
+    denied = client.post(
+        f"/v1/digital-twin/reviews/{'d' * 32}:candidate:1",
+        headers={"Authorization": f"Bearer {'r' * 32}"},
+        json={"identity": "owner@example.com", "decision": "accept"},
+    )
+    assert denied.status_code == 401

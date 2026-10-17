@@ -15,7 +15,7 @@ function jsonResponse(payload, status = 200) {
   });
 }
 
-test("Von receives explicit ontology-oriented choices", async () => {
+test("Von receives one anchored ontology choice", async () => {
   let request;
   const decision = await classifyTranscript("I use Playwright for browser testing.", {
     fetch: async (url, init) => {
@@ -40,12 +40,9 @@ test("Von receives explicit ontology-oriented choices", async () => {
     },
   });
 
-  assert.equal(request.url, "http://127.0.0.1:8000/v1/systemone");
+  assert.equal(request.url, "http://127.0.0.1:8010/v1/systemone");
   assert.deepEqual(Object.keys(request.body.questions.assertion_kind.criteria), [
-    "conversation_topic",
-    "skill_evidence",
-    "profile_update",
-    "none",
+    "conversation_topic", "skill_evidence", "profile_update", "none",
   ]);
   assert.equal(decision.kind, "skill_evidence");
   assert.equal(decision.review, false);

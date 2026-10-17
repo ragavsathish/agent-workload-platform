@@ -26,9 +26,9 @@ from fastapi.responses import Response, StreamingResponse
 from loguru import logger
 from pydantic import BaseModel, Field
 from voice_agent.shared.telemetry import configure_telemetry
-from voice_agent.speech.application.transcription import extract_transcript
+from voice_agent.speech.application.transcription import inference_slot, transcribe_audio
 from voice_agent.speech.infrastructure.mlx_tts import synthesize_pcm
-from voice_agent.speech.infrastructure.parakeet_stt import load_model, transcribe_pcm
+from voice_agent.speech.infrastructure.parakeet_stt import load_model
 
 # The broker handles raw voice data. Do not emit library or application logs from this process.
 logger.remove()
@@ -48,9 +48,6 @@ if len(BROKER_TOKEN) < 32:
     raise RuntimeError("INFERENCE_BROKER_TOKEN must contain at least 32 characters")
 if not OLLAMA_MODEL:
     raise RuntimeError("OLLAMA_MODEL is required")
-
-_inference_slot = asyncio.Semaphore(1)
-
 
 async def authenticate(authorization: Annotated[str | None, Header()] = None) -> None:
     expected = f"Bearer {BROKER_TOKEN}"
@@ -105,24 +102,23 @@ async def health(_: None = Depends(authenticate)) -> dict[str, str]:
     return {"status": "ok"}
 
 
+async def read_bounded_audio(file: UploadFile) -> np.ndarray:
+    """Read and decode an upload within the broker's audio limits."""
+    content = await file.read(MAX_AUDIO_BYTES + 1)
+    if len(content) > MAX_AUDIO_BYTES:
+        raise HTTPException(status_code=413, detail="audio payload too large")
+    return _decode_wav(content)
+
+
 @app.post("/v1/audio/transcriptions")
 async def transcribe(
     file: Annotated[UploadFile, File()],
     _: None = Depends(authenticate),
 ) -> dict[str, str]:
     with telemetry.observe("inference.stt"):
-        content = await file.read(MAX_AUDIO_BYTES + 1)
-        if len(content) > MAX_AUDIO_BYTES:
-            raise HTTPException(status_code=413, detail="audio payload too large")
-        audio = _decode_wav(content)
+        audio = await read_bounded_audio(file)
         telemetry.record("inference.stt.audio", outcome="accepted")
-        async with _inference_slot:
-            result = await asyncio.to_thread(
-                transcribe_pcm,
-                audio,
-                model_id=os.environ["MLX_STT_MODEL"],
-            )
-        transcript = extract_transcript(result)
+        transcript = await transcribe_audio(audio)
         telemetry.record("inference.stt.transcript", outcome=transcript.outcome)
         if transcript.filtered_segments:
             telemetry.record(
@@ -138,7 +134,7 @@ async def speech(body: SpeechRequest, _: None = Depends(authenticate)) -> Respon
     with telemetry.observe("inference.tts"):
         if body.response_format != "pcm":
             raise HTTPException(status_code=400, detail="only PCM output is supported")
-        async with _inference_slot:
+        async with inference_slot:
             pcm, sample_rate = await asyncio.to_thread(
                 synthesize_pcm,
                 text=body.input,

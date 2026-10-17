@@ -4,7 +4,15 @@
 <dict>
   <key>Label</key><string>com.sathish.pipecat-broker</string>
   <key>ProgramArguments</key>
-  <array><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/scripts/run-broker.sh</string></array>
+  <array>
+    <string>/opt/homebrew/bin/uv</string>
+    <string>run</string>
+    <string>--no-sync</string>
+    <string>python</string>
+    <string>-m</string>
+    <string>voice_agent.speech.presentation.http</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/apps/broker</string>
   <key>RunAtLoad</key><true/>
   <key>EnvironmentVariables</key>
   <dict>
@@ -13,6 +21,7 @@
     <key>OTEL_EXPORTER_OTLP_ENDPOINT</key><string>http://127.0.0.1:4318</string>
     <key>OTEL_LOGS_EXPORTER</key><string>none</string>
     <key>OTEL_METRIC_EXPORT_INTERVAL</key><string>5000</string>
+    <key>PYTHONPATH</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/apps/broker/src:/Users/sathish.narayanan/Library/Application Support/PipecatEdge/packages/telemetry/src</string>
   </dict>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>10</integer>

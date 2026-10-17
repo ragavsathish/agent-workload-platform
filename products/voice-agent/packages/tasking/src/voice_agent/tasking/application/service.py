@@ -69,8 +69,8 @@ class TaskService:
         message_id: str,
         transcript: str,
         captured_at: str,
-    ) -> dict[str, str]:
-        """Persist one owner turn as an idempotent background ingestion task."""
+    ) -> dict[str, Any]:
+        """Fan one owner turn out to independently retryable ingestion tasks."""
 
         text = transcript.strip()
         if not text:
@@ -79,23 +79,31 @@ class TaskService:
             raise ProposalError("transcript is too large")
         if not session_id.strip() or not message_id.strip():
             raise ProposalError("session_id and message_id are required")
-        idempotency_key = f"digital-twin:{session_id.strip()}:{message_id.strip()}"
+        source_key = f"{session_id.strip()}:{message_id.strip()}"
+        tasks: dict[str, dict[str, str]] = {}
         with closing(Absurd(self.settings.database_url, queue_name=self.settings.queue)) as absurd:
-            spawned = absurd.spawn(
-                "digital-twin-ingest",
-                {
-                    "identity": identity,
-                    "sessionId": session_id.strip(),
-                    "messageId": message_id.strip(),
-                    "transcript": text,
-                    "capturedAt": captured_at,
-                },
-                max_attempts=3,
-                queue=self.settings.queue,
-                cancellation={"max_duration": 180},
-                idempotency_key=idempotency_key,
-            )
-        return {"task_id": str(spawned["task_id"]), "idempotency_key": idempotency_key}
+            for mode in ("journal", "classify"):
+                idempotency_key = f"digital-twin:{mode}:{source_key}"
+                spawned = absurd.spawn(
+                    f"digital-twin-{mode}",
+                    {
+                        "mode": mode,
+                        "identity": identity,
+                        "sessionId": session_id.strip(),
+                        "messageId": message_id.strip(),
+                        "transcript": text,
+                        "capturedAt": captured_at,
+                    },
+                    max_attempts=3,
+                    queue=self.settings.queue,
+                    cancellation={"max_duration": 180},
+                    idempotency_key=idempotency_key,
+                )
+                tasks[mode] = {
+                    "task_id": str(spawned["task_id"]),
+                    "idempotency_key": idempotency_key,
+                }
+        return {"tasks": tasks}
 
     def propose(self, *, identity: str, instruction: str, workspace: str) -> dict[str, Any]:
         plan = self._plan(instruction, workspace)

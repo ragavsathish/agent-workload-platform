@@ -48,8 +48,8 @@ services:
 
   s3mock-init:
     image: adobe/s3mock:5.0.0@sha256:c461c8f4234bd63540d2f3a3cabce69d814c78dc890a5af08727525a028e23da
-    entrypoint: ["/bin/sh", "-c"]
-    command: ["chown 65532:65532 /s3mockroot"]
+    entrypoint: ["chown"]
+    command: ["65532:65532", "/s3mockroot"]
     volumes: [s3mock-data:/s3mockroot]
     network_mode: none
     cap_drop: [ALL]
@@ -104,8 +104,8 @@ services:
 
   oxigraph-init:
     image: busybox:1.37.0@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
-    entrypoint: ["/bin/sh", "-c"]
-    command: ["chown -R 65532:65532 /data"]
+    entrypoint: ["chown"]
+    command: ["-R", "65532:65532", "/data"]
     volumes: [oxigraph-data:/data]
     network_mode: none
     cap_drop: [ALL]

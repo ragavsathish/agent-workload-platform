@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any, cast
 from urllib.error import HTTPError
 from urllib.request import Request
 
@@ -42,7 +43,7 @@ def test_upload_uses_the_builder_package_capability(tmp_path: Path, monkeypatch)
 
 def test_optional_manifest_distinguishes_cache_miss(monkeypatch) -> None:
     def missing(request: Request, timeout: int):
-        raise HTTPError(request.full_url, 404, "missing", {}, None)
+        raise HTTPError(request.full_url, 404, "missing", cast(Any, {}), None)
 
     monkeypatch.setattr("voice_agent.tasking.infrastructure.image_packages.urlopen", missing)
     packages = GiteaImagePackages("http://gitea.local", "image-builder", "token")

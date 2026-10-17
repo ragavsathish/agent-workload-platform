@@ -146,18 +146,26 @@ def create_worker(settings: Settings) -> Absurd:
         with telemetry.observe("task.run"):
             return run_agent_task(params, ctx)
 
-    @absurd.register_task(
-        "digital-twin-ingest",
-        queue=settings.queue,
-        default_max_attempts=3,
-        default_cancellation={"max_duration": settings.digital_twin_timeout_seconds + 30},
-    )
-    def digital_twin_ingest(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
+    def run_digital_twin_ingestion(
+        params: dict[str, Any], ctx: TaskContext
+    ) -> dict[str, Any]:
         with telemetry.observe("digital_twin.ingest"):
             return cast(
                 dict[str, Any],
                 ctx.step("run-digital-twin-vm", lambda: run_digital_twin(settings, params)),
             )
+
+    for task_name in (
+        "digital-twin-journal",
+        "digital-twin-classify",
+        "digital-twin-ingest",  # Drain tasks created before the fan-out migration.
+    ):
+        absurd.register_task(
+            task_name,
+            queue=settings.queue,
+            default_max_attempts=3,
+            default_cancellation={"max_duration": settings.digital_twin_timeout_seconds + 30},
+        )(run_digital_twin_ingestion)
 
     def run_agent_task(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
         task_id = str(ctx.task_id)

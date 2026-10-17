@@ -138,7 +138,7 @@ export async function classifyTranscript(
   const text = transcript.trim();
   if (!text) throw new Error("transcript must not be empty");
   const request = options.fetch ?? fetch;
-  const baseUrl = (options.baseUrl ?? "http://127.0.0.1:8000").replace(/\/$/, "");
+  const baseUrl = (options.baseUrl ?? "http://127.0.0.1:8010").replace(/\/$/, "");
   const response = await request(`${baseUrl}/v1/systemone`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -175,7 +175,7 @@ export async function classifyTranscript(
   }
   const kind = kindAnswer.choice as AssertionKind;
   const profileField = profileAnswer.choice as ProfileField;
-  const threshold = options.reviewThreshold ?? 0.82;
+  const threshold = options.reviewThreshold ?? 0.60;
   return {
     kind,
     kindConfidence: kindAnswer.confidence,

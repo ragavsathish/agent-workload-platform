@@ -25,17 +25,15 @@ def settings(tmp_path: Path) -> Settings:
 
 
 def test_digital_twin_turn_uses_a_retryable_idempotent_task(tmp_path: Path, monkeypatch) -> None:
-    observed = {}
+    observed = []
 
     class Queue:
         def __init__(self, database_url, queue_name):
-            observed["database_url"] = database_url
-            observed["queue_name"] = queue_name
+            assert database_url
+            assert queue_name == "agents"
 
         def spawn(self, task, payload, **options):
-            observed["task"] = task
-            observed["payload"] = payload
-            observed["options"] = options
+            observed.append({"task": task, "payload": payload, "options": options})
             return {"task_id": "task-1"}
 
         def close(self):
@@ -50,15 +48,25 @@ def test_digital_twin_turn_uses_a_retryable_idempotent_task(tmp_path: Path, monk
         captured_at="2026-10-17T10:00:00Z",
     )
 
-    assert result == {
-        "task_id": "task-1",
-        "idempotency_key": "digital-twin:session-7:user-3",
-    }
-    assert observed["task"] == "digital-twin-ingest"
-    assert observed["payload"]["transcript"] == "I want durable memory."
-    assert observed["options"] == {
+    assert result == {"tasks": {
+        "journal": {
+            "task_id": "task-1",
+            "idempotency_key": "digital-twin:journal:session-7:user-3",
+        },
+        "classify": {
+            "task_id": "task-1",
+            "idempotency_key": "digital-twin:classify:session-7:user-3",
+        },
+    }}
+    assert [call["task"] for call in observed] == [
+        "digital-twin-journal",
+        "digital-twin-classify",
+    ]
+    assert all(call["payload"]["transcript"] == "I want durable memory." for call in observed)
+    assert [call["payload"]["mode"] for call in observed] == ["journal", "classify"]
+    assert [call["options"] for call in observed] == [{
         "max_attempts": 3,
         "queue": "agents",
         "cancellation": {"max_duration": 180},
-        "idempotency_key": "digital-twin:session-7:user-3",
-    }
+        "idempotency_key": f"digital-twin:{mode}:session-7:user-3",
+    } for mode in ("journal", "classify")]

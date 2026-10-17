@@ -1,0 +1,131 @@
+---
+- name: "Verify running state | {{ inspected_service.item.name }}"
+  ansible.builtin.assert:
+    that:
+      - inspected_service.exists
+      - inspected_service.container.State.Running
+    fail_msg: "Compose service {{ inspected_service.item.name }} is not running."
+    quiet: true
+
+- name: "Verify filesystem policy | {{ inspected_service.item.name }}"
+  ansible.builtin.assert:
+    that:
+      - inspected_service.container.HostConfig.ReadonlyRootfs == inspected_service.item.read_only
+    fail_msg: "Compose service {{ inspected_service.item.name }} has the wrong root-filesystem policy."
+    quiet: true
+
+- name: "Verify security policy | {{ inspected_service.item.name }}"
+  ansible.builtin.assert:
+    that:
+      - >-
+        inspected_service.container.HostConfig.CapDrop | default([], true)
+        ==
+        (["ALL"] if inspected_service.item.cap_drop_all | default(true) else [])
+      - "'no-new-privileges' in (inspected_service.container.HostConfig.SecurityOpt | default([]) | join(','))"
+      - "'/var/run/docker.sock' not in (inspected_service.container.Mounts | map(attribute='Destination') | list)"
+    fail_msg: "Compose service {{ inspected_service.item.name }} violates its container security contract."
+    quiet: true
+
+- name: "Verify logging policy | {{ inspected_service.item.name }}"
+  ansible.builtin.assert:
+    that:
+      - inspected_service.container.HostConfig.LogConfig.Type == inspected_service.item.log_driver
+      - inspected_service.item.log_driver != "local" or inspected_service.container.HostConfig.LogConfig.Config['max-size'] == "10m"
+      - inspected_service.item.log_driver != "local" or inspected_service.container.HostConfig.LogConfig.Config['max-file'] == "3"
+    fail_msg: "Compose service {{ inspected_service.item.name }} violates its logging policy."
+    quiet: true
+  when: inspected_service.item.log_driver is defined
+
+- name: "Verify declared ports | {{ inspected_service.item.name }}"
+  ansible.builtin.assert:
+    that:
+      - >-
+        (inspected_service.container.NetworkSettings.Ports
+          | dict2items
+          | selectattr('value', 'ne', none)
+          | map(attribute='key')
+          | sort
+          | list)
+        ==
+        (inspected_service.item.published_ports
+          | map(attribute='container')
+          | map('string')
+          | map('regex_replace', '$', '/tcp')
+          | sort
+          | list)
+    fail_msg: "Compose service {{ inspected_service.item.name }} publishes an unexpected port."
+    quiet: true
+
+- name: "Verify port bindings | {{ inspected_service.item.name }}"
+  ansible.builtin.assert:
+    that:
+      - inspected_service.container.NetworkSettings.Ports[(published_port.container | string) + '/tcp'][0].HostIp == published_port.host
+      - inspected_service.container.NetworkSettings.Ports[(published_port.container | string) + '/tcp'][0].HostPort == (published_port.published | string)
+    fail_msg: "Compose service {{ inspected_service.item.name }} has an unexpected host port binding."
+    quiet: true
+  loop: "{{ inspected_service.item.published_ports }}"
+  loop_control:
+    loop_var: published_port
+    label: "{{ published_port.host }}:{{ published_port.published }}"
+
+- name: "Verify OpenTelemetry log export is disabled | {{ inspected_service.item.name }}"
+  ansible.builtin.assert:
+    that:
+      - "'OTEL_LOGS_EXPORTER=none' in inspected_service.container.Config.Env"
+    quiet: true
+  when: inspected_service.item.name in ["grafana-mcp", "agent-gateway", "voice-edge"]
+
+- name: "Verify no Documents path is bound | {{ inspected_service.item.name }}"
+  ansible.builtin.assert:
+    that:
+      - >-
+        inspected_service.container.Mounts
+        | selectattr('Type', 'equalto', 'bind')
+        | map(attribute='Source')
+        | select('search', '/Documents(/|$)')
+        | list
+        | length == 0
+    quiet: true
+  when: inspected_service.item.name in ["gitea", "s3mock"]
+
+- name: Verify Grafana authentication-proxy configuration
+  ansible.builtin.assert:
+    that:
+      - "'GF_AUTH_PROXY_ENABLED=true' in inspected_service.container.Config.Env"
+      - "'GF_AUTH_PROXY_HEADER_NAME=Tailscale-User-Login' in inspected_service.container.Config.Env"
+      - "'GF_AUTH_PROXY_WHITELIST=172.30.90.2' in inspected_service.container.Config.Env"
+      - "'GF_SERVER_SERVE_FROM_SUB_PATH=true' in inspected_service.container.Config.Env"
+    quiet: true
+  when: inspected_service.item.name == "otel-lgtm"
+
+- name: Verify Oxigraph uses a named data volume
+  ansible.builtin.assert:
+    that:
+      - >-
+        inspected_service.container.Mounts
+        | selectattr('Type', 'equalto', 'volume')
+        | selectattr('Destination', 'equalto', '/data')
+        | list
+        | length == 1
+    quiet: true
+  when: inspected_service.item.name == "oxigraph"
+
+- name: Verify Fluent Bit host metric mounts are read-only
+  ansible.builtin.assert:
+    that:
+      - >-
+        inspected_service.container.Mounts
+        | selectattr('Source', 'equalto', '/proc')
+        | selectattr('Destination', 'equalto', '/host/proc')
+        | selectattr('RW', 'equalto', false)
+        | list
+        | length == 1
+      - >-
+        inspected_service.container.Mounts
+        | selectattr('Source', 'equalto', '/sys')
+        | selectattr('Destination', 'equalto', '/host/sys')
+        | selectattr('RW', 'equalto', false)
+        | list
+        | length == 1
+    quiet: true
+  when: inspected_service.item.name == "fluent-bit"

@@ -4,16 +4,21 @@
 <dict>
   <key>Label</key><string>com.sathish.pipecat-pi-voice</string>
   <key>ProgramArguments</key>
-  <array><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/scripts/run-pi-agent.sh</string></array>
+  <array>
+    <string>/opt/homebrew/bin/node</string>
+    <string>dist/voice-agent-service.js</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/voice-pi-agent</string>
   <key>RunAtLoad</key><true/>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>HOME</key><string>/Users/sathish.narayanan</string>
+    <key>HOME</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/runtime-home</string>
     <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     <key>PI_OFFLINE</key><string>1</string>
     <key>PI_VOICE_ENV_FILE</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/apps/pi-voice/pi-voice.env</string>
   </dict>
   <key>KeepAlive</key><true/>
+  <key>Umask</key><integer>63</integer>
   <key>ThrottleInterval</key><integer>10</integer>
   <key>StandardOutPath</key><string>/Users/sathish.narayanan/Library/Logs/PipecatEdge/pi-voice.log</string>
   <key>StandardErrorPath</key><string>/Users/sathish.narayanan/Library/Logs/PipecatEdge/pi-voice.log</string>

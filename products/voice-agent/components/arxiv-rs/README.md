@@ -26,7 +26,8 @@ The generated `dist/arxiv_rs.wasm` is intentionally ignored. Rebuild it from the
 install it into the voice service's private component directory with:
 
 ```bash
-make -C products/voice-agent wassette-arxiv-install
+make -C products/voice-agent/components/arxiv-rs build
+make -C products/voice-agent/components/arxiv-rs install
 ```
 
 `Cargo.lock` records the dependency resolution because upstream does not ship one for this

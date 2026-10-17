@@ -20,6 +20,7 @@ from typing import Annotated, Literal
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Path as ApiPath
 from pydantic import BaseModel, Field
 from voice_agent.shared.telemetry import configure_telemetry
 from voice_agent.tasking.application.pi_response import parse_pi_event_stream, response_from_text
@@ -138,6 +139,45 @@ ORDER BY DESC(?source)
 LIMIT 200
 """
 
+ACCEPTED_FACTS_QUERY = """
+PREFIX schema: <https://schema.org/>
+
+SELECT ?kind ?label ?source WHERE {
+  GRAPH <urn:awp:digital-twin:graph:accepted> {
+    ?source a schema:Claim ;
+      schema:additionalType ?kind ;
+      schema:name ?label .
+  }
+}
+ORDER BY ?kind ?label ?source
+LIMIT 200
+"""
+
+PENDING_REVIEWS_QUERY = """
+PREFIX schema: <https://schema.org/>
+PREFIX awp: <urn:awp:digital-twin:predicate:>
+
+SELECT ?id ?kind ?profileField ?label ?evidence ?confidence ?lowConfidence ?model ?sourceRef ?capturedAt ?status WHERE {
+  GRAPH <urn:awp:digital-twin:graph:review> {
+    ?candidate a schema:Claim ;
+      schema:identifier ?id ;
+      schema:additionalType ?kind ;
+      schema:disambiguatingDescription ?profileField ;
+      schema:name ?label ;
+      schema:text ?evidence ;
+      awp:confidence ?confidence ;
+      awp:status ?status ;
+      schema:isBasedOn ?source ;
+      schema:dateCreated ?capturedAt .
+    ?source schema:identifier ?sourceRef ; awp:model ?model .
+    OPTIONAL { ?candidate awp:lowConfidence ?lowConfidence }
+    FILTER(?status = "pending")
+  }
+}
+ORDER BY DESC(?capturedAt) ?id
+LIMIT 200
+"""
+
 
 class IdentityRequest(BaseModel):
     identity: str = Field(min_length=3, max_length=320)
@@ -170,6 +210,43 @@ class JournalCapture(IdentityRequest):
     captured_at: datetime = Field(alias="capturedAt")
     transcript: str = Field(min_length=1, max_length=20_000)
     entries: list[JournalEntry] = Field(max_length=12)
+
+
+class ReviewCandidate(BaseModel):
+    id: str = Field(pattern=r"^[a-f0-9]{32}:candidate:[1-9][0-9]*$")
+    label: str = Field(min_length=1, max_length=200)
+    evidence_quote: str = Field(alias="evidenceQuote", min_length=1, max_length=1_000)
+
+
+class AssertionProbabilities(BaseModel):
+    conversation_topic: float = Field(ge=0, le=1)
+    skill_evidence: float = Field(ge=0, le=1)
+    profile_update: float = Field(ge=0, le=1)
+    none: float = Field(ge=0, le=1)
+
+
+class ReviewClassification(BaseModel):
+    kind: Literal["conversation_topic", "skill_evidence", "profile_update"]
+    confidence: float = Field(ge=0, le=1)
+    probabilities: AssertionProbabilities
+    profile_field: Literal[
+        "job_title", "home_location", "credential", "employment", "none"
+    ] = Field(alias="profileField")
+    profile_field_confidence: float = Field(alias="profileFieldConfidence", ge=0, le=1)
+    low_confidence: bool = Field(alias="lowConfidence")
+    model: str = Field(min_length=1, max_length=200)
+
+
+class ReviewCapture(IdentityRequest):
+    id: str = Field(pattern=r"^[a-f0-9]{32}$")
+    source_ref: str = Field(alias="sourceRef", min_length=1, max_length=300)
+    captured_at: datetime = Field(alias="capturedAt")
+    classification: ReviewClassification
+    candidates: list[ReviewCandidate] = Field(min_length=1, max_length=8)
+
+
+class ReviewDecision(IdentityRequest):
+    decision: Literal["accept", "reject"]
 
 
 async def authenticate(authorization: Annotated[str | None, Header()] = None) -> None:
@@ -335,6 +412,97 @@ def _journal_update(capture: JournalCapture) -> str:
     )
 
 
+def _review_update(capture: ReviewCapture) -> str:
+    source = f"urn:awp:digital-twin:review-source:{capture.id}"
+    classification = capture.classification
+    triples = [
+        f"<{source}> a schema:Message ;",
+        f"  schema:identifier {_rdf_literal(capture.source_ref)} ;",
+        f"  schema:dateSent {_rdf_literal(capture.captured_at.isoformat())}^^xsd:dateTime ;",
+        f"  awp:model {_rdf_literal(classification.model)} ;",
+        f"  awp:profileFieldConfidence {classification.profile_field_confidence} .",
+    ]
+    for candidate in capture.candidates:
+        candidate_iri = f"urn:awp:digital-twin:review:{candidate.id}"
+        properties = [
+            f"  schema:identifier {_rdf_literal(candidate.id)}",
+            f"  schema:additionalType {_rdf_literal(classification.kind)}",
+            f"  schema:disambiguatingDescription {_rdf_literal(classification.profile_field)}",
+            f"  schema:name {_rdf_literal(candidate.label)}",
+            f"  schema:text {_rdf_literal(candidate.evidence_quote)}",
+            f"  schema:isBasedOn <{source}>",
+            f"  schema:dateCreated {_rdf_literal(capture.captured_at.isoformat())}^^xsd:dateTime",
+            f"  awp:confidence {classification.confidence}",
+            f"  awp:lowConfidence {str(classification.low_confidence).lower()}",
+            '  awp:status "pending"',
+        ]
+        triples.append(
+            f"<{candidate_iri}> a schema:Claim ;\n" + " ;\n".join(properties) + " ."
+        )
+    return "\n".join(
+        [
+            "PREFIX schema: <https://schema.org/>",
+            "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>",
+            "PREFIX awp: <urn:awp:digital-twin:predicate:>",
+            "INSERT DATA { GRAPH <urn:awp:digital-twin:graph:review> {",
+            *(f"  {triple.replace(chr(10), chr(10) + '  ')}" for triple in triples),
+            "} }",
+            "",
+        ]
+    )
+
+
+def _review_candidate_query(candidate_id: str) -> str:
+    candidate = f"urn:awp:digital-twin:review:{candidate_id}"
+    return "\n".join(
+        [
+            "PREFIX schema: <https://schema.org/>",
+            "PREFIX awp: <urn:awp:digital-twin:predicate:>",
+            "SELECT ?kind ?label ?evidence ?status WHERE {",
+            "  GRAPH <urn:awp:digital-twin:graph:review> {",
+            f"    <{candidate}> schema:additionalType ?kind ;",
+            "      schema:name ?label ; schema:text ?evidence ; awp:status ?status .",
+            "  }",
+            "}",
+            "LIMIT 1",
+        ]
+    )
+
+
+def _review_decision_update(candidate_id: str, decision: Literal["accept", "reject"]) -> str:
+    candidate = f"urn:awp:digital-twin:review:{candidate_id}"
+    status = "accepted" if decision == "accept" else "rejected"
+    accepted_insert = (
+        "GRAPH <urn:awp:digital-twin:graph:accepted> {\n"
+        f"  <{candidate}> a schema:Claim ; schema:identifier {_rdf_literal(candidate_id)} ;\n"
+        "    schema:additionalType ?kind ; schema:name ?label ; schema:text ?evidence ;\n"
+        "    schema:isBasedOn ?source .\n"
+        "}"
+        if decision == "accept"
+        else ""
+    )
+    return "\n".join(
+        [
+            "PREFIX schema: <https://schema.org/>",
+            "PREFIX awp: <urn:awp:digital-twin:predicate:>",
+            "DELETE { GRAPH <urn:awp:digital-twin:graph:review> {",
+            f"  <{candidate}> awp:status ?oldStatus .",
+            "} }",
+            "INSERT {",
+            "  GRAPH <urn:awp:digital-twin:graph:review> {",
+            f"    <{candidate}> awp:status {_rdf_literal(status)} .",
+            "  }",
+            f"  {accepted_insert}",
+            "}",
+            "WHERE { GRAPH <urn:awp:digital-twin:graph:review> {",
+            f"  <{candidate}> awp:status ?oldStatus ; schema:additionalType ?kind ;",
+            "    schema:name ?label ; schema:text ?evidence ; schema:isBasedOn ?source .",
+            "} }",
+            "",
+        ]
+    )
+
+
 def _sparql_update(update: str) -> None:
     request = urllib.request.Request(
         OXIGRAPH_UPDATE_URL,
@@ -386,6 +554,7 @@ async def query_digital_twin(
             rows: list[dict[str, str]] = []
             if scope in {"profile", "all"}:
                 rows.extend(await asyncio.to_thread(_sparql_rows, PROFILE_FACTS_QUERY))
+                rows.extend(await asyncio.to_thread(_sparql_rows, ACCEPTED_FACTS_QUERY))
             if scope in {"learning", "all"}:
                 rows.extend(await asyncio.to_thread(_sparql_rows, LEARNING_FACTS_QUERY))
             if scope in {"journal", "all"}:
@@ -424,6 +593,63 @@ async def write_digital_twin_journal(
         try:
             await asyncio.to_thread(_sparql_update, _journal_update(body))
             return {"captureId": body.id, "entries": len(body.entries)}
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/v1/digital-twin/reviews")
+async def write_digital_twin_reviews(
+    body: ReviewCapture,
+    _: None = Depends(authenticate_digital_twin_writer),
+):
+    normalized_identity(body.identity)
+    with telemetry.observe("digital_twin.review.write"):
+        try:
+            await asyncio.to_thread(_sparql_update, _review_update(body))
+            return {"captureId": body.id, "candidates": len(body.candidates)}
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/v1/digital-twin/reviews")
+async def list_digital_twin_reviews(
+    identity: str = Query(min_length=3, max_length=320),
+    _: None = Depends(authenticate_digital_twin_reader),
+):
+    normalized_identity(identity)
+    with telemetry.observe("digital_twin.review.list"):
+        try:
+            rows = await asyncio.to_thread(_sparql_rows, PENDING_REVIEWS_QUERY)
+            return {"reviews": rows[:MAX_DIGITAL_TWIN_FACTS]}
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/v1/digital-twin/reviews/{candidate_id}")
+async def decide_digital_twin_review(
+    candidate_id: Annotated[
+        str, ApiPath(pattern=r"^[a-f0-9]{32}:candidate:[1-9][0-9]*$")
+    ],
+    body: ReviewDecision,
+    _: None = Depends(authenticate),
+):
+    normalized_identity(body.identity)
+    with telemetry.observe("digital_twin.review.decide"):
+        try:
+            rows = await asyncio.to_thread(
+                _sparql_rows, _review_candidate_query(candidate_id)
+            )
+            if not rows:
+                raise HTTPException(status_code=404, detail="review candidate not found")
+            current = rows[0].get("status")
+            requested = "accepted" if body.decision == "accept" else "rejected"
+            if current not in {"pending", requested}:
+                raise HTTPException(status_code=409, detail="review candidate was already decided")
+            if current == "pending":
+                await asyncio.to_thread(
+                    _sparql_update, _review_decision_update(candidate_id, body.decision)
+                )
+            return {"candidateId": candidate_id, "status": requested}
         except RuntimeError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 

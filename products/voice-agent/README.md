@@ -90,6 +90,12 @@ make login
 make warm-models
 ```
 
+The repository-root `Makefile` is the main entry point. This product Makefile
+remains usable from this directory and owns product-specific orchestration.
+Every WASM module owns its build implementation in its component directory;
+run `make wasm-build`, `make wasm-check`, or `make wasm-install` here to invoke
+the same interface across all components.
+
 `make start` deploys in the background. Use `make up` to deploy and then follow
 bounded container output together with the native broker, Pi voice, and worker
 stdout; `Ctrl-C` stops following output but leaves the services running. Use
@@ -300,7 +306,7 @@ synthetic origin backed by Prometheus's loopback-only host port, so Pi can query
 receiving access to Grafana credentials or the Docker monitoring network.
 
 Gitea uses rootless mode, SQLite, and named Docker volumes. Registration and SSH are disabled.
-Actions schedule trusted image builds, while Packages store immutable project-image artifacts. `scripts/gitea-sync.sh`
+Actions schedule trusted image builds, while Packages store immutable project-image artifacts. `tools/ops/gitea_sync.py`
 creates the publisher account and repository idempotently, then
 mirrors only committed refs from this repository. Gitea is reachable from macOS only on
 `http://127.0.0.1:3001`; Gondolin can reach only its synthetic read endpoint and S3Mock, with all

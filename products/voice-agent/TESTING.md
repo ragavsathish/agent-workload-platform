@@ -1,5 +1,9 @@
 # Voice black-box testing
 
+Infrastructure verification and lifecycle tests are Ansible playbooks under
+[`automation/`](automation/README.md). Run `make automation-setup` once before
+using `make verify`, `make cycle-test`, or `make digital-twin-test`.
+
 The black-box runner uses no microphone shortcut and no direct STT injection. It asks the native
 Kokoro broker to synthesize an utterance, resamples the PCM to browser input format, obtains a
 one-use Pipecat session token, and streams 20 ms protobuf audio frames over the browser-facing
@@ -13,10 +17,9 @@ make blackbox-personal-knowledge
 make blackbox-voice \
   UTTERANCE="Propose a task in the default workspace to inspect it without changing files"
 
-# Multiple turns, including approval, can be passed directly:
-./tests/e2e/blackbox-voice.sh \
-  "Propose a task in the default workspace to report ready without changing files" \
-  "Approve that pending task now"
+# Multiple turns, including approval, can be passed as JSON:
+BLACKBOX_UTTERANCES_JSON='["Propose a task in the default workspace to report ready without changing files", "Approve that pending task now"]' \
+  make blackbox-voice
 ```
 
 `blackbox-personal-knowledge` inserts one isolated RDF fixture, invokes the typed tool through
