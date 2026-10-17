@@ -54,11 +54,25 @@ test("compiles C4 sources into deterministic Grafana JSON", () => {
   assert.deepEqual(dashboard.panels[1].gridPos, { h: 14, w: 12, x: 0, y: 8 });
   assert.deepEqual(dashboard.panels[2].gridPos, { h: 14, w: 12, x: 12, y: 8 });
   assert.match(dashboard.panels[1].options.content, /UpdateElementStyle\(system/);
-  assert.match(dashboard.panels[2].options.content, /style EDGE fill:\$\{__data\.A:color\}/);
+  assert.match(
+    dashboard.panels[2].options.content,
+    /style EDGE fill:#7c5e27,color:#ffffff,stroke:\$\{__data\.A:color\},stroke-width:5px/,
+  );
   assert.equal(
     dashboard.panels[2].targets[0].expr,
-    'sum(increase(pipecat_operation_total{service_name="voice-edge"}[$__range])) or vector(0)',
+    '(sum(increase(pipecat_operation_total{service_name="voice-edge"}[$__range])) and on() (max(timestamp(pipecat_operation_total{service_name="voice-edge"})) > time() - 120)) or vector(-1)',
   );
+  assert.deepEqual(
+    dashboard.panels[2].fieldConfig.defaults.thresholds.steps.slice(0, 3),
+    [
+      { color: "#ff778a", value: null },
+      { color: "#94a3b8", value: 0 },
+      { color: "#38bdf8", value: 1 },
+    ],
+  );
+  assert.equal(dashboard.links.length, 2);
+  assert.equal(dashboard.annotations.list[0].name, "Deployments and E2E runs");
+  assert.equal(dashboard.version, 9);
 });
 
 test("rejects references to diagrams that were not supplied", () => {
@@ -70,6 +84,24 @@ test("rejects references to diagrams that were not supplied", () => {
       [],
     ),
     "evidence references unknown diagram: missing",
+  );
+});
+
+test("uses the Gitea runner's native health metric for its activity overlay", () => {
+  const dashboard = JSON.parse(compileDashboard(
+    options,
+    diagrams,
+    [],
+    [{
+      diagramId: "deployment",
+      elementId: "EDGE",
+      refId: "A",
+      serviceName: "pipecat-gitea-runner",
+    }],
+  ));
+  assert.equal(
+    dashboard.panels[2].targets[0].expr,
+    '(sum(gitea_runner_info{service_name="pipecat-gitea-runner"}) and on() (max(timestamp(gitea_runner_info{service_name="pipecat-gitea-runner"})) > time() - 120)) or vector(-1)',
   );
 });
 

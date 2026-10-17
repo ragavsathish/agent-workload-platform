@@ -9,10 +9,14 @@ import {
   createWassetteMcpRegistration,
   isolatedVoiceMcpConfig,
   latestConversationPrompt,
+  listVoiceSessions,
   normalizeMessages,
   openVoiceSessionManager,
   parseEnvFile,
   PublicTranscript,
+  publicSessionTranscript,
+  readVoiceSession,
+  restorePublicTranscript,
   skillResourceLoader,
   splitConversation,
   submitAgentTask,
@@ -56,6 +60,128 @@ test("orchestrator Pi registers Wassette through native deferred MCP", async () 
 
 test("voice MCP ignores shared host and project MCP configuration", () => {
   assert.deepEqual(isolatedVoiceMcpConfig(), { servers: [], errors: [] });
+});
+
+test("persisted session history exposes text and tool status without private payloads", () => {
+  const entries = [
+    {
+      type: "message",
+      id: "user-1",
+      parentId: null,
+      timestamp: "2026-10-16T08:00:00Z",
+      message: {
+        role: "user",
+        content: [{ type: "text", text: "Inspect it" }, { type: "image", data: "private" }],
+        timestamp: 1,
+      },
+    },
+    {
+      type: "message",
+      id: "assistant-1",
+      parentId: "user-1",
+      timestamp: "2026-10-16T08:00:01Z",
+      message: {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "hidden reasoning" },
+          { type: "text", text: "I checked it." },
+          { type: "toolCall", id: "call-1", name: "read", arguments: { path: "/secret" } },
+        ],
+        timestamp: 2,
+      },
+    },
+    {
+      type: "message",
+      id: "result-1",
+      parentId: "assistant-1",
+      timestamp: "2026-10-16T08:00:02Z",
+      message: {
+        role: "toolResult",
+        toolCallId: "call-1",
+        toolName: "read",
+        content: [{ type: "text", text: "secret tool output" }],
+        isError: false,
+        timestamp: 3,
+      },
+    },
+  ];
+
+  assert.deepEqual(publicSessionTranscript(entries), [
+    { id: "user-1", timestamp: 1, role: "user", text: "Inspect it" },
+    {
+      id: "assistant-1",
+      timestamp: 2,
+      role: "assistant",
+      text: "I checked it.",
+      status: "completed",
+    },
+    {
+      id: "call-1",
+      timestamp: 2,
+      role: "tool",
+      text: "read",
+      status: "completed",
+    },
+  ]);
+  assert.doesNotMatch(JSON.stringify(publicSessionTranscript(entries)), /secret|hidden reasoning/);
+});
+
+test("service startup restores the active persisted transcript", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-voice-startup-transcript-test-"));
+  const cwd = join(root, "workspace");
+  const sessionDir = join(root, "sessions");
+  try {
+    await Promise.all([mkdir(cwd), mkdir(sessionDir)]);
+    const persisted = openVoiceSessionManager(cwd, sessionDir);
+    persisted.appendMessage({
+      role: "user",
+      content: "Show this after restart.",
+      timestamp: 1,
+    });
+    persisted.appendMessage({
+      role: "assistant",
+      content: [{ type: "text", text: "Restored from the active session." }],
+      timestamp: 2,
+    });
+
+    const reopened = openVoiceSessionManager(cwd, sessionDir);
+    assert.deepEqual(
+      restorePublicTranscript(reopened).snapshot().entries.map(({ role, text }) => ({
+        role,
+        text,
+      })),
+      [
+        { role: "user", text: "Show this after restart." },
+        { role: "assistant", text: "Restored from the active session." },
+      ],
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("session catalog always includes the current in-memory voice session", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-voice-history-test-"));
+  const sessions = join(root, "sessions");
+  const cwd = join(root, "workspace");
+  try {
+    await Promise.all([mkdir(sessions), mkdir(cwd)]);
+    const catalog = await listVoiceSessions(cwd, sessions, "live-session");
+    assert.equal(catalog.length, 1);
+    assert.deepEqual(
+      { ...catalog[0], updatedAt: "valid" },
+      {
+        id: "live-session",
+        title: "Voice orchestrator",
+        updatedAt: "valid",
+        messageCount: 0,
+        active: true,
+      },
+    );
+    assert.ok(Number.isFinite(Date.parse(catalog[0].updatedAt)));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("persistent voice VM disables broken macOS QEMU idle resume", () => {
@@ -284,6 +410,50 @@ test("public transcript exposes text and tool status without tool payloads", () 
     ],
   );
   assert.doesNotMatch(JSON.stringify(snapshot), /argument|result|secret payload/);
+
+  transcript.reset();
+  assert.deepEqual(transcript.snapshot().entries, []);
+  assert.equal(transcript.snapshot().revision, 7);
+
+  transcript.replace([
+    { id: "persisted-user", timestamp: 7, role: "user", text: "Resume this." },
+  ]);
+  assert.deepEqual(transcript.snapshot().entries, [
+    { id: "persisted-user", timestamp: 7, role: "user", text: "Resume this." },
+  ]);
+  assert.equal(transcript.snapshot().revision, 8);
+});
+
+test("a fresh voice session preserves the previous persisted conversation", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-voice-fresh-session-test-"));
+  const cwd = join(root, "workspace");
+  const sessionDir = join(root, "sessions");
+  try {
+    await Promise.all([mkdir(cwd), mkdir(sessionDir)]);
+    const previous = openVoiceSessionManager(cwd, sessionDir);
+    previous.appendMessage({
+      role: "user",
+      content: "Keep this conversation.",
+      timestamp: 1,
+    });
+    const fresh = (await import("@earendil-works/pi-coding-agent")).SessionManager.create(
+      cwd,
+      sessionDir,
+    );
+    assert.notEqual(fresh.getSessionId(), previous.getSessionId());
+    fresh.appendMessage({ role: "user", content: "Fresh context.", timestamp: 2 });
+
+    const catalog = await listVoiceSessions(cwd, sessionDir, fresh.getSessionId());
+    assert.equal(catalog.length, 2);
+    assert.equal(catalog[0].id, fresh.getSessionId());
+    assert.equal(catalog[0].active, true);
+    assert.equal(
+      readVoiceSession(cwd, sessionDir, previous.getSessionId()).entries[0].text,
+      "Keep this conversation.",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("voice messages keep the system prompt separate from the transcript", () => {

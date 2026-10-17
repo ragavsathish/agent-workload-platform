@@ -12,3 +12,8 @@ products/architecture-visualization/core/generated/
 .DS_Store
 .pnpm-store/v11/
 /work/
+products/voice-agent/apps/client/web/voice-canvas/main.dart.js*
+products/voice-agent/apps/client/web/voice-canvas/mcp_app.js*
+products/voice-agent/apps/client/web/excalidraw/
+products/voice-agent/apps/client/web/mermaid/
+products/voice-agent/apps/client/web/marp/

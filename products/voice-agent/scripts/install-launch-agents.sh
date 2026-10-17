@@ -135,6 +135,8 @@ printf 'AGENT_GATEWAY_BASE_URL="http://127.0.0.1:9444/v1"\nGONDOLIN_BROWSER_ASSE
   "$wassette_component_dir" \
   >> "$runtime_dir/apps/broker/broker.env"
 printf 'GONDOLIN_METRICS_DIR="%s"\n' "$runtime_dir/gondolin-metrics" >> "$runtime_dir/apps/broker/broker.env"
+printf 'OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4318"\nOTEL_LOGS_EXPORTER="none"\nOTEL_METRIC_EXPORT_INTERVAL="5000"\n' \
+  >> "$runtime_dir/apps/broker/broker.env"
 printf 'GITEA_TOKEN="%s"\n' "$(<"$gitea_agent_token_file")" >> "$runtime_dir/apps/broker/broker.env"
 chmod 600 "$runtime_dir/apps/broker/broker.env"
 awk -F= '/^(DATABASE_URL|ABSURD_QUEUE|IMAGE_BUILD_TIMEOUT_SECONDS|NODE_BINARY|ORCHESTRATOR_APPROVAL_SECRET|ORCHESTRATOR_APPROVAL_TTL_SECONDS|ORCHESTRATOR_ALLOWED_USERS|ORCHESTRATOR_WORKSPACE_ROOTS|ORCHESTRATOR_ALLOWED_WORKSPACES|ARTIFACT_ENDPOINT_URL|ARTIFACT_BUCKET|ARTIFACT_ACCESS_KEY|ARTIFACT_SECRET_KEY|GITEA_ENDPOINT_URL|GITEA_OWNER|GITEA_IMAGE_WORKFLOW|GITEA_WORKFLOW_REF|WORKER_SCRATCH_ROOT|WORKER_MAX_ARTIFACT_BYTES|PI_BINARY|PI_MODEL|PI_THINKING|PI_SESSION_DIR|WORKER_ALLOW_UNSANDBOXED|WORKER_TASK_TIMEOUT_SECONDS|WORKER_MAX_OUTPUT_BYTES|GITHUB_TOKEN|WASSETTE_BIN|WASSETTE_COMPONENT_DIR|WASSETTE_GITHUB_COMPONENT|WASSETTE_GITHUB_WRITE|MEMORY_FILE_PATH)=/ {print}' \
@@ -147,6 +149,8 @@ printf 'PI_GONDOLIN_EXTENSION="%s"\nPI_TASK_SKILLS_DIR="%s"\nGONDOLIN_BROWSER_AS
   "$HOME/.pi/agent" \
   >> "$runtime_dir/apps/worker/worker.env"
 printf 'GONDOLIN_METRICS_DIR="%s"\n' "$runtime_dir/gondolin-metrics" >> "$runtime_dir/apps/worker/worker.env"
+printf 'OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4318"\nOTEL_LOGS_EXPORTER="none"\nOTEL_METRIC_EXPORT_INTERVAL="5000"\n' \
+  >> "$runtime_dir/apps/worker/worker.env"
 printf 'GITEA_PACKAGE_OWNER="image-builder"\nGITEA_BUILDER_TOKEN="%s"\nGITEA_ACTIONS_TOKEN="%s"\nIMAGE_INSTALLER_CLI="%s"\n' \
   "$(<"$gitea_builder_token_file")" \
   "$(<"$gitea_dispatcher_token_file")" \
@@ -160,6 +164,8 @@ printf 'GITEA_ENDPOINT_URL="http://127.0.0.1:3001"\nGITEA_RUNNER_REGISTRATION_TO
   "$gondolin_runtime" \
   > "$gondolin_runtime/builder-manager.env"
 printf 'GONDOLIN_BUILDER_DISK="128G"\n' \
+  >> "$gondolin_runtime/builder-manager.env"
+printf 'OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4318"\nOTEL_LOGS_EXPORTER="none"\nOTEL_METRIC_EXPORT_INTERVAL="5000"\n' \
   >> "$gondolin_runtime/builder-manager.env"
 chmod 600 "$gondolin_runtime/builder-manager.env"
 /opt/homebrew/bin/uv sync --project "$runtime_dir/apps/broker" --frozen --no-dev

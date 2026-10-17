@@ -44,7 +44,7 @@ class _WebVoiceSession implements VoiceSession {
           'muted' => VoiceEventType.muted,
           'thinking' => VoiceEventType.thinking,
           'speaking' => VoiceEventType.speaking,
-          'mermaid' => VoiceEventType.mermaid,
+          'mcp-app' => VoiceEventType.mcpApp,
           'audio-output' => VoiceEventType.audioOutput,
           'audio-error' => VoiceEventType.audioError,
           'transport' => VoiceEventType.transport,
@@ -55,7 +55,10 @@ class _WebVoiceSession implements VoiceSession {
           VoiceEvent(
             type,
             active: event['active'] as bool?,
-            diagram: event['diagram'] as String?,
+            presentation: event['presentation'] is Map
+                ? Map<String, dynamic>.from(event['presentation'] as Map)
+                : null,
+            resourceUri: event['resourceUri'] as String?,
             message: event['message'] as String?,
             state: event['state'] as String?,
           ),

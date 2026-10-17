@@ -7,12 +7,21 @@ import {
   runnerRegistrationCommand,
 } from "./dist/builder-manager.js";
 
-test("the shared builder routes only its synthetic Gitea name to host loopback", async () => {
-  const access = createBuilderServiceAccess("http://127.0.0.1:3001");
+test("the shared builder routes only its synthetic service names to host loopback", async () => {
+  const access = createBuilderServiceAccess(
+    "http://127.0.0.1:3001",
+    "http://127.0.0.1:4318",
+  );
   const gitea = await access.httpHooks.onRequest(
     new Request("http://gitea.local:3001/api/v1/version"),
   );
   assert.equal(gitea.url, "http://127.0.0.1:3001/api/v1/version");
+
+  const otel = await access.httpHooks.onRequest(
+    new Request("http://otel.local:4318/v1/traces", { method: "POST", body: "trace" }),
+  );
+  assert.equal(otel.url, "http://127.0.0.1:4318/v1/traces");
+  assert.equal(await otel.text(), "trace");
 
   const loopback = await access.httpHooks.onRequest(
     new Request("http://127.0.0.1:3001/api/v1/version"),
@@ -31,6 +40,17 @@ test("the shared builder routes only its synthetic Gitea name to host loopback",
   assert.equal(
     challenge.headers.get("www-authenticate"),
     'Bearer realm="http://gitea.local:3001/v2/token",service="container_registry"',
+  );
+});
+
+test("builder service endpoints must stay on host loopback", () => {
+  assert.throws(
+    () => createBuilderServiceAccess("http://gitea.example:3001", "http://127.0.0.1:4318"),
+    /Gitea endpoint must be HTTP loopback/,
+  );
+  assert.throws(
+    () => createBuilderServiceAccess("http://127.0.0.1:3001", "http://otel.example:4318"),
+    /OTel endpoint must be HTTP loopback/,
   );
 });
 

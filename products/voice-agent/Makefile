@@ -1,4 +1,4 @@
-.PHONY: setup build up start logs down recreate verify cycle-test login status grafana-password warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e playwright-voice playwright-diagnostics host-preflight install-host-services wassette-arxiv-build wassette-arxiv-install wassette-c4-grafana-build wassette-c4-grafana-install grafana-c4-dashboard db-init broker worker pull-model check
+.PHONY: setup build up start logs down recreate verify cycle-test login status grafana-password warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e playwright-voice playwright-diagnostics playwright-grafana host-preflight install-host-services wassette-arxiv-build wassette-arxiv-install wassette-c4-grafana-build wassette-c4-grafana-install grafana-c4-dashboard db-init broker worker pull-model check
 
 COMPOSE = docker compose --env-file deploy/.env -f deploy/compose.yml
 
@@ -8,6 +8,7 @@ setup:
 	uv sync --project apps/worker --python 3.13
 	uv sync --project apps/edge --python 3.13
 	cd apps/client && npm ci
+	cd ../../vendor/excalidraw-mcp && pnpm install --frozen-lockfile --ignore-scripts --ignore-workspace --config.node-linker=isolated
 	cd apps/diagnostics && npm ci
 	pnpm --dir ../.. --filter @agent-workload-platform/voice-pi-agent install
 	cp -n deploy/.env.example deploy/.env || true
@@ -90,6 +91,9 @@ playwright-voice:
 playwright-diagnostics:
 	./tests/e2e/playwright-diagnostics.sh
 
+playwright-grafana:
+	./tests/e2e/playwright-grafana.sh
+
 host-preflight:
 	./scripts/host-preflight.sh
 
@@ -118,13 +122,14 @@ broker:
 	PYTHONPATH=apps/broker/src:packages/telemetry/src uv run --project apps/broker python -m voice_agent.speech.presentation.http
 
 worker:
-	PYTHONPATH=apps/worker/src:packages/tasking/src uv run --project apps/worker python -m voice_worker.main
+	PYTHONPATH=apps/worker/src:packages/tasking/src:packages/telemetry/src uv run --project apps/worker python -m voice_worker.main
 
 pull-model:
 	ollama pull qwen3.5:9b-mlx
 
 check:
 	$(MAKE) -C components/c4-grafana-ts check
+	pnpm --dir ../.. --filter @agent-workload-platform/otel test
 	pnpm --dir ../.. --filter @agent-workload-platform/gondolin-session check
 	pnpm --dir ../.. --filter @agent-workload-platform/voice-pi-agent check
 	pnpm --dir ../.. --filter @agent-workload-platform/voice-pi-agent test
@@ -139,7 +144,7 @@ check:
 	uv sync --project apps/worker --python 3.13
 	uv run --project apps/worker ruff check --config apps/worker/pyproject.toml apps/worker
 	uv run --project apps/worker pyright --project apps/worker/pyproject.toml apps/worker
-	PYTHONPATH=apps/worker/src:packages/tasking/src uv run --project apps/worker pytest apps/worker/tests
+	PYTHONPATH=apps/worker/src:packages/tasking/src:packages/telemetry/src uv run --project apps/worker pytest apps/worker/tests
 	uv sync --project apps/edge --python 3.13
 	cd apps/edge && PYTHONPATH=.:../../packages/telemetry/src uv run ruff check . && uv run pyright
 	cd apps/edge && PYTHONPATH=.:../../packages/telemetry/src uv run python -m unittest discover -p 'test_*.py'

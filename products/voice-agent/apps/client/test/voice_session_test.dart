@@ -52,6 +52,7 @@ void main() {
         home: VoiceView(api: VoiceApi(), session: session),
       ),
     );
+    expect(find.byKey(const Key('open-system-health')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('start-conversation')));
     await tester.pump();
@@ -65,7 +66,7 @@ void main() {
 
     session.emit(const VoiceEvent(VoiceEventType.speaking, active: true));
     await tester.pump();
-    expect(find.text('SPEAKING'), findsOneWidget);
+    expect(find.byKey(const Key('voice-state')), findsOneWidget);
     expect(find.text('Unmute'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('end-conversation')));

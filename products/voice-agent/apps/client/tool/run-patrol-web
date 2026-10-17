@@ -3,13 +3,100 @@ set -euo pipefail
 
 tool_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 build_dir="$tool_dir/build"
+run_id="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+run_dir="$build_dir/patrol-runs/$run_id"
+results_dir="$run_dir/results"
+fixture_ready_file="$run_dir/fixture-ready.json"
+fixture_nonce="$(node -e 'process.stdout.write(require("node:crypto").randomUUID())')"
+fixture_pid=""
 
-exec "$tool_dir/tool/patrolw" test \
-  --device chrome \
-  --target patrol_test/voice_web_test.dart \
-  --web-headless \
-  --web-trace on \
-  --web-screenshot on \
-  --web-results-dir "$build_dir/patrol-results" \
-  --web-report-dir "$build_dir/patrol-report" \
-  --web-traces-dir "$build_dir/patrol-traces"
+mkdir -p "$run_dir"
+
+stop_fixture() {
+  if [[ -n "$fixture_pid" ]] && kill -0 "$fixture_pid" 2>/dev/null; then
+    kill "$fixture_pid"
+    wait "$fixture_pid" 2>/dev/null || true
+  fi
+}
+trap stop_fixture EXIT INT TERM
+
+run_target() {
+  local name="$1"
+  local target="$2"
+  shift 2
+  "$tool_dir/tool/patrolw" test \
+    --device chrome \
+    --target "$target" \
+    --web-headless \
+    --web-workers 1 \
+    --web-timeout 30000 \
+    --web-global-timeout 60000 \
+    --web-trace off \
+    --web-screenshot only-on-failure \
+    --web-results-dir "$results_dir/$name" \
+    --web-report-dir "$run_dir/report-$name" \
+    "$@"
+}
+
+set +e
+run_target voice patrol_test/voice_web_test.dart
+voice_status=$?
+
+PATROL_FIXTURE_PORT=0 \
+PATROL_FIXTURE_NONCE="$fixture_nonce" \
+PATROL_FIXTURE_READY_FILE="$fixture_ready_file" \
+  node "$tool_dir/tool/patrol-fixture-server.mjs" >"$run_dir/fixture.log" 2>&1 &
+fixture_pid=$!
+fixture_ready=0
+fixture_port=""
+for _ in {1..50}; do
+  if [[ -f "$fixture_ready_file" ]]; then
+    fixture_port="$(node -e \
+      'const ready = require(process.argv[1]); process.stdout.write(String(ready.port))' \
+      "$fixture_ready_file")"
+    if curl --fail --silent "http://127.0.0.1:$fixture_port/health" | \
+      FIXTURE_NONCE="$fixture_nonce" node -e '
+        let input = "";
+        process.stdin.on("data", (chunk) => input += chunk);
+        process.stdin.on("end", () => {
+          const health = JSON.parse(input);
+          if (health.fixture !== "voice-agent-patrol" ||
+              health.nonce !== process.env.FIXTURE_NONCE) process.exit(1);
+        });
+      '
+    then
+      fixture_ready=1
+      break
+    fi
+  fi
+  sleep 0.1
+done
+
+if [[ "$fixture_ready" -eq 1 ]]; then
+  run_target workspace patrol_test/workspace_web_test.dart \
+    --dart-define "VOICE_API_ORIGIN=http://127.0.0.1:$fixture_port"
+  workspace_status=$?
+else
+  echo "Patrol fixture did not become ready" >&2
+  workspace_status=1
+fi
+stop_fixture
+fixture_pid=""
+set -e
+
+evidence_status=0
+node "$tool_dir/tool/inspect-patrol-trace.mjs" \
+  "$results_dir" \
+  "$run_dir/evidence.json" || evidence_status=$?
+if [[ -f "$run_dir/evidence.json" ]]; then
+  cp "$run_dir/evidence.json" "$build_dir/patrol-trace-evidence.json"
+fi
+ln -sfn "$run_dir" "$build_dir/patrol-latest"
+
+if [[ "$voice_status" -ne 0 ]]; then
+  exit "$voice_status"
+fi
+if [[ "$workspace_status" -ne 0 ]]; then
+  exit "$workspace_status"
+fi
+exit "$evidence_status"

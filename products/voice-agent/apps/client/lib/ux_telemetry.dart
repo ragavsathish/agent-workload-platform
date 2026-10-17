@@ -21,7 +21,7 @@ class UxTelemetry {
     'control.start',
     'control.mute',
     'control.stop',
-    'mermaid.render',
+    'mcp_app.render',
   };
 
   final _startedAt = Stopwatch();

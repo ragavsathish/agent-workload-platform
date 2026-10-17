@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { configureTelemetry } from "@agent-workload-platform/otel";
+
 import {
   createHttpHooks,
   ReadonlyProvider,
@@ -14,20 +16,39 @@ import {
 export const BUILDER_LABEL = "gondolin-builder:host";
 export const DEFAULT_BUILDER_DISK = "128G";
 const GITEA_GUEST_ORIGIN = "http://gitea.local:3001";
+const OTEL_GUEST_ORIGIN = "http://otel.local:4318";
 
-export function createBuilderServiceAccess(endpoint: string) {
-  const upstream = new URL(endpoint);
-  if (upstream.protocol !== "http:" || upstream.hostname !== "127.0.0.1" || !upstream.port) {
-    throw new Error("Builder Gitea endpoint must be HTTP loopback with an explicit port");
+function loopbackEndpoint(endpoint: string, name: string): URL {
+  const url = new URL(endpoint);
+  if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || !url.port) {
+    throw new Error(`Builder ${name} endpoint must be HTTP loopback with an explicit port`);
   }
-  const guest = new URL(GITEA_GUEST_ORIGIN);
-  guest.port = upstream.port;
+  return url;
+}
+
+export function createBuilderServiceAccess(giteaEndpoint: string, otelEndpoint: string) {
+  const giteaUpstream = loopbackEndpoint(giteaEndpoint, "Gitea");
+  const otelUpstream = loopbackEndpoint(otelEndpoint, "OTel");
+  const giteaGuest = new URL(GITEA_GUEST_ORIGIN);
+  giteaGuest.port = giteaUpstream.port;
+  const otelGuest = new URL(OTEL_GUEST_ORIGIN);
+  otelGuest.port = otelUpstream.port;
+  const route = (requested: URL) => {
+    if (requested.hostname === giteaGuest.hostname && requested.port === giteaGuest.port) {
+      return giteaUpstream;
+    }
+    if (requested.hostname === otelGuest.hostname && requested.port === otelGuest.port) {
+      return otelUpstream;
+    }
+    return undefined;
+  };
   return createHttpHooks({
     allowedHosts: ["*"],
-    allowedInternalHosts: [upstream.hostname],
+    allowedInternalHosts: [giteaUpstream.hostname, otelUpstream.hostname],
     onRequest: (request) => {
       const requested = new URL(request.url);
-      if (requested.hostname !== guest.hostname || requested.port !== guest.port) {
+      const upstream = route(requested);
+      if (!upstream) {
         if (requested.hostname === "127.0.0.1" || requested.hostname === "localhost") {
           return new Response("network destination denied", { status: 403 });
         }
@@ -41,12 +62,12 @@ export function createBuilderServiceAccess(endpoint: string) {
     onResponse: (response) => {
       const challenge = response.headers.get("www-authenticate");
       if (!challenge) return response;
-      const hostRealm = `${upstream.origin}/v2/token`;
+      const hostRealm = `${giteaUpstream.origin}/v2/token`;
       if (!challenge.includes(`realm="${hostRealm}"`)) return response;
       const headers = new Headers(response.headers);
       headers.set("www-authenticate", challenge.replace(
         `realm="${hostRealm}"`,
-        `realm="${guest.origin}/v2/token"`,
+        `realm="${giteaGuest.origin}/v2/token"`,
       ));
       return new Response(response.body, {
         status: response.status,
@@ -75,6 +96,7 @@ type BuilderManagerOptions = {
   checkpointPath: string;
   giteaEndpoint: string;
   imagePath: string;
+  otelEndpoint: string;
   registrationToken: string;
   runnerDirectory: string;
 };
@@ -87,7 +109,7 @@ export class BuilderManager {
   constructor(private readonly options: BuilderManagerOptions) {}
 
   async start(): Promise<void> {
-    const service = createBuilderServiceAccess(this.options.giteaEndpoint);
+    const service = createBuilderServiceAccess(this.options.giteaEndpoint, this.options.otelEndpoint);
     const vmOptions = {
       sandbox: { imagePath: this.options.imagePath, netEnabled: true },
       dns: { mode: "synthetic" as const, syntheticHostMapping: "per-host" as const },
@@ -143,7 +165,18 @@ export class BuilderManager {
     }
     this.runner = vm.exec(
       ["/usr/local/bin/gitea-runner", "daemon", "--labels", BUILDER_LABEL],
-      { cwd: "/var/lib/gitea-runner", stdout: "pipe", stderr: "pipe" },
+      {
+        cwd: "/var/lib/gitea-runner",
+        env: {
+          OTEL_EXPORTER_OTLP_ENDPOINT: OTEL_GUEST_ORIGIN,
+          OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf",
+          OTEL_LOGS_EXPORTER: "none",
+          OTEL_METRIC_EXPORT_INTERVAL: "5000",
+          OTEL_SERVICE_NAME: "pipecat-gitea-runner",
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      },
     );
     this.runner.stdout?.on("data", (chunk: Buffer) => process.stdout.write(chunk));
     this.runner.stderr?.on("data", (chunk: Buffer) => process.stderr.write(chunk));
@@ -183,9 +216,11 @@ async function main() {
     checkpointPath: required("GONDOLIN_BUILDER_CHECKPOINT"),
     giteaEndpoint: required("GITEA_ENDPOINT_URL"),
     imagePath: required("GONDOLIN_BUILDER_ASSETS"),
+    otelEndpoint: required("OTEL_EXPORTER_OTLP_ENDPOINT"),
     registrationToken: required("GITEA_RUNNER_REGISTRATION_TOKEN"),
     runnerDirectory: fs.realpathSync(required("GONDOLIN_RUNNER_DIR")),
   });
+  const telemetry = configureTelemetry("pipecat-image-builder");
   let stopPromise: Promise<void> | undefined;
   const stop = () => {
     stopPromise ??= manager.stop();
@@ -193,9 +228,13 @@ async function main() {
   };
   process.once("SIGINT", () => void stop());
   process.once("SIGTERM", () => void stop());
-  await manager.start();
-  await manager.wait();
-  await stop();
+  try {
+    await telemetry.observe("builder.start", () => manager.start());
+    await manager.wait();
+  } finally {
+    await stop();
+    await telemetry.shutdown();
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

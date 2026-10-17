@@ -31,7 +31,7 @@ COPY apps/edge/prompt.toml ./
 COPY apps/edge/audio_filter.py ./
 COPY apps/edge/audio_diagnostics.py ./
 COPY apps/edge/otel_bridge.py ./
-COPY apps/edge/visual_response.py ./
+COPY apps/edge/presentation_response.py ./
 COPY packages/telemetry/src ./src
 COPY apps/client/build/web ./client-dist
 COPY apps/diagnostics/dist ./client-dist/diagnostics

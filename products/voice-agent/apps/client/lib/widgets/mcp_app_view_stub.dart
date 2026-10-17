@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 
+import '../models.dart';
 import '../theme.dart';
 
-class MermaidView extends StatelessWidget {
-  const MermaidView({required this.diagram, this.height = 360, super.key});
+class McpAppView extends StatelessWidget {
+  const McpAppView({
+    required this.presentation,
+    this.resourceUri = 'ui://mermaid/main',
+    this.height = 360,
+    super.key,
+  });
 
-  final String diagram;
+  final JsonMap presentation;
+  final String resourceUri;
   final double height;
 
   @override
@@ -18,7 +25,7 @@ class MermaidView extends StatelessWidget {
       borderRadius: BorderRadius.circular(10),
     ),
     child: const Text(
-      'Native diagram rendering is being installed.',
+      'Interactive visuals are available in the web workspace.',
       style: TextStyle(color: PiColors.muted),
     ),
   );

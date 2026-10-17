@@ -1,7 +1,7 @@
 void openView(String view) =>
     throw UnsupportedError('Native navigation is not installed yet.');
 
-Future<void> playSpeech(String spoken) async =>
+Future<void> playSpeech(String spoken, {required String endpoint}) async =>
     throw UnsupportedError('Native speech playback is not installed yet.');
 
 Future<void> playUrl(String url) async =>

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src '__MCP_APP_SCRIPT_HASH__'; style-src 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'none'"
+    >
+    <title>Marp Slides</title>
+    <style>
+      :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; background: #0c1216; color: #eef6f2; }
+      body { display: grid; grid-template-rows: minmax(0, 1fr) auto; }
+      #deck { min-height: 0; display: grid; place-items: center; overflow: hidden; padding: 10px; }
+      #deck .marpit { width: 100%; height: 100%; display: grid; place-items: center; }
+      #deck svg[data-marpit-svg] { display: none; width: 100%; height: 100%; max-height: calc(100vh - 54px); }
+      #deck svg[data-marpit-svg][data-active] { display: block; }
+      #controls { min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 6px 10px; border-top: 1px solid #26343b; }
+      button { min-width: 44px; min-height: 34px; border: 1px solid #34464e; border-radius: 8px; background: #121b20; color: #eef6f2; font: inherit; cursor: pointer; }
+      button:disabled { opacity: .35; cursor: default; }
+      #position { min-width: 64px; text-align: center; color: #9aabb2; font-size: 13px; }
+      #error { margin: auto; color: #ff778a; }
+    </style>
+  </head>
+  <body>
+    <main id="deck" aria-live="polite"></main>
+    <nav id="controls" aria-label="Slide navigation" hidden>
+      <button id="previous" type="button" aria-label="Previous slide">&#8592;</button>
+      <span id="position" aria-live="polite"></span>
+      <button id="next" type="button" aria-label="Next slide">&#8594;</button>
+    </nav>
+    <script>__MCP_APP_SCRIPT__</script>
+  </body>
+</html>

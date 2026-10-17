@@ -37,8 +37,13 @@ Verification also asserts that S3Mock is loopback-only and has no Documents bind
 The runner intentionally prints only audio byte counts and event counts; it never prints recognized
 or synthesized text. Compose verification fails if Docker logging is enabled for the voice edge or
 gateway, if OpenTelemetry log export is enabled, if Grafana allows anonymous access, or if an
-observability port is published beyond loopback. The end-to-end test also waits for a payload-free
-Pipecat metric to become queryable through Grafana.
+observability port is published beyond loopback. The end-to-end test snapshots payload-free
+operation counters before synthetic audio starts, then queries them through Grafana after the run.
+It requires a fresh increment from every application runtime on the exercised path: Voice Edge
+(`voice.session`), Inference Broker (`inference.pi`), Pi Voice Service (`pi.turn`), and Agent Gateway
+(`task.propose`). It also requires the `component.started` lifecycle series from those services plus
+the Pi Task Worker, Image Builder manager, and native Gitea builder runner. A stale operation metric from an earlier run cannot satisfy
+the exercised-path gate.
 
 Verify durable results without displaying capabilities:
 

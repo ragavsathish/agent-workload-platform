@@ -12,6 +12,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from time import monotonic
+from uuid import uuid4
 
 from opentelemetry import metrics, trace
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
@@ -88,6 +89,7 @@ def configure_telemetry(service_name: str) -> Telemetry:
             {
                 "service.name": service_name,
                 "service.namespace": "pipecat-mlx-voice",
+                "service.instance.id": str(uuid4()),
                 "deployment.environment.name": os.getenv(
                     "OTEL_DEPLOYMENT_ENVIRONMENT", "local"
                 ),
@@ -110,7 +112,7 @@ def configure_telemetry(service_name: str) -> Telemetry:
 
     tracer = trace.get_tracer("pipecat-mlx-voice", "0.1.0")
     meter = metrics.get_meter("pipecat-mlx-voice", "0.1.0")
-    return Telemetry(
+    telemetry = Telemetry(
         service_name=service_name,
         tracer=tracer,
         meter=meter,
@@ -125,3 +127,5 @@ def configure_telemetry(service_name: str) -> Telemetry:
             description="Payload-free application operation duration",
         ),
     )
+    telemetry.record("component.started")
+    return telemetry

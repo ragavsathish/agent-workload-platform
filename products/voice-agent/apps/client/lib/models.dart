@@ -5,27 +5,64 @@ typedef JsonMap = Map<String, dynamic>;
 JsonMap asMap(Object? value) =>
     value is Map<String, dynamic> ? value : const {};
 
+Object? decodeModelJson(String value) {
+  var candidate = value.trim();
+  for (var removedBraces = 0; removedBraces <= 2; removedBraces++) {
+    try {
+      return jsonDecode(candidate);
+    } on FormatException {
+      if (!candidate.endsWith('}') || removedBraces == 2) return null;
+      candidate = candidate.substring(0, candidate.length - 1).trimRight();
+    }
+  }
+  return null;
+}
+
 class VisualResponse {
-  const VisualResponse({required this.spoken, required this.mermaid});
+  const VisualResponse({
+    required this.spoken,
+    required this.presentation,
+    this.resourceUri = 'ui://mermaid/main',
+  });
 
   final String spoken;
-  final String mermaid;
+  final JsonMap presentation;
+  final String resourceUri;
 
   static VisualResponse? fromValue(Object? value) {
-    JsonMap body;
-    if (value is String) {
-      try {
-        body = asMap(jsonDecode(value));
-      } on FormatException {
-        return null;
+    Object? decoded = value;
+    for (var depth = 0; depth < 4; depth++) {
+      final decodedMap = asMap(decoded);
+      if (decodedMap.isNotEmpty) {
+        final nested = decodedMap['spoken'];
+        if (nested is! String) break;
+        final nestedDecoded = decodeModelJson(nested);
+        final nestedMap = asMap(nestedDecoded);
+        if (nestedMap['presentation'] is! Map<String, dynamic>) break;
+        decoded = nestedDecoded;
+        continue;
       }
-    } else {
-      body = asMap(value);
+      if (decoded is! String) break;
+      decoded = decodeModelJson(decoded);
+      if (decoded == null) return null;
     }
+    final body = asMap(decoded);
     final spoken = body['spoken'];
-    final mermaid = body['mermaid'];
-    return spoken is String && mermaid is String
-        ? VisualResponse(spoken: spoken, mermaid: mermaid)
+    final presentation = asMap(body['presentation']);
+    final resourceUri = body['resourceUri'];
+    final inferredResourceUri = switch (presentation['kind']) {
+      'excalidraw' => 'ui://excalidraw/mcp-app.html',
+      'slides' => 'ui://slides/marp.html',
+      _ => 'ui://mermaid/main',
+    };
+    return spoken is String && presentation.isNotEmpty
+        ? VisualResponse(
+            spoken: spoken,
+            presentation: presentation,
+            resourceUri: resourceUri is String
+                ? resourceUri
+                : inferredResourceUri,
+          )
         : null;
   }
 }
@@ -89,6 +126,32 @@ class TranscriptSnapshot {
     entries: (json['entries'] as List? ?? const [])
         .map((value) => TranscriptEntry.fromJson(asMap(value)))
         .toList(growable: false),
+  );
+}
+
+class PiSessionSummary {
+  const PiSessionSummary({
+    required this.id,
+    required this.title,
+    required this.updatedAt,
+    required this.messageCount,
+    required this.active,
+  });
+
+  final String id;
+  final String title;
+  final DateTime updatedAt;
+  final int messageCount;
+  final bool active;
+
+  factory PiSessionSummary.fromJson(JsonMap json) => PiSessionSummary(
+    id: '${json['id'] ?? ''}',
+    title: '${json['title'] ?? 'Untitled session'}',
+    updatedAt:
+        DateTime.tryParse('${json['updatedAt'] ?? ''}') ??
+        DateTime.fromMillisecondsSinceEpoch(0),
+    messageCount: (json['messageCount'] as num?)?.toInt() ?? 0,
+    active: json['active'] == true,
   );
 }
 

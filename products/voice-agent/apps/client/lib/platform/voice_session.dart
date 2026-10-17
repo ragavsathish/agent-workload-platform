@@ -1,3 +1,5 @@
+import '../models.dart';
+
 import 'voice_session_stub.dart'
     if (dart.library.js_interop) 'voice_session_web.dart'
     as platform;
@@ -9,7 +11,7 @@ enum VoiceEventType {
   muted,
   thinking,
   speaking,
-  mermaid,
+  mcpApp,
   audioOutput,
   audioError,
   transport,
@@ -19,14 +21,16 @@ class VoiceEvent {
   const VoiceEvent(
     this.type, {
     this.active,
-    this.diagram,
+    this.presentation,
+    this.resourceUri,
     this.message,
     this.state,
   });
 
   final VoiceEventType type;
   final bool? active;
-  final String? diagram;
+  final JsonMap? presentation;
+  final String? resourceUri;
   final String? message;
   final String? state;
 }

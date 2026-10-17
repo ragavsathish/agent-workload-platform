@@ -71,7 +71,11 @@ flowchart TB
         GITEA -->|"download image assets"| WORKER
         EDGE -.->|"metrics · traces"| OTEL
         BROKER -.->|"metrics · traces"| OTEL
+        PI -.->|"metrics · traces"| OTEL
         GATEWAY -.->|"metrics · traces"| OTEL
+        WORKER -.->|"metrics · traces"| OTEL
+        BUILDER_MANAGER -.->|"metrics · traces"| OTEL
+        BUILDER_VM -.->|"Gitea Runner OTLP<br/>job traces · runner metrics"| OTEL
         PI -.->|"register voice VM PID"| HOST_METRICS
         WORKER -.->|"register task VM PID"| HOST_METRICS
         DOCKER_METRICS -->|"private scrape<br/>Docker VM resources"| OTEL

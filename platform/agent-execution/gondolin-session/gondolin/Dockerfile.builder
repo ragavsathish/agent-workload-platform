@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM docker.io/gitea/runner:3@sha256:66b7da94dc7dcadb2e076bec6928221336a9a637196399281c4b766fe1288242 AS gitea-runner
+FROM docker.io/gitea/runner:4.1.0@sha256:131ff842ec12453108f1c1a454031c325d3c95e4af459979a2e303e12d99c98c AS gitea-runner
 
 FROM alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0
 

@@ -8,7 +8,7 @@ import '../platform/client_actions.dart';
 import '../platform/voice_session.dart';
 import '../theme.dart';
 import '../ux_telemetry.dart';
-import '../widgets/mermaid_view.dart';
+import '../widgets/mcp_app_view.dart';
 
 enum VoicePhase { ready, starting, listening, muted, thinking, speaking }
 
@@ -25,8 +25,8 @@ class _VoiceViewState extends State<VoiceView> {
   VoicePhase _phase = VoicePhase.ready;
   bool _isMuted = false;
   ContextUsage? _context;
-  String _diagram = '';
-  bool _hasLiveDiagram = false;
+  JsonMap? _presentation;
+  String _resourceUri = 'ui://mermaid/main';
   String? _error;
   bool _compactBusy = false;
   late final VoiceSession _session;
@@ -78,11 +78,11 @@ class _VoiceViewState extends State<VoiceView> {
           } else if (_phase == VoicePhase.speaking) {
             _phase = VoicePhase.listening;
           }
-        case VoiceEventType.mermaid:
-          final next = event.diagram;
-          if (next != null && next.isNotEmpty && next.length <= 24000) {
-            _diagram = next;
-            _hasLiveDiagram = true;
+        case VoiceEventType.mcpApp:
+          final next = event.presentation;
+          if (next != null && next.isNotEmpty) {
+            _presentation = next;
+            _resourceUri = event.resourceUri ?? 'ui://mermaid/main';
           }
         case VoiceEventType.audioError:
           _error = event.message ?? 'Audio output failed.';
@@ -255,7 +255,7 @@ class _VoiceViewState extends State<VoiceView> {
                           children: [
                             Expanded(
                               child: Text(
-                                'Conversation map',
+                                'Live response',
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
@@ -263,7 +263,7 @@ class _VoiceViewState extends State<VoiceView> {
                               ),
                             ),
                             Text(
-                              'PINCH · DRAG',
+                              'MCP APP',
                               style: TextStyle(
                                 color: PiColors.muted,
                                 fontFamily: 'monospace',
@@ -277,7 +277,7 @@ class _VoiceViewState extends State<VoiceView> {
                         const Eyebrow('Live response'),
                         const SizedBox(height: 6),
                         const Text(
-                          'Conversation map',
+                          'Interactive canvas',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -285,10 +285,11 @@ class _VoiceViewState extends State<VoiceView> {
                         ),
                       ],
                       SizedBox(height: mobile ? 6 : 10),
-                      if (_hasLiveDiagram)
-                        MermaidView(
-                          key: const Key('live-mermaid'),
-                          diagram: _diagram,
+                      if (_presentation != null)
+                        McpAppView(
+                          key: const Key('live-mcp-app'),
+                          presentation: _presentation!,
+                          resourceUri: _resourceUri,
                           height: diagramHeight,
                         )
                       else
@@ -440,11 +441,19 @@ class _Header extends StatelessWidget {
       children: [
         _VoiceState(stateLabel),
         OutlinedButton.icon(
+          key: const Key('open-audio-diagnostics'),
           onPressed: () => ClientActions.openView('audio-diagnostics'),
           icon: const Icon(Icons.graphic_eq_rounded, size: 15),
           label: const Text('Replays'),
         ),
         OutlinedButton.icon(
+          key: const Key('open-system-health'),
+          onPressed: () => ClientActions.openView('system-health'),
+          icon: const Icon(Icons.account_tree_outlined, size: 15),
+          label: const Text('System'),
+        ),
+        OutlinedButton.icon(
+          key: const Key('open-transcript'),
           onPressed: () => ClientActions.openView('transcript'),
           icon: const Icon(Icons.chat_bubble_outline_rounded, size: 15),
           label: const Text('Chat'),
@@ -462,14 +471,26 @@ class _Header extends StatelessWidget {
                   style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                 ),
                 const Spacer(),
-                _VoiceState(stateLabel, compact: true),
+                _VoiceState(
+                  stateLabel,
+                  compact: true,
+                  showLabel: constraints.maxWidth >= 400,
+                ),
                 const SizedBox(width: 2),
                 _HeaderIconButton(
+                  key: const Key('open-audio-diagnostics'),
                   tooltip: 'Replays',
                   icon: Icons.graphic_eq_rounded,
                   onPressed: () => ClientActions.openView('audio-diagnostics'),
                 ),
                 _HeaderIconButton(
+                  key: const Key('open-system-health'),
+                  tooltip: 'System health',
+                  icon: Icons.account_tree_outlined,
+                  onPressed: () => ClientActions.openView('system-health'),
+                ),
+                _HeaderIconButton(
+                  key: const Key('open-transcript'),
                   tooltip: 'Chat',
                   icon: Icons.chat_bubble_outline_rounded,
                   onPressed: () => ClientActions.openView('transcript'),
@@ -490,6 +511,7 @@ class _Header extends StatelessWidget {
 
 class _HeaderIconButton extends StatelessWidget {
   const _HeaderIconButton({
+    super.key,
     required this.tooltip,
     required this.icon,
     required this.onPressed,
@@ -538,9 +560,10 @@ class _BrandMark extends StatelessWidget {
 }
 
 class _VoiceState extends StatelessWidget {
-  const _VoiceState(this.label, {this.compact = false});
+  const _VoiceState(this.label, {this.compact = false, this.showLabel = true});
   final String label;
   final bool compact;
+  final bool showLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -573,18 +596,20 @@ class _VoiceState extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 7),
-            Text(
-              compact && label == 'Starting…'
-                  ? 'STARTING'
-                  : label.toUpperCase(),
-              style: const TextStyle(
-                color: Color(0xFF89949F),
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                letterSpacing: .9,
+            if (showLabel) ...[
+              const SizedBox(width: 7),
+              Text(
+                compact && label == 'Starting…'
+                    ? 'STARTING'
+                    : label.toUpperCase(),
+                style: const TextStyle(
+                  color: Color(0xFF89949F),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: .9,
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),

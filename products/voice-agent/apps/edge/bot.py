@@ -1,5 +1,6 @@
 """Tailnet-facing Pipecat process for the isolated Linux VM."""
 
+import asyncio
 import os
 import tomllib
 import wave
@@ -48,7 +49,7 @@ from voice_agent.shared.telemetry import configure_telemetry
 from audio_diagnostics import audio_diagnostic_store
 from audio_filter import audio_filter_readiness, create_audio_filter
 from otel_bridge import configure_pipecat_observers
-from visual_response import StreamingSpokenExtractor, parse_visual_response
+from presentation_response import StreamingSpokenExtractor, parse_presentation_response
 
 # Voice content must never reach stdout/stderr. Docker also uses the `none` log driver, but removing
 # Loguru's shared handler prevents Pipecat from formatting transcripts or LLM context at all.
@@ -57,9 +58,19 @@ logger.remove()
 load_dotenv(override=True)
 telemetry = configure_telemetry("pipecat-voice-edge")
 
+PROMPT_LAYER_ORDER = (
+    "identity",
+    "response_contract",
+    "standard_presentation",
+    "slides_presentation",
+    "excalidraw_presentation",
+    "execution",
+    "environment",
+    "delegation",
+)
 
-class VoiceVisualResponseProcessor(FrameProcessor):
-    """Split one model response into browser Mermaid and TTS-safe speech."""
+class VoicePresentationResponseProcessor(FrameProcessor):
+    """Split one model response into an MCP App presentation and TTS-safe speech."""
 
     def __init__(self):
         super().__init__()
@@ -99,11 +110,12 @@ class VoiceVisualResponseProcessor(FrameProcessor):
                 await self.push_frame(frame)
                 return
 
-            response = parse_visual_response(raw)
+            response = parse_presentation_response(raw)
             await self.pipeline_worker.rtvi.send_server_message(
                 {
-                    "type": "mermaid",
-                    "diagram": response.mermaid,
+                    "type": "mcp-app",
+                    "resourceUri": response.resource_uri,
+                    "presentation": response.presentation,
                     "spoken": response.spoken,
                 }
             )
@@ -201,16 +213,61 @@ async def broker_transcript_request() -> dict[str, object]:
     return payload
 
 
+async def broker_sessions_request(
+    path: str = "",
+    method: str = "GET",
+    *,
+    operation: str,
+) -> dict[str, object]:
+    with telemetry.observe(operation):
+        headers = {"Authorization": f"Bearer {required_env('INFERENCE_BROKER_TOKEN')}"}
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
+            response = await client.request(
+                method,
+                f"{required_env('INFERENCE_BROKER_BASE_URL').rstrip('/')}/pi/sessions{path}",
+                headers=headers,
+            )
+        if response.is_error:
+            status = response.status_code if response.status_code in {404, 409} else 502
+            detail = "Pi session history is unavailable"
+            try:
+                service_detail = response.json().get("detail")
+                if isinstance(service_detail, str):
+                    detail = service_detail
+            except ValueError:
+                pass
+            raise HTTPException(status_code=status, detail=detail)
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=502, detail="invalid Pi session history")
+        return payload
+
+
 @lru_cache(maxsize=1)
-def voice_prompt_template() -> str:
-    """Load and validate the versioned model instruction."""
+def voice_prompt_layers() -> dict[str, str]:
+    """Load and validate the ordered model-instruction layers."""
     prompt_path = Path(__file__).with_name("prompt.toml")
     with prompt_path.open("rb") as source:
-        prompt = tomllib.load(source).get("system_prompt")
+        layers = tomllib.load(source).get("layers")
+    if not isinstance(layers, dict) or set(layers) != set(PROMPT_LAYER_ORDER):
+        raise RuntimeError("prompt.toml must define the expected prompt layers")
+    normalized: dict[str, str] = {}
+    for name in PROMPT_LAYER_ORDER:
+        value = layers.get(name)
+        if not isinstance(value, str) or not value.strip():
+            raise RuntimeError(f"prompt.toml layer {name} must be non-empty")
+        normalized[name] = value.strip()
+    return normalized
+
+
+@lru_cache(maxsize=1)
+def voice_prompt_template() -> str:
+    """Compose the stable Pi instruction shared by voice and typed turns."""
+    prompt = "\n\n".join(voice_prompt_layers().values())
     marker = "{{DEFAULT_WORKSPACE}}"
-    if not isinstance(prompt, str) or not prompt.strip() or prompt.count(marker) != 1:
+    if prompt.count(marker) != 1:
         raise RuntimeError("prompt.toml must define one default-workspace placeholder")
-    return prompt.strip()
+    return prompt
 
 
 def voice_system_instruction(default_workspace: str) -> str:
@@ -251,7 +308,7 @@ async def broker_pi_message(message: str):
         raise HTTPException(status_code=502, detail="Pi returned an invalid response") from exc
     if not isinstance(raw, str) or not raw.strip():
         raise HTTPException(status_code=502, detail="Pi returned an empty response")
-    return parse_visual_response(raw)
+    return parse_presentation_response(raw)
 
 
 async def broker_context_request(method: str, path: str) -> dict[str, object]:
@@ -275,6 +332,21 @@ async def broker_context_request(method: str, path: str) -> dict[str, object]:
     payload = response.json()
     if not isinstance(payload, dict):
         raise HTTPException(status_code=502, detail="invalid Pi context")
+    return payload
+
+
+async def broker_abort_pi_turn() -> dict[str, object]:
+    headers = {"Authorization": f"Bearer {required_env('INFERENCE_BROKER_TOKEN')}"}
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
+        response = await client.post(
+            f"{required_env('INFERENCE_BROKER_BASE_URL').rstrip('/')}/pi/turn/abort",
+            headers=headers,
+        )
+    if response.is_error:
+        raise HTTPException(status_code=502, detail="Pi turn could not be stopped")
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=502, detail="invalid Pi turn response")
     return payload
 
 
@@ -581,14 +653,14 @@ async def run_bot(transport: BaseTransport, identity: str):
     async def on_user_turn_message_added(_aggregator, _message):
         telemetry.record("pipecat.user_turn.transcript_emitted")
 
-    visual_response = VoiceVisualResponseProcessor()
+    presentation_response = VoicePresentationResponseProcessor()
     pipeline = Pipeline(
         [
             transport.input(),
             stt,
             user_aggregator,
             llm,
-            visual_response,
+            presentation_response,
             tts,
             transport.output(),
             assistant_aggregator,
@@ -615,8 +687,8 @@ async def run_bot(transport: BaseTransport, identity: str):
                 "role": "developer",
                 "content": (
                     f"The authenticated user is {identity}. Respond with spoken exactly "
-                    '"Voice interface ready." and a Mermaid flowchart showing Voice connected '
-                    "to Pi."
+                    '"Voice interface ready." and a flow presentation showing Voice connected '
+                    "to Pi using the response schema from your system instruction."
                 ),
             }
         )
@@ -669,7 +741,13 @@ if __name__ == "__main__":
                 validate_http_identity(request)
             except HTTPException as exc:
                 return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
-        return await call_next(request)
+        response = await call_next(request)
+        if path.startswith(("/mermaid/", "/marp/", "/excalidraw/")):
+            # The MCP App runs in an opaque-origin sandbox. Permit only its
+            # immutable static assets to load across that sandbox boundary.
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
+        return response
 
     client_dist = Path(__file__).resolve().parent / "client-dist"
     if (client_dist / "assets").is_dir():
@@ -686,13 +764,30 @@ if __name__ == "__main__":
             StaticFiles(directory=client_dist / "voice-runtime"),
             name="voice-runtime",
         )
+    if (client_dist / "mermaid").is_dir():
+        app.mount(
+            "/mermaid",
+            StaticFiles(directory=client_dist / "mermaid", html=True),
+            name="mermaid",
+        )
+    if (client_dist / "marp").is_dir():
+        app.mount(
+            "/marp",
+            StaticFiles(directory=client_dist / "marp", html=True),
+            name="marp",
+        )
+    if (client_dist / "excalidraw").is_dir():
+        app.mount(
+            "/excalidraw",
+            StaticFiles(directory=client_dist / "excalidraw", html=True),
+            name="excalidraw",
+        )
     if (client_dist / "diagnostics").is_dir():
         app.mount(
             "/diagnostics",
             StaticFiles(directory=client_dist / "diagnostics", html=True),
             name="diagnostics",
         )
-
     def register_browser_asset(asset_name: str, media_type: str | None = None) -> None:
         """Expose one generated Flutter root asset without shadowing Pipecat routes."""
 
@@ -805,6 +900,59 @@ if __name__ == "__main__":
             headers={"Cache-Control": "no-store"},
         )
 
+    @app.get("/api/pi-sessions")
+    async def get_pi_sessions(request: Request):
+        validate_http_identity(request)
+        return JSONResponse(
+            await broker_sessions_request(operation="browser.pi.sessions.list"),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/api/pi-sessions/{session_id}")
+    async def get_pi_session_history(session_id: str, request: Request):
+        validate_http_identity(request)
+        if (
+            not session_id
+            or len(session_id) > 128
+            or not session_id.replace("-", "").replace("_", "").isalnum()
+        ):
+            raise HTTPException(status_code=400, detail="invalid Pi session ID")
+        return JSONResponse(
+            await broker_sessions_request(
+                f"/{session_id}", operation="browser.pi.sessions.read"
+            ),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/pi-sessions/new", status_code=201)
+    async def start_new_pi_session(request: Request):
+        validate_http_identity(request)
+        return JSONResponse(
+            await broker_sessions_request(
+                "/new", "POST", operation="browser.pi.sessions.new"
+            ),
+            status_code=201,
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/pi-sessions/{session_id}/resume")
+    async def resume_pi_session(session_id: str, request: Request):
+        validate_http_identity(request)
+        if (
+            not session_id
+            or len(session_id) > 128
+            or not session_id.replace("-", "").replace("_", "").isalnum()
+        ):
+            raise HTTPException(status_code=400, detail="invalid Pi session ID")
+        return JSONResponse(
+            await broker_sessions_request(
+                f"/{session_id}/resume",
+                "POST",
+                operation="browser.pi.sessions.resume",
+            ),
+            headers={"Cache-Control": "no-store"},
+        )
+
     @app.post("/api/pi-message")
     async def send_pi_message(request: Request):
         validate_http_identity(request)
@@ -820,7 +968,19 @@ if __name__ == "__main__":
             raise HTTPException(status_code=413, detail="message is too large")
         result = await broker_pi_message(message)
         return JSONResponse(
-            {"spoken": result.spoken, "mermaid": result.mermaid},
+            {
+                "spoken": result.spoken,
+                "presentation": result.presentation,
+                "resourceUri": result.resource_uri,
+            },
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/pi-turn/abort")
+    async def abort_pi_turn(request: Request):
+        validate_http_identity(request)
+        return JSONResponse(
+            await broker_abort_pi_turn(),
             headers={"Cache-Control": "no-store"},
         )
 

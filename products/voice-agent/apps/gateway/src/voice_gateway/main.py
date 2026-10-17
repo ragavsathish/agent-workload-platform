@@ -108,7 +108,8 @@ def _public_task_result(task_result: object) -> object:
         "response": {
             "text": response_text,
             "spoken": normalized.spoken,
-            "mermaid": normalized.mermaid,
+            "presentation": normalized.presentation,
+            "resourceUri": normalized.resource_uri,
         },
     }
     artifacts = execution.get("artifacts")

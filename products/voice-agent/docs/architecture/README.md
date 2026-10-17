@@ -48,11 +48,14 @@ Grafana provisions the **C4 Operational Heat Map** dashboard. At build time,
 then calls the capability-free TypeScript WASM component in `components/c4-grafana-ts/` to compile
 the provisioned dashboard JSON. Grafana uses
 the pinned Grafmaid panel plugin to render C1, C2, all twelve C3 views, and the deployment view.
-Source-backed evidence colors apply to every view; instrumented elements additionally use fixed
-PromQL queries to show activity intensity for the selected dashboard range. The dashboard also
+Source-backed evidence colors fill every view; instrumented elements additionally use fixed
+PromQL queries to color their borders for missing or stale telemetry, idle services, and activity
+intensity in the selected dashboard range. Traffic volume is not treated as component health. The dashboard also
 contains the dated executable-line evidence snapshot formerly shown by the React coverage page;
 Grafana is now the single coverage and operational-health UI. Regenerate
 `deploy/observability/c4-heatmap.json` with `make grafana-c4-dashboard` after changing a C4 source or evidence mapping.
+Run `make playwright-grafana` to scroll and render every lazy panel, verify the computed palette,
+and retain a screenshot, browser evidence, and Playwright trace.
 The adapter speaks RTVI, while Tailscale Serve is the only browser ingress. It exposes the voice UI on tailnet HTTPS
 after tailnet authorization. Tailscale terminates TLS and supplies the authenticated identity to a
 localhost-only Traefik router. Traefik maps `/` to the Voice Edge, `/metrics/` to Grafana,
@@ -101,14 +104,14 @@ access to proposal records, and Habitat has no direct host port.
 | C4 element | Repository evidence |
 |---|---|
 | Browser Voice Client | `apps/client/lib/`; production Flutter web assets copied by `apps/edge/Containerfile` |
-| Browser Voice Client components | `apps/client/lib/main.dart`; `views/voice_view.dart`; `views/transcript_view.dart`; `widgets/mermaid_view_web.dart`; `platform/voice_session_web.dart`; `bridge/voice_bridge.js` |
+| Browser Voice Client components | `apps/client/lib/main.dart`; `views/voice_view.dart`; `views/pi_workspace_view.dart`; `widgets/mcp_app_view_web.dart`; `platform/voice_session_web.dart`; `bridge/voice_bridge.js`; `bridge/mermaid_app.js`; the lazy Excalidraw app is built from `vendor/excalidraw-mcp` by `tool/build-excalidraw-app.mjs` |
 | Mobile Client foundation | `apps/client/ios/`; `apps/client/android/`; `apps/client/lib/platform/voice_session.dart`; native adapters are not implemented yet |
 | Input Diagnostics | `apps/diagnostics/`; React bundle emitted to `apps/diagnostics/dist/` |
 | Engineering Evidence and C4 Explorer | `deploy/observability/generate-c4-heatmap.mjs`; `components/c4-grafana-ts/`; provisioned Grafana dashboard compiled by WASM from these Mermaid sources |
 | Tailnet Ingress | `deploy/compose.yml`; `scripts/compose-login.sh` |
 | Path Router | `deploy/traefik/traefik.yml`; `deploy/traefik/routes.yml` |
 | Voice Edge | `apps/edge/bot.py`; `apps/edge/Containerfile` |
-| Voice Edge components | `apps/edge/bot.py`; `apps/edge/audio_filter.py`; `apps/edge/audio_diagnostics.py`; `apps/edge/visual_response.py`; `apps/edge/otel_bridge.py` |
+| Voice Edge components | `apps/edge/bot.py`; `apps/edge/audio_filter.py`; `apps/edge/audio_diagnostics.py`; `apps/edge/presentation_response.py`; `apps/edge/otel_bridge.py` |
 | Input Audio Filter | `apps/edge/audio_filter.py`; `deploy/prepare_compose.py`; `apps/edge/Containerfile` |
 | Inference Broker | `apps/broker/src/voice_agent/speech/presentation/http.py`; broker LaunchAgent |
 | Inference Broker components | `apps/broker/src/voice_agent/speech/presentation/http.py`; `application/transcription.py`; `infrastructure/parakeet_stt.py`; `infrastructure/mlx_tts.py` |

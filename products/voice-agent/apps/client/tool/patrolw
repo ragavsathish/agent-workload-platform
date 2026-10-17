@@ -4,12 +4,22 @@ set -euo pipefail
 tool_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 pub_cache="$tool_dir/.flutter_tooling/pub-cache"
 patrol="$pub_cache/bin/patrol"
+patrol_cli_version="4.8.0"
 
-if [[ ! -x "$patrol" ]] || ! grep -Fq "$pub_cache" "$patrol"; then
-  PUB_CACHE="$pub_cache" "$tool_dir/tool/flutterw" pub global activate patrol_cli 4.8.0 --overwrite
+installed_version=""
+if [[ -x "$patrol" ]]; then
+  installed_version="$("$patrol" --version 2>/dev/null || true)"
+fi
+if [[ ! -x "$patrol" ]] || \
+  ! grep -Fq "$pub_cache" "$patrol" || \
+  [[ "$installed_version" != *"$patrol_cli_version"* ]]; then
+  PUB_CACHE="$pub_cache" "$tool_dir/tool/flutterw" pub global activate \
+    patrol_cli "$patrol_cli_version" --overwrite
 fi
 export PUB_CACHE="$pub_cache"
 export PATROL_FLUTTER_COMMAND="$tool_dir/tool/flutterw"
+node "$tool_dir/tool/patch-patrol-web-trace.mjs" \
+  "$pub_cache/hosted/pub.dev/patrol-4.10.0/web_runner/tests/test.spec.ts"
 if [[ -n "${FLUTTER_BIN:-}" ]]; then
   export PATH="$(dirname "$FLUTTER_BIN"):$PATH"
 elif command -v flutter >/dev/null 2>&1; then

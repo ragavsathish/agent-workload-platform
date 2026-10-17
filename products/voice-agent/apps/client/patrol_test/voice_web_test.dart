@@ -1,51 +1,51 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:patrol/patrol.dart';
-import 'package:voice_agent_client/api_client.dart';
-import 'package:voice_agent_client/theme.dart';
-import 'package:voice_agent_client/views/voice_view.dart';
+import 'package:voice_agent_client/main.dart' as app;
 
 void main() {
-  patrolTest('reproduces the voice shell at phone and desktop sizes', (
-    $,
-  ) async {
+  patrolTest('observes the responsive voice shell and navigation', ($) async {
     await $.platform.web.resizeWindow(size: const Size(390, 844));
-    await $.pumpWidget(
-      MaterialApp(
-        theme: buildTheme(),
-        home: VoiceView(api: VoiceApi()),
-      ),
-    );
-    await $.pump(const Duration(milliseconds: 80));
+    await $.pumpWidgetAndSettle(const app.VoiceAgentApp());
 
-    expect(find.text('Pi Voice'), findsOneWidget);
-    expect(find.text('Conversation map'), findsOneWidget);
-    expect(find.text('PINCH · DRAG'), findsOneWidget);
-    expect(find.text('Private coding workspace'), findsNothing);
-    expect(find.text('Start conversation'), findsOneWidget);
-    expect(find.byIcon(Icons.mic_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.graphic_eq_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.chat_bubble_outline_rounded), findsOneWidget);
-    expect(
-      find.byKey(const Key('conversation-map-placeholder')),
-      findsOneWidget,
-    );
-    expect(
-      find.bySemanticsLabel(
-        'Conversation map. Voice flows to Pi, waiting for response.',
-      ),
-      findsOneWidget,
-    );
-    await $.platform.web.resizeWindow(size: const Size(1440, 1000));
-    await $.pump(const Duration(milliseconds: 80));
-
-    expect(find.text('Chat'), findsOneWidget);
-    expect(find.text('Replays'), findsOneWidget);
-    expect(find.text('Private coding workspace'), findsOneWidget);
-    expect(find.text('PINCH · DRAG'), findsNothing);
-    expect(find.byKey(const Key('context-size')), findsOneWidget);
-
-    // Dispose the view's periodic context refresh before Patrol closes the page.
-    await $.pumpWidget(const SizedBox.shrink());
+    await _observePhoneShell($);
+    await _observeDesktopWorkspace($);
+    await _openTranscriptPage($);
+    await _openSystemHealthPage($);
   });
+}
+
+Future<void> _observePhoneShell(PatrolIntegrationTester $) async {
+  await $(const Key('voice-state')).waitUntilExists();
+  await $(const Key('conversation-map-placeholder')).waitUntilExists();
+  await $(const Key('start-conversation')).waitUntilExists();
+  expect($('Private coding workspace'), findsNothing);
+}
+
+Future<void> _observeDesktopWorkspace(PatrolIntegrationTester $) async {
+  await $.platform.web.resizeWindow(size: const Size(1440, 1000));
+  await $('Private coding workspace').waitUntilVisible();
+  await $(const Key('context-size')).waitUntilExists();
+}
+
+Future<void> _openTranscriptPage(PatrolIntegrationTester $) async {
+  final popup = $.platform.web.waitForPopup();
+  await $(const Key('open-transcript')).tap();
+  final page = await popup;
+  await $.platform.web.switchToPage(pageId: page);
+  final url = Uri.parse(await $.platform.web.getCurrentPageUrl());
+  expect(url.queryParameters['view'], 'transcript');
+  await $.platform.web.closePage(pageId: page);
+  await $.platform.web.switchToInitialPage();
+}
+
+Future<void> _openSystemHealthPage(PatrolIntegrationTester $) async {
+  final popup = $.platform.web.waitForPopup();
+  await $(const Key('open-system-health')).tap();
+  final page = await popup;
+  await $.platform.web.switchToPage(pageId: page);
+  final url = Uri.parse(await $.platform.web.getCurrentPageUrl());
+  expect(url.path, '/metrics/d/voice-c4-heatmap/c4-operational-heat-map');
+  await $.platform.web.closePage(pageId: page);
+  await $.platform.web.switchToInitialPage();
 }

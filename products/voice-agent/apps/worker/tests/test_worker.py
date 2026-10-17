@@ -2,7 +2,6 @@ from pathlib import Path
 
 import pytest
 from voice_agent.tasking.infrastructure.config import Settings
-
 from voice_worker.main import build_pi_command
 
 
@@ -39,7 +38,7 @@ def test_command_uses_only_explicit_gondolin_tools(tmp_path: Path) -> None:
     assert command[command.index("--skill") + 1] == str(tmp_path / "skills")
     assert command[-2] == "--"
     assert command[-1].startswith("work\n\n")
-    assert '"spoken" and "mermaid"' in command[-1]
+    assert '"spoken" and "presentation"' in command[-1]
 
 
 def test_command_refuses_unsandboxed_execution_by_default(tmp_path: Path) -> None:
