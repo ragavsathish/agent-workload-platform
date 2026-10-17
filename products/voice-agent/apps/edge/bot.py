@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import re
 import tomllib
 import wave
 from functools import lru_cache
@@ -48,6 +49,7 @@ from voice_agent.shared.telemetry import configure_telemetry
 
 from audio_diagnostics import audio_diagnostic_store
 from audio_filter import audio_filter_readiness, create_audio_filter
+from grafana_mcp import read_grafana_app, read_grafana_trace
 from otel_bridge import configure_pipecat_observers
 from presentation_response import StreamingSpokenExtractor, parse_presentation_response
 
@@ -64,6 +66,7 @@ PROMPT_LAYER_ORDER = (
     "standard_presentation",
     "slides_presentation",
     "excalidraw_presentation",
+    "grafana_presentation",
     "execution",
     "environment",
     "delegation",
@@ -835,6 +838,73 @@ if __name__ == "__main__":
             "defaultWorkspace": required_env("VOICE_DEFAULT_WORKSPACE"),
             "audioFilter": audio_filter_readiness(),
         }
+
+    @app.get("/api/grafana-mcp/apps/trace", include_in_schema=False)
+    async def grafana_trace_app(request: Request):
+        validate_http_identity(request)
+        try:
+            resource = await read_grafana_app(
+                required_env("GRAFANA_MCP_URL"),
+                required_env("GRAFANA_MCP_SERVER_TOKEN"),
+                "ui://grafana/trace.html",
+            )
+            contents = resource.get("contents")
+            item = contents[0] if isinstance(contents, list) and contents else None
+            html = item.get("text") if isinstance(item, dict) else None
+            if not isinstance(html, str) or not html:
+                raise RuntimeError("Grafana MCP trace App resource is empty")
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail="Grafana trace App is unavailable") from exc
+        return Response(
+            content=html,
+            media_type="text/html",
+            headers={
+                "Cache-Control": "private, max-age=3600",
+                "Content-Security-Policy": (
+                    "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
+                    "img-src data:; font-src data:"
+                ),
+            },
+        )
+
+    @app.get("/api/grafana-mcp/traces/{trace_id}", include_in_schema=False)
+    async def grafana_trace_data(
+        trace_id: str,
+        request: Request,
+        datasourceUid: str = "tempo",
+        focusSpanId: str | None = None,
+    ):
+        validate_http_identity(request)
+        if re.fullmatch(r"[0-9a-fA-F]{32}", trace_id) is None:
+            raise HTTPException(status_code=400, detail="invalid Tempo trace ID")
+        if re.fullmatch(r"[A-Za-z0-9_-]{1,80}", datasourceUid) is None:
+            raise HTTPException(status_code=400, detail="invalid Tempo datasource UID")
+        if focusSpanId is not None and re.fullmatch(r"[0-9a-fA-F]{16}", focusSpanId) is None:
+            raise HTTPException(status_code=400, detail="invalid Tempo focus span ID")
+        try:
+            result = await read_grafana_trace(
+                required_env("GRAFANA_MCP_URL"),
+                required_env("GRAFANA_MCP_SERVER_TOKEN"),
+                datasource_uid=datasourceUid,
+                trace_id=trace_id.lower(),
+                focus_span_id=focusSpanId.lower() if focusSpanId else None,
+            )
+            structured = result.get("structuredContent")
+            if result.get("isError") or not isinstance(structured, dict):
+                raise RuntimeError("Grafana MCP returned no trace App data")
+            public_origin = next(
+                (
+                    value.strip().rstrip("/")
+                    for value in required_env("PIPECAT_ALLOWED_ORIGINS").split(",")
+                    if value.strip()
+                ),
+                None,
+            )
+            if public_origin:
+                structured["grafanaUrl"] = f"{public_origin}/metrics/"
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail="Grafana trace is unavailable") from exc
+        return JSONResponse(structured, headers={"Cache-Control": "no-store"})
 
     @app.get("/api/ingress-auth", include_in_schema=False)
     async def ingress_auth(request: Request):

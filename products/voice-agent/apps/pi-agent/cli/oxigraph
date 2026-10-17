@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  oxigraph query [FILE|-]
+  oxigraph update [FILE|-]
+  oxigraph graphs
+
+FILE defaults to standard input. query accepts SPARQL query text; update accepts
+SPARQL Update text. This is direct, unrestricted access to the private voice-agent
+Oxigraph store.
+EOF
+}
+
+endpoint="${OXIGRAPH_URL:?OXIGRAPH_URL is required}"
+command="${1:-}"
+input="${2:--}"
+
+read_input() {
+  if [[ "$input" == "-" ]]; then
+    cat
+  else
+    [[ -f "$input" ]] || { printf 'SPARQL file not found: %s\n' "$input" >&2; exit 2; }
+    cat -- "$input"
+  fi
+}
+
+case "$command" in
+  query)
+    [[ $# -le 2 ]] || { usage >&2; exit 2; }
+    read_input | curl --fail --silent --show-error \
+      --header 'Accept: application/sparql-results+json, text/turtle;q=0.9' \
+      --header 'Content-Type: application/sparql-query' \
+      --data-binary @- "${endpoint%/}/query"
+    ;;
+  update)
+    [[ $# -le 2 ]] || { usage >&2; exit 2; }
+    read_input | curl --fail --silent --show-error \
+      --header 'Content-Type: application/sparql-update' \
+      --data-binary @- "${endpoint%/}/update"
+    ;;
+  graphs)
+    [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+    printf '%s\n' 'SELECT DISTINCT ?graph WHERE { GRAPH ?graph { ?subject ?predicate ?object } } ORDER BY ?graph' \
+      | curl --fail --silent --show-error \
+        --header 'Accept: application/sparql-results+json' \
+        --header 'Content-Type: application/sparql-query' \
+        --data-binary @- "${endpoint%/}/query"
+    ;;
+  *) usage >&2; exit 2 ;;
+esac

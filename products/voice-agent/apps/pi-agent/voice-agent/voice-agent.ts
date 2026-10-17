@@ -14,10 +14,9 @@ import {
 import { GondolinSession } from "@agent-workload-platform/gondolin-session";
 
 import { parseVoiceTurn } from "./conversation.js";
-import { createPersonalKnowledgeTool } from "./personal-knowledge-tool.js";
-import { createPersonalKnowledge } from "./personal-knowledge.js";
 import {
   assistantText,
+  createGrafanaMcpRegistration,
   createWassetteMcpRegistration,
   isolatedVoiceMcpConfig,
   skillResourceLoader,
@@ -44,6 +43,8 @@ type VoiceAgentSettings = Pick<
   ServiceSettings,
   | "agentDir"
   | "cwd"
+  | "grafanaMcpToken"
+  | "grafanaMcpUrl"
   | "model"
   | "sessionDir"
   | "skillsDir"
@@ -89,6 +90,8 @@ function runtimeSettings(settings: ServiceSettings): VoiceAgentSettings {
   return {
     agentDir: settings.agentDir,
     cwd: settings.cwd,
+    grafanaMcpToken: settings.grafanaMcpToken,
+    grafanaMcpUrl: settings.grafanaMcpUrl,
     model: settings.model,
     sessionDir: settings.sessionDir,
     skillsDir: settings.skillsDir,
@@ -114,7 +117,6 @@ export class VoiceAgent {
     private readonly modelRuntime: ModelRuntime,
     private readonly gondolin: GondolinSession,
     private readonly gondolinTools: GondolinTools,
-    private readonly personalKnowledgeTool: ReturnType<typeof createPersonalKnowledgeTool>,
     private persistedContextTokens: number | null,
     private persistedContextWindow: number | null,
     persistedSession: SessionManager,
@@ -137,6 +139,8 @@ export class VoiceAgent {
       giteaToken: settings.giteaToken,
       imagePath: settings.gondolinAssets,
       localCwd: settings.cwd,
+      oxigraphCliDir: settings.oxigraphCliDir,
+      oxigraphUrl: settings.oxigraphUrl,
       prometheusEndpointUrl: settings.prometheusEndpointUrl,
       skillsDir: settings.skillsDir,
       s3MockAccessKey: settings.s3MockAccessKey,
@@ -153,17 +157,11 @@ export class VoiceAgent {
     const persistedModel = modelChange?.type === "model_change"
       ? modelRuntime.getModel(modelChange.provider, modelChange.modelId)
       : undefined;
-    const personalKnowledge = createPersonalKnowledge({
-      baseUrl: settings.gatewayUrl,
-      token: settings.gatewayToken,
-      identity: settings.identity,
-    });
     return new VoiceAgent(
       runtimeSettings(settings),
       modelRuntime,
       gondolin,
       gondolinTools,
-      createPersonalKnowledgeTool(personalKnowledge),
       persistedUsage ? calculateContextTokens(persistedUsage) : null,
       persistedModel?.contextWindow ?? null,
       persistedSession,
@@ -196,6 +194,7 @@ export class VoiceAgent {
       createToolSearchExtension(),
       createMcpExtension({ loadConfig: isolatedVoiceMcpConfig }),
       createWassetteMcpRegistration(this.settings),
+      createGrafanaMcpRegistration(this.settings),
     ]);
     const model = this.settings.model
       ? this.modelRuntime.getModel(this.settings.model.provider, this.settings.model.modelId)
@@ -215,9 +214,8 @@ export class VoiceAgent {
         "edit",
         "bash",
         "tool_search",
-        "query_personal_knowledge",
       ],
-      customTools: [...this.gondolinTools, this.personalKnowledgeTool],
+      customTools: this.gondolinTools,
       resourceLoader,
       sessionManager,
     });

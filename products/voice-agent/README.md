@@ -33,13 +33,17 @@ ownership and planned extractions are documented in
   It routes `/` to Pipecat, `/metrics/` to Grafana, `/git/` to Gitea, and `/queue/` to the
   upstream Absurd Habitat operator UI. Funnel and public Docker ports are not enabled.
   Grafana provisions a generated **C4 Operational Heat Map** containing C1, C2, every C3 view, and
-  deployment, plus the dated source-backed code evidence snapshot. The build invokes the
-  capability-free TypeScript WASM compiler before Compose starts. Grafana renders the repository's
+  deployment, plus the dated source-backed code evidence snapshot. A deterministic local adapter
+  compiles the authoritative Mermaid sources before Compose starts. Grafana renders the repository's
   Mermaid sources with the pinned Grafmaid plugin. On the C2 container view, fixed PromQL queries
   color node fills for missing/stale, idle, and increasing activity while node borders show
   source-backed evidence. C1, C3, and deployment backgrounds stay neutral gray so the live C2 trace
   is the sole color highlight; traffic volume is deliberately not presented as health. Grafana is the only system coverage and
   operational-health surface.
+  The pinned official Grafana MCP server provides read-only dashboard, Prometheus, and Tempo tools
+  to authenticated MCP clients. Its Tempo tool includes Grafana's interactive trace MCP App;
+  the voice-chat client renders that upstream App inline with its dark host theme. The C4 dashboard
+  itself remains a Grafana dashboard rather than a custom MCP App.
 - Browser sessions require an exact HTTPS origin and a signed, one-use token in the WebSocket path.
   The current deployment is deliberately single-user: login pins exactly one owner identity during
   setup, while tailnet ACLs authenticate which devices can reach the listener.
@@ -53,10 +57,11 @@ ownership and planned extractions are documented in
   exception message, URL parameter, request body, or response body.
 - Database credentials, Pi/provider authentication, sessions, and writable workspaces never enter the voice
   container.
-- Oxigraph runs as an internal-only SPARQL 1.1/RDF store on the Compose `data` network. It publishes
-  no host port and persists only through the `oxigraph-data` named volume. The Agent Gateway is its
-  only application consumer and exposes fixed, bounded, read-only profile and learning queries to
-  the authenticated owner through the Pi Voice Service.
+- Oxigraph runs as a persistent SPARQL 1.1/RDF store on the Compose `data` network and publishes its
+  unauthenticated endpoint only on Mac loopback at `127.0.0.1:7878`. The Agent Gateway retains its
+  fixed, bounded personal-knowledge API, while the isolated Pi Voice VM also receives direct query
+  and update access through `/opt/awp/bin/oxigraph`. This is an explicit YOLO-mode capability: it is
+  not reachable from the LAN or tailnet, but agent-issued SPARQL can mutate the complete RDF store.
 - The Pi worker runs on macOS, but Pi's standard `read`, `write`, `edit`, and
   `bash` tools are backed by a Gondolin micro-VM with only the immutable task
   workspace mounted at `/workspace`; browser and permission-scoped Wassette
@@ -208,6 +213,18 @@ journey from detected speech through transcript, Pi inference, and reply audio. 
 outcomes, voice-filter pass rate, user-perceived and inference-stage latency, task activity,
 failures, and recent payload-free traces.
 
+The pinned official `grafana/mcp-grafana` service is available only on Mac loopback at
+`http://127.0.0.1:8000/mcp`. Compose creates a Viewer service account for its Grafana connection,
+requires a separate caller bearer token, disables write tools and anonymous usage reporting, and
+enables only dashboard discovery, Prometheus, Tempo, navigation, and identity tools. Compatible MCP
+hosts render the bundled Tempo waterfall App; the
+stable v2.0.2 Prometheus tool returns structured/text results without the unreleased metrics App.
+Pi Voice registers this server explicitly as a deferred provider. When it returns a bounded trace
+reference, Voice Edge identity-checks the browser, retrieves the official App resource and structured
+trace data server-side, and passes them through the existing sandboxed MCP Apps bridge. The caller
+token never enters model output or browser JavaScript.
+`make grafana-mcp-token` prints the local caller token for an explicitly configured development client.
+
 The provisioned **Platform Resources** dashboard separates three resource layers: the physical Mac,
 the Docker Desktop Linux VM, and each running Gondolin QEMU runner. Native Fluent Bit reports macOS
 CPU, active+wired memory, load, disk, and network metrics. The Compose Fluent Bit instance reads the
@@ -234,7 +251,7 @@ published Docker port and receives a separate `habitat_operator` credential whos
 limited to the Absurd schema; it cannot read voice task proposals. This operational view does not
 replace the gateway's proposal, approval, or tenant-policy boundary.
 
-Grafana and OTLP/HTTP bind only to Mac loopback. OTLP/gRPC, Prometheus, Tempo, and Loki ports are not
+Grafana, Grafana MCP, and OTLP/HTTP bind only to Mac loopback. OTLP/gRPC, Prometheus, Tempo, and Loki ports are not
 published. Gateway and edge stdout is retained only in bounded local Docker logs for `make logs`;
 applications do not send the OpenTelemetry logs signal. Telemetry is stored in the
 `otel-lgtm-data` Docker volume; Prometheus retention is seven days. This all-in-one bundle is for
@@ -253,10 +270,10 @@ set `BLACKBOX_USE_TAILSCALE=true` to test an authenticated tunnel namespace. See
 [TESTING.md](TESTING.md) for assertions and failure interpretation.
 
 Set `VOICE_LLM_BACKEND=pi` in `apps/edge/.env` to select the alternate
-`Parakeet v3 -> Pi agent -> capability-scoped Wassette task component -> Kokoro` path. The default remains `ollama`.
+`Parakeet v3 -> Pi agent -> capability-scoped Wassette components -> Kokoro` path. The default remains `ollama`.
 Pi voice uses a dedicated long-running Node service built on Pi's `createAgentSession()` SDK. The
 service keeps conversation state between turns, reconciles a restarted or reset Pipecat transcript,
-and consumes submission, status, and cancellation tools from Wassette. Its native
+and consumes tasking and read-only personal-knowledge tools from Wassette. Its native
 read, write, edit, and bash operations run only inside the persistent Gondolin Voice Workspace;
 reusable skills are mounted read-only at `/skills`. Committed source is published to the private,
 loopback-only Gitea service during `make start`; the VM may anonymously clone that public-in-Gitea
@@ -265,10 +282,14 @@ ignored files, local secrets, and uncommitted changes are not exposed. It disabl
 host extensions, prompt templates, themes, and context files. The service explicitly registers
 Wassette through Pi's native MCP extension as a deferred tool provider; `tool_search` discovers
 tools from the configured component directory without adding every schema to each turn, and the
-host-native Wassette child process receives only a dedicated tasking env file. WAC composes the
-TypeScript task core with its authenticated gateway adapter into the single component loaded by
-Wassette. Wassette is separate
+host-native Wassette child process receives only a dedicated capability env file. WAC composes each
+TypeScript core with its authenticated gateway adapter. The personal-knowledge component receives
+a separate reader token that cannot enqueue work or write RDF. Wassette is separate
 from the Gondolin VM used for native file and shell tools.
+The same VM mounts a read-only `oxigraph` CLI and reaches the loopback-published store through one
+synthetic network origin. `oxigraph query`, `oxigraph update`, and `oxigraph graphs` intentionally
+provide unrestricted RDF access; they should be replaced by reviewed domain operations before this
+becomes a multi-user deployment.
 Kokoro speaks the final text produced
 by Pi after any tool calls complete. `PI_VOICE_MODEL` selects the model; when blank, Pi uses its
 configured default. The VM image includes AWS CLI and receives mock-only credentials plus a

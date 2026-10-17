@@ -28,6 +28,9 @@ ffmpeg -hide_banner -loglevel error \
 
 export PLAYWRIGHT_AUDIO_FILE="$audio_file"
 export PLAYWRIGHT_OUTPUT_DIR="$output_dir"
+GRAFANA_TRACE_ID="$(python3 "$repo_dir/tests/e2e/grafana-mcp.py" | jq -r '.traceId')"
+test -n "$GRAFANA_TRACE_ID" && test "$GRAFANA_TRACE_ID" != null
+export GRAFANA_TRACE_ID
 
 "${compose[@]}" up -d --no-deps e2e-tailnet-bridge
 "${compose[@]}" run --rm --no-deps playwright-e2e

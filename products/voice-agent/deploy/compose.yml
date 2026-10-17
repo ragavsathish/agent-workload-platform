@@ -121,7 +121,8 @@ services:
       oxigraph-init:
         condition: service_completed_successfully
     volumes: [oxigraph-data:/data]
-    networks: [data]
+    ports: ["127.0.0.1:7878:7878"]
+    networks: [data, oxigraph-host]
     user: "65532:65532"
     read_only: true
     tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=32m"]
@@ -259,6 +260,68 @@ services:
       start_period: 15s
     logging:
       driver: none
+
+  grafana-mcp-bootstrap:
+    image: curlimages/curl:8.16.0@sha256:463eaf6072688fe96ac64fa623fe73e1dbe25d8ad6c34404a669ad3ce1f104b6
+    depends_on:
+      otel-lgtm:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/bootstrap-grafana-mcp.sh"]
+    environment:
+      GRAFANA_URL: http://otel-lgtm:3000
+      GRAFANA_SERVICE_ACCOUNT_TOKEN_FILE: /var/lib/grafana-mcp/service-account-token
+    secrets: [grafana-admin-password]
+    volumes:
+      - grafana-mcp-token:/var/lib/grafana-mcp
+      - ./observability/bootstrap-grafana-mcp.sh:/bootstrap-grafana-mcp.sh:ro
+    networks: [monitoring]
+    user: "0:0"
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=8m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: "no"
+
+  grafana-mcp:
+    image: grafana/mcp-grafana:2.0.2@sha256:78d208116ec52b09b44f0eca66892073b39aefcb64483c54d43255c8eab7e97a
+    depends_on:
+      grafana-mcp-bootstrap:
+        condition: service_completed_successfully
+    entrypoint: ["/bin/sh", "/run-grafana-mcp.sh"]
+    environment:
+      GRAFANA_URL: http://otel-lgtm:3000
+      GRAFANA_SERVICE_ACCOUNT_TOKEN_FILE: /var/lib/grafana-mcp/service-account-token
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-lgtm:4317
+      OTEL_EXPORTER_OTLP_TRACES_INSECURE: "true"
+      OTEL_LOGS_EXPORTER: none
+    secrets: [grafana-mcp-caller-token]
+    ports: ["127.0.0.1:8000:8000"]
+    volumes:
+      - grafana-mcp-token:/var/lib/grafana-mcp:ro
+      - ./observability/run-grafana-mcp.sh:/run-grafana-mcp.sh:ro
+    networks:
+      control:
+        ipv4_address: 172.30.90.20
+      monitoring:
+      mcp-access:
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=16m,uid=1000,gid=999"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 0.5
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf \"GET /healthz HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3 && grep -q \"200 OK\" <&3'"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   agent-gateway:
     image: local/pipecat-agent-gateway:compose
@@ -409,6 +472,8 @@ services:
     depends_on:
       agent-gateway:
         condition: service_healthy
+      grafana-mcp:
+        condition: service_healthy
       tailscale:
         condition: service_started
     network_mode: service:tailscale
@@ -416,6 +481,8 @@ services:
     environment:
       INFERENCE_BROKER_BASE_URL: http://inference-broker:9443/v1
       AGENT_GATEWAY_BASE_URL: http://agent-gateway:9444/v1
+      GRAFANA_MCP_URL: http://grafana-mcp:8000/mcp
+      GRAFANA_MCP_SERVER_TOKEN_FILE: /run/secrets/grafana-mcp-caller-token
       VOICE_DEFAULT_WORKSPACE: ${VOICE_DEFAULT_WORKSPACE:?set VOICE_DEFAULT_WORKSPACE in deploy/.env}
       VOICE_INPUT_FILTER: ${VOICE_INPUT_FILTER:-rnnoise}
       VOICE_DIAGNOSTIC_DIR: /var/lib/voice-diagnostics
@@ -424,7 +491,7 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-lgtm:4318
       OTEL_LOGS_EXPORTER: none
       OTEL_METRIC_EXPORT_INTERVAL: "5000"
-    secrets: [broker-token, agent-gateway-token, voxlock-voice-sample]
+    secrets: [broker-token, agent-gateway-token, grafana-mcp-caller-token, voxlock-voice-sample]
     volumes: [voice-diagnostics:/var/lib/voice-diagnostics]
     read_only: true
     tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=256m"]
@@ -444,6 +511,7 @@ volumes:
   gitea-config:
   gitea-data:
   otel-lgtm-data:
+  grafana-mcp-token:
   oxigraph-data:
   s3mock-data:
   postgres-data:
@@ -459,7 +527,9 @@ networks:
     internal: true
   monitoring:
     internal: true
+  mcp-access:
   host-access:
+  oxigraph-host:
 
 secrets:
   broker-token:
@@ -480,5 +550,7 @@ secrets:
     file: ./secrets/approval-secret
   grafana-admin-password:
     file: ./secrets/grafana-admin-password
+  grafana-mcp-caller-token:
+    file: ./secrets/grafana-mcp-caller-token
   voxlock-voice-sample:
     file: ./secrets/voxlock-voice-sample.wav

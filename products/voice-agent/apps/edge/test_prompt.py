@@ -12,6 +12,7 @@ class VoicePromptTest(unittest.TestCase):
         self.assertIn('"spoken" and "presentation"', prompt)
         self.assertIn('kind "excalidraw"', prompt)
         self.assertIn('kind "slides"', prompt)
+        self.assertIn('kind "grafana-trace"', prompt)
 
     def test_workspace_cannot_inject_another_prompt_line(self):
         with self.assertRaises(RuntimeError):
@@ -29,6 +30,7 @@ class VoicePromptTest(unittest.TestCase):
             "standard_presentation",
             "slides_presentation",
             "excalidraw_presentation",
+            "grafana_presentation",
             "execution",
             "environment",
             "delegation",
@@ -36,6 +38,7 @@ class VoicePromptTest(unittest.TestCase):
         self.assertIn("brief spoken walkthrough", layers["excalidraw_presentation"])
         self.assertIn("explicitly asks for slides", layers["slides_presentation"])
         self.assertIn("discovered Marp voice presentation skill", layers["slides_presentation"])
+        self.assertIn("official trace MCP App", layers["grafana_presentation"])
         self.assertLess(
             voice_prompt_template().index(layers["response_contract"]),
             voice_prompt_template().index(layers["excalidraw_presentation"]),

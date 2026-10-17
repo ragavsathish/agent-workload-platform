@@ -9,6 +9,7 @@ The resulting Parakeet v3 MLX transcript drives Ollama and the real gateway.
 ```bash
 make warm-models
 make blackbox-e2e
+make blackbox-personal-knowledge
 make blackbox-voice \
   UTTERANCE="Propose a task in the default workspace to inspect it without changing files"
 
@@ -17,6 +18,11 @@ make blackbox-voice \
   "Propose a task in the default workspace to report ready without changing files" \
   "Approve that pending task now"
 ```
+
+`blackbox-personal-knowledge` inserts one isolated RDF fixture, invokes the typed tool through
+Wassette MCP, the authenticated gateway, and Oxigraph, and then removes the fixture. Its broad
+natural-language query includes unmatched terms and guards against the former all-terms-required
+filter returning an empty fact list. The overall `blackbox-e2e` target includes this regression.
 
 The runner automatically retains an authenticated production Tailscale sidecar. When no
 authenticated sidecar is running, it uses `deploy/compose.local-test.yml` as a stable network
@@ -39,6 +45,12 @@ or synthesized text. Compose verification fails if Docker logging is enabled for
 gateway, if OpenTelemetry log export is enabled, if Grafana allows anonymous access, or if an
 observability port is published beyond loopback. The end-to-end test snapshots payload-free
 operation counters before synthetic audio starts, then queries them through Grafana after the run.
+Compose verification also initializes the real Grafana MCP streamable-HTTP session, reads the C4
+dashboard summary, queries `up{job="grafana-mcp"}` through the Prometheus tool, and asserts that the Tempo tool
+advertises the upstream interactive trace MCP App resource.
+The voice Playwright suite fetches a real Tempo trace, mounts Grafana's official App inside the
+voice-chat MCP host, waits for populated span data rather than its loading state, verifies the dark
+theme, and retains the Playwright trace and screenshot.
 It requires a fresh increment from every application runtime on the exercised path: Voice Edge
 (`voice.session`), Inference Broker (`inference.pi`), Pi Voice Service (`pi.turn`), and Agent Gateway
 (`task.propose`). It also requires the `component.started` lifecycle series from those services plus

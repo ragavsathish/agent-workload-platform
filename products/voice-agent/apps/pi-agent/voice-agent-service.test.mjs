@@ -6,6 +6,7 @@ import test from "node:test";
 
 import { canManuallyCompact } from "./dist/voice-agent/voice-agent.js";
 import {
+  createGrafanaMcpRegistration,
   createWassetteMcpRegistration,
   isolatedVoiceMcpConfig,
   skillResourceLoader,
@@ -16,12 +17,13 @@ import {
   restorePublicTranscript,
 } from "./dist/voice-agent/public-transcript.js";
 import { parseVoiceTurn } from "./dist/voice-agent/conversation.js";
-import { createPersonalKnowledge } from "./dist/voice-agent/personal-knowledge.js";
 import { parseEnvFile } from "./dist/voice-agent/voice-config.js";
 import { matchVoiceRoute } from "./dist/voice-agent/voice-http-server.js";
 import {
   createVoiceGondolinConfig,
   GUEST_GITEA_ENDPOINT,
+  GUEST_OXIGRAPH_CLI,
+  GUEST_OXIGRAPH_ENDPOINT,
   GUEST_PROMETHEUS_ENDPOINT,
   GUEST_S3MOCK_ENDPOINT,
   GUEST_SKILLS,
@@ -58,10 +60,36 @@ test("orchestrator Pi registers Wassette through native deferred MCP", async () 
   assert.equal(registrations[0].config.env.GITEA_TOKEN, "");
   assert.equal(registrations[0].config.env.ARTIFACT_SECRET_KEY, "");
   assert.equal(registrations[0].config.env.AWS_SESSION_TOKEN, "");
+  assert.equal(registrations[0].config.env.TASK_GATEWAY_TOKEN, "");
+  assert.equal(registrations[0].config.env.KNOWLEDGE_GATEWAY_TOKEN, "");
+  assert.equal(registrations[0].config.env.DIGITAL_TWIN_READER_TOKEN, "");
 });
 
 test("voice MCP ignores shared host and project MCP configuration", () => {
   assert.deepEqual(isolatedVoiceMcpConfig(), { servers: [], errors: [] });
+});
+
+test("orchestrator Pi registers authenticated Grafana MCP as deferred and read-only", async () => {
+  const registrations = [];
+  await createGrafanaMcpRegistration({
+    grafanaMcpToken: "caller-secret",
+    grafanaMcpUrl: "http://127.0.0.1:8000/mcp",
+  })({
+    registerMcpServer(name, config) {
+      registrations.push({ name, config });
+    },
+  });
+
+  assert.deepEqual(registrations, [{
+    name: "grafana",
+    config: {
+      url: "http://127.0.0.1:8000/mcp",
+      headers: { Authorization: "Bearer caller-secret" },
+      exposure: "deferred",
+      description: "Read Grafana dashboards, Prometheus metrics, and Tempo traces.",
+      timeout: 30,
+    },
+  }]);
 });
 
 test("voice HTTP routes parse into typed commands", () => {
@@ -205,6 +233,8 @@ test("persistent voice VM disables broken macOS QEMU idle resume", () => {
     giteaToken: "read-only-token",
     imagePath: "/host/assets",
     localCwd: "/host/workspace",
+    oxigraphCliDir: "/host/cli",
+    oxigraphUrl: "http://127.0.0.1:7878",
     prometheusEndpointUrl: "http://127.0.0.1:9091",
     skillsDir: "/host/skills",
     s3MockAccessKey: "local-test",
@@ -259,14 +289,16 @@ test("Pi natively discovers mounted skills and exposes guest-readable paths", as
   }
 });
 
-test("Gondolin mounts only writable runtime state and read-only skills", async () => {
+test("Gondolin mounts writable runtime state plus read-only skills and CLI", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi-voice-mount-test-"));
   const workspace = join(root, "workspace");
   const skills = join(root, "skills");
+  const cli = join(root, "cli");
   try {
     await Promise.all([
       mkdir(workspace),
       mkdir(skills),
+      mkdir(cli),
     ]);
     const mounts = createVoiceGondolinConfig({
       giteaEndpointUrl: "http://127.0.0.1:3001",
@@ -274,6 +306,8 @@ test("Gondolin mounts only writable runtime state and read-only skills", async (
       giteaToken: "read-only-token",
       imagePath: join(root, "assets"),
       localCwd: workspace,
+      oxigraphCliDir: cli,
+      oxigraphUrl: "http://127.0.0.1:7878",
       prometheusEndpointUrl: "http://127.0.0.1:9091",
       skillsDir: skills,
       s3MockAccessKey: "local-test",
@@ -283,19 +317,22 @@ test("Gondolin mounts only writable runtime state and read-only skills", async (
     }).mounts;
     assert.equal(mounts["/workspace"], workspace);
     assert.deepEqual(mounts["/skills"], { hostPath: skills, readonly: true });
-    assert.deepEqual(Object.keys(mounts).sort(), ["/skills", "/workspace"]);
+    assert.deepEqual(mounts[GUEST_OXIGRAPH_CLI], { hostPath: cli, readonly: true });
+    assert.deepEqual(Object.keys(mounts).sort(), ["/opt/awp/bin", "/skills", "/workspace"]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
 });
 
-test("voice Gondolin exposes only loopback S3Mock and read-only Gitea", async () => {
+test("voice Gondolin exposes allowlisted loopback services including raw Oxigraph", async () => {
   const config = createVoiceGondolinConfig({
     giteaEndpointUrl: "http://127.0.0.1:3001",
     giteaOwner: "source-publisher",
     giteaToken: "read-only-token",
     imagePath: "/host/assets",
     localCwd: "/host/workspace",
+    oxigraphCliDir: "/host/cli",
+    oxigraphUrl: "http://127.0.0.1:7878",
     prometheusEndpointUrl: "http://127.0.0.1:9091",
     skillsDir: "/host/skills",
     s3MockAccessKey: "local-test",
@@ -309,6 +346,7 @@ test("voice Gondolin exposes only loopback S3Mock and read-only Gitea", async ()
   assert.equal(config.environment.GITEA_BASE_URL, GUEST_GITEA_ENDPOINT);
   assert.equal(config.environment.GITEA_OWNER, "source-publisher");
   assert.equal(config.environment.PROMETHEUS_URL, GUEST_PROMETHEUS_ENDPOINT);
+  assert.equal(config.environment.OXIGRAPH_URL, GUEST_OXIGRAPH_ENDPOINT);
 
   const rewritten = await config.network.onRequest(
     new Request("http://s3mock.local:9090/agent-artifacts"),
@@ -328,6 +366,10 @@ test("voice Gondolin exposes only loopback S3Mock and read-only Gitea", async ()
     prometheus.url,
     "http://127.0.0.1:9091/api/v1/query?query=up",
   );
+  const oxigraph = await config.network.onRequest(
+    new Request("http://oxigraph.local:7878/query"),
+  );
+  assert.equal(oxigraph.url, "http://127.0.0.1:7878/query");
   const denied = await config.network.onRequest(new Request("http://example.com/"));
   assert.equal(denied.status, 403);
   assert.throws(
@@ -337,6 +379,8 @@ test("voice Gondolin exposes only loopback S3Mock and read-only Gitea", async ()
       giteaToken: "read-only-token",
       imagePath: "/host/assets",
       localCwd: "/host/workspace",
+      oxigraphCliDir: "/host/cli",
+      oxigraphUrl: "http://127.0.0.1:7878",
       skillsDir: "/host/skills",
       s3MockAccessKey: "local-test",
       s3MockBucket: "agent-artifacts",
@@ -345,28 +389,6 @@ test("voice Gondolin exposes only loopback S3Mock and read-only Gitea", async ()
     }),
     /HTTP loopback origin/,
   );
-});
-
-test("voice Pi queries bounded personal knowledge through the gateway", async () => {
-  const requests = [];
-  const knowledge = createPersonalKnowledge({
-    baseUrl: "http://gateway.test/v1",
-    token: "gateway-token",
-    identity: "owner@example.com",
-    fetch: async (url, init) => {
-      requests.push({ url: String(url), method: init.method });
-      return Response.json({ results: [] });
-    },
-  });
-
-  assert.deepEqual(
-    await knowledge.query({ scope: "learning", query: " DDD & EventStorming " }),
-    { results: [] },
-  );
-  assert.deepEqual(requests, [{
-    url: "http://gateway.test/v1/digital-twin?identity=owner%40example.com&scope=learning&query=DDD+%26+EventStorming",
-    method: "GET",
-  }]);
 });
 
 test("parseEnvFile accepts the installed quoted environment format", () => {

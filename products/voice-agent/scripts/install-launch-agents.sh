@@ -30,6 +30,8 @@ gitea_builder_token_file="$repo_dir/deploy/secrets/gitea-builder-token"
 gitea_runner_token_file="$repo_dir/deploy/secrets/gitea-runner-registration-token"
 gitea_dispatcher_token_file="$repo_dir/deploy/secrets/gitea-dispatcher-token"
 digital_twin_writer_token_file="$repo_dir/deploy/secrets/digital-twin-writer-token"
+digital_twin_reader_token_file="$repo_dir/deploy/secrets/digital-twin-reader-token"
+grafana_mcp_caller_token_file="$repo_dir/deploy/secrets/grafana-mcp-caller-token"
 
 [[ -d "$skills_dir" ]] || { echo "Missing skills directory: $skills_dir" >&2; exit 1; }
 [[ -s "$gitea_agent_token_file" ]] || { echo "Missing Gitea agent token; run the Compose bootstrap first" >&2; exit 1; }
@@ -37,6 +39,8 @@ digital_twin_writer_token_file="$repo_dir/deploy/secrets/digital-twin-writer-tok
 [[ -s "$gitea_runner_token_file" ]] || { echo "Missing Gitea runner registration token; run the Compose bootstrap first" >&2; exit 1; }
 [[ -s "$gitea_dispatcher_token_file" ]] || { echo "Missing Gitea workflow dispatcher token; run the Compose bootstrap first" >&2; exit 1; }
 [[ -s "$digital_twin_writer_token_file" ]] || { echo "Missing digital twin writer token; run the Compose bootstrap first" >&2; exit 1; }
+[[ -s "$digital_twin_reader_token_file" ]] || { echo "Missing digital twin reader token; run the Compose bootstrap first" >&2; exit 1; }
+[[ -s "$grafana_mcp_caller_token_file" ]] || { echo "Missing Grafana MCP caller token; run the Compose bootstrap first" >&2; exit 1; }
 [[ -d "$gondolin_builder_assets_source" ]] || { echo "Missing Gondolin builder bootstrap assets; run make gondolin-builder-build once" >&2; exit 1; }
 [[ -x /opt/homebrew/bin/fluent-bit ]] || { echo "Missing Fluent Bit; run: brew install fluent-bit" >&2; exit 1; }
 [[ -n "$wassette_bin" && -x "$wassette_bin" ]] || { echo "Missing Wassette executable; install it or set WASSETTE_BIN" >&2; exit 1; }
@@ -46,6 +50,8 @@ mkdir -p \
   "$logs_dir" \
   "$runtime_dir/scripts" \
   "$runtime_dir/apps/broker/src" \
+  "$runtime_dir/apps/pi-voice" \
+  "$runtime_dir/apps/digital-twin" \
   "$runtime_dir/apps/worker/src" \
   "$runtime_dir/apps/host-observability" \
   "$runtime_dir/observability" \
@@ -139,18 +145,21 @@ rsync -a --delete --exclude='.git/' "$skills_dir/" "$skills_runtime/"
 
 awk -F= '/^(INFERENCE_BROKER_TOKEN|BROKER_MAX_AUDIO_BYTES|BROKER_MAX_AUDIO_SECONDS|BROKER_MAX_CHAT_BYTES|BROKER_MAX_TTS_CHARS|OLLAMA_MODEL|OLLAMA_BASE_URL|MLX_STT_MODEL|MLX_TTS_MODEL|MLX_TTS_VOICE|MLX_TTS_SPEED|MLX_TTS_LANGUAGE_CODE|MLX_TTS_STREAMING_INTERVAL|AGENT_GATEWAY_TOKEN|ORCHESTRATOR_ALLOWED_USERS|ARTIFACT_ENDPOINT_URL|ARTIFACT_BUCKET|ARTIFACT_ACCESS_KEY|ARTIFACT_SECRET_KEY|GITEA_ENDPOINT_URL|GITEA_OWNER|PI_BINARY|PI_MODEL|PI_VOICE_MODEL|PI_VOICE_THINKING|PI_VOICE_TIMEOUT_SECONDS)=/ {print}' \
   "$repo_dir/deploy/.env" > "$runtime_dir/apps/broker/broker.env"
-printf 'AGENT_GATEWAY_BASE_URL="http://127.0.0.1:9444/v1"\nGONDOLIN_BROWSER_ASSETS="%s"\nPI_CODING_AGENT_DIR="%s"\nPI_VOICE_CWD="%s"\nPI_VOICE_SESSION_DIR="%s"\nPI_VOICE_SKILLS_DIR="%s"\nPI_VOICE_SERVICE_URL="http://127.0.0.1:9446"\nWASSETTE_BIN="%s"\nWASSETTE_COMPONENT_DIR="%s"\n' \
+printf 'AGENT_GATEWAY_BASE_URL="http://127.0.0.1:9444/v1"\nGONDOLIN_BROWSER_ASSETS="%s"\nPI_CODING_AGENT_DIR="%s"\nPI_VOICE_CWD="%s"\nPI_VOICE_SESSION_DIR="%s"\nPI_VOICE_SKILLS_DIR="%s"\nPI_VOICE_OXIGRAPH_CLI_DIR="%s"\nPI_VOICE_SERVICE_URL="http://127.0.0.1:9446"\nWASSETTE_BIN="%s"\nWASSETTE_COMPONENT_DIR="%s"\n' \
   "$gondolin_assets_runtime" \
   "$HOME/.pi/agent" \
   "$runtime_dir/voice-workspace" \
   "$runtime_dir/pi-voice-sessions" \
   "$skills_runtime" \
+  "$voice_agent_runtime/cli" \
   "$wassette_bin" \
   "$wassette_component_dir" \
   >> "$runtime_dir/apps/broker/broker.env"
 printf 'GONDOLIN_METRICS_DIR="%s"\n' "$runtime_dir/gondolin-metrics" >> "$runtime_dir/apps/broker/broker.env"
-printf 'TASK_GATEWAY_BASE_URL="http://127.0.0.1:9444/v1"\nTASK_GATEWAY_TOKEN="%s"\nTASK_IDENTITY="%s"\n' \
+printf 'TASK_GATEWAY_BASE_URL="http://127.0.0.1:9444/v1"\nTASK_GATEWAY_TOKEN="%s"\nTASK_IDENTITY="%s"\nKNOWLEDGE_GATEWAY_BASE_URL="http://127.0.0.1:9444/v1"\nKNOWLEDGE_GATEWAY_TOKEN="%s"\nKNOWLEDGE_IDENTITY="%s"\n' \
   "$(sed -n 's/^AGENT_GATEWAY_TOKEN=//p' "$repo_dir/deploy/.env" | tail -1)" \
+  "$(sed -n 's/^ORCHESTRATOR_ALLOWED_USERS=//p' "$repo_dir/deploy/.env" | tail -1)" \
+  "$(<"$digital_twin_reader_token_file")" \
   "$(sed -n 's/^ORCHESTRATOR_ALLOWED_USERS=//p' "$repo_dir/deploy/.env" | tail -1)" \
   > "$runtime_dir/wassette-tasking.env"
 chmod 600 "$runtime_dir/wassette-tasking.env"
@@ -159,6 +168,14 @@ printf 'OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4318"\nOTEL_LOGS_EXPORTER=
   >> "$runtime_dir/apps/broker/broker.env"
 printf 'GITEA_TOKEN="%s"\n' "$(<"$gitea_agent_token_file")" >> "$runtime_dir/apps/broker/broker.env"
 chmod 600 "$runtime_dir/apps/broker/broker.env"
+awk '!/^(AGENT_GATEWAY_TOKEN|AGENT_GATEWAY_BASE_URL|ORCHESTRATOR_ALLOWED_USERS)=/' \
+  "$runtime_dir/apps/broker/broker.env" > "$runtime_dir/apps/pi-voice/pi-voice.env"
+printf 'GRAFANA_MCP_URL="http://127.0.0.1:8000/mcp"\nGRAFANA_MCP_SERVER_TOKEN="%s"\n' \
+  "$(<"$grafana_mcp_caller_token_file")" >> "$runtime_dir/apps/pi-voice/pi-voice.env"
+chmod 600 "$runtime_dir/apps/pi-voice/pi-voice.env"
+awk -F= '/^(AGENT_GATEWAY_TOKEN|AGENT_GATEWAY_BASE_URL|ORCHESTRATOR_ALLOWED_USERS|PI_VOICE_SESSION_DIR)=/ {print}' \
+  "$runtime_dir/apps/broker/broker.env" > "$runtime_dir/apps/digital-twin/listener.env"
+chmod 600 "$runtime_dir/apps/digital-twin/listener.env"
 awk -F= '/^(DATABASE_URL|ABSURD_QUEUE|IMAGE_BUILD_TIMEOUT_SECONDS|NODE_BINARY|ORCHESTRATOR_APPROVAL_SECRET|ORCHESTRATOR_APPROVAL_TTL_SECONDS|ORCHESTRATOR_ALLOWED_USERS|ORCHESTRATOR_WORKSPACE_ROOTS|ORCHESTRATOR_ALLOWED_WORKSPACES|ARTIFACT_ENDPOINT_URL|ARTIFACT_BUCKET|ARTIFACT_ACCESS_KEY|ARTIFACT_SECRET_KEY|GITEA_ENDPOINT_URL|GITEA_OWNER|GITEA_IMAGE_WORKFLOW|GITEA_WORKFLOW_REF|WORKER_SCRATCH_ROOT|WORKER_MAX_ARTIFACT_BYTES|PI_BINARY|PI_MODEL|PI_THINKING|PI_SESSION_DIR|WORKER_ALLOW_UNSANDBOXED|WORKER_TASK_TIMEOUT_SECONDS|WORKER_MAX_OUTPUT_BYTES)=/ {print}' \
   "$repo_dir/deploy/.env" > "$runtime_dir/apps/worker/worker.env"
 printf 'PI_GONDOLIN_EXTENSION="%s"\nPI_TASK_SKILLS_DIR="%s"\nGONDOLIN_BROWSER_ASSETS="%s"\nGONDOLIN_IMAGE_STORE="%s"\nGONDOLIN_BROWSER_TOOLS=0\nGONDOLIN_PUBLIC_INTERNET=1\nPI_CODING_AGENT_DIR="%s"\n' \

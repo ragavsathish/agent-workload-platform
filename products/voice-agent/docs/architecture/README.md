@@ -45,8 +45,8 @@ chat/task, responsive state, and voice controls remain in Dart. Input diagnostic
 React bundle at `/diagnostics/`; it uses Recharts and WaveSurfer without loading the Flutter runtime.
 Grafana provisions the **C4 Operational Heat Map** dashboard. At build time,
 `deploy/observability/generate-c4-heatmap.mjs` reads the authoritative Mermaid and evidence sources,
-then calls the capability-free TypeScript WASM component in `components/c4-grafana-ts/` to compile
-the provisioned dashboard JSON. Grafana uses
+then uses the deterministic, dependency-free `deploy/observability/c4-dashboard.mjs` adapter to
+compile the provisioned dashboard JSON. Grafana uses
 the pinned Grafmaid panel plugin to render C1, C2, all twelve C3 views, and the deployment view.
 On the C2 container view, source-backed evidence colors borders and fixed PromQL queries color
 instrumented fills for missing or stale telemetry, idle services, and activity intensity in the
@@ -57,11 +57,20 @@ coverage page; Grafana is now the single coverage and operational-health UI. Reg
 `deploy/observability/c4-heatmap.json` with `make grafana-c4-dashboard` after changing a C4 source or evidence mapping.
 Run `make playwright-grafana` to scroll and render every lazy panel, verify the computed palette,
 and retain a screenshot, browser evidence, and Playwright trace.
+The official Grafana MCP server is a separate read-only container. Authenticated MCP clients reach it
+over loopback streamable HTTP to inspect this dashboard and query Prometheus or Tempo.
+The upstream Tempo MCP App provides an interactive trace view in compatible hosts; PromQL remains
+available through the server tool, and the Mermaid C4 panels continue to render in Grafana.
+Pi Voice registers Grafana MCP explicitly as a deferred provider. For an inline trace, the model
+returns only bounded identifiers; Voice Edge then retrieves the upstream App resource and structured
+trace result behind the authenticated tailnet boundary. The browser's sandboxed MCP Apps bridge
+receives no Grafana bearer token and supplies its dark host theme to the upstream App.
 Oxigraph is provisioned as a persistent RDF data-store container on the private Compose `data`
-network. The Agent Gateway is the only application runtime allowed to query it. The gateway runs
-fixed, read-only profile and learning SELECT queries, applies any owner-supplied text only as a
-post-query filter, and returns bounded facts to the authenticated Pi Voice Service. Oxigraph has no
-host, LAN, tailnet, or arbitrary-SPARQL exposure.
+network. Its unauthenticated SPARQL endpoint is published on Mac loopback only. The Agent Gateway
+continues to provide fixed, bounded personal-knowledge queries, while the isolated voice VM has a
+synthetic route to that loopback endpoint and a raw `oxigraph` query/update CLI. The endpoint is not
+reachable from the LAN or tailnet, but arbitrary agent-generated SPARQL is an intentional YOLO-mode
+write capability.
 The adapter speaks RTVI, while Tailscale Serve is the only browser ingress. It exposes the voice UI on tailnet HTTPS
 after tailnet authorization. Tailscale terminates TLS and supplies the authenticated identity to a
 localhost-only Traefik router. Traefik maps `/` to the Voice Edge, `/metrics/` to Grafana,
@@ -79,13 +88,10 @@ The Pi Voice Service also registers a host-native Wassette subprocess through Pi
 extension. `tool_search` discovers tools from the configured component directory without adding all
 schemas to every model turn. The child receives a credential-scrubbed environment and its WASM
 components can use only their persisted Wassette capability grants. The composed tasking component
-receives its three task-specific settings through a mode-0600 env file and owns the task lifecycle
-tools; only the bounded personal-knowledge query remains a native Pi tool. This path is separate from the
+owns the task lifecycle tools. A separate personal-knowledge component owns the bounded read-only
+digital-twin query and receives a reader-only token; it cannot enqueue work or write RDF. Both receive
+only their component-specific settings through a mode-0600 env file. This path is separate from the
 Gondolin VM used by Pi's native file and shell tools.
-The capability-free TypeScript component in `components/c4-grafana-ts/` exposes a documented
-`compile-dashboard` tool. It accepts Mermaid, evidence, and activity records and returns provisionable
-Grafana JSON without filesystem, network, environment, clock, or process access.
-
 Delegated work is separate. The **Agent Gateway** owns identity and task-lifecycle policy. PostgreSQL
 stores both the proposal records and Absurd durable queue schema. S3Mock stores immutable Git bundles
 and bounded task outputs. The native **Pi Task Worker** materializes one bundle into temporary scratch
@@ -115,7 +121,8 @@ access to proposal records, and Habitat has no direct host port.
 | Browser Voice Client components | `apps/client/lib/main.dart`; `views/voice_view.dart`; `views/pi_workspace_view.dart`; `widgets/mcp_app_view_web.dart`; `platform/voice_session_web.dart`; `bridge/voice_bridge.js`; `bridge/mermaid_app.js`; the lazy Excalidraw app is built from `vendor/excalidraw-mcp` by `tool/build-excalidraw-app.mjs` |
 | Mobile Client foundation | `apps/client/ios/`; `apps/client/android/`; `apps/client/lib/platform/voice_session.dart`; native adapters are not implemented yet |
 | Input Diagnostics | `apps/diagnostics/`; React bundle emitted to `apps/diagnostics/dist/` |
-| Engineering Evidence and C4 Explorer | `deploy/observability/generate-c4-heatmap.mjs`; `components/c4-grafana-ts/`; provisioned Grafana dashboard compiled by WASM from these Mermaid sources |
+| Engineering Evidence and C4 Explorer | `deploy/observability/generate-c4-heatmap.mjs`; `deploy/observability/c4-dashboard.mjs`; provisioned Grafana dashboard generated from these Mermaid sources |
+| Grafana MCP | Official pinned `grafana/mcp-grafana` Compose service; Viewer service account; authenticated loopback streamable HTTP; PromQL tools and Tempo trace MCP App |
 | Tailnet Ingress | `deploy/compose.yml`; `scripts/compose-login.sh` |
 | Path Router | `deploy/traefik/traefik.yml`; `deploy/traefik/routes.yml` |
 | Voice Edge | `apps/edge/bot.py`; `apps/edge/Containerfile` |
@@ -125,7 +132,6 @@ access to proposal records, and Habitat has no direct host port.
 | Inference Broker components | `apps/broker/src/voice_agent/speech/presentation/http.py`; `application/transcription.py`; `infrastructure/parakeet_stt.py`; `infrastructure/mlx_tts.py` |
 | Pi Voice Service | `apps/pi-agent/voice-agent-service.ts`; Pi voice LaunchAgent |
 | Pi Voice Service components | `apps/pi-agent/voice-agent-service.ts`; `apps/pi-agent/voice-agent/`; `platform/agent-execution/gondolin-session/session.ts` |
-| C4 to Grafana Wassette component | `components/c4-grafana-ts/src/index.ts`; `components/c4-grafana-ts/wit/world.wit` |
 | Tasking Wassette component | `components/tasking-ts/src/core/index.ts`; `components/tasking-ts/src/gateway-http/lib.rs`; `components/tasking-ts/wit/world.wit` |
 | Pi Context Usage and Compaction | `apps/client/lib/views/voice_view.dart`; `apps/edge/bot.py`; broker HTTP adapter; `apps/pi-agent/voice-agent-service.ts` |
 | Voice Tool Sandbox and Runtime Data | `apps/pi-agent/voice-agent/voice-gondolin.ts`; `platform/agent-execution/gondolin-session/session.ts`; `scripts/install-launch-agents.sh`; `deploy/launchd/run-pi-agent.sh` |

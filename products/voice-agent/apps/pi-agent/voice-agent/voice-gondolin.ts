@@ -7,6 +7,8 @@ import {
 
 const GUEST_WORKSPACE = "/workspace";
 export const GUEST_SKILLS = "/skills";
+export const GUEST_OXIGRAPH_CLI = "/opt/awp/bin";
+export const GUEST_OXIGRAPH_ENDPOINT = "http://oxigraph.local:7878";
 export const GUEST_S3MOCK_ENDPOINT = "http://s3mock.local:9090";
 export const GUEST_GITEA_ENDPOINT = "http://gitea.local:3001";
 export const GUEST_PROMETHEUS_ENDPOINT = "http://prometheus.local:9091";
@@ -17,6 +19,8 @@ export type VoiceGondolinOptions = {
   giteaToken: string;
   imagePath: string;
   localCwd: string;
+  oxigraphCliDir: string;
+  oxigraphUrl: string;
   prometheusEndpointUrl: string;
   skillsDir: string;
   s3MockAccessKey: string;
@@ -45,10 +49,12 @@ export function createVoiceGondolinConfig(options: VoiceGondolinOptions): Gondol
   const s3Upstream = loopbackOrigin(options.s3MockEndpointUrl, "S3Mock");
   const giteaUpstream = loopbackOrigin(options.giteaEndpointUrl, "Gitea");
   const prometheusUpstream = loopbackOrigin(options.prometheusEndpointUrl, "Prometheus");
+  const oxigraphUpstream = loopbackOrigin(options.oxigraphUrl, "Oxigraph");
   const routes = [
     { guest: guestOrigin(GUEST_S3MOCK_ENDPOINT, s3Upstream), upstream: s3Upstream },
     { guest: guestOrigin(GUEST_GITEA_ENDPOINT, giteaUpstream), upstream: giteaUpstream },
     { guest: guestOrigin(GUEST_PROMETHEUS_ENDPOINT, prometheusUpstream), upstream: prometheusUpstream },
+    { guest: guestOrigin(GUEST_OXIGRAPH_ENDPOINT, oxigraphUpstream), upstream: oxigraphUpstream },
   ];
 
   return {
@@ -56,6 +62,7 @@ export function createVoiceGondolinConfig(options: VoiceGondolinOptions): Gondol
     mounts: {
       [GUEST_WORKSPACE]: options.localCwd,
       [GUEST_SKILLS]: { hostPath: options.skillsDir, readonly: true },
+      [GUEST_OXIGRAPH_CLI]: { hostPath: options.oxigraphCliDir, readonly: true },
     },
     network: {
       allowedHosts: [],
@@ -81,6 +88,7 @@ export function createVoiceGondolinConfig(options: VoiceGondolinOptions): Gondol
       GITEA_BASE_URL: routes[1].guest.origin,
       GITEA_OWNER: options.giteaOwner,
       PROMETHEUS_URL: routes[2].guest.origin,
+      OXIGRAPH_URL: routes[3].guest.origin,
     },
     dns: { mode: "synthetic", syntheticHostMapping: "per-host" },
     sandbox: {
@@ -114,6 +122,9 @@ export async function createVoiceGondolinSession(
   }
   if (!existsSync(options.skillsDir)) {
     throw new Error(`Missing skills directory: ${options.skillsDir}`);
+  }
+  if (!existsSync(options.oxigraphCliDir)) {
+    throw new Error(`Missing Oxigraph CLI directory: ${options.oxigraphCliDir}`);
   }
   const session = new GondolinSession(createVoiceGondolinConfig(options));
   await session.start();

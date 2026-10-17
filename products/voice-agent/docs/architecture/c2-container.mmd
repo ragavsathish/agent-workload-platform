@@ -52,21 +52,25 @@ flowchart TB
             VOICE_DATA[("Container data store<br/><b>Voice Runtime Data</b><br/>sessions · workspace · skills")]
             GITEA[("Container data store<br/><b>Git and Image Packages</b><br/>rootless Gitea · refs · immutable assets")]
             ARTIFACTS[("Container data store<br/><b>Workspace and Result Store</b><br/>S3-compatible object storage")]
-            OXIGRAPH[("Container data store<br/><b>Knowledge Graph Store</b><br/>Oxigraph · private SPARQL 1.1 · persistent RDF")]
+            OXIGRAPH[("Container data store<br/><b>Knowledge Graph Store</b><br/>Oxigraph · loopback SPARQL 1.1 · persistent RDF")]
             DOCKER_METRICS["Container<br/><b>Docker VM Metrics</b><br/>Fluent Bit · Linux VM aggregate"]
             HOST_METRICS["Container<br/><b>Host and Gondolin Metrics</b><br/>Fluent Bit · QEMU process exporter"]
             WASSETTE["Container<br/><b>Wassette Integration Runtime</b><br/>native per-session MCP subprocesses · WebAssembly"]
             OTEL["Container<br/><b>Metrics and Traces</b><br/>OpenTelemetry LGTM"]
+            GRAFANA_MCP["Container<br/><b>Grafana MCP</b><br/>read-only dashboards · PromQL · Tempo App"]
         end
 
         EDGE -->|"browser task API"| GATEWAY
-        PI -->|"bounded personal-knowledge tool"| GATEWAY
-        PI -->|"deferred MCP over stdio<br/>dedicated tasking env file"| WASSETTE
-        WASSETTE -->|"composed task lifecycle tools"| GATEWAY
+        EDGE -->|"identity-checked App resource<br/>and trace-data proxy"| GRAFANA_MCP
+        PI -->|"deferred MCP over stdio<br/>credential-scrubbed environment"| WASSETTE
+        WASSETTE -->|"composed task lifecycle tools<br/>read-only personal knowledge"| GATEWAY
         TASK_PI -->|"MCP over stdio<br/>allowlisted task tools"| WASSETTE
+        PI -->|"authenticated streamable HTTP<br/>deferred observability tools"| GRAFANA_MCP
+        EDGE -->|"official trace MCP App"| BROWSER
         PI -->|"session · workspace · skills"| VOICE_DATA
         VOICE_VM -->|"clone · restricted read API · synthetic allowlist"| GITEA
         VOICE_VM -->|"AWS CLI · S3Mock-only HTTP"| ARTIFACTS
+        VOICE_VM -->|"raw SPARQL query/update CLI<br/>synthetic loopback route"| OXIGRAPH
         GATEWAY -->|"resolve workspace"| ARTIFACTS
         GATEWAY -->|"fixed read-only SPARQL<br/>profile and learning facts"| OXIGRAPH
         ARTIFACTS -->|"materialize · capture result"| WORKER
@@ -83,6 +87,8 @@ flowchart TB
         WORKER -.->|"register task VM PID"| HOST_METRICS
         DOCKER_METRICS -->|"private scrape<br/>Docker VM resources"| OTEL
         HOST_METRICS -->|"loopback scrape<br/>Mac · each Gondolin VM"| OTEL
+        GRAFANA_MCP -->|"service account<br/>dashboards · Prometheus · Tempo"| OTEL
+        GRAFANA_MCP -.->|"MCP metrics · OTLP traces"| OTEL
         ROUTER -->|"/metrics/"| OTEL
         ROUTER -->|"/git/"| GITEA
         ROUTER -->|"/queue/"| HABITAT
@@ -101,5 +107,5 @@ flowchart TB
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
     class USER person;
     class TSC,MODELS,INTEGRATIONS external;
-    class BROWSER,DIAGNOSTICS,INGRESS,ROUTER,EDGE,BROKER,PI,VOICE_VM,GATEWAY,HABITAT,WORKER,TASK_PI,BUILDER_MANAGER,BUILDER_VM,TASK_VM,DOCKER_METRICS,HOST_METRICS,WASSETTE,OTEL container;
+    class BROWSER,DIAGNOSTICS,INGRESS,ROUTER,EDGE,BROKER,PI,VOICE_VM,GATEWAY,HABITAT,WORKER,TASK_PI,BUILDER_MANAGER,BUILDER_VM,TASK_VM,DOCKER_METRICS,HOST_METRICS,WASSETTE,OTEL,GRAFANA_MCP container;
     class TASKS,VOICE_DATA,GITEA,ARTIFACTS,OXIGRAPH data;

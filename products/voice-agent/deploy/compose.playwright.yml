@@ -50,6 +50,7 @@ services:
       VOICE_E2E_URL: https://pipecat-edge.tailf6d713.ts.net
       VOICE_E2E_AUDIO: /fixtures/voice.wav
       VOICE_E2E_OUTPUT: /output
+      GRAFANA_TRACE_ID: ${GRAFANA_TRACE_ID:-}
     entrypoint: ["sh", "-c"]
     command:
       - >-

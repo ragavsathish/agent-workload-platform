@@ -11,7 +11,7 @@
     <key>HOME</key><string>/Users/sathish.narayanan</string>
     <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     <key>PI_OFFLINE</key><string>1</string>
-    <key>PI_VOICE_ENV_FILE</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/apps/broker/broker.env</string>
+    <key>PI_VOICE_ENV_FILE</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/apps/pi-voice/pi-voice.env</string>
   </dict>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>10</integer>

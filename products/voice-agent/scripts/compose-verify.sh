@@ -8,10 +8,10 @@ pass() { printf 'PASS  %s\n' "$*"; }
 warn() { printf 'WARN  %s\n' "$*"; }
 fail() { printf 'FAIL  %s\n' "$*"; failures=$((failures + 1)); }
 
-services=(gitea habitat s3mock postgres oxigraph fluent-bit otel-lgtm agent-gateway tailscale voice-edge traefik)
-secure_services=(gitea habitat s3mock oxigraph fluent-bit agent-gateway tailscale voice-edge traefik)
+services=(gitea habitat s3mock postgres oxigraph fluent-bit otel-lgtm grafana-mcp agent-gateway tailscale voice-edge traefik)
+secure_services=(gitea habitat s3mock oxigraph fluent-bit grafana-mcp agent-gateway tailscale voice-edge traefik)
 no_log_services=(otel-lgtm)
-bounded_log_services=(gitea habitat oxigraph fluent-bit agent-gateway voice-edge traefik)
+bounded_log_services=(gitea habitat oxigraph fluent-bit grafana-mcp agent-gateway voice-edge traefik)
 
 for service in "${services[@]}"; do
   cid="$("${compose[@]}" ps -q "$service")"
@@ -47,10 +47,26 @@ for service in "${bounded_log_services[@]}"; do
   [[ "$(docker inspect -f '{{index .HostConfig.LogConfig.Config "max-file"}}' "$cid")" == 3 ]] && pass "$service stdout rotation is bounded" || fail "$service stdout rotation is not bounded"
 done
 
-for service in agent-gateway voice-edge; do
+for service in grafana-mcp agent-gateway voice-edge; do
   cid="$("${compose[@]}" ps -q "$service")"
   docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$cid" | grep -Fxq 'OTEL_LOGS_EXPORTER=none' && pass "$service exports no OpenTelemetry logs" || fail "$service OpenTelemetry log export is not disabled"
 done
+
+grafana_mcp_cid="$("${compose[@]}" ps -q grafana-mcp)"
+grafana_mcp_ports="$(docker inspect -f '{{json .NetworkSettings.Ports}}' "$grafana_mcp_cid")"
+if [[ "$grafana_mcp_ports" == *'"8000/tcp":[{"HostIp":"127.0.0.1","HostPort":"8000"'* ]]; then
+  pass "Grafana MCP is published only on host loopback"
+else
+  fail "Grafana MCP loopback publication is missing"
+fi
+[[ "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/mcp || true)" == 401 ]] \
+  && pass "Grafana MCP requires caller authentication" \
+  || fail "Grafana MCP caller authentication check failed"
+if python3 "$root/tests/e2e/grafana-mcp.py" >/tmp/pipecat-grafana-mcp-check.json; then
+  pass "Grafana MCP reads the C4 dashboard, runs PromQL, and advertises its trace App"
+else
+  fail "Grafana MCP end-to-end regression failed"
+fi
 
 if "${compose[@]}" exec -T voice-edge /app/.venv/bin/python - <<'PY'
 import json
@@ -96,9 +112,12 @@ habitat_cid="$("${compose[@]}" ps -q habitat)"
   && pass "Habitat publishes no Docker port" \
   || fail "Habitat publishes a Docker port"
 oxigraph_cid="$("${compose[@]}" ps -q oxigraph)"
-[[ -z "$(docker port "$oxigraph_cid" 2>/dev/null)" ]] \
-  && pass "Oxigraph publishes no Docker port" \
-  || fail "Oxigraph publishes a Docker port"
+oxigraph_ports="$(docker inspect -f '{{json .NetworkSettings.Ports}}' "$oxigraph_cid")"
+if [[ "$oxigraph_ports" == *'"7878/tcp":[{"HostIp":"127.0.0.1","HostPort":"7878"}]'* ]]; then
+  pass "Oxigraph publishes SPARQL only on host loopback for the voice CLI"
+else
+  fail "Oxigraph loopback-only SPARQL publication is missing"
+fi
 if docker inspect -f '{{range .Mounts}}{{println .Type .Destination}}{{end}}' "$oxigraph_cid" \
   | grep -Fxq 'volume /data'; then
   pass "Oxigraph persists RDF data in a named volume"

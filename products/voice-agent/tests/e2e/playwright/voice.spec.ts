@@ -40,6 +40,53 @@ test('keeps the primary voice controls usable on a phone viewport', async ({
   expectCleanBrowser(browserEvidence);
 });
 
+test('renders the official Grafana trace MCP App inside voice chat', async ({
+  page,
+  browserEvidence,
+}, testInfo) => {
+  const traceId = process.env.GRAFANA_TRACE_ID;
+  expect(traceId).toMatch(/^[0-9a-f]{32}$/);
+  await page.goto('/', { waitUntil: 'networkidle' });
+  const result = await page.evaluate(async ({ id }) => {
+    const host = document.createElement('div');
+    host.id = 'grafana-trace-app-host';
+    Object.assign(host.style, { width: '1000px', height: '720px' });
+    document.body.replaceChildren(host);
+    return JSON.parse(await window.voiceBridge.mountMcpApp(
+      host.id,
+      JSON.stringify({
+        kind: 'grafana-trace',
+        title: 'Latest voice trace',
+        traceId: id,
+        datasourceUid: 'tempo',
+      }),
+      'ui://grafana/trace.html',
+    ));
+  }, { id: traceId });
+  expect(result).toEqual({ ok: true });
+
+  const frame = page.frameLocator('iframe[title="Grafana trace"]');
+  await expect(frame.getByText('Loading trace...')).toBeHidden({ timeout: 15_000 });
+  await expect(frame.locator('body')).toContainText('mcp-grafana');
+  const appBackground = await frame.locator('body').evaluate(
+    (body) => getComputedStyle(body).backgroundColor,
+  );
+  const headingColor = await frame.getByText('Span waterfall').evaluate(
+    (heading) => getComputedStyle(heading).color,
+  );
+  expect(appBackground).not.toBe('rgb(255, 255, 255)');
+  expect(headingColor).not.toBe('rgb(0, 0, 0)');
+  await expect(frame.getByRole('link', { name: /Open in Grafana/ })).toHaveAttribute(
+    'href',
+    /\/metrics\//,
+  );
+  await testInfo.attach('grafana-trace-mcp-app', {
+    body: await page.screenshot(),
+    contentType: 'image/png',
+  });
+  expectCleanBrowser(browserEvidence);
+});
+
 test('completes a deployed voice session and retains its diagnostics', async ({
   page,
   browserEvidence,

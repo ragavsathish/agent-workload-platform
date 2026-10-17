@@ -1,19 +1,15 @@
 #!/usr/bin/env node
 
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+import { compileDashboard } from "./c4-dashboard.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const productRoot = resolve(here, "..", "..");
 const architecture = join(productRoot, "docs", "architecture");
 const output = join(here, "c4-heatmap.json");
-const component = resolve(
-  process.env.C4_GRAFANA_WASM ?? join(productRoot, "components", "c4-grafana-ts", "dist", "c4-grafana.wasm"),
-);
-const wassette = process.env.WASSETTE_BIN ?? join(process.env.HOME ?? "", ".local", "bin", "wassette");
 
 const evidence = {
   "c1-system-context": { voice_agent: "partial" },
@@ -25,6 +21,7 @@ const evidence = {
     BUILDER_MANAGER: "strong", BUILDER_VM: "strong", VOICE_DATA: "partial",
     GITEA: "partial", ARTIFACTS: "partial", OXIGRAPH: "observed", DOCKER_METRICS: "strong",
     HOST_METRICS: "strong", OTEL: "strong",
+    GRAFANA_MCP: "strong",
   },
   "c3-browser-client": { BROWSER: "strong" },
   "c3-input-diagnostics": { DIAGNOSTICS: "partial" },
@@ -45,6 +42,7 @@ const evidence = {
     RUNNER: "strong", DOCKERD: "weak", POSTGRES: "observed", HABITAT: "observed",
     S3: "partial", GITEA: "partial", OXIGRAPH: "observed", DOCKER_METRICS: "strong",
     HOST_METRICS: "strong", OTEL: "strong",
+    GRAFANA_MCP: "strong",
   },
 };
 
@@ -152,42 +150,9 @@ const args = {
   activity: activityOverlays,
 };
 
-function runWassette(parameters) {
-  const result = spawnSync(wassette, parameters, {
-    encoding: "utf8",
-    maxBuffer: 16 * 1024 * 1024,
-  });
-  if (result.error) throw result.error;
-  if (result.status !== 0) {
-    throw new Error(`Wassette exited ${result.status}: ${(result.stderr || result.stdout).trim()}`);
-  }
-  return result.stdout;
+const dashboard = compileDashboard(args);
+if (dashboard.uid !== args.options["dashboard-uid"] || dashboard.panels.length !== views.length + 1) {
+  throw new Error("C4 dashboard generator returned an unexpected dashboard structure");
 }
-
-statSync(component);
-statSync(wassette);
-const componentDirectory = mkdtempSync(join(tmpdir(), "voice-c4-grafana-"));
-try {
-  runWassette([
-    "component", "load",
-    "--component-dir", componentDirectory,
-    pathToFileURL(component).href,
-  ]);
-  const response = JSON.parse(runWassette([
-    "tool", "invoke",
-    "--component-dir", componentDirectory,
-    "compile-dashboard",
-    "--args", JSON.stringify(args),
-  ]));
-  const result = response.result ?? response;
-  if (typeof result.err === "string") throw new Error(`C4 Grafana component rejected input: ${result.err}`);
-  if (typeof result.ok !== "string") throw new Error("C4 Grafana component returned no dashboard JSON");
-  const dashboard = JSON.parse(result.ok);
-  if (dashboard.uid !== args.options["dashboard-uid"] || dashboard.panels.length !== views.length + 1) {
-    throw new Error("C4 Grafana component returned an unexpected dashboard structure");
-  }
-  writeFileSync(output, `${JSON.stringify(dashboard, null, 2)}\n`);
-  console.log(`Generated ${output} with ${dashboard.panels.length} panels through ${component}`);
-} finally {
-  rmSync(componentDirectory, { force: true, recursive: true });
-}
+writeFileSync(output, `${JSON.stringify(dashboard, null, 2)}\n`);
+console.log(`Generated ${output} with ${dashboard.panels.length} panels`);

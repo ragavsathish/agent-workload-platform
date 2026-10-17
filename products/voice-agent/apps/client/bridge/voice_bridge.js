@@ -88,6 +88,25 @@ const mcpApps = Object.freeze({
     toolInput: (presentation) => ({ elements: JSON.stringify(presentation.elements ?? []) }),
     toolResult: () => ({}),
   },
+  'ui://grafana/trace.html': {
+    src: '/api/grafana-mcp/apps/trace',
+    title: 'Grafana trace',
+    toolInput: (presentation) => ({
+      datasourceUid: presentation.datasourceUid,
+      trace_id: presentation.traceId,
+      ...(presentation.focusSpanId ? { focus_span_id: presentation.focusSpanId } : {}),
+    }),
+    toolResult: async (presentation) => {
+      const query = new URLSearchParams({ datasourceUid: presentation.datasourceUid });
+      if (presentation.focusSpanId) query.set('focusSpanId', presentation.focusSpanId);
+      const response = await fetch(
+        `/api/grafana-mcp/traces/${encodeURIComponent(presentation.traceId)}?${query}`,
+        { credentials: 'same-origin' },
+      );
+      if (!response.ok) throw new Error('Grafana trace data is unavailable');
+      return response.json();
+    },
+  },
 });
 let client;
 let clientPromise;
@@ -265,6 +284,7 @@ window.voiceBridge = {
       iframe.setAttribute(
         'allow',
         resourceUri === 'ui://excalidraw/mcp-app.html'
+          || resourceUri === 'ui://grafana/trace.html'
           ? 'fullscreen; clipboard-write'
           : 'fullscreen',
       );
@@ -283,12 +303,14 @@ window.voiceBridge = {
           logging: {},
           sandbox: {
             permissions: resourceUri === 'ui://excalidraw/mcp-app.html'
+              || resourceUri === 'ui://grafana/trace.html'
               ? { clipboardWrite: {} }
               : {},
           },
         },
         {
           hostContext: {
+            theme: 'dark',
             displayMode: 'inline',
             availableDisplayModes: resourceUri === 'ui://excalidraw/mcp-app.html'
               ? ['inline', 'fullscreen']
@@ -336,7 +358,7 @@ window.voiceBridge = {
         await bridge.sendToolInput({ arguments: appDefinition.toolInput(presentation) });
         await bridge.sendToolResult({
           content: [],
-          structuredContent: appDefinition.toolResult(presentation),
+          structuredContent: await appDefinition.toolResult(presentation),
         });
       };
 

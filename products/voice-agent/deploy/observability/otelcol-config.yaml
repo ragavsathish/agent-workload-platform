@@ -27,6 +27,10 @@ receivers:
           scrape_interval: 5s
           static_configs:
             - targets: [host.docker.internal:9465]
+        - job_name: grafana-mcp
+          scrape_interval: 5s
+          static_configs:
+            - targets: [grafana-mcp:9090]
 
 extensions:
   health_check:

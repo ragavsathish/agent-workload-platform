@@ -16,10 +16,11 @@ export type ServiceSettings = {
   giteaEndpointUrl: string;
   giteaOwner: string;
   giteaToken: string;
+  grafanaMcpToken: string;
+  grafanaMcpUrl: string;
   gondolinAssets: string;
-  gatewayToken: string;
-  gatewayUrl: string;
-  identity: string;
+  oxigraphCliDir: string;
+  oxigraphUrl: string;
   listenHost: string;
   listenPort: number;
   model?: ModelSelector;
@@ -106,12 +107,6 @@ export async function loadSettings(
   const envFile = environment.PI_VOICE_ENV_FILE;
   const fileEnvironment = envFile ? parseEnvFile(await readFile(envFile, "utf8")) : {};
   const env: NodeJS.ProcessEnv = { ...fileEnvironment, ...environment };
-  const identities = requiredEnv(env, "ORCHESTRATOR_ALLOWED_USERS")
-    .split(",")
-    .map((value) => value.trim().toLowerCase())
-    .filter(Boolean);
-  if (identities.length !== 1) throw new Error("Pi voice requires exactly one allowed identity");
-
   const thinking = (env.PI_VOICE_THINKING?.trim() || "low") as ThinkingLevel;
   if (!thinkingLevels.has(thinking)) throw new Error("invalid PI_VOICE_THINKING");
 
@@ -128,13 +123,14 @@ export async function loadSettings(
     giteaEndpointUrl: httpUrl(requiredEnv(env, "GITEA_ENDPOINT_URL"), "GITEA_ENDPOINT_URL"),
     giteaOwner: requiredEnv(env, "GITEA_OWNER"),
     giteaToken: requiredEnv(env, "GITEA_TOKEN"),
+    grafanaMcpToken: requiredEnv(env, "GRAFANA_MCP_SERVER_TOKEN"),
+    grafanaMcpUrl: httpUrl(requiredEnv(env, "GRAFANA_MCP_URL"), "GRAFANA_MCP_URL"),
     gondolinAssets: resolve(requiredEnv(env, "GONDOLIN_BROWSER_ASSETS")),
-    gatewayToken: requiredEnv(env, "AGENT_GATEWAY_TOKEN"),
-    gatewayUrl: httpUrl(
-      env.AGENT_GATEWAY_BASE_URL || "http://127.0.0.1:9444/v1",
-      "AGENT_GATEWAY_BASE_URL",
+    oxigraphCliDir: resolve(requiredEnv(env, "PI_VOICE_OXIGRAPH_CLI_DIR")),
+    oxigraphUrl: httpUrl(
+      env.OXIGRAPH_URL || "http://127.0.0.1:7878",
+      "OXIGRAPH_URL",
     ),
-    identity: identities[0],
     listenHost: env.PI_VOICE_SERVICE_HOST || "127.0.0.1",
     listenPort: port(env.PI_VOICE_SERVICE_PORT || "9446"),
     model: modelSelector(env.PI_VOICE_MODEL || env.PI_MODEL),

@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import secrets
 import urllib.request
 from datetime import datetime
@@ -64,6 +65,10 @@ DIGITAL_TWIN_WRITER_TOKEN = (
 if len(DIGITAL_TWIN_WRITER_TOKEN) < 32:
     raise RuntimeError("DIGITAL_TWIN_WRITER_TOKEN must contain at least 32 characters")
 MAX_DIGITAL_TWIN_FACTS = 100
+SEARCH_STOP_WORDS = frozenset({
+    "a", "an", "and", "are", "for", "from", "how", "in", "is", "of", "on",
+    "or", "the", "to", "what", "where", "who", "why", "with",
+})
 
 PROFILE_FACTS_QUERY = """
 PREFIX schema: <https://schema.org/>
@@ -346,15 +351,21 @@ def _sparql_update(update: str) -> None:
 
 
 def _filter_facts(rows: list[dict[str, str]], search: str) -> list[dict[str, str]]:
-    terms = search.casefold().split()
+    terms = tuple(dict.fromkeys(
+        term
+        for term in re.findall(r"[a-z0-9]+", search.casefold())
+        if len(term) > 1 and term not in SEARCH_STOP_WORDS
+    ))
     if not terms:
         return rows[:MAX_DIGITAL_TWIN_FACTS]
-    matches = [
-        row
-        for row in rows
-        if all(term in " ".join(row.values()).casefold() for term in terms)
-    ]
-    return matches[:MAX_DIGITAL_TWIN_FACTS]
+    ranked = []
+    for position, row in enumerate(rows):
+        searchable = " ".join(row.values()).casefold()
+        score = sum(term in searchable for term in terms)
+        if score:
+            ranked.append((-score, position, row))
+    ranked.sort(key=lambda match: (match[0], match[1]))
+    return [row for _, _, row in ranked[:MAX_DIGITAL_TWIN_FACTS]]
 
 
 @app.get("/health")

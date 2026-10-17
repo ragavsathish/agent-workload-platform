@@ -31,16 +31,20 @@ flowchart LR
                 POSTGRES[("PostgreSQL<br/>proposals · queue · checkpoints")]
                 S3[("S3Mock<br/>workspaces · results")]
                 GITEA[("Gitea<br/>Git · Actions · packages")]
-                OXIGRAPH[("Oxigraph<br/>private SPARQL · persistent RDF")]
+                OXIGRAPH[("Oxigraph<br/>loopback SPARQL · persistent RDF")]
             end
 
             subgraph MONITOR_NET["monitoring · internal"]
                 DOCKER_METRICS["Docker VM Metrics<br/>Fluent Bit"]
                 OTEL["OTel LGTM<br/>Prometheus · Tempo · Grafana"]
+                GRAFANA_MCP["Grafana MCP<br/>read-only · caller bearer · MCP Apps"]
                 DOCKER_METRICS --> OTEL
+                GRAFANA_MCP -->|"service-account API<br/>PromQL · TraceQL"| OTEL
+                GRAFANA_MCP -.->|"metrics · OTLP traces"| OTEL
             end
 
             EDGE -->|"task API"| GATEWAY
+            EDGE -->|"identity-checked App and trace proxy"| GRAFANA_MCP
             GATEWAY --> POSTGRES
             GATEWAY --> S3
             GATEWAY -->|"fixed read-only SPARQL"| OXIGRAPH
@@ -69,6 +73,7 @@ flowchart LR
             WORKER --> TASK_PI
             PI --> VOICE_WASSETTE
             TASK_PI --> TASK_WASSETTE
+            PI -->|"bearer · loopback streamable HTTP"| GRAFANA_MCP
         end
 
         subgraph VMS["Gondolin micro-VM isolation"]
@@ -87,13 +92,13 @@ flowchart LR
         end
 
         EDGE -->|"bearer · host-access"| BROKER
-        PI -->|"bearer · bounded knowledge tool"| GATEWAY
-        VOICE_WASSETTE -->|"component-scoped bearer · task tools"| GATEWAY
+        VOICE_WASSETTE -->|"component-scoped bearers<br/>task and read-only knowledge tools"| GATEWAY
         PI -->|"native tools"| VOICE_TOOLS
         TASK_PI -->|"isolated tools"| TASK_TOOLS
         BUILDER_MANAGER -->|"resume · checkpoint"| RUNNER
         VOICE_TOOLS -->|"synthetic allowlist"| GITEA
         VOICE_TOOLS -->|"synthetic allowlist"| S3
+        VOICE_TOOLS -->|"raw SPARQL query/update<br/>loopback-published endpoint"| OXIGRAPH
         RUNNER -->|"Actions · packages"| GITEA
         RUNNER -.->|"OTLP job traces · runner metrics"| OTEL
         WORKER -->|"verified package"| GITEA
@@ -124,7 +129,7 @@ flowchart LR
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
     class USER person;
     class CONTROL,MODELS,INTERNET external;
-    class BROWSER,BROKER,PI,WORKER,TASK_PI,BUILDER_MANAGER,VOICE_WASSETTE,TASK_WASSETTE,HOST_METRICS,VOICE_TOOLS,TASK_TOOLS,RUNNER,DOCKERD,HABITAT,DOCKER_METRICS,OTEL runtime;
+    class BROWSER,BROKER,PI,WORKER,TASK_PI,BUILDER_MANAGER,VOICE_WASSETTE,TASK_WASSETTE,HOST_METRICS,VOICE_TOOLS,TASK_TOOLS,RUNNER,DOCKERD,HABITAT,DOCKER_METRICS,OTEL,GRAFANA_MCP runtime;
     class INGRESS,ROUTER,EDGE,GATEWAY security;
     class TRUST_RISK warning;
     class POSTGRES,S3,GITEA,OXIGRAPH,RUNTIME data;

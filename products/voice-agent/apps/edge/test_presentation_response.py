@@ -51,6 +51,38 @@ class PresentationResponseTest(unittest.TestCase):
         self.assertIsInstance(elements, list)
         self.assertEqual(len(elements), 2)  # type: ignore[arg-type]
 
+    def test_accepts_bounded_grafana_trace_presentation(self):
+        result = parse_presentation_response(json.dumps({
+            "spoken": "Here is the trace.",
+            "presentation": {
+                "kind": "grafana-trace",
+                "title": "Latest voice trace",
+                "traceId": "ABCDEF0123456789ABCDEF0123456789",
+                "datasourceUid": "tempo",
+                "focusSpanId": "ABCDEF0123456789",
+            },
+        }))
+        self.assertEqual(result.resource_uri, "ui://grafana/trace.html")
+        self.assertEqual(result.presentation, {
+            "kind": "grafana-trace",
+            "title": "Latest voice trace",
+            "traceId": "abcdef0123456789abcdef0123456789",
+            "datasourceUid": "tempo",
+            "focusSpanId": "abcdef0123456789",
+        })
+
+    def test_rejects_unbounded_grafana_trace_reference(self):
+        result = parse_presentation_response(json.dumps({
+            "spoken": "Trace unavailable.",
+            "presentation": {
+                "kind": "grafana-trace",
+                "traceId": "../../secret",
+                "datasourceUid": "tempo?unsafe=true",
+            },
+        }))
+        self.assertEqual(result.resource_uri, "ui://mermaid/main")
+        self.assertEqual(result.presentation, fallback_presentation(result.spoken))
+
     def test_routes_bounded_marp_slides_to_the_slides_app(self):
         markdown = """---
 marp: true

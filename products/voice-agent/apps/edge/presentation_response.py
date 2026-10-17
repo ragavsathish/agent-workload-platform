@@ -18,6 +18,7 @@ MAX_MARP_BYTES = 64 * 1024
 MERMAID_URI = "ui://mermaid/main"
 EXCALIDRAW_URI = "ui://excalidraw/mcp-app.html"
 MARP_URI = "ui://slides/marp.html"
+GRAFANA_TRACE_URI = "ui://grafana/trace.html"
 EXCALIDRAW_TYPES = {
     "cameraUpdate", "rectangle", "ellipse", "diamond", "text", "arrow", "line"
 }
@@ -154,6 +155,36 @@ def _normalize_presentation(value: object, spoken: str) -> dict[str, object]:
         return _normalize_excalidraw(value, spoken)
     if kind == "slides":
         return _normalize_slides(value, spoken)
+    if kind == "grafana-trace":
+        trace_id = value.get("traceId")
+        datasource_uid = value.get("datasourceUid")
+        focus_span_id = value.get("focusSpanId")
+        if (
+            not isinstance(trace_id, str)
+            or re.fullmatch(r"[0-9a-fA-F]{32}", trace_id) is None
+            or not isinstance(datasource_uid, str)
+            or re.fullmatch(r"[A-Za-z0-9_-]{1,80}", datasource_uid) is None
+            or (
+                focus_span_id is not None
+                and (
+                    not isinstance(focus_span_id, str)
+                    or re.fullmatch(r"[0-9a-fA-F]{16}", focus_span_id) is None
+                )
+            )
+        ):
+            return fallback_presentation(spoken)
+        title = value.get("title")
+        presentation: dict[str, object] = {
+            "kind": "grafana-trace",
+            "title": title.strip()[:MAX_TITLE_LENGTH]
+            if isinstance(title, str) and title.strip()
+            else "Grafana trace",
+            "traceId": trace_id.lower(),
+            "datasourceUid": datasource_uid,
+        }
+        if focus_span_id is not None:
+            presentation["focusSpanId"] = focus_span_id.lower()
+        return presentation
     if kind not in {"flow", "status"} or not isinstance(raw_nodes, list):
         return fallback_presentation(spoken)
 
@@ -385,6 +416,8 @@ def parse_presentation_response(raw: str) -> PresentationResponse:
         resource_uri = EXCALIDRAW_URI
     elif kind == "slides":
         resource_uri = MARP_URI
+    elif kind == "grafana-trace":
+        resource_uri = GRAFANA_TRACE_URI
     else:
         resource_uri = MERMAID_URI
     return PresentationResponse(

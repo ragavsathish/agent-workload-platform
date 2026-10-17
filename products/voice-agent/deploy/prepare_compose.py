@@ -119,6 +119,11 @@ def main() -> None:
         grafana = grafana_path.read_text(encoding="utf-8").strip()
     else:
         grafana = secrets.token_urlsafe(32)
+    grafana_mcp_caller_path = secrets_dir / "grafana-mcp-caller-token"
+    if grafana_mcp_caller_path.is_file():
+        grafana_mcp_caller = grafana_mcp_caller_path.read_text(encoding="utf-8").strip()
+    else:
+        grafana_mcp_caller = secrets.token_urlsafe(32)
     gitea_path = secrets_dir / "gitea-admin-password"
     if gitea_path.is_file():
         gitea = gitea_path.read_text(encoding="utf-8").strip()
@@ -157,6 +162,7 @@ def main() -> None:
             f"postgresql://voice_agents:{quote(postgres, safe='')}@postgres:5432/voice_agents"
         ),
         "grafana-admin-password": grafana,
+        "grafana-mcp-caller-token": grafana_mcp_caller,
         "gitea-admin-password": gitea,
         "gitea-agent-password": gitea_agent_password,
         "gitea-builder-password": gitea_builder_password,

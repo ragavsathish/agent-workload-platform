@@ -1,0 +1,41 @@
+package voice:personal-knowledge@0.1.0;
+
+interface types {
+    enum scope {
+        profile,
+        learning,
+        journal,
+        all,
+    }
+
+    record fact {
+        kind: string,
+        label: string,
+        source: string,
+    }
+
+    record query-response {
+        scope: scope,
+        query: string,
+        facts: list<fact>,
+    }
+}
+
+world personal-knowledge-core {
+    use types.{scope, query-response};
+
+    /// Send one authenticated request to the fixed personal-knowledge endpoint.
+    /// The adapter owns identity, credentials, network access, and response limits.
+    import request: func(path: string) -> result<string, string>;
+
+    /// Read bounded profile, learning, or journal facts from the owner's private digital twin.
+    /// This cannot write RDF or execute arbitrary SPARQL.
+    export query-personal-knowledge: func(scope: option<scope>, query: option<string>) -> result<query-response, string>;
+}
+
+world gateway-http {
+    import wasi:cli/environment@0.2.0;
+
+    /// Adapt one fixed personal-knowledge request to authenticated HTTP.
+    export request: func(path: string) -> result<string, string>;
+}

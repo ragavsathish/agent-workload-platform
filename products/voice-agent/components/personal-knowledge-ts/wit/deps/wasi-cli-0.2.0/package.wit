@@ -1,0 +1,12 @@
+package wasi:cli@0.2.0;
+
+interface environment {
+    /// Return the environment variables granted to this module.
+    get-environment: func() -> list<tuple<string, string>>;
+
+    /// Return the module's command-line arguments.
+    get-arguments: func() -> list<string>;
+
+    /// Return the module's initial working directory when one exists.
+    initial-cwd: func() -> option<string>;
+}

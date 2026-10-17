@@ -165,6 +165,17 @@ def test_completed_turn_is_enqueued_as_an_idempotent_digital_twin_task(monkeypat
 
     monkeypatch.setattr(gateway, "service", lambda: Tasks())
     client = TestClient(gateway.app)
+    assert client.post(
+        "/v1/digital-twin/ingestions",
+        headers={"Authorization": f"Bearer {'r' * 32}"},
+        json={
+            "identity": "owner@example.com",
+            "sessionId": "session-7",
+            "messageId": "user-3",
+            "transcript": "I want ingestion to be durable.",
+            "capturedAt": "2026-10-17T10:00:00Z",
+        },
+    ).status_code == 401
     response = client.post(
         "/v1/digital-twin/ingestions",
         headers={"Authorization": f"Bearer {'g' * 32}"},
@@ -210,6 +221,11 @@ def test_journal_writer_has_a_separate_capability_and_fixed_graph(monkeypatch):
     assert client.post(
         "/v1/digital-twin/journal",
         headers={"Authorization": f"Bearer {'g' * 32}"},
+        json=capture,
+    ).status_code == 401
+    assert client.post(
+        "/v1/digital-twin/journal",
+        headers={"Authorization": f"Bearer {'r' * 32}"},
         json=capture,
     ).status_code == 401
     response = client.post(

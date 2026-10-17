@@ -14,7 +14,20 @@ const WASSETTE_SYSTEM_PROMPT = `Wassette provides capability-controlled WebAssem
 Use tool_search when a request could benefit from a Wassette component. Components start without
 host capabilities: grant only the minimum capability needed for the current request, and never grant
 access to orchestrator credentials, the Pi agent directory, or unrelated host files. The preconfigured
-tasking component provides submission, status, and cancellation tools for durable work.`;
+components provide submission, status, and cancellation tools for durable work, plus bounded
+read-only access to personal knowledge.`;
+
+const GRAFANA_SYSTEM_PROMPT = `Grafana MCP provides read-only dashboard, Prometheus, and Tempo tools.
+When the user asks to see a trace in the voice chat, use search_tempo_traces when no trace ID was
+given, call get_tempo_trace for the selected trace, and return a
+grafana-trace presentation containing only its traceId, datasourceUid, and optional focusSpanId.
+The voice client retrieves the official Grafana MCP App data; never copy the full trace into the
+presentation JSON.`;
+
+const OXIGRAPH_CLI_SYSTEM_PROMPT = `The isolated workspace exposes the private RDF store through
+/opt/awp/bin/oxigraph. Use "oxigraph graphs", pipe SPARQL into "oxigraph query", or pipe SPARQL
+Update into "oxigraph update". This is unrestricted store access: inspect before updating and keep
+updates narrowly scoped to the user's request.`;
 
 const SCRUBBED_WASSETTE_ENV = {
   AGENT_GATEWAY_TOKEN: "",
@@ -24,11 +37,14 @@ const SCRUBBED_WASSETTE_ENV = {
   AWS_SECRET_ACCESS_KEY: "",
   AWS_SESSION_TOKEN: "",
   DATABASE_URL: "",
+  DIGITAL_TWIN_READER_TOKEN: "",
   GITEA_BUILDER_TOKEN: "",
   GITEA_TOKEN: "",
   GITHUB_TOKEN: "",
   INFERENCE_BROKER_TOKEN: "",
+  KNOWLEDGE_GATEWAY_TOKEN: "",
   ORCHESTRATOR_APPROVAL_SECRET: "",
+  TASK_GATEWAY_TOKEN: "",
 };
 
 export function createWassetteMcpRegistration(
@@ -55,6 +71,20 @@ export function createWassetteMcpRegistration(
       exposure: "deferred",
       description: "Run capability-controlled WebAssembly components with Wassette.",
       timeout: 60,
+    });
+  };
+}
+
+export function createGrafanaMcpRegistration(
+  settings: Pick<ServiceSettings, "grafanaMcpToken" | "grafanaMcpUrl">,
+): ExtensionFactory {
+  return (pi: ExtensionAPI) => {
+    pi.registerMcpServer("grafana", {
+      url: settings.grafanaMcpUrl,
+      headers: { Authorization: `Bearer ${settings.grafanaMcpToken}` },
+      exposure: "deferred",
+      description: "Read Grafana dashboards, Prometheus metrics, and Tempo traces.",
+      timeout: 30,
     });
   };
 }
@@ -105,7 +135,9 @@ export async function skillResourceLoader(
     cwd: settings.cwd,
     agentDir: settings.agentDir,
     systemPrompt,
-    appendSystemPrompt: extensionFactories.length > 0 ? [WASSETTE_SYSTEM_PROMPT] : [],
+    appendSystemPrompt: extensionFactories.length > 0
+      ? [WASSETTE_SYSTEM_PROMPT, GRAFANA_SYSTEM_PROMPT, OXIGRAPH_CLI_SYSTEM_PROMPT]
+      : [OXIGRAPH_CLI_SYSTEM_PROMPT],
     extensionFactories,
     additionalSkillPaths: [settings.skillsDir],
     noExtensions: true,

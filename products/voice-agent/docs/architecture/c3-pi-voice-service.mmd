@@ -3,7 +3,8 @@ flowchart LR
     PROVIDER[External system<br/><b>Model Provider</b>]
     GATEWAY[External container<br/><b>Agent Gateway</b><br/>task lifecycle and personal knowledge]
     VM[External container<br/><b>Voice Tool Sandbox</b><br/>Gondolin VM]
-    WASSETTE[External container<br/><b>Wassette Integration Runtime</b><br/>native MCP subprocess with capability-scoped WASM components]
+    WASSETTE[External container<br/><b>Wassette Integration Runtime</b><br/>tasking and personal-knowledge WASM components]
+    GRAFANA[External container<br/><b>Grafana MCP</b><br/>read-only dashboards, PromQL, and Tempo App data]
     STATE[(External data store<br/><b>Voice Runtime Data</b><br/>sessions, workspace, skills)]
 
     subgraph PI["Container: Pi Voice Service · TypeScript + Pi coding-agent SDK"]
@@ -13,10 +14,10 @@ flowchart LR
         SESSION["Component<br/><b>Agent Session</b><br/>persistent Pi context and streamed model events"]
         MODEL["Component<br/><b>Model Runtime</b><br/>host credentials with model network disabled"]
         SKILLS["Component<br/><b>Skill Resource Loader</b><br/>discovers trusted read-only SKILL.md resources"]
-        KNOWLEDGE["Component<br/><b>Personal Knowledge Tool</b><br/>bounded read-only digital-twin queries"]
         WORKSPACE["Component<br/><b>Gondolin Workspace Adapter</b><br/>creates VM-backed read, write, edit, and bash tools"]
         SEARCH["Component<br/><b>Deferred Tool Search</b><br/>reveals MCP tools only when the model searches for them"]
-        MCP["Component<br/><b>Wassette MCP Registration</b><br/>stdio child with a dedicated mode-0600 task env file"]
+        MCP["Component<br/><b>Wassette MCP Registration</b><br/>stdio child with a dedicated mode-0600 capability env file"]
+        GRAFANA_MCP["Component<br/><b>Grafana MCP Registration</b><br/>authenticated deferred streamable HTTP"]
         TRANSCRIPT["Component<br/><b>Public Transcript Projection</b><br/>bounded user, assistant, and tool-status entries"]
         USAGE["Component<br/><b>Context Usage Projection</b><br/>tokens, window, percentage, and compactability"]
         PERSIST["Component<br/><b>Session Manager</b><br/>loads and persists the voice session branch"]
@@ -24,9 +25,9 @@ flowchart LR
         HTTP --> QUEUE --> SESSION
         MODEL --> SESSION
         SKILLS --> SESSION
-        KNOWLEDGE --> SESSION
         WORKSPACE --> SESSION
         SESSION --> SEARCH --> MCP
+        SEARCH --> GRAFANA_MCP
         SESSION --> TRANSCRIPT
         SESSION --> USAGE
         SESSION <--> PERSIST
@@ -34,10 +35,10 @@ flowchart LR
 
     BROKER -->|"private turn and projection HTTP"| HTTP
     SESSION -->|"model requests"| PROVIDER
-    KNOWLEDGE -->|"identity-bound read-only knowledge queries"| GATEWAY
     WORKSPACE -->|"VM lifecycle and tools"| VM
     MCP -->|"MCP over stdio<br/>configured component directory"| WASSETTE
-    WASSETTE -->|"composed tasking component<br/>identity-bound task commands"| GATEWAY
+    GRAFANA_MCP -->|"read-only MCP calls"| GRAFANA
+    WASSETTE -->|"task commands · reader-token<br/>personal-knowledge queries"| GATEWAY
     SKILLS -->|"read only"| STATE
     PERSIST -->|"session files"| STATE
     TRANSCRIPT -->|"bounded display projection"| HTTP
@@ -46,6 +47,6 @@ flowchart LR
     classDef component fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
     classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
-    class HTTP,QUEUE,SESSION,MODEL,SKILLS,KNOWLEDGE,WORKSPACE,SEARCH,MCP,TRANSCRIPT,USAGE,PERSIST component;
-    class BROKER,PROVIDER,GATEWAY,VM,WASSETTE external;
+    class HTTP,QUEUE,SESSION,MODEL,SKILLS,WORKSPACE,SEARCH,MCP,GRAFANA_MCP,TRANSCRIPT,USAGE,PERSIST component;
+    class BROKER,PROVIDER,GATEWAY,VM,WASSETTE,GRAFANA external;
     class STATE data;

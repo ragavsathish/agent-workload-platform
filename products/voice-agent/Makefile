@@ -1,4 +1,4 @@
-.PHONY: setup build up start logs down recreate verify cycle-test login status grafana-password warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e playwright-voice playwright-diagnostics playwright-grafana host-preflight install-host-services wassette-arxiv-build wassette-arxiv-install wassette-c4-grafana-build wassette-c4-grafana-install wassette-tasking-build wassette-tasking-install grafana-c4-dashboard digital-twin-image-build digital-twin-load digital-twin-query digital-twin-validate digital-twin-test digital-twin-identify-skills digital-twin-capture-journal digital-twin-eval db-init broker worker pull-model check
+.PHONY: setup build up start logs down recreate verify cycle-test login status grafana-password grafana-mcp-token warm-models benchmark-mlx publish-workspace blackbox-voice blackbox-e2e blackbox-personal-knowledge playwright-voice playwright-diagnostics playwright-grafana host-preflight install-host-services wassette-arxiv-build wassette-arxiv-install wassette-tasking-build wassette-tasking-install wassette-personal-knowledge-build wassette-personal-knowledge-install grafana-c4-dashboard digital-twin-image-build digital-twin-load digital-twin-query digital-twin-validate digital-twin-test digital-twin-identify-skills digital-twin-capture-journal digital-twin-eval db-init broker worker pull-model check
 
 COMPOSE = docker compose --env-file deploy/.env -f deploy/compose.yml
 
@@ -68,6 +68,10 @@ grafana-password:
 	@printf 'Grafana user: admin\nGrafana password: '
 	@cat deploy/secrets/grafana-admin-password
 
+grafana-mcp-token:
+	@test -s deploy/secrets/grafana-mcp-caller-token || { echo "Run make start first" >&2; exit 1; }
+	@cat deploy/secrets/grafana-mcp-caller-token
+
 warm-models:
 	./scripts/edge-warm-models.sh
 
@@ -82,8 +86,11 @@ publish-workspace:
 blackbox-voice:
 	./tests/e2e/blackbox-voice.sh "$(UTTERANCE)"
 
-blackbox-e2e:
+blackbox-e2e: blackbox-personal-knowledge
 	./tests/e2e/blackbox-e2e.sh
+
+blackbox-personal-knowledge: wassette-personal-knowledge-install
+	uv run --project apps/gateway python tests/e2e/personal-knowledge-regression.py
 
 playwright-voice:
 	./tests/e2e/playwright-voice.sh
@@ -97,7 +104,7 @@ playwright-grafana:
 host-preflight:
 	./scripts/host-preflight.sh
 
-install-host-services: wassette-arxiv-install wassette-c4-grafana-install wassette-tasking-install digital-twin-image-build
+install-host-services: wassette-arxiv-install wassette-tasking-install wassette-personal-knowledge-install digital-twin-image-build
 	./scripts/install-launch-agents.sh
 
 wassette-arxiv-build:
@@ -106,20 +113,20 @@ wassette-arxiv-build:
 wassette-arxiv-install: wassette-arxiv-build
 	$(MAKE) -C components/arxiv-rs install
 
-wassette-c4-grafana-build:
-	$(MAKE) -C components/c4-grafana-ts build
-
-wassette-c4-grafana-install: wassette-c4-grafana-build
-	$(MAKE) -C components/c4-grafana-ts install
-
 wassette-tasking-build:
 	$(MAKE) -C components/tasking-ts build
 
 wassette-tasking-install: wassette-tasking-build
 	$(MAKE) -C components/tasking-ts install
 
-grafana-c4-dashboard: wassette-c4-grafana-build
-	C4_GRAFANA_WASM="$(CURDIR)/components/c4-grafana-ts/dist/c4-grafana.wasm" node deploy/observability/generate-c4-heatmap.mjs
+wassette-personal-knowledge-build:
+	$(MAKE) -C components/personal-knowledge-ts build
+
+wassette-personal-knowledge-install: wassette-personal-knowledge-build
+	$(MAKE) -C components/personal-knowledge-ts install
+
+grafana-c4-dashboard:
+	node deploy/observability/generate-c4-heatmap.mjs
 
 digital-twin-image-build:
 	./scripts/gitea-sync.sh
@@ -178,8 +185,9 @@ pull-model:
 	ollama pull qwen3.5:9b-mlx
 
 check:
-	$(MAKE) -C components/c4-grafana-ts check
+	node --test deploy/observability/c4-dashboard.test.mjs
 	$(MAKE) -C components/tasking-ts check
+	$(MAKE) -C components/personal-knowledge-ts check
 	pnpm --dir ../.. --filter @agent-workload-platform/otel test
 	pnpm --dir ../.. --filter @agent-workload-platform/gondolin-session check
 	pnpm --dir ../.. --filter @agent-workload-platform/voice-pi-agent check
