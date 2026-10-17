@@ -77,7 +77,7 @@ async function main() {
   const token = process.env.GITEA_BUILDER_TOKEN;
   if (!assetConfigPath || !registryImage || !imageRef || !digest || !token) {
     throw new Error(
-      "usage: image-installer <asset-config> <registry-image> <image-ref> <sha256:digest>; "
+      "usage: image-builder/installer <asset-config> <registry-image> <image-ref> <sha256:digest>; "
         + "GITEA_BUILDER_TOKEN is required",
     );
   }

@@ -129,7 +129,7 @@ access to proposal records, and Habitat has no direct host port.
 | Pi Task Worker | `apps/worker/src/voice_worker/main.py`; worker LaunchAgent |
 | Pi Task Worker components | `apps/worker/src/voice_worker/main.py`; `packages/tasking/src/voice_agent/tasking/application/pi_response.py`; `domain/execution_images.py`; `infrastructure/artifacts.py`; `infrastructure/image_packages.py` |
 | Image Build Orchestration | `apps/worker/src/voice_worker/main.py`; `infrastructure/gitea_actions.py`; `domain/execution_images.py`; `infrastructure/image_packages.py` |
-| Shared Image Builder | image-builder LaunchAgent; `builder-manager.ts`; `image-builder-workflow.ts`; `image-builder-guest.ts`; builder image definitions |
+| Shared Image Builder | image-builder LaunchAgent; `platform/agent-execution/gondolin-session/image-builder/` |
 | Git and Image Package Store | Compose Gitea service; `scripts/gitea-sync.sh`; `packages/tasking/src/voice_agent/tasking/infrastructure/image_packages.py` |
 | Pi Task Session tool components | `platform/agent-execution/gondolin-session/pi-extension.ts` and its MCP clients |
 | Metrics and Traces | `apps/edge/otel_bridge.py`; `packages/telemetry/src/voice_agent/shared/telemetry.py`; Compose `otel-lgtm` service |

@@ -8,7 +8,7 @@ mkdir -p "$HOME"
 chmod 700 "$HOME"
 set -a
 # shellcheck disable=SC1091
-source "$runtime_dir/gondolin-agent/builder-manager.env"
+source "$runtime_dir/gondolin-agent/image-builder.env"
 set +a
 cd "$runtime_dir/gondolin-agent"
-exec /opt/homebrew/bin/node dist/builder-manager.js
+exec /opt/homebrew/bin/node dist/image-builder/manager.js

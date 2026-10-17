@@ -25,4 +25,4 @@ jobs:
         env:
           ARTIFACT_VERSION: ${{ inputs.artifact_version }}
           IMAGE_BUILDER_TOKEN: ${{ secrets.IMAGE_BUILDER_TOKEN }}
-        run: node /runner/dist/image-builder-workflow.js
+        run: node /runner/dist/image-builder/workflow.js

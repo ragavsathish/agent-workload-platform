@@ -68,7 +68,7 @@ async function importTrustedBaseImages(): Promise<void> {
 }
 
 const [planFile] = process.argv.slice(2);
-if (!planFile) throw new Error("usage: image-builder-guest <plan.json>");
+if (!planFile) throw new Error("usage: image-builder/guest <plan.json>");
 const plan = JSON.parse(fs.readFileSync(planFile, "utf8")) as GuestPlan;
 const gondolinMitmCa = "/etc/gondolin/mitm/ca.crt";
 if (!fs.existsSync(gondolinMitmCa)) {

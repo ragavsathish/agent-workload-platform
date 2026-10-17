@@ -154,7 +154,7 @@ printf 'OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4318"\nOTEL_LOGS_EXPORTER=
 printf 'GITEA_PACKAGE_OWNER="image-builder"\nGITEA_BUILDER_TOKEN="%s"\nGITEA_ACTIONS_TOKEN="%s"\nIMAGE_INSTALLER_CLI="%s"\n' \
   "$(<"$gitea_builder_token_file")" \
   "$(<"$gitea_dispatcher_token_file")" \
-  "$gondolin_runtime/dist/image-installer.js" \
+  "$gondolin_runtime/dist/image-builder/installer.js" \
   >> "$runtime_dir/apps/worker/worker.env"
 chmod 600 "$runtime_dir/apps/worker/worker.env"
 printf 'GITEA_ENDPOINT_URL="http://127.0.0.1:3001"\nGITEA_RUNNER_REGISTRATION_TOKEN="%s"\nGONDOLIN_BUILDER_ASSETS="%s"\nGONDOLIN_BUILDER_CHECKPOINT="%s"\nGONDOLIN_RUNNER_DIR="%s"\n' \
@@ -162,12 +162,12 @@ printf 'GITEA_ENDPOINT_URL="http://127.0.0.1:3001"\nGITEA_RUNNER_REGISTRATION_TO
   "$gondolin_builder_assets_runtime" \
   "$runtime_dir/gondolin-builder-checkpoint.qcow2" \
   "$gondolin_runtime" \
-  > "$gondolin_runtime/builder-manager.env"
+  > "$gondolin_runtime/image-builder.env"
 printf 'GONDOLIN_BUILDER_DISK="128G"\n' \
-  >> "$gondolin_runtime/builder-manager.env"
+  >> "$gondolin_runtime/image-builder.env"
 printf 'OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4318"\nOTEL_LOGS_EXPORTER="none"\nOTEL_METRIC_EXPORT_INTERVAL="5000"\n' \
-  >> "$gondolin_runtime/builder-manager.env"
-chmod 600 "$gondolin_runtime/builder-manager.env"
+  >> "$gondolin_runtime/image-builder.env"
+chmod 600 "$gondolin_runtime/image-builder.env"
 /opt/homebrew/bin/uv sync --project "$runtime_dir/apps/broker" --frozen --no-dev
 /opt/homebrew/bin/uv sync --project "$runtime_dir/apps/worker" --frozen --no-dev
 
