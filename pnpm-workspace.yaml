@@ -1,13 +1,9 @@
 packages:
   - vendor/excalidraw-mcp
   - vendor/mermaid-to-excalidraw
-  - products/architecture-visualization/integrations/gondolin
   - platform/agent-execution/gondolin-session
   - platform/observability/otel
   - products/voice-agent/apps/pi-agent
-  - products/architecture-visualization
-  - products/architecture-visualization/core
-  - products/architecture-visualization/components
 
 allowBuilds:
   '@google/genai': false

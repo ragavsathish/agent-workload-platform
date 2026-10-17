@@ -57,6 +57,11 @@ coverage page; Grafana is now the single coverage and operational-health UI. Reg
 `deploy/observability/c4-heatmap.json` with `make grafana-c4-dashboard` after changing a C4 source or evidence mapping.
 Run `make playwright-grafana` to scroll and render every lazy panel, verify the computed palette,
 and retain a screenshot, browser evidence, and Playwright trace.
+Oxigraph is provisioned as a persistent RDF data-store container on the private Compose `data`
+network. The Agent Gateway is the only application runtime allowed to query it. The gateway runs
+fixed, read-only profile and learning SELECT queries, applies any owner-supplied text only as a
+post-query filter, and returns bounded facts to the authenticated Pi Voice Service. Oxigraph has no
+host, LAN, tailnet, or arbitrary-SPARQL exposure.
 The adapter speaks RTVI, while Tailscale Serve is the only browser ingress. It exposes the voice UI on tailnet HTTPS
 after tailnet authorization. Tailscale terminates TLS and supplies the authenticated identity to a
 localhost-only Traefik router. Traefik maps `/` to the Voice Edge, `/metrics/` to Grafana,
@@ -73,7 +78,9 @@ mock's host-loopback endpoint, while other HTTP destinations are denied.
 The Pi Voice Service also registers a host-native Wassette subprocess through Pi's deferred MCP
 extension. `tool_search` discovers tools from the configured component directory without adding all
 schemas to every model turn. The child receives a credential-scrubbed environment and its WASM
-components can use only their persisted Wassette capability grants. This path is separate from the
+components can use only their persisted Wassette capability grants. The composed tasking component
+receives its three task-specific settings through a mode-0600 env file and owns the task lifecycle
+tools; only the bounded personal-knowledge query remains a native Pi tool. This path is separate from the
 Gondolin VM used by Pi's native file and shell tools.
 The capability-free TypeScript component in `components/c4-grafana-ts/` exposes a documented
 `compile-dashboard` tool. It accepts Mermaid, evidence, and activity records and returns provisionable
@@ -117,10 +124,11 @@ access to proposal records, and Habitat has no direct host port.
 | Inference Broker | `apps/broker/src/voice_agent/speech/presentation/http.py`; broker LaunchAgent |
 | Inference Broker components | `apps/broker/src/voice_agent/speech/presentation/http.py`; `application/transcription.py`; `infrastructure/parakeet_stt.py`; `infrastructure/mlx_tts.py` |
 | Pi Voice Service | `apps/pi-agent/voice-agent-service.ts`; Pi voice LaunchAgent |
-| Pi Voice Service components | `apps/pi-agent/voice-agent-service.ts`; `apps/pi-agent/gondolin-workspace.ts` |
+| Pi Voice Service components | `apps/pi-agent/voice-agent-service.ts`; `apps/pi-agent/voice-agent/`; `platform/agent-execution/gondolin-session/session.ts` |
 | C4 to Grafana Wassette component | `components/c4-grafana-ts/src/index.ts`; `components/c4-grafana-ts/wit/world.wit` |
+| Tasking Wassette component | `components/tasking-ts/src/core/index.ts`; `components/tasking-ts/src/gateway-http/lib.rs`; `components/tasking-ts/wit/world.wit` |
 | Pi Context Usage and Compaction | `apps/client/lib/views/voice_view.dart`; `apps/edge/bot.py`; broker HTTP adapter; `apps/pi-agent/voice-agent-service.ts` |
-| Voice Tool Sandbox and Runtime Data | `apps/pi-agent/gondolin-workspace.ts`; `scripts/install-launch-agents.sh`; `deploy/launchd/run-pi-agent.sh` |
+| Voice Tool Sandbox and Runtime Data | `apps/pi-agent/voice-agent/voice-gondolin.ts`; `platform/agent-execution/gondolin-session/session.ts`; `scripts/install-launch-agents.sh`; `deploy/launchd/run-pi-agent.sh` |
 | Agent Gateway | `apps/gateway/src/voice_gateway/main.py`; `apps/gateway/Dockerfile` |
 | Agent Gateway components | `apps/gateway/src/voice_gateway/main.py`; `packages/tasking/src/voice_agent/tasking/application/service.py`; `domain/approval.py`; `infrastructure/artifacts.py` |
 | Task Database and Queue | `packages/tasking/migrations/`; `packages/tasking/src/voice_agent/tasking/application/service.py`; Compose Postgres service |
@@ -131,7 +139,7 @@ access to proposal records, and Habitat has no direct host port.
 | Image Build Orchestration | `apps/worker/src/voice_worker/main.py`; `infrastructure/gitea_actions.py`; `domain/execution_images.py`; `infrastructure/image_packages.py` |
 | Shared Image Builder | image-builder LaunchAgent; `platform/agent-execution/gondolin-session/image-builder/` |
 | Git and Image Package Store | Compose Gitea service; `scripts/gitea-sync.sh`; `packages/tasking/src/voice_agent/tasking/infrastructure/image_packages.py` |
-| Pi Task Session tool components | `platform/agent-execution/gondolin-session/pi-extension.ts` and its MCP clients |
+| Pi Task Session tools | `platform/agent-execution/gondolin-session/pi-extension.ts`; MCP servers from Pi configuration |
 | Metrics and Traces | `apps/edge/otel_bridge.py`; `packages/telemetry/src/voice_agent/shared/telemetry.py`; Compose `otel-lgtm` service |
 | Platform Resource Metrics | `apps/host-observability/gondolin-exporter.mjs`; `deploy/observability/fluent-bit-host.yaml`; `deploy/observability/fluent-bit.yaml`; `deploy/observability/otelcol-config.yaml`; host-observability LaunchAgent; Compose `fluent-bit` service |
 
@@ -184,6 +192,6 @@ for source in products/voice-agent/docs/architecture/*.mmd; do
 done
 ```
 
-The repository's architecture-visualization product can also compile native Mermaid C4 sources such
-as the context view into policy-checked Excalidraw scenes. The lane and sequence views intentionally
-use standard Mermaid where it produces a clearer generated artifact than Mermaid's native C4 layout.
+The browser presents Mermaid, Excalidraw, and Marp through its MCP App host. Architecture sources in
+this directory remain Mermaid because they are reviewable, source-controlled, and directly renderable;
+lane and sequence views use standard Mermaid where it is clearer than native C4 layout.

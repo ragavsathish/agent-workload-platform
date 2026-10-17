@@ -5,5 +5,7 @@ product. They may depend on external systems and vendor sources, but must not
 import product internals.
 
 - [`agent-execution`](agent-execution/README.md) provides isolated agent
-  sessions and capability adapters shared by Voice Agent and Architecture
-  Visualization.
+  sessions and capability adapters. Voice Agent is its current product
+  consumer.
+- [`observability`](observability/) provides shared payload-free OpenTelemetry
+  metrics and traces.

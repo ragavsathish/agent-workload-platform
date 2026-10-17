@@ -1,9 +1,0 @@
-package diagram:c4-suite;
-
-let engine = new local:c4-engine { ... };
-let policy = new local:excalidraw-policy { ... };
-let core = new local:excalidraw-core { ... };
-
-export engine.compiler;
-export policy.excalidraw-policy;
-export core.diagrams;

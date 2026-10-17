@@ -1,9 +1,9 @@
 # Monorepo organization
 
 The repository is organized around product and bounded-context ownership.
-Voice Agent and Architecture Visualization are product vertical slices;
-Agent Execution is the first shared platform context. Earendil remains the one
-transitional area until its local work is ready for an isolated migration.
+Voice Agent is the canonical product vertical slice, and Agent Execution is a
+shared platform context. Earendil remains the one transitional area until its
+local work is ready for an isolated migration.
 
 ## Dependency direction
 
@@ -28,8 +28,7 @@ because it uses Docker, macOS LaunchAgents, or Kubernetes.
 | Path | Ownership | Status or next focused change |
 | --- | --- | --- |
 | `products/voice-agent` | Voice Agent product | Canonical; the obsolete `workloads/pipecat-mlx-voice` copy is removed |
-| `products/architecture-visualization` | Architecture Visualization product | Canonical vertical slice including C4 components, contracts, examples, and its Gondolin integration |
-| `platform/agent-execution/gondolin-session` | Agent Execution platform context | Shared by Voice Agent and Architecture Visualization; product-specific voice services are excluded |
+| `platform/agent-execution/gondolin-session` | Agent Execution platform context | Shared execution capability; product-specific voice services are excluded |
 | `vendor/excalidraw-mcp` | Upstream vendor source | Pinned, unmodified Git submodule |
 | `vendor/mermaid-to-excalidraw` | Upstream vendor source | Pinned, unmodified Git submodule |
 | `runtimes/k3s-earendil` | Future Secure Agent Workspace product | Migrate only when its local source is ready; replace its source-tree C4 dependency with an artifact contract |
@@ -78,10 +77,8 @@ own deployment configuration.
 
 1. **Voice Agent product boundary** — complete.
 2. **Vendor isolation** — complete.
-3. **Architecture Visualization product** — complete.
-4. **Agent Execution platform context** — complete for the two current
-   consumers.
-5. **Secure Agent Workspace product** — move the Earendil deployment and make
+3. **Agent Execution platform context** — complete for its current consumer.
+4. **Secure Agent Workspace product** — move the Earendil deployment and make
    capability inputs explicit artifacts.
-6. **Enforcement and cleanup** — add ownership rules, path-scoped CI, dependency
+5. **Enforcement and cleanup** — add ownership rules, path-scoped CI, dependency
    checks, and delete obsolete technical buckets.
