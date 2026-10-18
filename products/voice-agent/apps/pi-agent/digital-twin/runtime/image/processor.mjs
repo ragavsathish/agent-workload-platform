@@ -22,11 +22,85 @@ const PROFILE_CRITERIA = {
   employment: "The owner explicitly stated starting, ending, or holding employment with an organization.",
   none: "The statement is not an explicit profile update in one of the listed fields.",
 };
+const JOURNAL_EXTRACTOR_VERSION = "journal-v4-sentence-gate";
 
 function required(name) {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is required`);
   return value;
+}
+
+const LOW_VALUE_TRANSCRIPT_PATTERNS = [
+  /^authenticated user\s*:/i,
+  /^(?:voice black box|system|assistant)\b[^.!?\n]*\b(?:complete|connected|disconnected|authenticated|reported)\b[^.!?\n]*[.!?]?$/i,
+  /^(?:can you hear (?:me|this)|are you okay|please repeat(?: what you said| any question.*)?)\??$/i,
+  /^(?:do not change files|continue current activity|proceed with deeper analysis|select the latest version|propose a task in the default workspace|waiting for a moment to return)\.?$/i,
+  /^(?:okay|ok|thanks|thank you|that works|go ahead|done(?: for now)?)\b[.!?]*$/i,
+];
+const ROUTINE_COMMAND_PATTERN = /^(?:please\s+)?(?:use|check|run|open|deploy|search|inspect|restart|query|read|create|add|show|extract|render|call|fix|explain|summarize|review|find|look up)\b/i;
+const POLITE_COMMAND_PATTERN = /^(?:can|could|would|will)\s+you\b/i;
+const REPORTED_SPEECH_PATTERN = /^(?:(?:a|an|the|my)\s+)?(?:assistant|system|blog|article|author|presenter|speaker|colleague)\b.*\b(?:said|says|suggested|proposed|claims?|argues?|explained|reported|believes?)\b/i;
+const ATTRIBUTED_SPEECH_PATTERN = /^(?:according to\b|i\s+(?:read|heard|watched|saw|attended)\b)/i;
+const CONTENT_STOP_WORDS = new Set([
+  "a", "an", "and", "are", "as", "at", "be", "but", "by", "do", "does", "for", "from",
+  "he", "her", "him", "his", "i", "in", "is", "it", "its", "me", "my", "of", "on", "or",
+  "our", "she", "that", "the", "their", "them", "they", "this", "to", "us", "was", "we",
+  "were", "what", "when", "where", "which", "who", "why", "with", "you", "your",
+]);
+
+function normalized(value) {
+  return value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/\s+/g, " ").trim();
+}
+
+function contentWords(value) {
+  return new Set(normalized(value)
+    .match(/[\p{L}\p{N}][\p{L}\p{N}'-]*/gu)
+    ?.filter((word) => !CONTENT_STOP_WORDS.has(word)) ?? []);
+}
+
+function isLowValueText(value) {
+  const text = value.trim();
+  if (LOW_VALUE_TRANSCRIPT_PATTERNS.some((pattern) => pattern.test(text))) return true;
+  return contentWords(text).size < 2;
+}
+
+function isIneligibleJournalSentence(value) {
+  const text = value.trim();
+  return isLowValueText(text)
+    || ROUTINE_COMMAND_PATTERN.test(text)
+    || POLITE_COMMAND_PATTERN.test(text)
+    || REPORTED_SPEECH_PATTERN.test(text)
+    || ATTRIBUTED_SPEECH_PATTERN.test(text);
+}
+
+function eligibleJournalTranscript(value) {
+  return (value.match(/[^.!?\n]+[.!?]?/gu) ?? [value])
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence && !isIneligibleJournalSentence(sentence))
+    .join("\n");
+}
+
+function journalSentences(value) {
+  return (value.match(/[^.!?\n]+[.!?]?/gu) ?? [value])
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+}
+
+function isSemanticallySupported(text, evidenceQuote) {
+  const evidenceWords = contentWords(evidenceQuote);
+  return [...contentWords(text)].some((word) => evidenceWords.has(word));
+}
+
+function hasTypeEvidence(type, evidenceQuote) {
+  if (type === "learning") {
+    return /\b(?:learn(?:ed|t|ing)?|understand(?:ing|s|stood)?|reali[sz](?:e|ed|ing)|discover(?:ed|ing)?|found out|now know|makes? sense|means?)\b/i
+      .test(evidenceQuote);
+  }
+  if (type === "decision") {
+    return /\b(?:i|we)\s+(?:(?:have|'ve)\s+)?decided\b|\b(?:i|we)\s+(?:will|'ll)\b|\b(?:my|our|the)\s+decision\b/i
+      .test(evidenceQuote);
+  }
+  return true;
 }
 
 async function readInput() {
@@ -72,7 +146,32 @@ function checkedEntries(value) {
       || entry.topics.some((topic) => typeof topic !== "string" || !topic.trim() || topic.length > 120)) {
       throw new Error("model returned invalid entry topics");
     }
-    return { type: entry.type, text: entry.text.trim(), topics: entry.topics.map((topic) => topic.trim()) };
+    if (typeof entry.evidenceQuote !== "string" || !entry.evidenceQuote.trim()
+      || entry.evidenceQuote.length > 500) {
+      throw new Error("model returned invalid entry evidence");
+    }
+    return {
+      type: entry.type,
+      text: entry.text.trim(),
+      topics: entry.topics.map((topic) => topic.trim()),
+      evidenceQuote: entry.evidenceQuote.trim(),
+    };
+  });
+}
+
+function groundedJournalEntries(transcript, entries) {
+  const source = normalized(transcript);
+  const seen = new Set();
+  return entries.flatMap(({ evidenceQuote, ...entry }) => {
+    const evidence = normalized(evidenceQuote);
+    if (!evidence || !source.includes(evidence)) return [];
+    if (isIneligibleJournalSentence(evidenceQuote) || isLowValueText(entry.text)) return [];
+    if (!isSemanticallySupported(entry.text, evidenceQuote)) return [];
+    if (!hasTypeEvidence(entry.type, evidenceQuote)) return [];
+    const key = `${entry.type}\0${normalized(entry.text)}`;
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [entry];
   });
 }
 
@@ -87,6 +186,26 @@ const model = required("DIGITAL_TWIN_MODEL");
 const writerToken = required("DIGITAL_TWIN_WRITER_TOKEN");
 
 async function captureJournal() {
+  const inputSentences = journalSentences(input.transcript);
+  const eligibleSentences = inputSentences.filter(
+    (sentence) => !isIneligibleJournalSentence(sentence),
+  );
+  const eligibleTranscript = eligibleSentences.join("\n");
+  if (!eligibleTranscript) {
+    return {
+      mode: "journal", captureId, entries: 0, skipped: "low-value-transcript",
+      decision: {
+        extractorVersion: JOURNAL_EXTRACTOR_VERSION,
+        outcome: "filtered",
+        inputSentences: inputSentences.length,
+        eligibleSentences: 0,
+        modelInvoked: false,
+        modelEntries: 0,
+        groundedEntries: 0,
+        rejectedEntries: 0,
+      },
+    };
+  }
   const format = {
     type: "object",
     additionalProperties: false,
@@ -98,11 +217,12 @@ async function captureJournal() {
         items: {
           type: "object",
           additionalProperties: false,
-          required: ["type", "text", "topics"],
+          required: ["type", "text", "topics", "evidenceQuote"],
           properties: {
             type: { enum: [...ENTRY_TYPES] },
             text: { type: "string", minLength: 1, maxLength: 1_000 },
             topics: { type: "array", maxItems: 8, items: { type: "string", minLength: 1, maxLength: 120 } },
+            evidenceQuote: { type: "string", minLength: 1, maxLength: 500 },
           },
         },
       },
@@ -114,16 +234,48 @@ async function captureJournal() {
       { role: "system", content: [
         "Create a lightweight cognitive journal from the owner's transcript.",
         "Capture meaningful thoughts, ideas, genuine questions, decisions, goals, and learnings.",
+        "Each entry must have standalone value when read later without conversation context.",
+        "Evaluate every sentence independently: ignore a noisy sentence without discarding meaningful owner statements elsewhere in the transcript.",
+        "Explicit signals such as 'I think', 'an idea', 'we could', 'I decided', 'we will', 'my goal', 'I want', 'I learned', 'I realized', and 'I now understand' normally indicate durable journal content.",
+        "A specific technical why/how question is a genuine question when its answer would remain useful later; an imperative request to run, check, open, deploy, search, or repeat something is a routine command.",
+        "Project architecture and workflow choices can be durable decisions, goals, or ideas; they do not need to be biographical facts.",
         "Keep the owner's meaning concise and do not invent conclusions or personal facts.",
-        "Ignore routine commands, acknowledgements, quoted text, and assistant statements.",
+        "For every entry, evidenceQuote must be an exact, contiguous, verbatim quote from the transcript that supports the entry.",
+        "Ignore authentication or system status, routine commands, acknowledgements, navigation, requests to repeat, quoted text, and assistant statements.",
+        "Do not classify identity, affiliation, biography, or merely consuming a source as learning. Learning requires the owner to express a new understanding.",
+        "Reject vague fragments, context-dependent references, and generic phrases. Return an empty entries array when nothing has durable cognitive value.",
         "Topics are retrieval labels, not claims of expertise.",
       ].join("\n") },
-      { role: "user", content: input.transcript },
+      { role: "user", content: "Why does the cache remain stale after the deployment completes?" },
+      { role: "assistant", content: JSON.stringify({ entries: [{
+        type: "question",
+        text: "Why the cache remains stale after deployment.",
+        topics: ["cache", "deployment"],
+        evidenceQuote: "Why does the cache remain stale after the deployment completes?",
+      }] }) },
+      { role: "user", content: "I decided that local requests will bypass the remote proxy." },
+      { role: "assistant", content: JSON.stringify({ entries: [{
+        type: "decision",
+        text: "Local requests will bypass the remote proxy.",
+        topics: ["local routing", "proxy"],
+        evidenceQuote: "I decided that local requests will bypass the remote proxy.",
+      }] }) },
+      { role: "user", content: "System connected successfully. I now understand that retries need stable identifiers." },
+      { role: "assistant", content: JSON.stringify({ entries: [{
+        type: "learning",
+        text: "Retries need stable identifiers.",
+        topics: ["retries", "identifiers"],
+        evidenceQuote: "I now understand that retries need stable identifiers.",
+      }] }) },
+      { role: "user", content: "Check the logs and deploy it." },
+      { role: "assistant", content: JSON.stringify({ entries: [] }) },
+      { role: "user", content: eligibleTranscript },
     ],
   });
   const content = modelPayload?.message?.content;
   if (typeof content !== "string") throw new Error("model returned no journal content");
-  const entries = checkedEntries(JSON.parse(content));
+  const modelEntries = checkedEntries(JSON.parse(content));
+  const entries = groundedJournalEntries(input.transcript, modelEntries);
   const capture = {
     id: captureId, identity: input.identity, sourceRef, capturedAt: input.capturedAt,
     transcript: input.transcript,
@@ -132,7 +284,19 @@ async function captureJournal() {
   const writer = await postJson(required("DIGITAL_TWIN_WRITER_URL"), capture, {
     authorization: `Bearer ${writerToken}`,
   });
-  return { mode: "journal", captureId, entries: entries.length, writer };
+  return {
+    mode: "journal", captureId, entries: entries.length, writer,
+    decision: {
+      extractorVersion: JOURNAL_EXTRACTOR_VERSION,
+      outcome: entries.length > 0 ? "written" : "no-entries",
+      inputSentences: inputSentences.length,
+      eligibleSentences: eligibleSentences.length,
+      modelInvoked: true,
+      modelEntries: modelEntries.length,
+      groundedEntries: entries.length,
+      rejectedEntries: modelEntries.length - entries.length,
+    },
+  };
 }
 
 function checkedChoice(answer, allowed, name) {

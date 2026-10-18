@@ -6,7 +6,7 @@ This directory owns the Pi agent's complete digital-twin implementation:
 | --- | --- |
 | `runtime/` | Production modules, CLIs, RDF, and operational scripts |
 | `eval/` | Offline-only Promptfoo providers, corpora, calibration, and local results |
-| `tests/` | Runtime unit and Oxigraph integration coverage |
+| `tests/` | Process-level safety and Oxigraph integration coverage |
 | `docs/` | Ontology, evaluator, and local-model research |
 
 The dependency direction is one-way: evaluation may import the compiled runtime interface, while

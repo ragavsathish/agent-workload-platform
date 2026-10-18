@@ -15,3 +15,5 @@ products/voice-agent/apps/client/web/voice-canvas/mcp_app.js*
 products/voice-agent/apps/client/web/excalidraw/
 products/voice-agent/apps/client/web/mermaid/
 products/voice-agent/apps/client/web/marp/
+products/voice-agent/apps/pi-agent/digital-twin/eval/private-manifests/
+products/voice-agent/apps/pi-agent/digital-twin/eval/private-results/

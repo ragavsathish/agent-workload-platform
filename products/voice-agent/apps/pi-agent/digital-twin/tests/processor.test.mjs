@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const processor = fileURLToPath(new URL("../runtime/image/processor.mjs", import.meta.url));
 
-async function fixtureServer(classifierConfidence = 0.93) {
+async function fixtureServer(classifierConfidence = 0.93, journalEntries) {
   const requests = [];
   const server = createServer(async (request, response) => {
     let body = "";
@@ -31,7 +31,12 @@ async function fixtureServer(classifierConfidence = 0.93) {
     } else if (request.url === "/api/chat") {
       const system = parsed.messages[0].content;
       const content = system.includes("cognitive journal")
-        ? { entries: [{ type: "learning", text: "Uses Playwright.", topics: ["testing"] }] }
+        ? { entries: journalEntries ?? [{
+          type: "idea",
+          text: "Playwright could improve test reliability.",
+          topics: ["testing"],
+          evidenceQuote: "I think Playwright could improve test reliability.",
+        }] }
         : { candidates: [{ label: "Playwright", evidence_quote: "I use Playwright." }] };
       response.end(JSON.stringify({ message: { content: JSON.stringify(content) } }));
     } else if (request.url === "/v1/digital-twin/journal") {
@@ -52,7 +57,13 @@ async function fixtureServer(classifierConfidence = 0.93) {
   };
 }
 
-async function runProcessor(baseUrl, mode) {
+async function runProcessor(
+  baseUrl,
+  mode,
+  transcript = mode === "journal"
+    ? "I think Playwright could improve test reliability."
+    : "I use Playwright.",
+) {
   const child = spawn(process.execPath, [processor], {
     env: {
       ...process.env,
@@ -76,7 +87,7 @@ async function runProcessor(baseUrl, mode) {
     identity: "owner@example.com",
     sessionId: "session-1",
     messageId: "message-1",
-    transcript: "I use Playwright.",
+    transcript,
     capturedAt: "2026-10-17T10:00:00Z",
   }));
   const code = await new Promise((resolve) => child.once("close", resolve));
@@ -90,9 +101,120 @@ test("journal job calls only Qwen and the fixed journal writer", async () => {
     const result = await runProcessor(fixture.baseUrl, "journal");
     assert.equal(result.mode, "journal");
     assert.equal(result.entries, 1);
+    assert.deepEqual(result.decision, {
+      extractorVersion: "journal-v4-sentence-gate",
+      outcome: "written",
+      inputSentences: 1,
+      eligibleSentences: 1,
+      modelInvoked: true,
+      modelEntries: 1,
+      groundedEntries: 1,
+      rejectedEntries: 0,
+    });
     assert.deepEqual(fixture.requests.map((request) => request.path), [
       "/api/chat", "/v1/digital-twin/journal",
     ]);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("journal job does not persist authentication events", async () => {
+  const fixture = await fixtureServer();
+  try {
+    const result = await runProcessor(
+      fixture.baseUrl,
+      "journal",
+      "Authenticated user: owner@example.com",
+    );
+    assert.equal(result.entries, 0);
+    assert.deepEqual(fixture.requests, []);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("journal job rejects routine commands before model inference", async () => {
+  const fixture = await fixtureServer();
+  try {
+    const result = await runProcessor(
+      fixture.baseUrl,
+      "journal",
+      "Use speech synthesis for the narration.",
+    );
+    assert.equal(result.entries, 0);
+    assert.equal(result.skipped, "low-value-transcript");
+    assert.equal(result.decision.outcome, "filtered");
+    assert.equal(result.decision.modelInvoked, false);
+    assert.deepEqual(fixture.requests, []);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("journal job removes status noise but keeps a meaningful sentence", async () => {
+  const learning = "I learned that stable identifiers make retries idempotent.";
+  const fixture = await fixtureServer(0.93, [{
+    type: "learning",
+    text: "Stable identifiers make retries idempotent.",
+    topics: ["idempotency", "retries"],
+    evidenceQuote: learning,
+  }]);
+  try {
+    const result = await runProcessor(
+      fixture.baseUrl,
+      "journal",
+      `System connected successfully. ${learning}`,
+    );
+    assert.equal(result.entries, 1);
+    const modelRequest = fixture.requests.find((request) => request.path === "/api/chat");
+    assert.equal(modelRequest.body.messages.at(-1).content, learning);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("journal job persists only grounded, meaningful model entries", async () => {
+  const fixture = await fixtureServer(0.93, [
+    {
+      type: "idea",
+      text: "Use confidence training to improve reasoning models.",
+      topics: ["confidence training", "reasoning models"],
+      evidenceQuote: "confidence training could improve reasoning models",
+    },
+    {
+      type: "learning",
+      text: "The owner is affiliated with a university.",
+      topics: ["education"],
+      evidenceQuote: "confidence training",
+    },
+    {
+      type: "thought",
+      text: "The idea of it.",
+      topics: ["idea"],
+      evidenceQuote: "idea",
+    },
+    {
+      type: "decision",
+      text: "Use confidence training for reasoning models.",
+      topics: ["confidence training"],
+      evidenceQuote: "confidence training could improve reasoning models",
+    },
+  ]);
+  try {
+    const result = await runProcessor(
+      fixture.baseUrl,
+      "journal",
+      "I think confidence training could improve reasoning models; that is my idea.",
+    );
+    assert.equal(result.entries, 1);
+    const journalRequest = fixture.requests.find((request) => request.path === "/v1/digital-twin/journal");
+    assert.deepEqual(journalRequest.body.entries, [{
+      id: `${result.captureId}:entry:1`,
+      type: "idea",
+      text: "Use confidence training to improve reasoning models.",
+      topics: ["confidence training", "reasoning models"],
+    }]);
   } finally {
     await fixture.close();
   }

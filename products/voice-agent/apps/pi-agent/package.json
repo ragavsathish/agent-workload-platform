@@ -17,6 +17,9 @@
     "eval:classifier": "pnpm run build && PROMPTFOO_DISABLE_TELEMETRY=1 PROMPTFOO_DISABLE_UPDATE=1 PROMPTFOO_DISABLE_REMOTE_GENERATION=true PROMPTFOO_DISABLE_SHARING=1 PROMPTFOO_SELF_HOSTED=1 PROMPTFOO_SAFE_MODE=true promptfoo eval -c digital-twin/eval/promptfooconfig.mjs --no-share",
     "eval:judge-calibration": "pnpm run build && PROMPTFOO_DISABLE_TELEMETRY=1 PROMPTFOO_DISABLE_UPDATE=1 PROMPTFOO_DISABLE_REMOTE_GENERATION=true PROMPTFOO_DISABLE_SHARING=1 PROMPTFOO_SELF_HOSTED=1 PROMPTFOO_SAFE_MODE=true promptfoo eval -c digital-twin/eval/judge-calibration.promptfooconfig.mjs --no-share",
     "eval:judge-report": "node digital-twin/eval/summarize-judge-results.mjs",
+    "eval:journal-export": "node digital-twin/eval/journal-annotation-export.mjs",
+    "eval:journal-finalize": "node digital-twin/eval/journal-annotation-finalize.mjs",
+    "eval:journal-reviewed": "pnpm run build && node digital-twin/eval/journal-reviewed-eval.mjs",
     "eval:classifier:view": "promptfoo view"
   },
   "dependencies": {

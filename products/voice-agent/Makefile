@@ -14,7 +14,8 @@ WASM_ACTIONS := setup build check install clean
 .PHONY: config-init config-check
 .PHONY: grafana-c4-dashboard digital-twin-image-build digital-twin-load digital-twin-query
 .PHONY: digital-twin-validate digital-twin-test digital-twin-identify-skills
-.PHONY: digital-twin-capture-journal digital-twin-eval digital-twin-judge-calibration
+.PHONY: digital-twin-capture-journal digital-twin-eval digital-twin-journal-export digital-twin-journal-finalize
+.PHONY: digital-twin-journal-eval digital-twin-judge-calibration
 .PHONY: digital-twin-judge-report digital-twin-pull-judge digital-twin-load-judge
 .PHONY: db-init gitea-sync broker worker pull-model
 
@@ -246,6 +247,15 @@ digital-twin-capture-journal:
 
 digital-twin-eval:
 	pnpm --dir apps/pi-agent eval:classifier $(ARGS)
+
+digital-twin-journal-export:
+	pnpm --dir apps/pi-agent eval:journal-export -- $(ARGS)
+
+digital-twin-journal-finalize:
+	pnpm --dir apps/pi-agent eval:journal-finalize -- $(ARGS)
+
+digital-twin-journal-eval:
+	pnpm --dir apps/pi-agent eval:journal-reviewed -- $(ARGS)
 
 digital-twin-judge-calibration:
 	pnpm --dir apps/pi-agent eval:judge-calibration $(ARGS)

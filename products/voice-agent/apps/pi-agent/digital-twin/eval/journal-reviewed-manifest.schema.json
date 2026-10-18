@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:awp:digital-twin:journal-reviewed-manifest:v1",
+  "title": "Private reviewed cognitive-journal evaluation manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["formatVersion", "datasetId", "privacyReview", "cases"],
+  "properties": {
+    "formatVersion": { "const": 1 },
+    "datasetId": { "type": "string", "minLength": 1 },
+    "privacyReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reviewedAt"],
+      "properties": {
+        "status": { "const": "passed" },
+        "reviewedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "semanticFamilyId",
+          "split",
+          "sourceKind",
+          "errorSlice",
+          "annotationStatus",
+          "transcript",
+          "expectedEntries"
+        ],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "semanticFamilyId": { "type": "string", "minLength": 1 },
+          "split": {
+            "enum": ["development", "challenge", "locked_holdout", "production_shadow"]
+          },
+          "sourceKind": { "type": "string", "minLength": 1 },
+          "errorSlice": { "type": "string", "minLength": 1 },
+          "annotationStatus": { "enum": ["reviewed", "adjudicated"] },
+          "transcript": { "type": "string", "minLength": 1 },
+          "expectedEntries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "text", "evidenceQuote"],
+              "properties": {
+                "type": {
+                  "enum": ["thought", "idea", "question", "decision", "goal", "learning", "unclassified"]
+                },
+                "text": { "type": "string", "minLength": 1, "maxLength": 1000 },
+                "evidenceQuote": { "type": "string", "minLength": 1, "maxLength": 500 },
+                "topics": {
+                  "type": "array",
+                  "maxItems": 8,
+                  "items": { "type": "string", "minLength": 1, "maxLength": 120 }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
