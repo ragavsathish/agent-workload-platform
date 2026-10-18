@@ -157,7 +157,7 @@ The scorer should calculate:
 5. **Calibration**
    - multiclass Brier score;
    - expected calibration error using fixed, documented bins;
-   - accuracy and volume above and below the `0.82` review threshold;
+   - accuracy and volume above and below the configured production review threshold;
    - reliability data in the JSON/Markdown report.
 
 Do not let the LLM judge replace these labels. Expected classes and invariants remain deterministic.

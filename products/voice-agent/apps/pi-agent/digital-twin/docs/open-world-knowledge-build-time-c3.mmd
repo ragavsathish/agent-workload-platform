@@ -1,0 +1,72 @@
+flowchart TB
+    owner["Owner / Reviewer<br/><small>[Person · HITL authority]</small><br/>Approves labels, experiment scope, training, qualification, and promotion"]
+    oxigraph[("Oxigraph<br/><small>[External container: RDF database]</small><br/>Authoritative reviewed feedback and evidence")]
+    git[("Git Repository<br/><small>[External container: source store]</small><br/>Prompts, ontology, evaluators, configs, aggregate baselines, and rollback revisions")]
+    dvc[("DVC + Private S3-compatible Store<br/><small>[External container: artifact store]</small><br/>Reviewed datasets, split manifests, and reproducibility evidence")]
+
+    subgraph buildtime["Digital Twin Learning Toolchain — Component view (C3 build-time scope)"]
+        direction TB
+
+        exporter["Reviewed Evidence Exporter<br/><small>[Component]</small><br/>Applies owner decisions, atomizes turns, redacts content, and emits approval provenance"]
+        validator["Dataset & Split Validator<br/><small>[Component]</small><br/>Checks schema, legal labels, privacy, duplicates, and semantic-family isolation"]
+        contract["Experiment Contract Controller<br/><small>[Component · HITL authorization gate]</small><br/>Freezes the human-approved baseline, mutable scope, evaluators, metrics, safety gates, budget, and stop conditions"]
+        prompt_loop["Prompt / Policy Autoresearch Runner<br/><small>[Component]</small><br/>Runs bounded development and challenge experiments without opening the locked holdout"]
+        training["Training Orchestrator<br/><small>[Component]</small><br/>Selects approved Oumi generative training or the Clef-specific trainer and enforces smoke tests"]
+        qualification["Qualification Runner<br/><small>[Component]</small><br/>Serves the exact candidate through the production-compatible boundary and invokes product evals"]
+        lineage["Artifact & Lineage Manager<br/><small>[Component]</small><br/>Links dataset, config, code, run, checkpoint, package, and evaluation digests"]
+        promotion["Promotion Coordinator<br/><small>[Component · HITL promotion gate]</small><br/>Requires explicit human approval, immutable artifact identity, rollback target, and observation plan"]
+
+        exporter -->|"submits reviewed rows and manifest"| validator
+        validator -->|"supplies approved split digests"| contract
+        contract -->|"authorizes prompt/policy search"| prompt_loop
+        contract -->|"authorizes training only after evidence gate"| training
+        prompt_loop -->|"submits frozen prompt/config candidate"| qualification
+        training -->|"submits immutable checkpoint candidate"| lineage
+        lineage -->|"resolves exact artifact"| qualification
+        qualification -->|"records reports and gate results"| lineage
+        qualification -->|"presents qualified candidate"| promotion
+    end
+
+    evals["Promptfoo + Journal Harnesses<br/><small>[External container: evaluation tools]</small><br/>Development/challenge metrics, robustness and variance, then one locked-holdout qualification"]
+    oumi["Oumi<br/><small>[External container: training engine]</small><br/>Approved journal SFT, LoRA, or QLoRA; training loss remains diagnostic"]
+    clef["Clef-specific Trainer<br/><small>[External container: training engine]</small><br/>SystemOne joint schema head plus approved LoRA parameters"]
+    telemetry["OpenTelemetry Pipeline<br/><small>[External container: observability]</small><br/>Bounded run, failure, checkpoint, duration, and resource signals"]
+    mlflow["MLflow<br/><small>[External container: tracking and model registry]</small><br/>Approved training lineage and immutable qualified model versions"]
+    runtime["Digital Twin Runtime<br/><small>[External container: deployment target]</small><br/>Loads an explicitly promoted prompt/configuration or model artifact"]
+
+    owner -->|"reviews source decisions"| oxigraph
+    owner -->|"authorizes experiment and training scope"| contract
+    owner -->|"approves promotion"| promotion
+    oxigraph -->|"exports reviewed evidence only"| exporter
+    validator -->|"versions private dataset bundle"| dvc
+    dvc -->|"provides immutable split manifests"| contract
+    dvc -->|"provides approved evaluation rows"| qualification
+    git -->|"provides versioned policy and evaluator revisions"| contract
+    prompt_loop -->|"runs fixed development/challenge evaluators"| evals
+    evals -->|"returns product metrics and gate failures"| prompt_loop
+    training -->|"runs approved generative experiment"| oumi
+    training -->|"runs approved classifier experiment"| clef
+    oumi -->|"returns adapter checkpoint and run diagnostics"| training
+    clef -->|"returns joint-head and adapter checkpoint"| training
+    training -.->|"exports privacy-safe run signals"| telemetry
+    prompt_loop -.->|"exports bounded experiment signals"| telemetry
+    qualification -->|"runs exact candidate; locked holdout only after freeze"| evals
+    evals -->|"returns qualification report"| qualification
+    lineage -->|"logs approved run lineage; registers only qualified models"| mlflow
+    promotion -->|"commits promoted prompt/config revision"| git
+    promotion -->|"moves approved model alias"| mlflow
+    promotion -->|"releases exact digest with rollback plan"| runtime
+
+    classDef hitl fill:#ccfbf1,stroke:#0f766e,color:#134e4a,stroke-width:3px;
+    classDef component fill:#dbeafe,stroke:#1d4ed8,color:#102a56,stroke-width:1.5px;
+    classDef authority fill:#dcfce7,stroke:#15803d,color:#123d20,stroke-width:1.5px;
+    classDef evaluation fill:#f3e8ff,stroke:#7e22ce,color:#3b125d,stroke-width:1.5px;
+    classDef trainingEngine fill:#ffedd5,stroke:#c2410c,color:#52200b,stroke-width:1.5px;
+    classDef external fill:#f3f4f6,stroke:#4b5563,color:#1f2937,stroke-width:1.5px;
+
+    class owner,contract,promotion hitl;
+    class exporter,validator,prompt_loop,training,qualification,lineage component;
+    class oxigraph,git,dvc authority;
+    class evals evaluation;
+    class oumi,clef trainingEngine;
+    class telemetry,mlflow,runtime external;

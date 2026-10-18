@@ -23,7 +23,8 @@ The digital twin listens outside the Pi voice service. A separate launch agent s
 sessions and fans each completed owner turn into independently retryable `digital-twin-journal` and
 `digital-twin-classify` Absurd tasks. The stable Pi session and message IDs form each branch's
 idempotency identity, so listener restarts and queue retries cannot create duplicate journal facts
-or review candidates.
+or review candidates. Each persisted prompt carries user-versus-developer origin metadata; the
+listener excludes developer bootstrap turns before they reach either extraction branch.
 
 Each handler runs the transcript in its own disposable Gondolin microVM. The
 guest has no workspace mount or public internet access. Synthetic networking permits only:
@@ -92,6 +93,62 @@ make digital-twin-query QUERY=apps/pi-agent/digital-twin/runtime/rdf/queries/jou
 
 The CV, conversation, videos, and repositories are sources, not ontologies. Conversation statements
 and learning evidence remain separate and should not become durable profile facts without review.
+
+### Journal observation and feedback
+
+Every production journal task returns a payload-free decision summary containing the extractor
+version, sentence counts, whether the model ran, and model/grounded/rejected entry counts. The
+worker exports only these bounded counts and the outcomes `filtered`, `no-entries`, or `written` to
+OpenTelemetry. Capture IDs, transcripts, entry text, topics, and identities are never metric
+attributes.
+
+Owner-authenticated feedback is stored separately in
+`urn:awp:digital-twin:graph:journal-feedback`:
+
+- `POST /v1/digital-twin/journal/{entryId}/feedback` records `keep`, `delete`, `edit`, or
+  `wrong_type`; edits require `correctedText` and wrong-type reports require `correctedType`.
+- `POST /v1/digital-twin/journal/misses` records an expected entry omitted from a known capture.
+- `GET /v1/digital-twin/journal/feedback` uses the read-only digital-twin capability to export the
+  private, human-reviewed evidence for offline evaluation.
+
+Deleted entries are excluded from journal queries while their correction event remains available
+for evaluation. Never use unreviewed model output as a gold label.
+
+### Reviewed journal evaluation
+
+Extraction quality is measured on private, human-reviewed production captures, not with unit tests.
+The first command samples the journal graph into an ignored review queue. Predictions are included
+only as reviewer suggestions and are removed from the finalized manifest:
+
+```bash
+make digital-twin-journal-export \
+  ARGS='--output apps/pi-agent/digital-twin/eval/private-manifests/journal-review.draft.json --limit 40'
+```
+
+Review every case, including explicit empty cases. Redact secrets, set `privacyReview.status` to
+`passed` with `reviewedAt`, assign each case an error slice and semantic family, and change its
+annotation status to `reviewed` or `adjudicated`. Each expected entry needs an exact contiguous
+`evidenceQuote` from the transcript. Keep every semantic family in one split.
+
+Finalize the queue only after that human work is complete. Finalization fails closed on pending
+privacy review, pending annotations, unassigned error slices, invalid evidence, or split leakage:
+
+```bash
+make digital-twin-journal-finalize \
+  ARGS='--input apps/pi-agent/digital-twin/eval/private-manifests/journal-review.draft.json --output apps/pi-agent/digital-twin/eval/private-manifests/journal-review.json'
+```
+
+Evaluate through the same transcript prefilter and extraction boundary used in production:
+
+```bash
+make digital-twin-journal-eval \
+  ARGS='--input apps/pi-agent/digital-twin/eval/private-manifests/journal-review.json --output apps/pi-agent/digital-twin/eval/private-results/journal-review --split development'
+```
+
+The result includes row-level matches and failures, aggregate capture and entry precision/recall/F1,
+per-type confusion, error-slice metrics, latency, operational failures, and immutable dataset,
+configuration, runtime, and evaluator digests. Locked holdout evaluation requires the explicit
+`--allow-locked-holdout` flag and should run once for a promotion decision.
 
 ## Transcript ingestion contract
 
@@ -171,6 +228,23 @@ them from semantic agreement. It reports them separately instead of converting t
 Provider credentials are read only from environment variables. Promptfoo sharing is disabled and
 local result files are ignored because evaluation artifacts contain the full test inputs and model
 outputs.
+
+## Classifier artifacts
+
+DVC versions privacy-reviewed reproducibility bundles against the loopback-only S3Mock service. Git
+stores only `artifacts.dvc`, configuration, and the bundle schema; the ignored `artifacts/`
+directory contains reviewed manifests, configuration, and aggregate qualification evidence. MLflow
+owns model versions and aliases; DVC records their immutable model-version/run references rather
+than duplicating model weights. No Hugging Face account or service is involved.
+
+```bash
+make digital-twin-artifact-add
+make digital-twin-artifact-verify
+```
+
+The verification command validates the manifest, pushes the current bundle, restores it into a
+clean temporary DVC checkout, and byte-compares the fixture. See
+[`docs/artifact-management.md`](docs/artifact-management.md) for lifecycle and privacy rules.
 
 ## Private data
 

@@ -39,6 +39,35 @@ test("listener emits only owner turns followed by a completed assistant message"
   }]);
 });
 
+test("listener excludes developer bootstrap turns using persisted origin metadata", () => {
+  const turns = completedOwnerTurns("session-1", [
+    {
+      type: "custom",
+      id: "origin-1",
+      parentId: null,
+      timestamp: "2026-10-17T09:59:59.000Z",
+      customType: "voice.turn-origin",
+      data: { origin: "developer" },
+    },
+    {
+      type: "message",
+      id: "bootstrap-1",
+      parentId: "origin-1",
+      timestamp: "2026-10-17T10:00:00.000Z",
+      message: { role: "user", content: "The authenticated user is owner@example.com.", timestamp: 1 },
+    },
+    {
+      type: "message",
+      id: "assistant-1",
+      parentId: "bootstrap-1",
+      timestamp: "2026-10-17T10:00:01.000Z",
+      message: { role: "assistant", content: [{ type: "text", text: "Voice interface ready." }], timestamp: 2 },
+    },
+  ]);
+
+  assert.deepEqual(turns, []);
+});
+
 test("listener submits the stable Pi session and message identity", async () => {
   const originalFetch = globalThis.fetch;
   let request;

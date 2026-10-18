@@ -29,6 +29,7 @@ export default class VonProvider {
             choice: decision.profileField,
             confidence: decision.profileFieldConfidence,
           },
+          review: decision.review,
         }),
         metadata: { model: process.env.VON_MODEL || "von-1.3.0" },
       };

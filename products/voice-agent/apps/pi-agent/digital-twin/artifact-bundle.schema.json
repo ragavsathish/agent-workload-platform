@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:awp:digital-twin:clef-artifact-bundle:v1",
+  "title": "Digital twin classifier reproducibility bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "artifactId",
+    "kind",
+    "createdAt",
+    "contents",
+    "provenance",
+    "privacy"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "artifactId": { "type": "string", "minLength": 1 },
+    "kind": {
+      "enum": ["integration-fixture", "dataset-snapshot", "evaluation-bundle", "reproducibility-bundle"]
+    },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "contents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "sha256", "role"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "role": {
+            "enum": [
+              "dataset-manifest",
+              "split-manifest",
+              "training-config",
+              "aggregate-qualification",
+              "integration-fixture"
+            ]
+          }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "codeRevision",
+        "baseModelRevision",
+        "datasetManifestDigest",
+        "trainingConfigDigest",
+        "promptfooReportDigest"
+      ],
+      "properties": {
+        "codeRevision": { "type": "string" },
+        "baseModelRevision": { "type": "string" },
+        "datasetManifestDigest": { "type": "string" },
+        "trainingConfigDigest": { "type": "string" },
+        "promptfooReportDigest": { "type": "string" }
+      }
+    },
+    "modelReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["registeredModelName", "modelVersion", "runId"],
+      "properties": {
+        "registeredModelName": { "type": "string", "minLength": 1 },
+        "modelVersion": { "type": "string", "minLength": 1 },
+        "runId": { "type": "string", "minLength": 1 }
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "containsRawTranscripts",
+        "containsDatasetRows",
+        "containsOptimizerState",
+        "containsRowLevelEvaluation"
+      ],
+      "properties": {
+        "containsRawTranscripts": { "const": false },
+        "containsDatasetRows": { "const": false },
+        "containsOptimizerState": { "const": false },
+        "containsRowLevelEvaluation": { "const": false }
+      }
+    }
+  }
+}

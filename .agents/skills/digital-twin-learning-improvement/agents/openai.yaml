@@ -1,0 +1,4 @@
+interface:
+  display_name: "Digital Twin Learning Improvement"
+  short_description: "Run safe learning and autoresearch loops"
+  default_prompt: "Use $digital-twin-learning-improvement to improve classifier or journal extraction through reviewed annotations, bounded autoresearch, and gated evaluation."
