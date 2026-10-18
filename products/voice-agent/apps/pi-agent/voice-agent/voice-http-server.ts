@@ -18,6 +18,7 @@ type VoiceAgentPort = {
   contextSnapshot(): PublicContextUsage;
   compact(): Promise<PublicContextUsage>;
   abort(): Promise<void>;
+  detachTaskSession(): Promise<void>;
   turn(messages: unknown): Promise<string>;
   streamTurn(messages: unknown, onDelta: (delta: string) => void): Promise<string>;
 };
@@ -36,6 +37,7 @@ type VoiceRoute =
   | { kind: "context" }
   | { kind: "compact" }
   | { kind: "abort" }
+  | { kind: "detach-task" }
   | { kind: "turn"; stream: boolean }
   | { kind: "not-found" };
 
@@ -49,6 +51,7 @@ export function matchVoiceRoute(method = "", url = ""): VoiceRoute {
   if (method === "GET" && url === "/v1/context") return { kind: "context" };
   if (method === "POST" && url === "/v1/context/compact") return { kind: "compact" };
   if (method === "POST" && url === "/v1/turn/abort") return { kind: "abort" };
+  if (method === "POST" && url === "/v1/tasks/detach") return { kind: "detach-task" };
   if (method === "POST" && (url === "/v1/turn" || url === "/v1/turn/stream")) {
     return { kind: "turn", stream: url.endsWith("/stream") };
   }
@@ -119,6 +122,10 @@ export function createVoiceHttpServer(options: {
     if (route.kind === "abort") {
       await agent.abort();
       return sendJson(response, 200, { status: "stopped" });
+    }
+    if (route.kind === "detach-task") {
+      await agent.detachTaskSession();
+      return sendJson(response, 200, { status: "detached" });
     }
     if (route.kind === "new-session" || route.kind === "resume-session") {
       try {

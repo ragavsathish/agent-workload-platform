@@ -1,6 +1,6 @@
-import { chmod, mkdir, readFile } from "node:fs/promises";
+import { chmod, mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { parseEnv } from "node:util";
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
@@ -25,6 +25,11 @@ export type ServiceSettings = {
   listenPort: number;
   model?: ModelSelector;
   prometheusEndpointUrl: string;
+  remoteTaskSocketDir: string;
+  playwrightTraceArtifactRoot: string;
+  playwrightTraceOutputRoot: string;
+  playwrightTraceRenderer: string;
+  playwrightTraceViewerBaseUrl: string;
   sessionDir: string;
   serviceToken: string;
   skillsDir: string;
@@ -48,14 +53,6 @@ const thinkingLevels = new Set<ThinkingLevel>([
   "xhigh",
   "max",
 ]);
-
-export function parseEnvFile(content: string): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(parseEnv(content)).filter(
-      (entry): entry is [string, string] => typeof entry[1] === "string",
-    ),
-  );
-}
 
 function requiredEnv(environment: NodeJS.ProcessEnv, name: string): string {
   const value = environment[name]?.trim();
@@ -104,9 +101,7 @@ function modelSelector(value: string | undefined): ModelSelector | undefined {
 export async function loadSettings(
   environment: NodeJS.ProcessEnv = process.env,
 ): Promise<ServiceSettings> {
-  const envFile = environment.PI_VOICE_ENV_FILE;
-  const fileEnvironment = envFile ? parseEnvFile(await readFile(envFile, "utf8")) : {};
-  const env: NodeJS.ProcessEnv = { ...fileEnvironment, ...environment };
+  const env = environment;
   const thinking = (env.PI_VOICE_THINKING?.trim() || "low") as ThinkingLevel;
   if (!thinkingLevels.has(thinking)) throw new Error("invalid PI_VOICE_THINKING");
 
@@ -137,6 +132,22 @@ export async function loadSettings(
     prometheusEndpointUrl: httpUrl(
       env.PROMETHEUS_ENDPOINT_URL || "http://127.0.0.1:9091",
       "PROMETHEUS_ENDPOINT_URL",
+    ),
+    remoteTaskSocketDir: resolve(
+      env.PI_TASK_RPC_SOCKET_DIR
+        || `/tmp/awp-pi-rpc-${process.getuid?.() ?? "owner"}`,
+    ),
+    playwrightTraceArtifactRoot: resolve(env.PLAYWRIGHT_TRACE_ARTIFACT_ROOT || tmpdir()),
+    playwrightTraceOutputRoot: resolve(
+      env.PLAYWRIGHT_TRACE_OUTPUT_ROOT || join(tmpdir(), "playwright-trace-renders"),
+    ),
+    playwrightTraceRenderer: resolve(
+      env.PLAYWRIGHT_TRACE_RENDERER
+        || join(process.cwd(), "products/voice-agent/apps/client/tool/prototype-trace-explainer.mjs"),
+    ),
+    playwrightTraceViewerBaseUrl: httpUrl(
+      env.PLAYWRIGHT_TRACE_VIEWER_BASE_URL || "http://127.0.0.1:9450",
+      "PLAYWRIGHT_TRACE_VIEWER_BASE_URL",
     ),
     sessionDir,
     serviceToken: requiredEnv(env, "INFERENCE_BROKER_TOKEN"),

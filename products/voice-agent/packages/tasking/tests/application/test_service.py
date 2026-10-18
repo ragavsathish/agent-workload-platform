@@ -1,6 +1,12 @@
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from voice_agent.tasking.application.service import TaskService
+from voice_agent.tasking.application.service import (
+    TaskService,
+    bounded_trace_context,
+    persisted_plan_hash_is_valid,
+)
+from voice_agent.tasking.domain.approval import plan_hash
 from voice_agent.tasking.infrastructure.config import Settings
 
 
@@ -24,7 +30,9 @@ def settings(tmp_path: Path) -> Settings:
     )
 
 
-def test_digital_twin_turn_uses_a_retryable_idempotent_task(tmp_path: Path, monkeypatch) -> None:
+def test_digital_twin_turn_uses_a_retryable_idempotent_task(
+    tmp_path: Path, monkeypatch
+) -> None:
     observed = []
 
     class Queue:
@@ -48,25 +56,107 @@ def test_digital_twin_turn_uses_a_retryable_idempotent_task(tmp_path: Path, monk
         captured_at="2026-10-17T10:00:00Z",
     )
 
-    assert result == {"tasks": {
-        "journal": {
-            "task_id": "task-1",
-            "idempotency_key": "digital-twin:journal:session-7:user-3",
-        },
-        "classify": {
-            "task_id": "task-1",
-            "idempotency_key": "digital-twin:classify:session-7:user-3",
-        },
-    }}
+    assert result == {
+        "tasks": {
+            "journal": {
+                "task_id": "task-1",
+                "idempotency_key": "digital-twin:journal:session-7:user-3",
+            },
+            "classify": {
+                "task_id": "task-1",
+                "idempotency_key": "digital-twin:classify:session-7:user-3",
+            },
+        }
+    }
     assert [call["task"] for call in observed] == [
         "digital-twin-journal",
         "digital-twin-classify",
     ]
-    assert all(call["payload"]["transcript"] == "I want durable memory." for call in observed)
+    assert all(
+        call["payload"]["transcript"] == "I want durable memory." for call in observed
+    )
     assert [call["payload"]["mode"] for call in observed] == ["journal", "classify"]
-    assert [call["options"] for call in observed] == [{
-        "max_attempts": 3,
-        "queue": "agents",
-        "cancellation": {"max_duration": 180},
-        "idempotency_key": f"digital-twin:{mode}:session-7:user-3",
-    } for mode in ("journal", "classify")]
+    assert [call["options"] for call in observed] == [
+        {
+            "max_attempts": 3,
+            "queue": "agents",
+            "cancellation": {"max_duration": 180},
+            "idempotency_key": f"digital-twin:{mode}:session-7:user-3",
+        }
+        for mode in ("journal", "classify")
+    ]
+
+
+def test_task_view_exposes_the_persisted_session_album(
+    tmp_path: Path, monkeypatch
+) -> None:
+    service = TaskService(settings(tmp_path))
+    monkeypatch.setattr(service, "_task_result", lambda _task_id: None)
+    now = datetime.now(UTC)
+
+    view = service._view(
+        {
+            "id": "7e635c29-8840-4aad-b840-f6d5a344ef68",
+            "identity": "owner@example.com",
+            "instruction": "Inspect the repository",
+            "workspace": str(tmp_path),
+            "session_album_key": "kind-of-blue",
+            "session_name": "Kind of Blue",
+            "plan_hash": "a" * 64,
+            "status": "pending",
+            "task_id": None,
+            "created_at": now,
+            "expires_at": now + timedelta(minutes=5),
+        },
+        include_token=False,
+    )
+
+    assert view["session_name"] == "Kind of Blue"
+    assert view["session_reference"] == {
+        "artist": "Miles Davis",
+        "spotify_url": "https://open.spotify.com/album/1weenld61qoidwYuZ1GESA",
+    }
+
+
+def test_plan_hash_accepts_legacy_rows_but_new_rows_bind_the_album() -> None:
+    row = {
+        "instruction": "Inspect the repository",
+        "workspace": "/workspace",
+        "session_album_key": "kind-of-blue",
+        "session_name": "Kind of Blue · Take 2",
+    }
+    legacy = plan_hash(
+        {"instruction": row["instruction"], "workspace": row["workspace"]}
+    )
+    album_only = plan_hash(
+        {
+            "instruction": row["instruction"],
+            "workspace": row["workspace"],
+            "session_album_key": row["session_album_key"],
+        }
+    )
+    current = plan_hash(row)
+
+    assert persisted_plan_hash_is_valid({**row, "plan_hash": legacy})
+    assert persisted_plan_hash_is_valid({**row, "plan_hash": album_only})
+    assert persisted_plan_hash_is_valid({**row, "plan_hash": current})
+    assert not persisted_plan_hash_is_valid(
+        {**row, "session_album_key": "blue-train", "plan_hash": current}
+    )
+    assert not persisted_plan_hash_is_valid(
+        {**row, "session_name": "Kind of Blue · Take 3", "plan_hash": current}
+    )
+
+
+def test_durable_trace_context_keeps_only_bounded_w3c_fields() -> None:
+    assert bounded_trace_context(
+        {
+            "traceparent": "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01",
+            "tracestate": "vendor=value",
+            "baggage": "private=value",
+        }
+    ) == {
+        "traceparent": "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01",
+        "tracestate": "vendor=value",
+    }
+    assert bounded_trace_context({"traceparent": "x" * 513}) == {}

@@ -59,7 +59,9 @@ install: build
 	@"$(WASSETTE)" component unload --component-dir "$(COMPONENT_DIR)" "$(COMPONENT_ID)" >/dev/null 2>&1 || true
 	"$(WASSETTE)" component load --component-dir "$(COMPONENT_DIR)" "file://$(CURDIR)/$(WASM)"
 	"$(WASSETTE)" permission grant network --component-dir "$(COMPONENT_DIR)" "$(COMPONENT_ID)" 127.0.0.1:9444
+	"$(WASSETTE)" permission grant network --component-dir "$(COMPONENT_DIR)" "$(COMPONENT_ID)" 127.0.0.1:9450
 	"$(WASSETTE)" permission grant environment-variable --component-dir "$(COMPONENT_DIR)" "$(COMPONENT_ID)" TASK_GATEWAY_BASE_URL
 	"$(WASSETTE)" permission grant environment-variable --component-dir "$(COMPONENT_DIR)" "$(COMPONENT_ID)" TASK_GATEWAY_TOKEN
 	"$(WASSETTE)" permission grant environment-variable --component-dir "$(COMPONENT_DIR)" "$(COMPONENT_ID)" TASK_IDENTITY
+	"$(WASSETTE)" permission grant environment-variable --component-dir "$(COMPONENT_DIR)" "$(COMPONENT_ID)" TRACE_RENDER_BASE_URL
 	"$(WASSETTE)" inspect --component-dir "$(COMPONENT_DIR)" "$(COMPONENT_ID)"

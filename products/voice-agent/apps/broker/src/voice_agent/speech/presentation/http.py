@@ -20,7 +20,6 @@ from typing import Annotated, Any
 
 import httpx
 import numpy as np
-from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from loguru import logger
@@ -33,7 +32,6 @@ from voice_agent.speech.infrastructure.parakeet_stt import load_model
 # The broker handles raw voice data. Do not emit library or application logs from this process.
 logger.remove()
 
-load_dotenv(os.getenv("INFERENCE_BROKER_ENV_FILE", ".env"), override=True)
 telemetry = configure_telemetry("pipecat-mlx-inference")
 
 MAX_AUDIO_BYTES = int(os.getenv("BROKER_MAX_AUDIO_BYTES", "4194304"))
@@ -542,6 +540,27 @@ async def abort_pi_turn(request: Request, _: None = Depends(authenticate)) -> Re
         raise HTTPException(status_code=502, detail="Pi turn could not be stopped") from exc
     if response.status_code != 200 or len(response.content) > 16_384:
         raise HTTPException(status_code=502, detail="Pi turn could not be stopped")
+    return Response(
+        content=response.content,
+        media_type="application/json",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/v1/pi/tasks/detach", response_model=None)
+async def detach_pi_task(request: Request, _: None = Depends(authenticate)) -> Response:
+    """Release the voice process's live attachment to a durable Pi task."""
+
+    try:
+        response = await request.app.state.http.post(
+            f"{_pi_service_url()}/v1/tasks/detach",
+            headers={"Authorization": f"Bearer {BROKER_TOKEN}"},
+            timeout=10.0,
+        )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="Pi task could not be detached") from exc
+    if response.status_code != 200 or len(response.content) > 16_384:
+        raise HTTPException(status_code=502, detail="Pi task could not be detached")
     return Response(
         content=response.content,
         media_type="application/json",

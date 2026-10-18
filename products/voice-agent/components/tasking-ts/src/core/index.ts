@@ -3,6 +3,8 @@ import request from "request";
 const MAX_INSTRUCTION_CHARS = 20_000;
 const MAX_WORKSPACE_CHARS = 4_096;
 const MAX_PROPOSAL_ID_CHARS = 256;
+const MAX_SESSION_NAME_CHARS = 200;
+const OPAQUE_ID = /^[a-f0-9]{32}$/u;
 
 function requiredText(value: string, name: string, maximum: number): string {
   const normalized = value.trim();
@@ -36,6 +38,19 @@ function validPayload(payload: string): string {
   return JSON.stringify(parsed);
 }
 
+function singleTask(payload: string): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payload);
+  } catch {
+    throw new Error("agent gateway returned invalid JSON");
+  }
+  if (!Array.isArray(parsed) || parsed.length !== 1) {
+    throw new Error("task session name did not resolve to exactly one task");
+  }
+  return validPayload(JSON.stringify(parsed[0]));
+}
+
 function proposalId(payload: string): string {
   const parsed: unknown = JSON.parse(validPayload(payload));
   if (!parsed || typeof parsed !== "object" || !("id" in parsed)) {
@@ -61,10 +76,32 @@ export function getAgentTask(taskId: string): string {
   return call("get", proposalPath(taskId));
 }
 
+export function findAgentTask(sessionName: string): string {
+  const name = requiredText(sessionName, "session name", MAX_SESSION_NAME_CHARS);
+  const path = `/tasks?session_name=${encodeURIComponent(name)}&limit=2`;
+  return singleTask(request("get", path, undefined));
+}
+
 function approveAgentTask(proposalIdValue: string): string {
   return call("post", proposalPath(proposalIdValue, "/approve"), "{}");
 }
 
 export function cancelAgentTask(taskId: string): string {
   return call("post", proposalPath(taskId, "/cancel"), "{}");
+}
+
+function opaqueId(value: string, name: string): string {
+  const id = value.trim();
+  if (!OPAQUE_ID.test(id)) throw new Error(`${name} must be a 32-character lowercase hex ID`);
+  return id;
+}
+
+export function submitTraceRender(traceId: string): string {
+  return call("post", "/api/trace-explainers", JSON.stringify({
+    traceId: opaqueId(traceId, "trace ID"),
+  }));
+}
+
+export function getTraceRender(renderId: string): string {
+  return call("get", `/api/trace-explainers/${opaqueId(renderId, "render ID")}`);
 }

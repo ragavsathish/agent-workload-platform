@@ -40,6 +40,9 @@ class Settings:
     task_timeout_seconds: int
     max_output_bytes: int
     skills_dir: Path | None
+    pi_rpc_host_binary: Path = Path("/opt/homebrew/bin/pi-task-rpc")
+    pi_rpc_socket_dir: Path = Path(f"/tmp/awp-pi-rpc-{os.getuid()}")
+    pi_rpc_idle_seconds: float = 30.0
     artifact_endpoint_url: str = ""
     artifact_bucket: str = ""
     artifact_access_key: str = ""
@@ -85,6 +88,16 @@ class Settings:
                 if _value("PI_TASK_SKILLS_DIR")
                 else None
             ),
+            pi_rpc_host_binary=Path(
+                _value("PI_TASK_RPC_HOST_BINARY", "/opt/homebrew/bin/pi-task-rpc")
+            ).expanduser(),
+            pi_rpc_socket_dir=Path(
+                _value(
+                    "PI_TASK_RPC_SOCKET_DIR",
+                    f"/tmp/awp-pi-rpc-{os.getuid()}",
+                )
+            ).expanduser(),
+            pi_rpc_idle_seconds=float(os.getenv("PI_TASK_RPC_IDLE_SECONDS", "30")),
             artifact_endpoint_url=_value("ARTIFACT_ENDPOINT_URL"),
             artifact_bucket=_value("ARTIFACT_BUCKET", "agent-artifacts"),
             artifact_access_key=_value("ARTIFACT_ACCESS_KEY", "local-test"),

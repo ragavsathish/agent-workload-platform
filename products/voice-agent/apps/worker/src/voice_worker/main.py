@@ -8,14 +8,20 @@ import os
 import subprocess
 import tempfile
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, cast
 
 from absurd_sdk import Absurd, TaskContext
-from dotenv import load_dotenv
+from opentelemetry.context import attach, detach
+from opentelemetry.propagate import extract, inject
 from psycopg import OperationalError
 from voice_agent.shared.telemetry import configure_telemetry
-from voice_agent.tasking.application.pi_response import parse_pi_event_stream, presentation_prompt
+from voice_agent.tasking.application.pi_response import (
+    parse_pi_event_stream,
+    presentation_prompt,
+)
 from voice_agent.tasking.domain.workspaces import resolve_workspace
 from voice_agent.tasking.infrastructure.artifacts import ArtifactStore
 from voice_agent.tasking.infrastructure.config import Settings
@@ -23,16 +29,39 @@ from voice_agent.tasking.infrastructure.config import Settings
 telemetry = configure_telemetry("pipecat-task-worker")
 logger = logging.getLogger(__name__)
 
+
 DATABASE_RETRY_DELAY_SECONDS = 2.0
 
 
-def build_pi_command(settings: Settings, *, task_id: str, instruction: str) -> list[str]:
+@contextmanager
+def continue_task_trace(params: dict[str, Any]) -> Iterator[None]:
+    """Continue bounded W3C context carried by one durable task envelope."""
+    candidate = params.get("trace_context")
+    carrier = (
+        {
+            key: value
+            for key in ("traceparent", "tracestate")
+            if isinstance((value := candidate.get(key)), str) and 0 < len(value) <= 512
+        }
+        if isinstance(candidate, dict)
+        else {}
+    )
+    token = attach(extract(carrier))
+    try:
+        yield
+    finally:
+        detach(token)
+
+
+def build_pi_command(settings: Settings, *, task_id: str) -> list[str]:
     command = [
         settings.pi_binary,
         "--mode",
-        "json",
-        "--print",
-        "--no-session",
+        "rpc",
+        "--session-id",
+        task_id,
+        "--session-dir",
+        str(settings.pi_session_dir),
         "--thinking",
         settings.pi_thinking,
         "--no-extensions",
@@ -49,14 +78,31 @@ def build_pi_command(settings: Settings, *, task_id: str, instruction: str) -> l
         command.extend(["--no-builtin-tools", "--extension", str(settings.gondolin_extension)])
     elif not settings.allow_unsandboxed:
         raise RuntimeError("PI_GONDOLIN_EXTENSION is required unless WORKER_ALLOW_UNSANDBOXED=true")
-    command.extend(["--", presentation_prompt(instruction)])
     return command
+
+
+def build_rpc_command(settings: Settings, *, task_id: str) -> list[str]:
+    return [
+        str(settings.pi_rpc_host_binary),
+        "--socket-dir",
+        str(settings.pi_rpc_socket_dir),
+        "--task-id",
+        task_id,
+        "--idle-seconds",
+        str(settings.pi_rpc_idle_seconds),
+        "--timeout-seconds",
+        str(settings.task_timeout_seconds),
+        "--",
+        *build_pi_command(settings, task_id=task_id),
+    ]
 
 
 def validate_worker(settings: Settings) -> None:
     settings.require_api()
     if not Path(settings.pi_binary).is_file():
         raise RuntimeError(f"Pi binary not found: {settings.pi_binary}")
+    if not settings.pi_rpc_host_binary.is_file():
+        raise RuntimeError(f"Pi RPC host binary not found: {settings.pi_rpc_host_binary}")
     if settings.gondolin_extension and not settings.gondolin_extension.is_file():
         raise RuntimeError(f"Gondolin extension not found: {settings.gondolin_extension}")
     if settings.skills_dir and not settings.skills_dir.is_dir():
@@ -66,34 +112,54 @@ def validate_worker(settings: Settings) -> None:
     if settings.artifact_workspaces:
         settings.worker_scratch_root.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.chmod(settings.worker_scratch_root, 0o700)
+    settings.pi_session_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(settings.pi_session_dir, 0o700)
+    settings.pi_rpc_socket_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(settings.pi_rpc_socket_dir, 0o700)
+    if settings.pi_rpc_idle_seconds < 0 or settings.pi_rpc_idle_seconds > 300:
+        raise RuntimeError("PI_TASK_RPC_IDLE_SECONDS must be between 0 and 300")
 
 
 def run_pi(
-    settings: Settings, *, task_id: str, instruction: str, workspace: Path
+    settings: Settings,
+    *,
+    task_id: str,
+    instruction: str,
+    workspace: Path,
 ) -> dict[str, Any]:
-    command = build_pi_command(settings, task_id=task_id, instruction=instruction)
-    with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
-        completed = subprocess.run(
-            command,
-            cwd=workspace,
-            env=os.environ.copy(),
-            stdin=subprocess.DEVNULL,
-            stdout=stdout_file,
-            stderr=stderr_file,
-            timeout=settings.task_timeout_seconds,
-            check=False,
-        )
+    with telemetry.observe("agent-task.pi-rpc"):
+        command = build_rpc_command(settings, task_id=task_id)
+        process_environment = os.environ.copy()
+        trace_carrier: dict[str, str] = {}
+        inject(trace_carrier)
+        if traceparent := trace_carrier.get("traceparent"):
+            process_environment["TRACEPARENT"] = traceparent
+        if tracestate := trace_carrier.get("tracestate"):
+            process_environment["TRACESTATE"] = tracestate
+        with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
+            completed = subprocess.run(
+                command,
+                cwd=workspace,
+                env=process_environment,
+                input=presentation_prompt(instruction).encode("utf-8"),
+                stdout=stdout_file,
+                stderr=stderr_file,
+                timeout=settings.task_timeout_seconds + 10,
+                check=False,
+            )
 
-        def tail(file) -> str:
-            file.seek(0, os.SEEK_END)
-            file.seek(max(file.tell() - settings.max_output_bytes, 0))
-            return file.read().decode("utf-8", errors="replace")
+            def tail(file) -> str:
+                file.seek(0, os.SEEK_END)
+                file.seek(max(file.tell() - settings.max_output_bytes, 0))
+                return file.read().decode("utf-8", errors="replace")
 
-        stderr = tail(stderr_file)
-        if completed.returncode != 0:
-            raise RuntimeError(f"Pi exited with {completed.returncode}: {stderr[-2000:]}")
-        stdout_file.seek(0)
-        response = parse_pi_event_stream(stdout_file)
+            stderr = tail(stderr_file)
+            if completed.returncode != 0:
+                raise RuntimeError(
+                    f"Pi RPC host exited with {completed.returncode}: {stderr[-2000:]}"
+                )
+            stdout_file.seek(0)
+            response = parse_pi_event_stream(stdout_file)
     return {
         "exit_code": completed.returncode,
         "response": {
@@ -128,6 +194,29 @@ def run_digital_twin(settings: Settings, payload: dict[str, Any]) -> dict[str, A
     return cast(dict[str, Any], result)
 
 
+def record_journal_decision(result: dict[str, Any]) -> None:
+    """Emit only bounded journal decision metrics, never transcript or entry text."""
+    if result.get("mode") != "journal":
+        return
+    decision = result.get("decision")
+    if not isinstance(decision, dict):
+        return
+    outcome = decision.get("outcome")
+    if outcome not in {"filtered", "no-entries", "written"}:
+        outcome = "invalid"
+    telemetry.record("digital_twin.journal.decision", outcome=outcome)
+    for field, operation in (
+        ("inputSentences", "digital_twin.journal.sentences.input"),
+        ("eligibleSentences", "digital_twin.journal.sentences.eligible"),
+        ("modelEntries", "digital_twin.journal.entries.model"),
+        ("groundedEntries", "digital_twin.journal.entries.written"),
+        ("rejectedEntries", "digital_twin.journal.entries.rejected"),
+    ):
+        count = decision.get(field)
+        if isinstance(count, int) and 0 < count <= 100:
+            telemetry.record(operation, count=count)
+
+
 def create_worker(settings: Settings) -> Absurd:
     validate_worker(settings)
     absurd = Absurd(settings.database_url, queue_name=settings.queue, default_max_attempts=1)
@@ -149,17 +238,20 @@ def create_worker(settings: Settings) -> Absurd:
         default_cancellation={"max_duration": settings.task_timeout_seconds + 60},
     )
     def agent_run(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
-        with telemetry.observe("task.run"):
-            return run_agent_task(params, ctx)
+        with continue_task_trace(params):
+            with telemetry.observe("task.run"):
+                return run_agent_task(params, ctx)
 
     def run_digital_twin_ingestion(
         params: dict[str, Any], ctx: TaskContext
     ) -> dict[str, Any]:
         with telemetry.observe("digital_twin.ingest"):
-            return cast(
+            result = cast(
                 dict[str, Any],
                 ctx.step("run-digital-twin-vm", lambda: run_digital_twin(settings, params)),
             )
+            record_journal_decision(result)
+            return result
 
     for task_name in (
         "digital-twin-journal",
@@ -256,7 +348,6 @@ def run_worker(settings: Settings) -> None:
 
 
 def main() -> None:
-    load_dotenv(override=True)
     settings = Settings.from_env()
     run_worker(settings)
 

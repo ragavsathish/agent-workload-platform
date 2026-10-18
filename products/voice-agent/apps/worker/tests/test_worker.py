@@ -2,11 +2,22 @@ import json
 import subprocess
 from dataclasses import replace
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pytest
+from opentelemetry.propagate import inject
 from psycopg import OperationalError
 from voice_agent.tasking.infrastructure.config import Settings
-from voice_worker.main import build_pi_command, run_digital_twin, run_worker
+
+from voice_worker.main import (
+    build_pi_command,
+    build_rpc_command,
+    continue_task_trace,
+    record_journal_decision,
+    run_digital_twin,
+    run_pi,
+    run_worker,
+)
 
 
 def settings(tmp_path: Path, *, sandboxed: bool) -> Settings:
@@ -26,28 +37,84 @@ def settings(tmp_path: Path, *, sandboxed: bool) -> Settings:
         task_timeout_seconds=60,
         max_output_bytes=1024,
         skills_dir=tmp_path / "skills",
+        pi_rpc_host_binary=tmp_path / "pi-task-rpc",
+        pi_rpc_socket_dir=tmp_path / "rpc",
+        pi_rpc_idle_seconds=0,
     )
 
 
 def test_command_uses_only_explicit_gondolin_tools(tmp_path: Path) -> None:
-    command = build_pi_command(
-        settings(tmp_path, sandboxed=True), task_id="abc", instruction="work"
-    )
+    command = build_pi_command(settings(tmp_path, sandboxed=True), task_id="abc")
     assert "--no-builtin-tools" in command
-    assert "--no-session" in command
-    assert "--session-id" not in command
-    assert "--session-dir" not in command
+    assert command[command.index("--mode") + 1] == "rpc"
+    assert command[command.index("--session-id") + 1] == "abc"
+    assert command[command.index("--session-dir") + 1] == str(tmp_path / "sessions")
     assert "--extension" in command
     assert "--no-skills" in command
     assert command[command.index("--skill") + 1] == str(tmp_path / "skills")
-    assert command[-2] == "--"
-    assert command[-1].startswith("work\n\n")
-    assert '"spoken" and "presentation"' in command[-1]
+    assert "work" not in command
+    rpc = build_rpc_command(settings(tmp_path, sandboxed=True), task_id="abc")
+    assert rpc[:3] == [str(tmp_path / "pi-task-rpc"), "--socket-dir", str(tmp_path / "rpc")]
+    assert rpc[rpc.index("--task-id") + 1] == "abc"
+    assert rpc[rpc.index("--") + 1:] == command
 
 
 def test_command_refuses_unsandboxed_execution_by_default(tmp_path: Path) -> None:
     with pytest.raises(RuntimeError, match="PI_GONDOLIN_EXTENSION"):
-        build_pi_command(settings(tmp_path, sandboxed=False), task_id="abc", instruction="work")
+        build_pi_command(settings(tmp_path, sandboxed=False), task_id="abc")
+
+
+def test_run_pi_uses_rust_rpc_host_and_returns_the_initial_settled_response(
+    tmp_path: Path, monkeypatch
+) -> None:
+    executable = tmp_path / "fake-rpc-host"
+    executable.write_text(
+        """#!/usr/bin/env python3
+import json
+import os
+import sys
+assert "spoken" in sys.stdin.read()
+assert os.environ["TRACEPARENT"] == "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+answer = {"spoken": "Done.", "presentation": {"kind": "status", "title": "Done", "nodes": [{"id": "done", "label": "Done"}], "edges": []}}
+print(json.dumps({"type": "message_end", "message": {"role": "assistant", "content": [{"type": "text", "text": json.dumps(answer)}]}}))
+print(json.dumps({"type": "agent_settled"}))
+""",
+        encoding="utf-8",
+    )
+    executable.chmod(0o700)
+    monkeypatch.setattr(
+        "voice_worker.main.inject",
+        lambda carrier: carrier.update(
+            {"traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"}
+        ),
+    )
+    with TemporaryDirectory(prefix="awp-rpc-", dir="/tmp") as rpc_directory:
+        configured = replace(
+            settings(tmp_path, sandboxed=True),
+            pi_rpc_host_binary=executable,
+            skills_dir=None,
+            pi_rpc_socket_dir=Path(rpc_directory),
+        )
+
+        result = run_pi(
+            configured,
+            task_id="00000000-0000-0000-0000-000000000001",
+            instruction="Work",
+            workspace=tmp_path,
+        )
+
+    assert result["exit_code"] == 0
+    assert result["response"]["spoken"] == "Done."
+
+
+def test_durable_task_continues_the_queued_trace_context() -> None:
+    observed: dict[str, str] = {}
+    traceparent = "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01"
+
+    with continue_task_trace({"trace_context": {"traceparent": traceparent}}):
+        inject(observed)
+
+    assert observed["traceparent"] == traceparent
 
 
 def test_digital_twin_task_invokes_the_dedicated_vm_runner(tmp_path: Path, monkeypatch) -> None:
@@ -67,6 +134,39 @@ def test_digital_twin_task_invokes_the_dedicated_vm_runner(tmp_path: Path, monke
     assert observed["command"] == [configured.node_binary, str(runner)]
     assert json.loads(observed["input"])["sessionId"] == "session-7"
     assert result == {"entries": 1}
+
+
+def test_journal_decision_metrics_are_payload_free(monkeypatch) -> None:
+    observed = []
+
+    class FixedTelemetry:
+        @staticmethod
+        def record(operation, *, outcome="ok", count=1, duration_seconds=None):
+            observed.append((operation, outcome, count, duration_seconds))
+
+    monkeypatch.setattr("voice_worker.main.telemetry", FixedTelemetry())
+    record_journal_decision({
+        "mode": "journal",
+        "captureId": "private-correlation-id",
+        "decision": {
+            "outcome": "written",
+            "inputSentences": 3,
+            "eligibleSentences": 2,
+            "modelEntries": 2,
+            "groundedEntries": 1,
+            "rejectedEntries": 1,
+        },
+    })
+
+    assert observed == [
+        ("digital_twin.journal.decision", "written", 1, None),
+        ("digital_twin.journal.sentences.input", "ok", 3, None),
+        ("digital_twin.journal.sentences.eligible", "ok", 2, None),
+        ("digital_twin.journal.entries.model", "ok", 2, None),
+        ("digital_twin.journal.entries.written", "ok", 1, None),
+        ("digital_twin.journal.entries.rejected", "ok", 1, None),
+    ]
+    assert "private-correlation-id" not in repr(observed)
 
 
 def test_worker_reconnects_after_a_temporary_database_outage(
