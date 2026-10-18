@@ -6,6 +6,31 @@
       - ansible_facts.architecture in ['arm64', 'aarch64', 'x86_64']
     fail_msg: Host services require a supported macOS host.
 
+- name: Configure the dotenvx Homebrew tap
+  community.general.homebrew_tap:
+    name: dotenvx/brew
+    state: present
+
+- name: Inspect trusted Homebrew packages
+  ansible.builtin.command:
+    argv: [brew, trust, --json=v1]
+  register: host_services_homebrew_trust
+  changed_when: false
+
+- name: Trust the official dotenvx Homebrew tap
+  ansible.builtin.command:
+    argv: [brew, trust, --tap, dotenvx/brew]
+  changed_when: true
+  when: >-
+    'dotenvx/brew' not in
+    ((host_services_homebrew_trust.stdout | from_json).taps | default([]))
+
+- name: Install the dotenvx runtime
+  community.general.homebrew:
+    name: dotenvx
+    state: present
+    update_homebrew: false
+
 - name: Inspect stable skills source
   ansible.builtin.stat:
     path: "{{ host_services_stable_skills_dir }}"
@@ -46,7 +71,9 @@
     - { name: Fluent Bit, path: /opt/homebrew/bin/fluent-bit, kind: executable }
     - { name: pnpm, path: /opt/homebrew/bin/pnpm, kind: executable }
     - { name: uv, path: /opt/homebrew/bin/uv, kind: executable }
+    - { name: dotenvx, path: /opt/homebrew/bin/dotenvx, kind: executable }
     - { name: Wassette, path: "{{ host_services_wassette_bin }}", kind: executable }
+    - { name: Pi RPC supervisor artifact, path: "{{ host_services_pi_rpc_artifact }}", kind: executable }
   register: host_services_prerequisites
   loop_control:
     label: "{{ item.name }}"
@@ -81,7 +108,8 @@
     that:
       - item.stat.isreg | default(false)
       - item.stat.size | default(0) > 0
-    fail_msg: Host environments are missing; run make host-services-env first.
+      - item.stat.mode == '0600'
+    fail_msg: Host environments are missing; run make setup and configure deploy/host-env.
     quiet: true
   loop: "{{ host_services_environment_files.results }}"
   no_log: true
@@ -99,6 +127,13 @@
     state: directory
     mode: "0700"
   loop: "{{ host_services_secure_directories }}"
+
+- name: Install the Pi RPC supervisor
+  ansible.builtin.copy:
+    src: "{{ host_services_pi_rpc_artifact }}"
+    dest: "{{ host_services_bin_dir }}/pi-task-rpc"
+    mode: "0755"
+  notify: Restart host services
 
 - name: Create private classifier cache
   ansible.builtin.file:

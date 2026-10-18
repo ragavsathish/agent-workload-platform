@@ -1,5 +1,6 @@
 ---
 host_services_runtime_dir: "{{ ansible_facts.user_dir }}/Library/Application Support/PipecatEdge"
+host_services_bin_dir: "{{ host_services_runtime_dir }}/bin"
 host_services_logs_dir: "{{ ansible_facts.user_dir }}/Library/Logs/PipecatEdge"
 host_services_agents_dir: "{{ ansible_facts.user_dir }}/Library/LaunchAgents"
 host_services_gondolin_runtime: "{{ host_services_runtime_dir }}/gondolin-agent"
@@ -16,12 +17,15 @@ host_services_stable_skills_dir: "{{ host_services_runtime_dir }}/skills-source"
 host_services_skills_runtime: "{{ host_services_runtime_dir }}/skills"
 host_services_domain: "gui/{{ ansible_facts.user_uid }}"
 host_services_architecture: "{{ 'aarch64' if ansible_facts.architecture in ['arm64', 'aarch64'] else 'x86_64' }}"
+host_services_pi_rpc_artifact_architecture: "{{ 'arm64' if ansible_facts.architecture in ['arm64', 'aarch64'] else 'x86_64' }}"
+host_services_pi_rpc_artifact: "{{ voice_agent_root }}/apps/pi-rpc-host/dist/pi-task-rpc-darwin-{{ host_services_pi_rpc_artifact_architecture }}"
 host_services_gondolin_assets_source: "{{ voice_agent_root }}/../../artifacts/gondolin-browser/{{ host_services_architecture }}"
 host_services_builder_assets_source: "{{ voice_agent_root }}/../../artifacts/gondolin-builder/{{ host_services_architecture }}"
 host_services_wassette_override: "{{ lookup('ansible.builtin.env', 'WASSETTE_BIN') }}"
 host_services_skills_override: "{{ lookup('ansible.builtin.env', 'PI_VOICE_SKILLS_SOURCE') }}"
 
 host_services_runtime_directories:
+  - bin
   - apps/broker/src
   - apps/classifier
   - apps/pi-voice

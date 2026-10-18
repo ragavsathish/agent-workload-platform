@@ -6,11 +6,12 @@ Application tests remain in their native language when they exercise an
 in-process module or a local adapter.
 
 Docker Compose reads only `deploy/.env` plus explicit files in
-`deploy/secrets/`. `make config-init` initializes missing secret files and
-`make host-services-env` projects the same private configuration into ignored,
-least-privilege files under `deploy/host-env/`. Ansible treats those files as
-opaque inputs: it validates and installs them, but does not parse configuration
-or render secrets.
+`deploy/secrets/`. Native services read their own ignored, least-privilege files
+under `deploy/host-env/`; `make setup` initializes missing files from
+`deploy/host-env.example/`. Dotenvx injects each service file at process startup.
+Ansible installs the dotenvx CLI from its official Homebrew tap and treats
+configuration files as opaque inputs: it validates and copies them, but does not
+parse or render configuration.
 
 Install the pinned collections once:
 

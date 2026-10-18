@@ -20,6 +20,9 @@
       - pipecat-task-worker
       - pipecat-image-builder
       - pipecat-gitea-runner
+    remote_session_operations:
+      - client.attached
+      - command
   tasks:
     - name: Read deployment configuration
       ansible.builtin.set_fact:
@@ -119,6 +122,23 @@
       when: blackbox_full_e2e | bool
       no_log: true
 
+    - name: Snapshot remote-session metrics
+      ansible.builtin.uri:
+        url: >-
+          http://127.0.0.1:3300/api/datasources/proxy/uid/prometheus/api/v1/query?query={{
+          ('sum(pipecat_operation_total{service_namespace="pipecat-mlx-voice",service_name="pi-task-rpc",app_operation="'
+           + item + '",app_outcome="ok"}) or vector(0)') | urlencode }}
+        method: GET
+        user: admin
+        password: "{{ lookup('ansible.builtin.file', voice_agent_root + '/deploy/secrets/grafana-admin-password') }}"
+        force_basic_auth: true
+        return_content: true
+        status_code: 200
+      loop: "{{ remote_session_operations }}"
+      register: blackbox_remote_metrics_before
+      when: lookup('ansible.builtin.env', 'BLACKBOX_REQUIRE_REMOTE_ATTACH') | default('false', true) | bool
+      no_log: true
+
     - name: Stream synthetic speech through the deployed edge
       community.docker.docker_compose_v2_exec:
         project_src: "{{ compose_project_src }}"
@@ -203,6 +223,33 @@
       retries: 15
       delay: 2
       when: blackbox_full_e2e | bool
+      no_log: true
+
+    - name: Verify fresh remote-session attachment and conversation metrics
+      ansible.builtin.uri:
+        url: >-
+          http://127.0.0.1:3300/api/datasources/proxy/uid/prometheus/api/v1/query?query={{
+          ('sum(pipecat_operation_total{service_namespace="pipecat-mlx-voice",service_name="pi-task-rpc",app_operation="'
+           + item + '",app_outcome="ok"}) or vector(0)') | urlencode }}
+        method: GET
+        user: admin
+        password: "{{ lookup('ansible.builtin.file', voice_agent_root + '/deploy/secrets/grafana-admin-password') }}"
+        force_basic_auth: true
+        return_content: true
+        status_code: 200
+      loop: "{{ remote_session_operations }}"
+      loop_control:
+        index_var: remote_metric_index
+      register: blackbox_remote_metrics_after
+      until:
+        - blackbox_remote_metrics_after.json.data.result | length == 1
+        - >-
+          blackbox_remote_metrics_after.json.data.result[0].value[1] | float
+          > blackbox_remote_metrics_before.results[remote_metric_index]
+              .json.data.result[0].value[1] | float
+      retries: 15
+      delay: 2
+      when: lookup('ansible.builtin.env', 'BLACKBOX_REQUIRE_REMOTE_ATTACH') | default('false', true) | bool
       no_log: true
 
     - name: Verify component lifecycle metrics
