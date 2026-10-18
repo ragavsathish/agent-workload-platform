@@ -6,9 +6,17 @@ from unittest.mock import patch
 
 import httpx
 from fastapi import HTTPException, Request
+from opentelemetry.context import attach, detach
+from opentelemetry.trace import (
+    NonRecordingSpan,
+    SpanContext,
+    TraceFlags,
+    set_span_in_context,
+)
 
 from bot import (
     broker_sessions_request,
+    owner_gateway_request,
     validate_http_identity,
     validate_ingress_identity,
 )
@@ -171,6 +179,54 @@ class SessionTelemetryTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(payload["id"], "persisted-session")
         self.assertEqual(operations, ["browser.pi.sessions.resume"])
+
+
+class GatewayTracePropagationTest(unittest.IsolatedAsyncioTestCase):
+    async def test_owner_gateway_request_propagates_the_active_trace_context(self):
+        observed_headers: dict[str, str] = {}
+
+        async def handler(upstream_request: httpx.Request) -> httpx.Response:
+            observed_headers.update(upstream_request.headers)
+            return httpx.Response(200, request=upstream_request, json=[])
+
+        @contextmanager
+        def observe(_operation: str):
+            yield
+
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        span_context = SpanContext(
+            trace_id=int("1234567890abcdef1234567890abcdef", 16),
+            span_id=int("1234567890abcdef", 16),
+            is_remote=False,
+            trace_flags=TraceFlags(TraceFlags.SAMPLED),
+        )
+        token = attach(set_span_in_context(NonRecordingSpan(span_context)))
+        try:
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "AGENT_GATEWAY_BASE_URL": "http://gateway.test/v1",
+                        "AGENT_GATEWAY_TOKEN": "x" * 32,
+                        "EDGE_ALLOWED_USERS": "owner@example.com",
+                        "PIPECAT_ALLOWED_ORIGINS": "https://voice.example.test",
+                    },
+                ),
+                patch("bot.httpx.AsyncClient", return_value=client),
+                patch("bot.telemetry", SimpleNamespace(observe=observe)),
+            ):
+                await owner_gateway_request(
+                    request("GET", identity="owner@example.com"),
+                    "GET",
+                    "/tasks",
+                )
+        finally:
+            detach(token)
+
+        self.assertEqual(
+            observed_headers["traceparent"],
+            "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01",
+        )
 
 
 if __name__ == "__main__":

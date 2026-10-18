@@ -30,6 +30,17 @@ class ProposalError(ValueError):
     """A safe proposal lifecycle error."""
 
 
+def bounded_trace_context(carrier: dict[str, str] | None) -> dict[str, str]:
+    """Keep only bounded W3C context required to continue a durable trace."""
+    if carrier is None:
+        return {}
+    return {
+        key: value
+        for key in ("traceparent", "tracestate")
+        if isinstance((value := carrier.get(key)), str) and 0 < len(value) <= 512
+    }
+
+
 class TaskService:
     def __init__(self, settings: Settings):
         settings.require_api()
@@ -152,9 +163,18 @@ class TaskService:
         row = self._get_owned(identity, proposal_id)
         return self._view(row, include_token=True)
 
-    def approve(self, *, identity: str, proposal_id: str, token: str) -> dict[str, Any]:
+    def approve(
+        self,
+        *,
+        identity: str,
+        proposal_id: str,
+        token: str,
+        trace_context: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         try:
-            claims = verify_approval(token, identity=identity, secret=self.settings.approval_secret)
+            claims = verify_approval(
+                token, identity=identity, secret=self.settings.approval_secret
+            )
         except ApprovalError as exc:
             raise ProposalError(str(exc)) from exc
         if claims.proposal_id != proposal_id:
@@ -195,10 +215,13 @@ class TaskService:
                             "identity": identity,
                             "instruction": row["instruction"],
                             "workspace": row["workspace"],
+                            "trace_context": bounded_trace_context(trace_context),
                         },
                         max_attempts=1,
                         queue=self.settings.queue,
-                        cancellation={"max_duration": self.settings.task_timeout_seconds + 60},
+                        cancellation={
+                            "max_duration": self.settings.task_timeout_seconds + 60
+                        },
                         idempotency_key=f"voice-proposal:{row['id']}",
                     )
                 cursor.execute(

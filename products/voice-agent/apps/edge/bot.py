@@ -13,6 +13,7 @@ import httpx
 from dotenv import load_dotenv
 from fastapi import HTTPException, Request
 from loguru import logger
+from opentelemetry.propagate import inject
 from pipecat.adapters.schemas.direct_function import DirectFunction
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
@@ -359,20 +360,26 @@ async def owner_gateway_request(
     path: str,
     *,
     body: dict[str, object] | None = None,
+    query: dict[str, str | int] | None = None,
 ) -> object:
     """Proxy one owner-scoped task operation through the narrow gateway."""
     identity = validate_http_identity(request)
     headers = {"Authorization": f"Bearer {required_env('AGENT_GATEWAY_TOKEN')}"}
     url = f"{required_env('AGENT_GATEWAY_BASE_URL').rstrip('/')}{path}"
-    async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0)) as client:
-        if method == "GET":
-            response = await client.request(
-                method, url, headers=headers, params={"identity": identity}
-            )
-        else:
-            response = await client.request(
-                method, url, headers=headers, json={"identity": identity, **(body or {})}
-            )
+    with telemetry.observe("task.gateway"):
+        inject(headers)
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0)) as client:
+            if method == "GET":
+                response = await client.request(
+                    method,
+                    url,
+                    headers=headers,
+                    params={"identity": identity, **(query or {})},
+                )
+            else:
+                response = await client.request(
+                    method, url, headers=headers, json={"identity": identity, **(body or {})}
+                )
     if response.is_error:
         try:
             detail = response.json().get("detail", "task request failed")
@@ -465,7 +472,11 @@ async def run_bot(transport: BaseTransport, identity: str):
     async def gateway_request(method: str, path: str, **kwargs) -> dict[str, object]:
         operation = f"gateway.{method.lower()}"
         with telemetry.observe(operation):
-            response = await http_client.request(method, path, **kwargs)
+            request_headers = dict(kwargs.pop("headers", {}))
+            inject(request_headers)
+            response = await http_client.request(
+                method, path, headers=request_headers, **kwargs
+            )
             if response.is_error:
                 try:
                     detail = response.json().get("detail", "request failed")
@@ -475,6 +486,22 @@ async def run_bot(transport: BaseTransport, identity: str):
             payload = response.json()
             if not isinstance(payload, dict):
                 raise RuntimeError("agent gateway returned an invalid response")
+            return payload
+
+    async def gateway_list_request(path: str, **kwargs) -> list[dict[str, object]]:
+        with telemetry.observe("gateway.get"):
+            request_headers = dict(kwargs.pop("headers", {}))
+            inject(request_headers)
+            response = await http_client.get(path, headers=request_headers, **kwargs)
+            if response.is_error:
+                try:
+                    detail = response.json().get("detail", "request failed")
+                except ValueError:
+                    detail = "request failed"
+                raise RuntimeError(f"agent gateway rejected the request: {detail}")
+            payload = response.json()
+            if not isinstance(payload, list) or not all(isinstance(item, dict) for item in payload):
+                raise RuntimeError("agent gateway returned an invalid task list")
             return payload
 
     async def propose_agent_task(params: FunctionCallParams) -> None:

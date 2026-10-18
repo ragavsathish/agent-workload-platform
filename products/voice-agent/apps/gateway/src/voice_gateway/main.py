@@ -21,6 +21,7 @@ from typing import Annotated, Literal
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi import Path as ApiPath
+from opentelemetry.propagate import inject
 from pydantic import BaseModel, Field
 from voice_agent.shared.telemetry import configure_telemetry
 from voice_agent.tasking.application.pi_response import parse_pi_event_stream, response_from_text
@@ -712,17 +713,18 @@ async def approve(
         identity = normalized_identity(body.identity)
         try:
             tasks = service()
-            pending = await asyncio.to_thread(
-                tasks.get, identity=identity, proposal_id=proposal_id
-            )
+            pending = await asyncio.to_thread(tasks.get, identity=identity, proposal_id=proposal_id)
             token = pending.get("approval_token")
             if not isinstance(token, str):
                 raise ProposalError("proposal is not available for approval")
+            trace_context: dict[str, str] = {}
+            inject(trace_context)
             result = await asyncio.to_thread(
                 tasks.approve,
                 identity=identity,
                 proposal_id=proposal_id,
                 token=token,
+                trace_context=trace_context,
             )
             return voice_view(result)
         except ProposalError as exc:
