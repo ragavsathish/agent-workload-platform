@@ -26,8 +26,8 @@ world tasking-core {
     /// Cancel one pending or running durable task.
     export cancel-agent-task: func(task-id: string) -> result<string, string>;
 
-    /// Submit a durable narrated-video render for one opaque Playwright trace ID.
-    export submit-trace-render: func(trace-id: string) -> result<string, string>;
+    /// Submit a durable narrated-video render for the active Playwright trace and conversational intent.
+    export submit-trace-render: func(trace-id: string, narration-brief: string) -> result<string, string>;
 
     /// Read the durable state and completed video URL for one trace render.
     export get-trace-render: func(render-id: string) -> result<string, string>;

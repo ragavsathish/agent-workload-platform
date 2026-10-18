@@ -1,0 +1,1 @@
+- Trusted reusable skills are mounted read-only at /skills.

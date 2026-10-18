@@ -9,7 +9,6 @@ import {
   type ExtensionAPI,
   type McpTransportFactory,
 } from "@earendil-works/pi-coding-agent";
-import { parse } from "smol-toml";
 
 import { GondolinSession } from "./session.js";
 
@@ -35,27 +34,16 @@ type ProjectVmConfig = {
   cpus?: number;
   policy?: string;
 };
-type RuntimePromptLayers = {
-  runtime: string;
-  skills: string;
-  isolation: string;
-  network_enabled: string;
-  network_disabled: string;
-};
-
 const extensionDir = path.dirname(fileURLToPath(import.meta.url));
 const runtimeDir = path.basename(extensionDir) === "dist"
   ? path.dirname(extensionDir)
   : extensionDir;
 const repositoryRoot = path.resolve(runtimeDir, "..", "..", "..");
 const architecture = os.arch() === "arm64" ? "aarch64" : os.arch() === "x64" ? "x86_64" : "unsupported";
-const runtimePromptKeys = [
-  "runtime",
-  "skills",
-  "isolation",
-  "network_enabled",
-  "network_disabled",
-] as const satisfies readonly (keyof RuntimePromptLayers)[];
+const runtimePrompt = readCapabilityPrompt("runtime");
+const skillsPrompt = readCapabilityPrompt("skills");
+const networkEnabledPrompt = readCapabilityPrompt("network-enabled");
+const networkDisabledPrompt = readCapabilityPrompt("network-disabled");
 
 function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
@@ -71,22 +59,11 @@ function readJsonObject(filePath: string): Record<string, unknown> {
   return parsed;
 }
 
-function readRuntimePrompt(filePath: string): RuntimePromptLayers {
-  const parsed: unknown = parse(fs.readFileSync(filePath, "utf8"));
-  if (!record(parsed) || !record(parsed.layers)) {
-    throw new Error(`${filePath} must contain a layers table`);
-  }
-  const keys = Object.keys(parsed.layers);
-  if (keys.length !== runtimePromptKeys.length
-    || runtimePromptKeys.some((key) => !keys.includes(key))) {
-    throw new Error(`${filePath} must define exactly: ${runtimePromptKeys.join(", ")}`);
-  }
-  for (const key of runtimePromptKeys) {
-    if (typeof parsed.layers[key] !== "string" || !parsed.layers[key].trim()) {
-      throw new Error(`${filePath} layer ${key} must be a non-empty string`);
-    }
-  }
-  return parsed.layers as RuntimePromptLayers;
+function readCapabilityPrompt(name: string): string {
+  const filePath = path.join(extensionDir, "prompts", name, "APPEND_SYSTEM.md");
+  const prompt = fs.readFileSync(filePath, "utf8").trim();
+  if (!prompt) throw new Error(`${filePath} must not be empty`);
+  return prompt;
 }
 
 function insideDirectory(directory: string, filePath: string): boolean {
@@ -173,13 +150,11 @@ function deferredCodingTools(
 
 function runtimeInstructions(
   config: ResolvedGondolinConfig,
-  layers: RuntimePromptLayers,
 ): string {
   return [
-    layers.runtime,
-    ...(config.skillsDirectory ? [layers.skills] : []),
-    layers.isolation,
-    config.networkEnabled ? layers.network_enabled : layers.network_disabled,
+    runtimePrompt,
+    ...(config.skillsDirectory ? [skillsPrompt] : []),
+    config.networkEnabled ? networkEnabledPrompt : networkDisabledPrompt,
   ].join("\n");
 }
 
@@ -188,19 +163,12 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
   let session: GondolinSession | undefined;
   let codingTools: CodingTools | undefined;
   let config: ResolvedGondolinConfig | undefined;
-  let prompt: RuntimePromptLayers | undefined;
   let configurationError: Error | undefined;
 
   const activeConfig = (): ResolvedGondolinConfig => {
     if (configurationError) throw configurationError;
     if (!config) throw new Error("Gondolin Agent Session is not configured");
     return config;
-  };
-
-  const activePrompt = (): RuntimePromptLayers => {
-    if (configurationError) throw configurationError;
-    if (!prompt) throw new Error("Gondolin Agent Session prompt is not configured");
-    return prompt;
   };
 
   const activeCodingTools = (): CodingTools => {
@@ -235,7 +203,6 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
       skillsDirectory: process.env.PI_TASK_SKILLS_DIR,
       fallbackPublicInternet: process.env.GONDOLIN_PUBLIC_INTERNET === "1",
     });
-    prompt = readRuntimePrompt(path.join(extensionDir, "prompt.toml"));
   } catch (error) {
     configurationError = asError(error);
   }
@@ -277,9 +244,7 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
 
   pi.on("before_agent_start", (event) => {
     activeCodingTools();
-    return {
-      systemPrompt: `${event.systemPrompt}\n\n${runtimeInstructions(activeConfig(), activePrompt())}`,
-    };
+    event.systemPromptOptions.sections.gondolin_runtime = runtimeInstructions(activeConfig());
   });
 
   if (process.env.GONDOLIN_BROWSER_TOOLS === "1") {

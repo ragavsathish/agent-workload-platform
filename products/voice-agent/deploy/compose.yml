@@ -101,6 +101,7 @@ services:
       ARTIFACT_SECRET_KEY: ${ARTIFACT_SECRET_KEY:-local-test}
       INFERENCE_BROKER_BASE_URL: http://host.docker.internal:9443/v1
       INFERENCE_BROKER_TOKEN_FILE: /run/secrets/broker-token
+      INFERENCE_LLM_MODEL: ${OLLAMA_MODEL}
       TRACE_RENDER_WORKER_PORT: "9460"
       TRACE_RENDER_TIMEOUT_MS: "600000"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-lgtm:4318

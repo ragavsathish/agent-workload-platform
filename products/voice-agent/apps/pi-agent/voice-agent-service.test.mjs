@@ -41,8 +41,11 @@ import {
   readVoiceSession,
 } from "./dist/voice-agent/voice-sessions.js";
 
+const promptEvent = () => ({ systemPromptOptions: { sections: {} } });
+
 test("orchestrator Pi registers Wassette through native deferred MCP", async () => {
   const registrations = [];
+  const handlers = new Map();
   await createWassetteMcpRegistration({
     cwd: "/host/voice-workspace",
     wassetteBin: "/host/bin/wassette",
@@ -51,6 +54,9 @@ test("orchestrator Pi registers Wassette through native deferred MCP", async () 
   })({
     registerMcpServer(name, config) {
       registrations.push({ name, config });
+    },
+    on(event, handler) {
+      handlers.set(event, handler);
     },
   });
 
@@ -70,6 +76,10 @@ test("orchestrator Pi registers Wassette through native deferred MCP", async () 
   assert.equal(registrations[0].config.env.TASK_GATEWAY_TOKEN, "");
   assert.equal(registrations[0].config.env.KNOWLEDGE_GATEWAY_TOKEN, "");
   assert.equal(registrations[0].config.env.DIGITAL_TWIN_READER_TOKEN, "");
+  const event = promptEvent();
+  handlers.get("before_agent_start")(event);
+  assert.match(event.systemPromptOptions.sections.wassette, /capability-controlled WebAssembly/u);
+  assert.match(event.systemPromptOptions.sections.music, /review-gated/u);
 });
 
 test("voice initial tools do not turn MCP selection into an allowlist", () => {
@@ -123,7 +133,9 @@ test("orchestrator Pi keeps authenticated Grafana trace tools directly available
       timeout: 30,
     },
   }]);
-  handlers.get("before_agent_start")();
+  const event = promptEvent();
+  handlers.get("before_agent_start")(event);
+  assert.match(event.systemPromptOptions.sections.grafana_trace, /Grafana MCP/u);
   assert.deepEqual(activeTools, [
     "read",
     "mcp__grafana__search_tempo_traces",
@@ -164,7 +176,9 @@ test("orchestrator Pi keeps Playwright trace reads direct while narrated export 
   assert.equal(registrations[0].config.url, "http://127.0.0.1:9450/mcp");
   assert.equal(registrations[0].config.timeout, 600);
   assert.equal(registrations[0].config.exposure, "direct");
-  handlers.get("before_agent_start")();
+  const event = promptEvent();
+  handlers.get("before_agent_start")(event);
+  assert.match(event.systemPromptOptions.sections.playwright_trace, /selectedPlaywrightTrace/u);
   assert.deepEqual(activeTools, [
     "read",
     "mcp__playwright_traces__search_playwright_traces",
@@ -212,7 +226,9 @@ test("orchestrator Pi keeps the journal review app directly available", async ()
     /dist\/vendor\/journal-review-mcp\/app\/main\.html$/u,
   );
   assert.equal(registrations[0].config.exposure, "direct");
-  handlers.get("before_agent_start")();
+  const event = promptEvent();
+  handlers.get("before_agent_start")(event);
+  assert.match(event.systemPromptOptions.sections.journal_review, /Recogito/u);
   assert.deepEqual(activeTools, [
     "read",
     "mcp__journal_review__render_journal_review",
@@ -240,15 +256,22 @@ test("voice HTTP routes parse into typed commands", () => {
 test("voice Pi exposes one task-session attachment tool", async () => {
   const tools = [];
   const attached = [];
+  const handlers = new Map();
   await createRemoteTaskSessionRegistration({
     async attach(taskId) {
       attached.push(taskId);
       return { taskId, isStreaming: true };
     },
-  })({ registerTool(tool) { tools.push(tool); } });
+  })({
+    registerTool(tool) { tools.push(tool); },
+    on(event, handler) { handlers.set(event, handler); },
+  });
 
   assert.equal(tools.length, 1);
   assert.equal(tools[0].name, "attach_task_session");
+  const event = promptEvent();
+  handlers.get("before_agent_start")(event);
+  assert.match(event.systemPromptOptions.sections.remote_task, /active conversational session/u);
   const taskId = "00000000-0000-0000-0000-000000000001";
   const result = await tools[0].execute("call-1", { task_id: taskId });
   assert.deepEqual(attached, [taskId]);

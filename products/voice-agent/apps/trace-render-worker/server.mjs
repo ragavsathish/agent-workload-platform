@@ -18,6 +18,8 @@ import { telemetry } from './telemetry.mjs';
 
 const ID = /^[a-f0-9]{32}$/u;
 const MAX_TRACE_BYTES = 256 * 1024 * 1024;
+const MAX_NARRATION_BRIEF_CHARS = 2_000;
+const MAX_SUBMISSION_BYTES = MAX_TRACE_BYTES + (64 * 1024);
 const RENDER_TIMEOUT_MS = Number(process.env.TRACE_RENDER_TIMEOUT_MS ?? '600000');
 const port = Number(process.env.TRACE_RENDER_WORKER_PORT ?? '9460');
 if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error('invalid worker port');
@@ -71,10 +73,50 @@ async function writeJob(job) {
   await put(job.renderId, 'job.json', json(job), 'application/json');
 }
 
-function runRenderer(tracePath, outputDirectory, brokerToken, log) {
+const publicJob = ({ narrationBrief: _narrationBrief, traceSha256: _traceSha256, ...job }) => job;
+
+const narrationBrief = (value) => {
+  if (typeof value !== 'string') throw new Error('narration brief is required');
+  const normalized = value.trim();
+  if (!normalized) throw new Error('narration brief is required');
+  if (normalized.length > MAX_NARRATION_BRIEF_CHARS) {
+    throw new Error(`narration brief exceeds ${MAX_NARRATION_BRIEF_CHARS} characters`);
+  }
+  return normalized;
+};
+
+async function submission(request) {
+  const contentType = request.header('content-type') ?? '';
+  if (!contentType.toLowerCase().startsWith('multipart/form-data;')) {
+    throw new Error('multipart render submission is required');
+  }
+  const form = await new Request('http://trace-render-worker/submission', {
+    method: 'POST',
+    headers: { 'content-type': contentType },
+    body: request.body,
+  }).formData();
+  const tracePart = form.get('trace');
+  const metadataPart = form.get('metadata');
+  if (!(tracePart instanceof Blob) || tracePart.size === 0 || tracePart.size > MAX_TRACE_BYTES) {
+    throw new Error('trace body is required');
+  }
+  if (typeof metadataPart !== 'string' || metadataPart.length > 8_192) {
+    throw new Error('render metadata is required');
+  }
+  const metadata = JSON.parse(metadataPart);
+  const traceId = String(metadata?.traceId ?? '');
+  if (!ID.test(traceId)) throw new Error('invalid trace ID');
+  return {
+    trace: Buffer.from(await tracePart.arrayBuffer()),
+    traceId,
+    narrationBrief: narrationBrief(metadata?.narrationBrief),
+  };
+}
+
+function runRenderer(tracePath, outputDirectory, narrationContextPath, brokerToken, log) {
   return new Promise((resolve, reject) => {
     let timedOut = false;
-    const child = spawn(process.execPath, [renderer, tracePath, outputDirectory], {
+    const child = spawn(process.execPath, [renderer, tracePath, outputDirectory, narrationContextPath], {
       env: {
         ...process.env,
         HOME: '/tmp',
@@ -113,11 +155,17 @@ async function render(job) {
     const digest = createHash('sha256').update(trace).digest('hex');
     if (digest !== job.traceSha256) throw new Error('trace artifact digest mismatch');
     const tracePath = join(scratch, 'trace.zip');
+    const narrationContextPath = join(scratch, 'narration-context.json');
     const output = join(scratch, 'output');
     await mkdir(output, { mode: 0o700 });
     await writeFile(tracePath, trace, { mode: 0o600 });
+    await writeFile(
+      narrationContextPath,
+      `${JSON.stringify({ narrationBrief: job.narrationBrief })}\n`,
+      { mode: 0o600 },
+    );
     const brokerToken = (await readFile(tokenFile, 'utf8')).trim();
-    await runRenderer(tracePath, output, brokerToken, log);
+    await runRenderer(tracePath, output, narrationContextPath, brokerToken, log);
     const [video, manifest] = await Promise.all([
       readFile(join(output, 'trace-explainer.mp4')),
       readFile(join(output, 'manifest.json')),
@@ -147,34 +195,55 @@ function schedule(job) {
 }
 
 app.get('/health', (_request, response) => response.json({ status: 'ok', storage: 's3' }));
-app.post('/v1/renders/:renderId', express.raw({ type: 'application/zip', limit: MAX_TRACE_BYTES }), async (request, response) => {
+app.post(
+  '/v1/renders/:renderId',
+  express.raw({ type: 'multipart/form-data', limit: MAX_SUBMISSION_BYTES }),
+  async (request, response) => {
   try {
     const { renderId } = request.params;
-    const traceId = String(request.header('x-trace-id') ?? '');
-    if (!ID.test(renderId) || !ID.test(traceId)) return response.status(400).json({ error: 'invalid opaque ID' });
-    if (!Buffer.isBuffer(request.body) || request.body.length === 0) return response.status(400).json({ error: 'trace body is required' });
+    if (!ID.test(renderId)) return response.status(400).json({ error: 'invalid render ID' });
+    if (!Buffer.isBuffer(request.body) || request.body.length === 0) {
+      return response.status(400).json({ error: 'render submission is required' });
+    }
+    const submitted = await submission(request);
     try {
       const existing = await readJob(renderId);
-      return response.status(200).json(existing);
+      const submittedTraceSha256 = createHash('sha256').update(submitted.trace).digest('hex');
+      const submittedBriefSha256 = createHash('sha256').update(submitted.narrationBrief).digest('hex');
+      if (
+        existing.traceId !== submitted.traceId
+        || existing.traceSha256 !== submittedTraceSha256
+        || existing.narrationBriefSha256 !== submittedBriefSha256
+      ) return response.status(409).json({ error: 'render ID already belongs to another submission' });
+      return response.status(200).json(publicJob(existing));
     } catch (error) {
       if (error?.name !== 'NoSuchKey') throw error;
     }
     const now = new Date().toISOString();
     const job = {
       renderId,
-      traceId,
-      traceSha256: createHash('sha256').update(request.body).digest('hex'),
+      traceId: submitted.traceId,
+      traceSha256: createHash('sha256').update(submitted.trace).digest('hex'),
+      narrationBrief: submitted.narrationBrief,
+      narrationBriefSha256: createHash('sha256').update(submitted.narrationBrief).digest('hex'),
       status: 'pending',
       createdAt: now,
       updatedAt: now,
     };
-    await put(renderId, 'trace.zip', request.body, 'application/zip');
+    await put(renderId, 'trace.zip', submitted.trace, 'application/zip');
     await writeJob(job);
     schedule(job);
     telemetry.record('submit');
-    structuredLog('render.accepted', { renderId, traceId });
-    return response.status(202).json(job);
+    structuredLog('render.accepted', {
+      renderId,
+      traceId: submitted.traceId,
+      narrationBriefSha256: job.narrationBriefSha256,
+    });
+    return response.status(202).json(publicJob(job));
   } catch (error) {
+    if (error instanceof SyntaxError || /required|exceeds|invalid trace ID|multipart/u.test(error?.message ?? '')) {
+      return response.status(400).json({ error: error.message });
+    }
     structuredLog('submit.failed', { errorType: error?.name ?? 'Error' });
     return response.status(500).json({ error: 'render submission failed' });
   }
@@ -183,9 +252,9 @@ app.get('/v1/renders/:renderId', async (request, response) => {
   try {
     if (!ID.test(request.params.renderId)) return response.status(400).json({ error: 'invalid render ID' });
     const job = await readJob(request.params.renderId);
-    if (job.status !== 'completed') return response.json(job);
+    if (job.status !== 'completed') return response.json(publicJob(job));
     const manifest = JSON.parse((await get(job.renderId, 'manifest.json')).toString('utf8'));
-    return response.json({ ...job, manifest });
+    return response.json({ ...publicJob(job), manifest });
   } catch (error) {
     if (error?.name === 'NoSuchKey') return response.status(404).json({ error: 'render not found' });
     structuredLog('status.failed', { errorType: error?.name ?? 'Error' });

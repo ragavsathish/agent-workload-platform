@@ -1,0 +1,1 @@
+The isolated workspace exposes the private RDF store through /opt/awp/bin/oxigraph. Use "oxigraph graphs", pipe SPARQL into "oxigraph query", or pipe SPARQL Update into "oxigraph update". This is unrestricted store access: inspect before updating and keep updates narrowly scoped to the user's request.

@@ -3,7 +3,6 @@
 import asyncio
 import os
 import re
-import tomllib
 import wave
 from functools import lru_cache
 from io import BytesIO
@@ -60,20 +59,6 @@ logger.remove()
 
 load_dotenv(override=True)
 telemetry = configure_telemetry("pipecat-voice-edge")
-
-PROMPT_LAYER_ORDER = (
-    "identity",
-    "response_contract",
-    "standard_presentation",
-    "slides_presentation",
-    "excalidraw_presentation",
-    "grafana_presentation",
-    "journal_review_presentation",
-    "execution",
-    "environment",
-    "delegation",
-)
-
 
 class VoicePresentationResponseProcessor(FrameProcessor):
     """Split one model response into an MCP App presentation and TTS-safe speech."""
@@ -347,29 +332,14 @@ async def broker_sessions_request(
 
 
 @lru_cache(maxsize=1)
-def voice_prompt_layers() -> dict[str, str]:
-    """Load and validate the ordered model-instruction layers."""
-    prompt_path = Path(__file__).with_name("prompt.toml")
-    with prompt_path.open("rb") as source:
-        layers = tomllib.load(source).get("layers")
-    if not isinstance(layers, dict) or set(layers) != set(PROMPT_LAYER_ORDER):
-        raise RuntimeError("prompt.toml must define the expected prompt layers")
-    normalized: dict[str, str] = {}
-    for name in PROMPT_LAYER_ORDER:
-        value = layers.get(name)
-        if not isinstance(value, str) or not value.strip():
-            raise RuntimeError(f"prompt.toml layer {name} must be non-empty")
-        normalized[name] = value.strip()
-    return normalized
-
-
-@lru_cache(maxsize=1)
 def voice_prompt_template() -> str:
-    """Compose the stable Pi instruction shared by voice and typed turns."""
-    prompt = "\n\n".join(voice_prompt_layers().values())
+    """Load the stable system prompt shared by voice and typed turns."""
+    prompt = Path(__file__).with_name("SYSTEM.md").read_text(encoding="utf-8").strip()
+    if not prompt:
+        raise RuntimeError("SYSTEM.md must not be empty")
     marker = "{{DEFAULT_WORKSPACE}}"
     if prompt.count(marker) != 1:
-        raise RuntimeError("prompt.toml must define one default-workspace placeholder")
+        raise RuntimeError("SYSTEM.md must define one default-workspace placeholder")
     return prompt
 
 

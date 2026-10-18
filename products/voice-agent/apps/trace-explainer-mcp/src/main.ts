@@ -10,7 +10,12 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import type { Request, Response } from "express";
 import express from "express";
 
-import { HttpTraceRenderBackend, processRenderer, TraceArtifactStore } from "./artifacts.js";
+import {
+  HttpTraceRenderBackend,
+  processRenderer,
+  TraceArtifactStore,
+  validatedNarrationBrief,
+} from "./artifacts.js";
 import { createServer } from "./server.js";
 
 const distributionRoot = dirname(fileURLToPath(import.meta.url));
@@ -132,9 +137,14 @@ function configureViewerRoutes(app: ReturnType<typeof createMcpExpressApp>): voi
         return response.status(400).json({ error: "invalid Playwright trace ID" });
       }
       try {
-        const job = await store.enqueue(traceId);
+        const narrationBrief = validatedNarrationBrief(request.body?.narrationBrief);
+        const job = await store.enqueue(traceId, narrationBrief);
         return response.status(202).json(job);
-      } catch {
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "trace render submission failed";
+        if (message.includes("narration brief")) {
+          return response.status(400).json({ error: message });
+        }
         return response.status(404).json({ error: "Playwright trace not found" });
       }
     },

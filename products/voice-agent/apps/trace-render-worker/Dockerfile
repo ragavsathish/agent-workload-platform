@@ -19,6 +19,7 @@ COPY apps/trace-render-worker/server.mjs ./server.mjs
 COPY apps/trace-render-worker/telemetry.mjs ./telemetry.mjs
 COPY apps/client/tool/prototype-trace-explainer.mjs ./tool/prototype-trace-explainer.mjs
 COPY apps/client/tool/trace-explainer-analysis.mjs ./tool/trace-explainer-analysis.mjs
+COPY apps/client/tool/prompts/trace-narration/SYSTEM.md ./tool/prompts/trace-narration/SYSTEM.md
 
 USER 65532:65532
 EXPOSE 9460

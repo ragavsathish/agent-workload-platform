@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { createWriteStream, mkdirSync } from "node:fs";
+import { createWriteStream, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
@@ -9,6 +9,7 @@ import { unzipSync } from "fflate";
 const RENDER_ID = /^[a-f0-9]{32}$/u;
 const MAX_RECORDINGS = 500;
 const MAX_TRACE_BYTES = 256 * 1024 * 1024;
+export const MAX_NARRATION_BRIEF_CHARS = 2_000;
 const RENDER_TIMEOUT_MS = 10 * 60 * 1_000;
 
 export type TraceRecording = {
@@ -59,6 +60,7 @@ export type TraceExplainerManifest = {
 export type TraceRenderJob = {
   renderId: string;
   traceId: string;
+  narrationBriefSha256: string;
   status: "pending" | "running" | "completed" | "failed";
   createdAt: string;
   updatedAt: string;
@@ -68,7 +70,10 @@ export type TraceRenderJob = {
 export type RenderCommand = (
   tracePath: string,
   outputDirectory: string,
+  narrationBrief: string,
 ) => Promise<void>;
+
+type StoredTraceRenderJob = TraceRenderJob & { narrationBrief: string };
 
 type RemoteRenderResponse = TraceRenderJob & { manifest?: Record<string, unknown> };
 
@@ -78,11 +83,13 @@ function validatedJob(value: unknown, expectedRenderId: string): TraceRenderJob 
   if (
     job.renderId !== expectedRenderId
     || !RENDER_ID.test(boundedText(job.traceId, "", 32))
+    || !/^[a-f0-9]{64}$/u.test(boundedText(job.narrationBriefSha256, "", 64))
     || !["pending", "running", "completed", "failed"].includes(status)
   ) throw new Error("Trace render worker returned an invalid job");
   return {
     renderId: expectedRenderId,
     traceId: String(job.traceId),
+    narrationBriefSha256: String(job.narrationBriefSha256),
     status: status as TraceRenderJob["status"],
     createdAt: boundedText(job.createdAt, new Date().toISOString(), 64),
     updatedAt: boundedText(job.updatedAt, new Date().toISOString(), 64),
@@ -112,11 +119,20 @@ export class HttpTraceRenderBackend {
     return { ...job, ...(manifest ? { manifest } : {}) };
   }
 
-  async submit(renderId: string, traceId: string, tracePath: string): Promise<TraceRenderJob> {
+  async submit(
+    renderId: string,
+    traceId: string,
+    tracePath: string,
+    narrationBrief: string,
+  ): Promise<TraceRenderJob> {
+    const form = new FormData();
+    form.set("trace", new Blob([new Uint8Array(await readFile(tracePath))], {
+      type: "application/zip",
+    }), "trace.zip");
+    form.set("metadata", JSON.stringify({ traceId, narrationBrief }));
     const response = await fetch(`${this.baseUrl}/v1/renders/${renderId}`, {
       method: "POST",
-      headers: { "Content-Type": "application/zip", "X-Trace-Id": traceId },
-      body: new Uint8Array(await readFile(tracePath)),
+      body: form,
       signal: AbortSignal.timeout(60_000),
     });
     if (!response.ok) throw new Error(`Trace render worker submission failed: HTTP ${response.status}`);
@@ -154,6 +170,21 @@ function below(root: string, candidate: string): boolean {
 
 function boundedText(value: unknown, fallback = "", limit = 4_000): string {
   return typeof value === "string" ? value.slice(0, limit) : fallback;
+}
+
+export function validatedNarrationBrief(value: unknown): string {
+  if (typeof value !== "string") throw new Error("narration brief is required");
+  const brief = value.trim();
+  if (!brief) throw new Error("narration brief is required");
+  if (brief.length > MAX_NARRATION_BRIEF_CHARS) {
+    throw new Error(`narration brief exceeds ${MAX_NARRATION_BRIEF_CHARS} characters`);
+  }
+  return brief;
+}
+
+function publicJob(job: StoredTraceRenderJob): TraceRenderJob {
+  const { narrationBrief: _narrationBrief, ...visible } = job;
+  return visible;
 }
 
 function boundedSeconds(value: unknown): number {
@@ -226,17 +257,23 @@ function traceActionLabel(event: Record<string, unknown>): string {
 }
 
 export function processRenderer(rendererScript: string): RenderCommand {
-  return (tracePath, outputDirectory) => new Promise((resolvePromise, reject) => {
+  return (tracePath, outputDirectory, narrationBrief) => new Promise((resolvePromise, reject) => {
     mkdirSync(outputDirectory, { recursive: true, mode: 0o700 });
+    const narrationContextPath = join(outputDirectory, "narration-context.json");
+    writeFileSync(narrationContextPath, `${JSON.stringify({ narrationBrief })}\n`, { mode: 0o600 });
     const log = createWriteStream(join(outputDirectory, "renderer.log"), {
       flags: "a",
       mode: 0o600,
     });
     log.write(`[${new Date().toISOString()}] starting trace renderer\n`);
-    const child = spawn(process.execPath, [rendererScript, tracePath, outputDirectory], {
+    const child = spawn(
+      process.execPath,
+      [rendererScript, tracePath, outputDirectory, narrationContextPath],
+      {
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"],
-    });
+      },
+    );
     let errorOutput = "";
     let settled = false;
     const timeout = setTimeout(() => {
@@ -456,7 +493,7 @@ export class TraceArtifactStore {
     return join(this.renderDirectory(renderId), "job.json");
   }
 
-  private async writeJob(job: TraceRenderJob): Promise<void> {
+  private async writeJob(job: StoredTraceRenderJob): Promise<void> {
     const directory = this.renderDirectory(job.renderId);
     await mkdir(directory, { recursive: true, mode: 0o700 });
     const temporary = join(directory, `job.${process.pid}.tmp`);
@@ -464,27 +501,33 @@ export class TraceArtifactStore {
     await rename(temporary, this.jobPath(job.renderId));
   }
 
-  async readJob(renderId: string): Promise<TraceRenderJob> {
-    if (this.remoteBackend) return this.remoteBackend.status(renderId);
-    const raw = JSON.parse(await readFile(this.jobPath(renderId), "utf8")) as TraceRenderJob;
+  private async readStoredJob(renderId: string): Promise<StoredTraceRenderJob> {
+    const raw = JSON.parse(await readFile(this.jobPath(renderId), "utf8")) as StoredTraceRenderJob;
     if (
       raw.renderId !== renderId
       || !RENDER_ID.test(raw.traceId)
+      || !/^[a-f0-9]{64}$/u.test(raw.narrationBriefSha256)
+      || validatedNarrationBrief(raw.narrationBrief) !== raw.narrationBrief
       || !["pending", "running", "completed", "failed"].includes(raw.status)
     ) throw new Error("Invalid trace render job");
     return raw;
   }
 
-  private schedule(job: TraceRenderJob): void {
+  async readJob(renderId: string): Promise<TraceRenderJob> {
+    if (this.remoteBackend) return this.remoteBackend.status(renderId);
+    return publicJob(await this.readStoredJob(renderId));
+  }
+
+  private schedule(job: StoredTraceRenderJob): void {
     const operation = this.renderQueue.then(async () => {
-      const running: TraceRenderJob = {
+      const running: StoredTraceRenderJob = {
         ...job,
         status: "running",
         updatedAt: new Date().toISOString(),
       };
       await this.writeJob(running);
       try {
-        await this.renderNow(job.traceId, job.renderId);
+        await this.renderNow(job.traceId, job.narrationBrief, job.renderId);
         await this.writeJob({
           ...running,
           status: "completed",
@@ -502,22 +545,25 @@ export class TraceArtifactStore {
     this.renderQueue = operation.then(() => undefined, () => undefined);
   }
 
-  async enqueue(traceId: string): Promise<TraceRenderJob> {
+  async enqueue(traceId: string, narrationBriefValue: unknown): Promise<TraceRenderJob> {
+    const narrationBrief = validatedNarrationBrief(narrationBriefValue);
     const tracePath = await this.tracePath(traceId);
     const now = new Date().toISOString();
-    const job: TraceRenderJob = {
+    const job: StoredTraceRenderJob = {
       renderId: randomUUID().replaceAll("-", ""),
       traceId,
+      narrationBrief,
+      narrationBriefSha256: createHash("sha256").update(narrationBrief).digest("hex"),
       status: "pending",
       createdAt: now,
       updatedAt: now,
     };
     if (this.remoteBackend) {
-      return this.remoteBackend.submit(job.renderId, traceId, tracePath);
+      return this.remoteBackend.submit(job.renderId, traceId, tracePath, narrationBrief);
     }
     await this.writeJob(job);
     this.schedule(job);
-    return job;
+    return publicJob(job);
   }
 
   async recover(): Promise<void> {
@@ -526,7 +572,7 @@ export class TraceArtifactStore {
     for (const entry of await readdir(this.outputRoot, { withFileTypes: true })) {
       if (!entry.isDirectory() || !RENDER_ID.test(entry.name)) continue;
       try {
-        const job = await this.readJob(entry.name);
+        const job = await this.readStoredJob(entry.name);
         if (job.status === "pending" || job.status === "running") {
           this.schedule({ ...job, status: "pending", updatedAt: new Date().toISOString() });
         }
@@ -538,6 +584,7 @@ export class TraceArtifactStore {
 
   private async renderNow(
     traceId: string,
+    narrationBrief: string,
     renderId = randomUUID().replaceAll("-", ""),
   ): Promise<TraceExplainerManifest> {
     if (!RENDER_ID.test(traceId)) throw new Error("Invalid trace ID");
@@ -545,15 +592,16 @@ export class TraceArtifactStore {
     const traceInfo = await stat(tracePath);
     if (traceInfo.size > MAX_TRACE_BYTES) throw new Error("Trace recording exceeds 256 MiB");
     const outputDirectory = this.renderDirectory(renderId);
-    await this.renderCommand(tracePath, outputDirectory);
+    await this.renderCommand(tracePath, outputDirectory, narrationBrief);
     return this.readManifest(renderId, traceId);
   }
 
-  render(traceId: string): Promise<TraceExplainerManifest> {
+  render(traceId: string, narrationBrief: string): Promise<TraceExplainerManifest> {
     if (this.remoteBackend) {
       return Promise.reject(new Error("Direct host rendering is disabled for the remote backend"));
     }
-    const operation = this.renderQueue.then(() => this.renderNow(traceId));
+    const validatedBrief = validatedNarrationBrief(narrationBrief);
+    const operation = this.renderQueue.then(() => this.renderNow(traceId, validatedBrief));
     this.renderQueue = operation.then(() => undefined, () => undefined);
     return operation;
   }

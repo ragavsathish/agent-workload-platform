@@ -13,6 +13,7 @@ RUN --mount=type=secret,id=gondolin_mitm_ca \
 
 WORKDIR /app
 COPY processor.mjs /app/processor.mjs
+COPY prompts /app/prompts
 
 USER 65532:65532
 ENTRYPOINT ["node", "/app/processor.mjs"]

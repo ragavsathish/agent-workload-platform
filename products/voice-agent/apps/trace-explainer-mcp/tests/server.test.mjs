@@ -31,7 +31,11 @@ test("searches traces, renders the selected official viewer, and keeps video exp
     await writeFile(join(traceDirectory, "trace.zip"), traceArchive);
     await writeFile(appHtml, "<!doctype html><title>Trace Explainer</title>");
 
-    const store = new TraceArtifactStore(artifacts, output, async (_trace, destination) => {
+    const store = new TraceArtifactStore(artifacts, output, async (_trace, destination, narrationBrief) => {
+      assert.equal(
+        narrationBrief,
+        "Explain why opening commit history matters to a backend reviewer.",
+      );
       await mkdir(destination, { recursive: true });
       await writeFile(join(destination, "trace-explainer.mp4"), "video-bytes");
       await writeFile(join(destination, "manifest.json"), JSON.stringify({
@@ -90,12 +94,23 @@ test("searches traces, renders the selected official viewer, and keeps video exp
     const traceResource = await client.readResource({ uri: traceResourceLink.uri });
     assert.deepEqual(Buffer.from(traceResource.contents[0].blob, "base64"), Buffer.from(traceArchive));
 
-    const rendered = await client.callTool({
+    const missingBrief = await client.callTool({
       name: "render_narrated_trace_export",
       arguments: { traceId },
     });
+    assert.equal(missingBrief.isError, true);
+
+    const rendered = await client.callTool({
+      name: "render_narrated_trace_export",
+      arguments: {
+        traceId,
+        narrationBrief: "Explain why opening commit history matters to a backend reviewer.",
+      },
+    });
     assert.equal(rendered.isError, undefined);
     assert.equal(rendered.structuredContent.render.status, "pending");
+    assert.match(rendered.structuredContent.render.narrationBriefSha256, /^[a-f0-9]{64}$/u);
+    assert.equal(rendered.structuredContent.render.narrationBrief, undefined);
     const renderId = rendered.structuredContent.render.renderId;
     let completed;
     for (let attempt = 0; attempt < 20; attempt += 1) {

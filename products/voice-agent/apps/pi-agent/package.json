@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "clean": "node --input-type=module -e \"import fs from 'node:fs'; fs.rmSync('dist', { recursive: true, force: true })\"",
-    "build": "pnpm --filter @agent-workload-platform/journal-review-mcp build && pnpm run clean && tsc && node tool/package-journal-review-mcp.mjs",
+    "build": "pnpm --filter @agent-workload-platform/journal-review-mcp build && pnpm run clean && tsc && node tool/package-journal-review-mcp.mjs && node tool/package-inference-prompts.mjs",
     "check": "tsc --noEmit",
     "test": "pnpm run build && node --test '*.test.mjs' 'digital-twin/tests/*.test.mjs' 'digital-twin/eval/*.test.mjs'",
     "digital-twin:journal": "pnpm run build && node digital-twin/runtime/capture-journal.mjs",

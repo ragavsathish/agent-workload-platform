@@ -13,15 +13,14 @@
   },
   "scripts": {
     "clean": "node --input-type=module -e \"import fs from 'node:fs'; fs.rmSync('dist', { recursive: true, force: true })\"",
-    "build": "pnpm run clean && tsc && node --input-type=module -e \"import fs from 'node:fs'; fs.copyFileSync('prompt.toml', 'dist/prompt.toml')\"",
+    "build": "pnpm run clean && tsc && node --input-type=module -e \"import fs from 'node:fs'; fs.cpSync('prompts', 'dist/prompts', { recursive: true })\"",
     "check": "tsc --noEmit"
   },
   "dependencies": {
     "@agent-workload-platform/otel": "workspace:*",
     "@earendil-works/pi-coding-agent": "1.2.0",
     "@earendil-works/pi-mcp": "1.2.0",
-    "@modelcontextprotocol/server-memory": "2026.8.31",
-    "smol-toml": "1.9.1"
+    "@modelcontextprotocol/server-memory": "2026.8.31"
   },
   "optionalDependencies": {
     "@earendil-works/gondolin": "0.13.0"

@@ -10,6 +10,7 @@ import type { CallToolResult, ReadResourceResult } from "@modelcontextprotocol/s
 import { z } from "zod";
 
 import {
+  MAX_NARRATION_BRIEF_CHARS,
   TraceArtifactStore,
   type TraceExplainerManifest,
   type TraceRecording,
@@ -207,12 +208,15 @@ export function createServer(
       description: "Create an optional narrated MP4 only when the user explicitly asks for a video export.",
       inputSchema: z.object({
         traceId: z.string().regex(/^[a-f0-9]{32}$/u),
+        narrationBrief: z.string().trim().min(1).max(MAX_NARRATION_BRIEF_CHARS).describe(
+          "The user's conversational purpose, audience, and emphasis for this active trace.",
+        ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     },
-    async ({ traceId }): Promise<CallToolResult> => {
+    async ({ traceId, narrationBrief }): Promise<CallToolResult> => {
       try {
-        return pendingJobResult(await store.enqueue(traceId));
+        return pendingJobResult(await store.enqueue(traceId, narrationBrief));
       } catch (error) {
         console.error("[trace-explainer] render failed", error);
         return {

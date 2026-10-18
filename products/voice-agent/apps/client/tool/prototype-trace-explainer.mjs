@@ -19,6 +19,8 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  applyNarrationBrief,
+  applyNarrationPlan,
   assertSafeOutputDirectory,
   buildTraceScenes,
 } from './trace-explainer-analysis.mjs';
@@ -26,6 +28,10 @@ import {
 const clientRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const voiceRoot = resolve(clientRoot, '../..');
 const defaultOutput = join(clientRoot, 'build/prototype-trace-explainer');
+const narrationSystemPrompt = readFileSync(
+  new URL('./prompts/trace-narration/SYSTEM.md', import.meta.url),
+  'utf8',
+).trim();
 
 const walk = (root, name) => {
   if (!existsSync(root)) return [];
@@ -46,8 +52,19 @@ const defaultTrace = () => {
 
 const tracePath = resolve(process.argv[2] ?? defaultTrace());
 const outputDir = resolve(process.argv[3] ?? defaultOutput);
+const narrationContextPath = process.argv[4] ? resolve(process.argv[4]) : undefined;
 if (!existsSync(tracePath) || !statSync(tracePath).isFile()) {
   throw new Error(`Trace does not exist: ${tracePath}`);
+}
+if (!narrationContextPath || !existsSync(narrationContextPath)) {
+  throw new Error('Narration context does not exist');
+}
+const narrationContext = JSON.parse(readFileSync(narrationContextPath, 'utf8'));
+const narrationBrief = typeof narrationContext?.narrationBrief === 'string'
+  ? narrationContext.narrationBrief.trim()
+  : '';
+if (!narrationBrief || narrationBrief.length > 2_000) {
+  throw new Error('Narration brief must contain 1 to 2,000 characters');
 }
 assertSafeOutputDirectory(outputDir, [
   join(clientRoot, 'build'),
@@ -85,7 +102,7 @@ const sourceDuration = Math.max(
   (pageFrames.at(-1).timestamp - pageFrames[0].timestamp) / 1000,
 );
 const framePath = (frame) => frame.file ?? `resources/${frame.sha1}`;
-const scenes = buildTraceScenes({
+let scenes = buildTraceScenes({
   pageId,
   pageFrames,
   calls,
@@ -93,6 +110,7 @@ const scenes = buildTraceScenes({
   sourceDuration,
   framePath,
 });
+scenes = applyNarrationBrief(scenes, narrationBrief);
 
 const parseEnv = (path) => {
   if (!existsSync(path)) return {};
@@ -107,7 +125,54 @@ const deployEnv = parseEnv(join(voiceRoot, 'deploy/.env'));
 const brokerToken = process.env.INFERENCE_BROKER_TOKEN ?? deployEnv.INFERENCE_BROKER_TOKEN;
 const brokerBaseUrl = (process.env.INFERENCE_BROKER_BASE_URL
   ?? 'http://127.0.0.1:9443/v1').replace(/\/$/u, '');
+const narrationModel = process.env.INFERENCE_LLM_MODEL ?? deployEnv.OLLAMA_MODEL;
 if (!brokerToken) throw new Error('INFERENCE_BROKER_TOKEN is required');
+
+const narrationEvidence = scenes.map(({ id, title, spoken, evidence }) => ({
+  id,
+  title,
+  groundedFallback: spoken,
+  eventIds: evidence.eventIds,
+}));
+
+if (narrationModel) {
+  try {
+    const response = await fetch(`${brokerBaseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${brokerToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: narrationModel,
+        stream: false,
+        temperature: 0,
+        messages: [
+          {
+            role: 'system',
+            content: narrationSystemPrompt,
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({ providedIntent: narrationBrief, scenes: narrationEvidence }),
+          },
+        ],
+      }),
+      signal: AbortSignal.timeout(90_000),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    const content = payload?.choices?.[0]?.message?.content;
+    if (typeof content !== 'string') throw new Error('missing completion text');
+    const json = content.match(/\{[\s\S]*\}/u)?.[0];
+    if (!json) throw new Error('missing narration JSON');
+    scenes = applyNarrationPlan(scenes, JSON.parse(json));
+    console.log(`Planned ${scenes.length} grounded narration scenes with local inference`);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message.slice(0, 160) : 'unknown error';
+    console.warn(`Narration planner unavailable (${reason}); using grounded deterministic narration`);
+  }
+}
 
 const formatSrtTime = (seconds) => {
   const milliseconds = Math.round(seconds * 1000);
@@ -208,6 +273,7 @@ const manifest = {
   renderer: { name: 'playwright-recast', version: '0.23.0' },
   trace: relative(clientRoot, tracePath),
   traceSha256: sha256(tracePath),
+  narrationBriefSha256: createHash('sha256').update(narrationBrief).digest('hex'),
   primaryPageId: pageId,
   traceFrames: pageFrames.length,
   traceActions: calls.length,

@@ -8,7 +8,7 @@ contains the separate trusted image-builder workflow.
 - `pi-extension.ts` adapts Pi and owns one disposable Gondolin VM plus its
   session-scoped Capability Providers. It also validates `.pi/gondolin.json`
   and its network policy.
-- `prompt.toml` declares the runtime instructions appended by the Pi extension.
+- `prompts/*/APPEND_SYSTEM.md` declares capability-owned runtime instructions added through Pi's named prompt section.
   The extension selects the configured skills and network layers.
 - `session.ts` owns the Gondolin VM lifecycle, mounts, network hooks, metrics,
   startup commands, and the minimal guest-process MCP transport. Both the Pi

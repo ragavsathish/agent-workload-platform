@@ -59,6 +59,13 @@
 | Global state | Avoid changing process-wide state; isolate and restore it when unavoidable. |
 | Testing | Test the functional core deterministically and the imperative shell through observable effects. |
 
+## Inference prompts
+
+- Store each complete production system prompt in a colocated `SYSTEM.md`; runtime code owns schemas, request data, and other dynamic context.
+- Give Pi one base `SYSTEM.md`. Store capability guidance in a colocated `APPEND_SYSTEM.md` and let its extension add a named `before_agent_start` section.
+- Package the same prompt file into every runtime image or compiled artifact that performs that inference; keep one source of truth.
+- Keep evaluation and judge prompts with their evaluation harnesses because they are not production inference prompts.
+
 ## Black-box testing
 
 - Replace only the uncontrollable outer edge with a deterministic protocol driver; keep the production path behind that boundary real.

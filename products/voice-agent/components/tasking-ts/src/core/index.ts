@@ -5,6 +5,7 @@ const MAX_WORKSPACE_CHARS = 4_096;
 const MAX_PROPOSAL_ID_CHARS = 256;
 const MAX_SESSION_NAME_CHARS = 200;
 const MAX_STYLE_CHARS = 1_000;
+const MAX_NARRATION_BRIEF_CHARS = 2_000;
 const OPAQUE_ID = /^[a-f0-9]{32}$/u;
 
 function requiredText(value: string, name: string, maximum: number): string {
@@ -97,9 +98,14 @@ function opaqueId(value: string, name: string): string {
   return id;
 }
 
-export function submitTraceRender(traceId: string): string {
+export function submitTraceRender(traceId: string, narrationBrief: string): string {
   return call("post", "/api/trace-explainers", JSON.stringify({
     traceId: opaqueId(traceId, "trace ID"),
+    narrationBrief: requiredText(
+      narrationBrief,
+      "narration brief",
+      MAX_NARRATION_BRIEF_CHARS,
+    ),
   }));
 }
 
