@@ -21,6 +21,12 @@ Create `deploy/.env` from the example. Generate distinct random values for
 `GRAFANA_ADMIN_PASSWORD` is set. Configure the exact allowed Ollama model, MLX models, logical workspaces, Pi
 binary, Pi model credentials, Gondolin extension, and Wassette permissions.
 
+Native LaunchAgents use separate, least-privilege files under
+`deploy/host-env/`. `make setup` initializes missing files from
+`deploy/host-env.example/`; replace their placeholder credentials before
+installation. Ansible copies them with mode `0600`, and dotenvx injects each
+file only into its owning process.
+
 Set `VOICE_DEFAULT_WORKSPACE` to one name in `ORCHESTRATOR_ALLOWED_WORKSPACES`; spoken
 commands can then say “the default workspace” without asking speech recognition to reconstruct a
 filesystem path. Publish its committed Git state with `make publish-workspace`; the native worker

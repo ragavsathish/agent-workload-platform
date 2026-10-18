@@ -10,6 +10,8 @@
 .DS_Store
 .pnpm-store/v11/
 /work/
+worktrees/
+products/voice-agent/.env.keys
 products/voice-agent/apps/client/web/voice-canvas/main.dart.js*
 products/voice-agent/apps/client/web/voice-canvas/mcp_app.js*
 products/voice-agent/apps/client/web/excalidraw/

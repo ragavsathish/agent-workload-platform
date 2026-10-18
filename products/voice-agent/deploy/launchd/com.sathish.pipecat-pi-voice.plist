@@ -6,6 +6,7 @@
   <key>ProgramArguments</key>
   <array>
     <string>/opt/homebrew/bin/node</string>
+    <string>--env-file=/Users/sathish.narayanan/Library/Application Support/PipecatEdge/apps/pi-voice/pi-voice.env</string>
     <string>dist/voice-agent-service.js</string>
   </array>
   <key>WorkingDirectory</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/voice-pi-agent</string>
@@ -15,7 +16,6 @@
     <key>HOME</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/runtime-home</string>
     <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     <key>PI_OFFLINE</key><string>1</string>
-    <key>PI_VOICE_ENV_FILE</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/apps/pi-voice/pi-voice.env</string>
   </dict>
   <key>KeepAlive</key><true/>
   <key>Umask</key><integer>63</integer>

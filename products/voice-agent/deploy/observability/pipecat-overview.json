@@ -161,6 +161,39 @@
       "targets": [{"limit": 20, "query": "{ resource.service.namespace = \"pipecat-mlx-voice\" }", "queryType": "traceql", "refId": "A", "tableType": "traces"}],
       "title": "Recent payload-free traces",
       "type": "table"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Journal turns by privacy-safe extractor outcome. Filtered turns never invoke the model.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 7, "x": 0, "y": 40},
+      "id": 14,
+      "options": {"displayMode": "gradient", "legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false}, "maxVizHeight": 300, "minVizHeight": 16, "minVizWidth": 8, "namePlacement": "auto", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showUnfilled": true, "sizing": "auto", "valueMode": "color"},
+      "targets": [{"editorMode": "code", "expr": "round(sum by (app_outcome) (increase(pipecat_operation_total{app_operation=\"digital_twin.journal.decision\"}[$__range])))", "instant": true, "legendFormat": "{{app_outcome}}", "range": false, "refId": "A"}],
+      "title": "Journal decisions",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Payload-free sentence and entry counts across the journal extraction pipeline.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 10, "x": 7, "y": 40},
+      "id": 15,
+      "options": {"displayMode": "gradient", "legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false}, "maxVizHeight": 300, "minVizHeight": 16, "minVizWidth": 8, "namePlacement": "auto", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showUnfilled": true, "sizing": "auto", "valueMode": "color"},
+      "targets": [{"editorMode": "code", "expr": "round(sum by (app_operation) (increase(pipecat_operation_total{app_operation=~\"digital_twin[.]journal[.](sentences|entries)[.].*\"}[$__range])))", "instant": true, "legendFormat": "{{app_operation}}", "range": false, "refId": "A"}],
+      "title": "Journal extraction funnel",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Owner feedback actions. Text and capture identifiers remain only in the private knowledge store.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 7, "x": 17, "y": 40},
+      "id": 16,
+      "options": {"displayMode": "gradient", "legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false}, "maxVizHeight": 300, "minVizHeight": 16, "minVizWidth": 8, "namePlacement": "auto", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showUnfilled": true, "sizing": "auto", "valueMode": "color"},
+      "targets": [{"editorMode": "code", "expr": "round(sum by (app_outcome) (increase(pipecat_operation_total{app_operation=\"digital_twin.journal.feedback.action\"}[$__range])))", "instant": true, "legendFormat": "{{app_outcome}}", "range": false, "refId": "A"}],
+      "title": "Journal feedback",
+      "type": "bargauge"
     }
   ],
   "refresh": "10s",
@@ -171,5 +204,5 @@
   "timezone": "browser",
   "title": "Voice Product Health",
   "uid": "pipecat-voice-overview",
-  "version": 2
+  "version": 10
 }

@@ -82,7 +82,7 @@ tools still execute through Gondolin rather than in the voice stack.
 ```bash
 cd products/voice-agent
 make setup
-# Fill deploy/.env using deploy/.env.example, including fresh random secrets.
+# Configure deploy/.env and the service files under deploy/host-env.
 make pull-model
 make host-preflight
 make start
@@ -181,10 +181,13 @@ instruments the digest-verified VoxLock ONNX graph at build time to expose that 
 only frequency-band aggregates, not model tensors. The live view polls a bounded microphone
 envelope rather than sending replayable audio samples. Synthesized speech exists only in memory while
 streaming. Transcripts remain in the in-memory conversation context for the active call and are
-discarded with it. Postgres stores only an explicitly proposed task instruction. Queue workers run Pi
-with `--no-session`, and native
-launch services write stdout and stderr to `/dev/null`, so agent conversations are not retained as
-Pi session JSONL. The synthetic black-box runner reports event counts, never transcript text.
+discarded with it. Postgres stores only an explicitly proposed task instruction. Queue workers retain
+each durable Pi task as a local Pi session JSONL so the owner can attach the voice conversation to the
+still-running task. The native Rust `pi-task-rpc` supervisor owns Pi's JSONL protocol, process
+lifecycle, and a mode-0600 Unix socket that accepts only bounded conversational RPC commands; its
+outbound projection includes assistant text and command status, never model reasoning, tool arguments,
+or tool results. Native launch services still write stdout and stderr to `/dev/null`, and the synthetic
+black-box runner reports event counts, never transcript text.
 
 The server-side microphone filter is selected with `VOICE_INPUT_FILTER=rnnoise|voxlock`; RNNoise
 is the rollback default. Only the selected filter is initialized and executed; its output continues
@@ -269,6 +272,13 @@ headers; Traefik then uses the edge's forward-auth endpoint to require the exact
 before any route is served. Prometheus, OTLP, the Agent Gateway, S3Mock, Postgres, and the Traefik
 dashboard have no tailnet route.
 
+For browser testing on the Docker host, the voice UI is also available at
+<http://127.0.0.1:8080>. This ingress is published on host loopback only and maps to a separate
+Traefik entry point. Traefik marks requests from that entry point, while every tailnet router removes
+client-supplied copies of the marker. The edge accepts the marker only when
+`EDGE_ALLOW_LOCAL_INGRESS=true` and resolves it to the sole configured edge owner. Set
+`VOICE_LOCAL_PORT` to change the host port or `EDGE_ALLOW_LOCAL_INGRESS=false` to disable it.
+
 The black-box runner synthesizes speech with Kokoro, streams it through the same authenticated
 WebSocket used by the browser, transcribes it with Parakeet v3 on MLX, and exercises the LLM/tool path.
 Before Tailscale login it uses `deploy/compose.local-test.yml` as a non-listening network anchor;
@@ -296,6 +306,26 @@ The same VM mounts a read-only `oxigraph` CLI and reaches the loopback-published
 synthetic network origin. `oxigraph query`, `oxigraph update`, and `oxigraph graphs` intentionally
 provide unrestricted RDF access; they should be replaced by reviewed domain operations before this
 becomes a multi-user deployment.
+
+When a durable task is running, ask the voice agent to attach using the returned lowercase `task_id`.
+The first turn invokes `attach_task_session`; later voice turns are sent directly to that task's Pi RPC
+process and therefore use its existing context, workspace, tools, and Gondolin VM. No worker LLM,
+database transcript projection, or polling loop sits between the two sessions. Disconnecting voice
+releases the attachment, and an unattached settled task exits after the bounded RPC idle grace.
+Run `make pi-rpc-host-release` to produce a platform-labelled executable and SHA-256 manifest under
+`apps/pi-rpc-host/dist`, then set `PI_TASK_RPC_HOST_BINARY` to the verified executable. Production
+installation remains intentionally separate from Ansible in this change.
+Run `make pi-rpc-host-smoke` for a local, non-installing check of the worker, Rust supervisor, Pi,
+and Gondolin path. It reads the local worker environment, uses temporary session and socket
+directories under `/tmp`, emits only bounded status JSON, and does not restart deployed services.
+The worker propagates W3C trace context into the Rust process. With `OTEL_EXPORTER_OTLP_ENDPOINT`
+configured, Grafana Tempo shows `pipecat-task-worker.agent-task.pi-rpc` parenting
+`pi-task-rpc.session`, `pi-task-rpc.client.attached`, and `pi-task-rpc.command` spans. Search with
+`{ resource.service.name = "pi-task-rpc" }`; errors use OpenTelemetry error status and
+`app.outcome`, while Prometheus exposes the matching `pipecat_operation_total` and
+`pipecat_operation_duration_seconds` series. Telemetry contains operational names, bounded outcome
+labels, allowed command kinds, counts, and task UUID correlation only—never prompt, response,
+reasoning, tool, workspace-path, or exception text.
 Kokoro speaks the final text produced
 by Pi after any tool calls complete. `PI_VOICE_MODEL` selects the model; when blank, Pi uses its
 configured default. The VM image includes AWS CLI and receives mock-only credentials plus a

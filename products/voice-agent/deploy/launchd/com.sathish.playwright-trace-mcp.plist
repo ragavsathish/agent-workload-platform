@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.sathish.playwright-trace-mcp</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/node</string>
+    <string>node_modules/@agent-workload-platform/trace-explainer-mcp/dist/main.js</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/voice-pi-agent</string>
+  <key>RunAtLoad</key><true/>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/runtime-home</string>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>PLAYWRIGHT_TRACE_ARTIFACT_ROOT</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/playwright-traces</string>
+    <key>PLAYWRIGHT_TRACE_OUTPUT_ROOT</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/playwright-trace-renders</string>
+    <key>TRACE_RENDER_WORKER_URL</key><string>http://127.0.0.1:9460</string>
+    <key>TRACE_RENDER_REQUIRE_REMOTE</key><string>true</string>
+    <key>PLAYWRIGHT_TRACE_VIEWER_BASE_URL</key><string>http://127.0.0.1:9450</string>
+    <key>PLAYWRIGHT_TRACE_MCP_HOST</key><string>127.0.0.1</string>
+    <key>PLAYWRIGHT_TRACE_MCP_PORT</key><string>9450</string>
+  </dict>
+  <key>KeepAlive</key><true/>
+  <key>Umask</key><integer>63</integer>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>/Users/sathish.narayanan/Library/Logs/PipecatEdge/playwright-trace-mcp.log</string>
+  <key>StandardErrorPath</key><string>/Users/sathish.narayanan/Library/Logs/PipecatEdge/playwright-trace-mcp.log</string>
+</dict>
+</plist>

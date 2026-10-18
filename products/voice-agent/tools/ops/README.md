@@ -9,6 +9,8 @@ directly so dependency and environment selection stays consistent.
 - `gitea_sync.py` converges Gitea identities and publishes committed Git state.
 - `warm_models.py` warms the configured inference models through the edge.
 - `digital_twin.py` validates, loads, queries, and captures digital-twin data.
+- `make pi-rpc-host-smoke` exercises the local Agent Task worker, Rust RPC
+  host, Pi, and Gondolin path without installing or restarting deployed services.
 
 The `deploy/` directory remains limited to deployment definitions and the
 configuration generators that materialize those definitions.

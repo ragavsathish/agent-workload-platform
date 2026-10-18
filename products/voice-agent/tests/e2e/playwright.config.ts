@@ -18,7 +18,7 @@ module.exports = defineConfig({
     ['json', { outputFile: path.join(outputDir, 'results.json') }],
   ],
   use: {
-    baseURL: process.env.VOICE_E2E_URL,
+    baseURL: process.env.VOICE_E2E_URL || 'http://127.0.0.1:8080',
     headless: true,
     ignoreHTTPSErrors: false,
     trace: 'on',

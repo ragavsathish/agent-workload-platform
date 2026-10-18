@@ -9,19 +9,27 @@ WASM_ACTIONS := setup build check install clean
 .PHONY: automation-digital-twin-e2e automation-playwright automation-blackbox-e2e
 .PHONY: automation-blackbox-voice automation-observability
 .PHONY: login status grafana-password grafana-mcp-token warm-models benchmark-mlx publish-workspace
-.PHONY: blackbox-voice blackbox-e2e blackbox-personal-knowledge
-.PHONY: playwright-voice playwright-diagnostics playwright-grafana host-preflight host-services-env install-host-services
+.PHONY: blackbox-voice blackbox-e2e blackbox-personal-knowledge blackbox-remote-session
+.PHONY: playwright-voice playwright-diagnostics playwright-grafana playwright-tailnet-voice
+.PHONY: playwright-tailnet-diagnostics host-preflight install-host-services
 .PHONY: config-init config-check
 .PHONY: grafana-c4-dashboard digital-twin-image-build digital-twin-load digital-twin-query
 .PHONY: digital-twin-validate digital-twin-test digital-twin-identify-skills
 .PHONY: digital-twin-capture-journal digital-twin-eval digital-twin-journal-export digital-twin-journal-finalize
 .PHONY: digital-twin-journal-eval digital-twin-judge-calibration
 .PHONY: digital-twin-judge-report digital-twin-pull-judge digital-twin-load-judge
-.PHONY: db-init gitea-sync broker worker pull-model
+.PHONY: digital-twin-artifact-store digital-twin-artifact-add digital-twin-artifact-push
+.PHONY: digital-twin-artifact-pull digital-twin-artifact-status digital-twin-artifact-verify
+.PHONY: digital-twin-mlflow-up digital-twin-mlflow-verify
+.PHONY: db-init gitea-sync broker worker pull-model pi-rpc-host-release pi-rpc-host-smoke
 
 COMPOSE = docker compose --env-file deploy/.env -f deploy/compose.yml
+MLFLOW_COMPOSE = $(COMPOSE) -f deploy/compose.mlflow.yml
 ANSIBLE = ANSIBLE_CONFIG=automation/ansible.cfg uvx --from ansible-core --with requests --with 'psycopg[binary]' ansible-playbook
 ANSIBLE_GALAXY = uvx --from ansible-core ansible-galaxy
+DVC_ROOT = apps/pi-agent/digital-twin
+DVC = AWS_ACCESS_KEY_ID="$${ARTIFACT_ACCESS_KEY:-local-test}" AWS_SECRET_ACCESS_KEY="$${ARTIFACT_SECRET_KEY:-local-test}" AWS_DEFAULT_REGION="$${AWS_DEFAULT_REGION:-us-east-1}" AWS_S3_ADDRESSING_STYLE=path uvx --from dvc==3.67.1 --with dvc-s3==3.3.0 dvc --cd $(DVC_ROOT)
+DVC_SCHEMA_CHECK = uvx --from check-jsonschema==0.38.2 check-jsonschema --schemafile $(DVC_ROOT)/artifact-bundle.schema.json $(DVC_ROOT)/artifacts/manifest.json
 
 help:
 	@printf '%s\n' \
@@ -30,7 +38,15 @@ help:
 		'  make setup          Install development dependencies' \
 		'  make build          Build apps, images, dashboards, and WASM components' \
 		'  make check          Run all static checks and tests' \
+		'  make pi-rpc-host-release' \
+		'                      Build a checksummed native Pi RPC supervisor' \
+		'  make pi-rpc-host-smoke' \
+		'                      Exercise worker, Rust RPC, Pi, and Gondolin locally' \
 		'  make start|up|down  Operate the deployment' \
+		'  make digital-twin-artifact-verify' \
+		'                      Verify DVC artifacts through local S3Mock' \
+		'  make digital-twin-mlflow-verify' \
+		'                      Verify MLflow model versioning through local S3Mock' \
 		'  make verify         Verify deployed infrastructure' \
 		'  make wasm-ACTION    Run setup, build, check, install, or clean for all components' \
 		'  make wasm-ACTION-COMPONENT' \
@@ -47,6 +63,10 @@ setup: automation-setup wasm-setup
 	pnpm --dir ../.. --filter @agent-workload-platform/voice-pi-agent install
 	cp -n deploy/.env.example deploy/.env || true
 	cp -n apps/edge/.env.example apps/edge/.env || true
+	@mkdir -p deploy/host-env
+	@for file in deploy/host-env.example/*.env; do cp -n "$$file" "deploy/host-env/$$(basename "$$file")" || true; done
+	@chmod 700 deploy/host-env
+	@chmod 600 deploy/host-env/*.env
 	$(MAKE) config-init
 
 build: wasm-build grafana-c4-dashboard
@@ -83,6 +103,12 @@ config-init:
 config-check:
 	@test -s deploy/.env || { echo "Missing deploy/.env; run make setup" >&2; exit 1; }
 	@test -s apps/edge/.env || { echo "Missing apps/edge/.env; run make setup" >&2; exit 1; }
+	@for name in broker pi-voice listener worker image-builder wassette-tasking; do \
+		test -s "deploy/host-env/$$name.env" || { echo "Missing deploy/host-env/$$name.env; run make setup" >&2; exit 1; }; \
+	done
+	@if rg -q '=replace-with-' deploy/host-env/*.env; then \
+		echo "Replace placeholder credentials in deploy/host-env before installation" >&2; exit 1; \
+	fi
 	@for name in broker-token agent-gateway-token digital-twin-reader-token digital-twin-writer-token postgres-password database-url habitat-database-password approval-secret grafana-admin-password grafana-mcp-caller-token; do \
 		test -s "deploy/secrets/$$name" || { echo "Missing deploy/secrets/$$name; run make config-init" >&2; exit 1; }; \
 	done
@@ -183,6 +209,11 @@ publish-workspace:
 blackbox-voice:
 	BLACKBOX_UTTERANCE="$(UTTERANCE)" $(MAKE) automation-blackbox-voice
 
+blackbox-remote-session:
+	BLACKBOX_REQUIRE_REMOTE_ATTACH=true \
+	BLACKBOX_UTTERANCES_JSON='["Propose a task in the default workspace to inspect the README and architecture documentation and explain remote durable Pi session listening without changing files.","Approve that pending task now.","Attach to the task you just approved.","What are you doing, what have you learned so far, and are you still running?"]' \
+	$(MAKE) automation-blackbox-voice
+
 blackbox-e2e: blackbox-personal-knowledge
 	$(MAKE) automation-blackbox-e2e
 
@@ -190,20 +221,23 @@ blackbox-personal-knowledge: wasm-install-personal-knowledge-ts
 	uv run --project apps/gateway python tests/e2e/personal-knowledge-regression.py
 
 playwright-voice:
-	$(MAKE) automation-playwright PLAYWRIGHT_PROJECT=voice
+	tests/e2e/run-playwright-local voice
 
 playwright-diagnostics:
-	$(MAKE) automation-playwright PLAYWRIGHT_PROJECT=diagnostics
+	tests/e2e/run-playwright-local diagnostics
 
 playwright-grafana:
 	$(MAKE) automation-playwright PLAYWRIGHT_PROJECT=grafana
 
+playwright-tailnet-voice:
+	$(MAKE) automation-playwright PLAYWRIGHT_PROJECT=voice
+
+playwright-tailnet-diagnostics:
+	$(MAKE) automation-playwright PLAYWRIGHT_PROJECT=diagnostics
+
 host-preflight: automation-preflight
 
-host-services-env:
-	uv run --project apps/gateway python tools/config/host_env.py .
-
-install-host-services: wasm-install digital-twin-image-build host-services-env
+install-host-services: wasm-install digital-twin-image-build pi-rpc-host-release config-check
 	$(ANSIBLE) automation/playbooks/install_host_services.yml
 
 wasm-setup: $(WASM_COMPONENTS:%=wasm-setup-%)
@@ -273,6 +307,36 @@ digital-twin-load-judge:
 		lms load selene-1-mini-llama-3.1-8b --identifier selene-1-mini-llama-3.1-8b --yes; \
 	fi
 
+digital-twin-artifact-store:
+	$(MLFLOW_COMPOSE) up -d --wait s3mock
+
+digital-twin-artifact-add:
+	@test -f "$(DVC_ROOT)/artifacts/manifest.json" || { echo "Missing $(DVC_ROOT)/artifacts/manifest.json" >&2; exit 1; }
+	$(DVC_SCHEMA_CHECK)
+	python3 $(DVC_ROOT)/tools/validate-artifact-bundle.py $(DVC_ROOT)/artifacts
+	$(DVC) add artifacts
+
+digital-twin-artifact-push: digital-twin-artifact-store
+	@test -f "$(DVC_ROOT)/artifacts.dvc" || { echo "Run make digital-twin-artifact-add first" >&2; exit 1; }
+	$(DVC) push artifacts.dvc
+
+digital-twin-artifact-pull: digital-twin-artifact-store
+	@test -f "$(DVC_ROOT)/artifacts.dvc" || { echo "Missing $(DVC_ROOT)/artifacts.dvc" >&2; exit 1; }
+	$(DVC) pull artifacts.dvc
+
+digital-twin-artifact-status:
+	@test -f "$(DVC_ROOT)/artifacts.dvc" || { echo "Run make digital-twin-artifact-add first" >&2; exit 1; }
+	$(DVC) status --cloud artifacts.dvc
+
+digital-twin-artifact-verify: digital-twin-artifact-store
+	bash $(DVC_ROOT)/tools/verify-dvc-s3mock
+
+digital-twin-mlflow-up:
+	$(MLFLOW_COMPOSE) up -d --wait s3mock mlflow
+
+digital-twin-mlflow-verify: digital-twin-mlflow-up
+	MLFLOW_TRACKING_URI=http://127.0.0.1:$${MLFLOW_PORT:-5001} MLFLOW_DISABLE_AGENT_HINT=1 uv run --with mlflow==3.17.1 python $(DVC_ROOT)/tools/verify-mlflow-registry.py
+
 db-init:
 	uv run --project apps/gateway --env-file deploy/.env python tools/ops/db_init.py
 
@@ -287,6 +351,22 @@ worker:
 
 pull-model:
 	ollama pull qwen3.5:9b-mlx
+
+pi-rpc-host-release:
+	cargo build --locked --release --manifest-path apps/pi-rpc-host/Cargo.toml
+	@mkdir -p apps/pi-rpc-host/dist
+	@artifact="pi-task-rpc-$$(uname -s | tr '[:upper:]' '[:lower:]')-$$(uname -m)"; \
+		cp apps/pi-rpc-host/target/release/pi-task-rpc "apps/pi-rpc-host/dist/$$artifact"; \
+		chmod 0755 "apps/pi-rpc-host/dist/$$artifact"; \
+		cd apps/pi-rpc-host/dist && shasum -a 256 "$$artifact" > "$$artifact.sha256"; \
+		printf '%s\n' "apps/pi-rpc-host/dist/$$artifact"
+
+pi-rpc-host-smoke: pi-rpc-host-release
+	@test -s deploy/host-env/worker.env || { echo "Missing deploy/host-env/worker.env; run make setup" >&2; exit 1; }
+	@artifact="$$PWD/apps/pi-rpc-host/dist/pi-task-rpc-$$(uname -s | tr '[:upper:]' '[:lower:]')-$$(uname -m)"; \
+		dotenvx run --quiet --strict -f deploy/host-env/worker.env -- \
+		env PI_TASK_RPC_HOST_BINARY="$$artifact" PYTHONPATH="apps/worker/src:packages/tasking/src:packages/telemetry/src" \
+		uv run --project apps/worker python -m voice_worker.smoke --artifact "$$artifact" --workspace "$$PWD"
 
 check: wasm-check automation-check
 	node --test deploy/observability/c4-dashboard.test.mjs

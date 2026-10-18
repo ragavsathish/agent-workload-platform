@@ -6,8 +6,14 @@
   <string>com.sathish.pipecat-image-builder</string>
   <key>ProgramArguments</key>
   <array>
+    <string>/opt/homebrew/bin/dotenvx</string>
+    <string>run</string>
+    <string>--quiet</string>
+    <string>--strict</string>
+    <string>-f</string>
+    <string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/gondolin-agent/image-builder.env</string>
+    <string>--</string>
     <string>/opt/homebrew/bin/node</string>
-    <string>--env-file=/Users/sathish.narayanan/Library/Application Support/PipecatEdge/gondolin-agent/image-builder.env</string>
     <string>dist/image-builder/manager.js</string>
   </array>
   <key>WorkingDirectory</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/gondolin-agent</string>

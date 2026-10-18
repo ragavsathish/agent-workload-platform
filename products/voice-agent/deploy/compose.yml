@@ -84,6 +84,54 @@ services:
       timeout: 3s
       retries: 30
 
+  trace-render-worker:
+    image: local/playwright-trace-render-worker:compose
+    pull_policy: never
+    build:
+      context: ..
+      dockerfile: apps/trace-render-worker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      s3mock:
+        condition: service_healthy
+    environment:
+      ARTIFACT_ENDPOINT_URL: http://s3mock:9090
+      ARTIFACT_BUCKET: ${ARTIFACT_BUCKET:-agent-artifacts}
+      ARTIFACT_ACCESS_KEY: ${ARTIFACT_ACCESS_KEY:-local-test}
+      ARTIFACT_SECRET_KEY: ${ARTIFACT_SECRET_KEY:-local-test}
+      INFERENCE_BROKER_BASE_URL: http://host.docker.internal:9443/v1
+      INFERENCE_BROKER_TOKEN_FILE: /run/secrets/broker-token
+      TRACE_RENDER_WORKER_PORT: "9460"
+      TRACE_RENDER_TIMEOUT_MS: "600000"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-lgtm:4318
+      OTEL_LOGS_EXPORTER: none
+      OTEL_METRIC_EXPORT_INTERVAL: "5000"
+    secrets: [broker-token]
+    ports: ["127.0.0.1:9460:9460"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    networks: [data, host-access, monitoring]
+    user: "65532:65532"
+    read_only: true
+    tmpfs:
+      - "/tmp:rw,noexec,nosuid,nodev,size=64m,uid=65532,gid=65532"
+      - "/scratch:rw,nosuid,nodev,size=1g,uid=65532,gid=65532"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
+    mem_limit: 2g
+    cpus: 2
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:9460/health').then(r=>{if(!r.ok)process.exit(1)})"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   postgres:
     image: postgres@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
     restart: unless-stopped
@@ -400,6 +448,8 @@ services:
       TS_DEBUG_FIREWALL_MODE: nftables
     volumes:
       - tailscale-state:/var/lib/tailscale
+    ports:
+      - "127.0.0.1:${VOICE_LOCAL_PORT:-8080}:8081"
     devices:
       - /dev/net/tun:/dev/net/tun
     # Voice shares this service's network namespace. Pin its capability
@@ -483,6 +533,9 @@ services:
       AGENT_GATEWAY_BASE_URL: http://agent-gateway:9444/v1
       GRAFANA_MCP_URL: http://grafana-mcp:8000/mcp
       GRAFANA_MCP_SERVER_TOKEN_FILE: /run/secrets/grafana-mcp-caller-token
+      PLAYWRIGHT_TRACE_VIEWER_INTERNAL_BASE_URL: http://host.docker.internal:9450
+      EDGE_ALLOW_LOCAL_INGRESS: ${EDGE_ALLOW_LOCAL_INGRESS:-true}
+      EDGE_LOCAL_ORIGINS: http://127.0.0.1:${VOICE_LOCAL_PORT:-8080},http://localhost:${VOICE_LOCAL_PORT:-8080},http://127.0.0.1:8081
       VOICE_DEFAULT_WORKSPACE: ${VOICE_DEFAULT_WORKSPACE:?set VOICE_DEFAULT_WORKSPACE in deploy/.env}
       VOICE_INPUT_FILTER: ${VOICE_INPUT_FILTER:-rnnoise}
       VOICE_DIAGNOSTIC_DIR: /var/lib/voice-diagnostics

@@ -5,8 +5,14 @@
   <key>Label</key><string>com.sathish.pipecat-digital-twin-listener</string>
   <key>ProgramArguments</key>
   <array>
+    <string>/opt/homebrew/bin/dotenvx</string>
+    <string>run</string>
+    <string>--quiet</string>
+    <string>--strict</string>
+    <string>-f</string>
+    <string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/apps/digital-twin/listener.env</string>
+    <string>--</string>
     <string>/opt/homebrew/bin/node</string>
-    <string>--env-file=/Users/sathish.narayanan/Library/Application Support/PipecatEdge/apps/digital-twin/listener.env</string>
     <string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/voice-pi-agent/dist/digital-twin/runtime/session-listener.js</string>
   </array>
   <key>EnvironmentVariables</key>

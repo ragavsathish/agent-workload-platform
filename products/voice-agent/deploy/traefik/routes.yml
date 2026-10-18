@@ -5,6 +5,14 @@ http:
         sourceRange:
           - "127.0.0.1/32"
         rejectStatusCode: 404
+    strip-local-ingress-marker:
+      headers:
+        customRequestHeaders:
+          X-Voice-Local-Ingress: ""
+    local-ingress-marker:
+      headers:
+        customRequestHeaders:
+          X-Voice-Local-Ingress: "1"
     owner-only:
       forwardAuth:
         address: http://127.0.0.1:7860/api/ingress-auth
@@ -62,7 +70,13 @@ http:
       entryPoints: [tailnet]
       rule: "HeaderRegexp(`Tailscale-User-Login`, `.+`) && PathPrefix(`/`)"
       priority: 1
-      middlewares: [tailnet-loopback-only, owner-only]
+      middlewares: [tailnet-loopback-only, strip-local-ingress-marker, owner-only]
+      service: voice-edge
+    local-live:
+      entryPoints: [local]
+      rule: "PathPrefix(`/`)"
+      priority: 1
+      middlewares: [local-ingress-marker]
       service: voice-edge
 
   services:
