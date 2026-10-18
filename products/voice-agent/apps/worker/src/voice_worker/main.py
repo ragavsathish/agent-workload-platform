@@ -8,7 +8,7 @@ import os
 import subprocess
 import tempfile
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, cast
@@ -22,7 +22,14 @@ from voice_agent.tasking.application.pi_response import (
     parse_pi_event_stream,
     presentation_prompt,
 )
+from voice_agent.tasking.domain.song_generation import (
+    SongManifest,
+    lyric_prompt,
+    manifest_from_pi_result,
+    validate_song_manifest,
+)
 from voice_agent.tasking.domain.workspaces import resolve_workspace
+from voice_agent.tasking.infrastructure.ace_step import create_ace_step_renderer
 from voice_agent.tasking.infrastructure.artifacts import ArtifactStore
 from voice_agent.tasking.infrastructure.config import Settings
 
@@ -31,6 +38,31 @@ logger = logging.getLogger(__name__)
 
 
 DATABASE_RETRY_DELAY_SECONDS = 2.0
+
+
+type RenderSong = Callable[[SongManifest], bytes]
+type StoreSong = Callable[[str, bytes], dict[str, str]]
+
+
+def create_song_renderer(settings: Settings) -> RenderSong | None:
+    """Construct the effectful music adapter once at the worker edge."""
+    if not settings.music_generation_enabled:
+        return None
+    return create_ace_step_renderer(
+        base_url=settings.music_generation_base_url,
+        timeout_seconds=settings.music_generation_timeout_seconds,
+        ffmpeg_binary=settings.music_ffmpeg_binary,
+    )
+
+
+def create_song_writer(artifacts: ArtifactStore | None) -> StoreSong | None:
+    if artifacts is None:
+        return None
+
+    def store(generation_id: str, audio: bytes) -> dict[str, str]:
+        return artifacts.put_song(generation_id=generation_id, audio=audio)
+
+    return store
 
 
 @contextmanager
@@ -118,6 +150,8 @@ def validate_worker(settings: Settings) -> None:
     os.chmod(settings.pi_rpc_socket_dir, 0o700)
     if settings.pi_rpc_idle_seconds < 0 or settings.pi_rpc_idle_seconds > 300:
         raise RuntimeError("PI_TASK_RPC_IDLE_SECONDS must be between 0 and 300")
+    if settings.music_generation_enabled and not Path(settings.music_ffmpeg_binary).is_file():
+        raise RuntimeError(f"FFmpeg binary not found: {settings.music_ffmpeg_binary}")
 
 
 def run_pi(
@@ -194,6 +228,48 @@ def run_digital_twin(settings: Settings, payload: dict[str, Any]) -> dict[str, A
     return cast(dict[str, Any], result)
 
 
+def run_song_lyrics(
+    settings: Settings,
+    *,
+    task_id: str,
+    brief: str,
+    style: str,
+    duration_seconds: int,
+    workspace: Path,
+) -> dict[str, Any]:
+    result = run_pi(
+        settings,
+        task_id=task_id,
+        instruction=lyric_prompt(
+            brief=brief,
+            style=style,
+            duration_seconds=duration_seconds,
+        ),
+        workspace=workspace,
+    )
+    manifest = manifest_from_pi_result(result)
+    return {**result, "manifest": manifest.to_dict()}
+
+
+def run_song_render(
+    render_song: RenderSong | None,
+    store_song: StoreSong | None,
+    *,
+    generation_id: str,
+    manifest_payload: object,
+) -> dict[str, Any]:
+    if render_song is None:
+        raise RuntimeError("MUSIC_GENERATION_BASE_URL is required for song rendering")
+    if store_song is None:
+        raise RuntimeError("song rendering requires the S3-compatible artifact store")
+    manifest = validate_song_manifest(manifest_payload)
+    audio = render_song(manifest)
+    return {
+        "manifest": manifest.to_dict(),
+        "artifacts": store_song(generation_id, audio),
+    }
+
+
 def record_journal_decision(result: dict[str, Any]) -> None:
     """Emit only bounded journal decision metrics, never transcript or entry text."""
     if result.get("mode") != "journal":
@@ -230,6 +306,8 @@ def create_worker(settings: Settings) -> Absurd:
         if settings.artifact_workspaces
         else None
     )
+    song_renderer = create_song_renderer(settings)
+    song_writer = create_song_writer(artifacts)
 
     @absurd.register_task(
         "agent-run",
@@ -264,6 +342,73 @@ def create_worker(settings: Settings) -> Absurd:
             default_max_attempts=3,
             default_cancellation={"max_duration": settings.digital_twin_timeout_seconds + 30},
         )(run_digital_twin_ingestion)
+
+    @absurd.register_task(
+        "song-lyrics",
+        queue=settings.queue,
+        default_max_attempts=1,
+        default_cancellation={"max_duration": settings.task_timeout_seconds + 60},
+    )
+    def song_lyrics(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
+        with continue_task_trace(params):
+            with telemetry.observe("song.lyrics"):
+                task_id = str(ctx.task_id)
+                intent = ctx.begin_step("lyrics-intent")
+                if intent.done:
+                    return {
+                        "state": "needs_manual_reconciliation",
+                        "session_id": task_id,
+                        "message": "Pi lyric generation started previously without a result; not rerun.",
+                    }
+                ctx.complete_step(intent, {"started": True, "session_id": task_id})
+                if artifacts:
+                    with artifacts.materialize_workspace(
+                        str(params["workspace"]), settings.worker_scratch_root
+                    ) as workspace:
+                        return run_song_lyrics(
+                            settings,
+                            task_id=task_id,
+                            brief=str(params["brief"]),
+                            style=str(params["style"]),
+                            duration_seconds=int(params["duration_seconds"]),
+                            workspace=workspace,
+                        )
+                workspace = resolve_workspace(
+                    str(params["workspace"]), settings.workspace_roots
+                )
+                return run_song_lyrics(
+                    settings,
+                    task_id=task_id,
+                    brief=str(params["brief"]),
+                    style=str(params["style"]),
+                    duration_seconds=int(params["duration_seconds"]),
+                    workspace=workspace,
+                )
+
+    @absurd.register_task(
+        "song-render",
+        queue=settings.queue,
+        default_max_attempts=1,
+        default_cancellation={
+            "max_duration": settings.music_generation_timeout_seconds + 180
+        },
+    )
+    def song_render(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
+        with continue_task_trace(params):
+            with telemetry.observe("song.render"):
+                intent = ctx.begin_step("render-intent")
+                if intent.done:
+                    return {
+                        "state": "needs_manual_reconciliation",
+                        "message": "Music generation started previously without a result; not rerun.",
+                    }
+                ctx.complete_step(intent, {"started": True})
+                return run_song_render(
+                    song_renderer,
+                    song_writer,
+                    generation_id=str(params["generation_id"]),
+                    manifest_payload=params.get("manifest"),
+                )
 
     def run_agent_task(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
         task_id = str(ctx.task_id)

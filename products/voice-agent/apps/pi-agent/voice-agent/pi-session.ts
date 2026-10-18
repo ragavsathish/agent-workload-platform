@@ -68,6 +68,15 @@ pending state without waiting. On a later status request, discover get_trace_ren
 completed with a videoUrl, preserve the same Trace Viewer presentation and add narratedVideoUrl so
 the user can open the MP4 in a separate window.`;
 
+const MUSIC_SYSTEM_PROMPT = `Durable song generation is review-gated. When the owner asks to turn
+context, a task, or a pull request into a song, use tool_search to discover submit_song and start the
+lyric Pi session with a concrete brief, workspace, musical style, and duration. Report the returned
+generation ID and writing_lyrics state without waiting. On a later status or review request, use
+get_song. When its state is lyrics_ready, present the title and complete lyrics for review. Call
+render_song only after the owner explicitly approves those lyrics in a later turn. Rendering runs
+ACE-Step on the host and stores an M4A artifact. Never claim that audio exists until get_song returns
+complete with an audio path. Use cancel_song when the owner asks to stop either stage.`;
+
 const JOURNAL_REVIEW_SYSTEM_PROMPT = `Journal Review MCP renders the active extraction in a dark
 Recogito evidence-review app. When the user asks to review journal extraction, call
 render_journal_review and put its journal-review presentation unchanged under the final response's
@@ -291,6 +300,7 @@ export async function skillResourceLoader(
         WASSETTE_SYSTEM_PROMPT,
         GRAFANA_SYSTEM_PROMPT,
         PLAYWRIGHT_TRACE_SYSTEM_PROMPT,
+        MUSIC_SYSTEM_PROMPT,
         JOURNAL_REVIEW_SYSTEM_PROMPT,
         OXIGRAPH_CLI_SYSTEM_PROMPT,
         REMOTE_TASK_SYSTEM_PROMPT,

@@ -16,6 +16,9 @@ model-visible tool argument.
 Pi sees only submission, exact session-name lookup, status, and cancellation; it cannot create or
 approve proposals directly. Reused albums receive persisted `· Take N` suffixes, so the displayed
 name resolves to one owner-scoped task.
+Song generation is a separate review-gated durable workflow. Pi first writes a bounded lyric
+manifest in an attachable durable session. Only `render-song` advances reviewed lyrics to the
+loopback ACE-Step host API; the completed M4A is stored in the S3-compatible artifact store.
 The same component exposes asynchronous Playwright trace render submission and status. That adapter
 has a separate capability limited to the loopback trace service; the voice VM never receives trace
 filesystem access, FFmpeg, renderer dependencies, or broker credentials.

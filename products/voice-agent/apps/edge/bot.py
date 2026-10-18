@@ -499,6 +499,32 @@ async def owner_gateway_request(
     return response.json()
 
 
+async def owner_gateway_audio(request: Request, generation_id: str) -> bytes:
+    """Retrieve one completed song without exposing the gateway bearer to the browser."""
+    if re.fullmatch(
+        r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+        generation_id,
+    ) is None:
+        raise HTTPException(status_code=400, detail="invalid song generation ID")
+    identity = validate_http_identity(request)
+    headers = {"Authorization": f"Bearer {required_env('AGENT_GATEWAY_TOKEN')}"}
+    url = (
+        f"{required_env('AGENT_GATEWAY_BASE_URL').rstrip('/')}"
+        f"/music/generations/{generation_id}/audio"
+    )
+    with telemetry.observe("song.audio.proxy"):
+        inject(headers)
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0)) as client:
+            response = await client.get(url, headers=headers, params={"identity": identity})
+    if response.is_error:
+        raise HTTPException(status_code=response.status_code, detail="song audio is unavailable")
+    if response.headers.get("content-type", "").split(";", 1)[0] != "audio/mp4":
+        raise HTTPException(status_code=502, detail="gateway returned invalid song audio")
+    if not response.content or len(response.content) > 32 * 1024 * 1024:
+        raise HTTPException(status_code=502, detail="gateway returned invalid song audio")
+    return response.content
+
+
 def task_spoken_text(view: object) -> str:
     if not isinstance(view, dict):
         raise HTTPException(status_code=502, detail="invalid task response")
@@ -1203,6 +1229,74 @@ if __name__ == "__main__":
             content=await broker_speech(spoken),
             media_type="audio/wav",
             headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/music/generations", status_code=202)
+    async def create_browser_song(request: Request):
+        try:
+            payload = await request.json()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="invalid song request") from exc
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=400, detail="invalid song request")
+        brief = payload.get("brief")
+        style = payload.get("style")
+        workspace = payload.get("workspace") or required_env("VOICE_DEFAULT_WORKSPACE")
+        duration = payload.get("durationSeconds", 120)
+        if (
+            not isinstance(brief, str)
+            or not isinstance(style, str)
+            or not isinstance(workspace, str)
+            or not isinstance(duration, int)
+        ):
+            raise HTTPException(status_code=400, detail="invalid song request")
+        result = await owner_gateway_request(
+            request,
+            "POST",
+            "/music/generations",
+            body={
+                "brief": brief,
+                "style": style,
+                "workspace": workspace,
+                "durationSeconds": duration,
+            },
+        )
+        return JSONResponse(result, status_code=202, headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/music/generations/{generation_id}")
+    async def get_browser_song(generation_id: str, request: Request):
+        return JSONResponse(
+            await owner_gateway_request(
+                request, "GET", f"/music/generations/{generation_id}"
+            ),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/music/generations/{generation_id}/render", status_code=202)
+    async def render_browser_song(generation_id: str, request: Request):
+        return JSONResponse(
+            await owner_gateway_request(
+                request, "POST", f"/music/generations/{generation_id}/render"
+            ),
+            status_code=202,
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/music/generations/{generation_id}/cancel")
+    async def cancel_browser_song(generation_id: str, request: Request):
+        return JSONResponse(
+            await owner_gateway_request(
+                request, "POST", f"/music/generations/{generation_id}/cancel"
+            ),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/api/music/generations/{generation_id}/audio")
+    async def get_browser_song_audio(generation_id: str, request: Request):
+        return Response(
+            content=await owner_gateway_audio(request, generation_id),
+            media_type="audio/mp4",
+            headers={"Cache-Control": "private, max-age=300"},
         )
 
     @app.get("/api/pi-transcript")

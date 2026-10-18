@@ -148,6 +148,72 @@ def test_task_approval_passes_trace_context_to_the_durable_queue(monkeypatch):
     }
 
 
+def test_song_creation_is_authenticated_and_enqueues_lyrics_before_render(monkeypatch):
+    gateway = load_gateway(monkeypatch)
+    observed = {}
+
+    class Songs:
+        def create(self, **kwargs):
+            observed.update(kwargs)
+            return {
+                "id": "generation-1",
+                "status": "writing_lyrics",
+                "lyrics_task_id": "task-1",
+            }
+
+    monkeypatch.setattr(gateway, "songs", lambda: Songs())
+    monkeypatch.setattr(
+        gateway,
+        "inject",
+        lambda carrier: carrier.update(
+            {"traceparent": "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01"}
+        ),
+    )
+    client = TestClient(gateway.app)
+    body = {
+        "identity": "owner@example.com",
+        "brief": "Turn the current pull request into a song.",
+        "workspace": "/tmp",
+        "style": "Warm R&B",
+        "durationSeconds": 120,
+    }
+
+    assert client.post("/v1/music/generations", json=body).status_code == 401
+    response = client.post(
+        "/v1/music/generations",
+        json=body,
+        headers={"Authorization": f"Bearer {'g' * 32}"},
+    )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "writing_lyrics"
+    assert observed["brief"] == body["brief"]
+    assert observed["duration_seconds"] == 120
+    assert "traceparent" in observed["trace_context"]
+
+
+def test_song_render_requires_a_separate_review_command(monkeypatch):
+    gateway = load_gateway(monkeypatch)
+    observed = {}
+
+    class Songs:
+        def render(self, **kwargs):
+            observed.update(kwargs)
+            return {"id": "generation-1", "status": "generating_music"}
+
+    monkeypatch.setattr(gateway, "songs", lambda: Songs())
+    client = TestClient(gateway.app)
+    response = client.post(
+        "/v1/music/generations/generation-1/render",
+        json={"identity": "owner@example.com"},
+        headers={"Authorization": f"Bearer {'g' * 32}"},
+    )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "generating_music"
+    assert observed["generation_id"] == "generation-1"
+
+
 def test_digital_twin_query_is_authenticated_identity_bound_and_read_only(monkeypatch):
     gateway = load_gateway(monkeypatch)
     observed_queries = []

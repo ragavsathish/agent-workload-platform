@@ -8,7 +8,6 @@ import pytest
 from opentelemetry.propagate import inject
 from psycopg import OperationalError
 from voice_agent.tasking.infrastructure.config import Settings
-
 from voice_worker.main import (
     build_pi_command,
     build_rpc_command,
@@ -16,6 +15,7 @@ from voice_worker.main import (
     record_journal_decision,
     run_digital_twin,
     run_pi,
+    run_song_render,
     run_worker,
 )
 
@@ -167,6 +167,39 @@ def test_journal_decision_metrics_are_payload_free(monkeypatch) -> None:
         ("digital_twin.journal.entries.rejected", "ok", 1, None),
     ]
     assert "private-correlation-id" not in repr(observed)
+
+
+def test_song_render_uses_injected_model_and_stores_only_the_encoded_artifact() -> None:
+    manifest = {
+        "title": "Signals After Midnight",
+        "style": "Warm R&B",
+        "lyrics": "[Verse 1]\nAcross the wire.\n[Chorus]\nShow me the trace.",
+        "duration_seconds": 120,
+        "bpm": 82,
+        "key_scale": "D Minor",
+        "time_signature": "4",
+    }
+    observed = {}
+
+    def render_song(manifest):
+        observed["manifest"] = manifest
+        return b"encoded-m4a"
+
+    def store_song(generation_id, audio):
+        observed["generation_id"] = generation_id
+        observed["audio"] = audio
+        return {"audio": "s3://agent-artifacts/songs/example/song.m4a"}
+
+    result = run_song_render(
+        render_song,
+        store_song,
+        generation_id="00000000-0000-0000-0000-000000000001",
+        manifest_payload=manifest,
+    )
+
+    assert observed["manifest"].title == "Signals After Midnight"
+    assert observed["audio"] == b"encoded-m4a"
+    assert result["artifacts"]["audio"].startswith("s3://")
 
 
 def test_worker_reconnects_after_a_temporary_database_outage(

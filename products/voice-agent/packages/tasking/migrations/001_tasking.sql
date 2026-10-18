@@ -101,3 +101,20 @@ CREATE UNIQUE INDEX IF NOT EXISTS voice_task_proposals_identity_session_name_idx
 
 CREATE INDEX IF NOT EXISTS voice_task_proposals_identity_created_idx
     ON voice_task_proposals (identity, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS voice_song_generations (
+    id uuid PRIMARY KEY,
+    identity text NOT NULL,
+    brief text NOT NULL,
+    workspace text NOT NULL,
+    style text NOT NULL,
+    duration_seconds integer NOT NULL CHECK (duration_seconds BETWEEN 30 AND 300),
+    lyrics_task_id uuid NOT NULL UNIQUE,
+    render_task_id uuid UNIQUE,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    render_requested_at timestamptz,
+    cancelled_at timestamptz
+);
+
+CREATE INDEX IF NOT EXISTS voice_song_generations_identity_created_idx
+    ON voice_song_generations (identity, created_at DESC);

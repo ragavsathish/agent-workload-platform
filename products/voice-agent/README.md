@@ -160,6 +160,11 @@ Postgres and S3Mock are published only on host loopback so the native Pi worker 
 queue and immutable workspace bundles. The bearer-protected agent gateway is also published on
 host loopback so the optional Pi voice backend can use bounded task-lifecycle and read-only
 personal-knowledge operations.
+The same gateway exposes a review-gated durable music workflow. Creating a generation starts an
+attachable Pi session that writes a bounded lyric manifest. A later explicit render command sends
+the reviewed manifest to a loopback-only ACE-Step host API, encodes the result as M4A, and stores it
+in S3Mock. The browser retrieves completed audio through the identity-checked edge proxy; model
+weights, S3 credentials, lyrics, and audio never enter MCP arguments or OpenTelemetry.
 The native inference broker listens on `127.0.0.1:9443`; Docker Desktop makes that protected
 capability available through the private `inference-broker` host-gateway alias. No service listens
 on the Mac LAN interface; browser access is available only through the tailnet listener.

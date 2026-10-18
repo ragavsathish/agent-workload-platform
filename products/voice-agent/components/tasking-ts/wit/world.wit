@@ -31,6 +31,18 @@ world tasking-core {
 
     /// Read the durable state and completed video URL for one trace render.
     export get-trace-render: func(render-id: string) -> result<string, string>;
+
+    /// Start a durable Pi session that writes a reviewable song manifest.
+    export submit-song: func(brief: string, workspace: string, style: string, duration-seconds: u32) -> result<string, string>;
+
+    /// Read lyric, render, and artifact status for one song generation.
+    export get-song: func(generation-id: string) -> result<string, string>;
+
+    /// Approve reviewed lyrics and start durable ACE-Step rendering.
+    export render-song: func(generation-id: string) -> result<string, string>;
+
+    /// Cancel the active lyric or render stage for one song generation.
+    export cancel-song: func(generation-id: string) -> result<string, string>;
 }
 
 world gateway-http {

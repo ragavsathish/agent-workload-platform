@@ -4,6 +4,7 @@ const MAX_INSTRUCTION_CHARS = 20_000;
 const MAX_WORKSPACE_CHARS = 4_096;
 const MAX_PROPOSAL_ID_CHARS = 256;
 const MAX_SESSION_NAME_CHARS = 200;
+const MAX_STYLE_CHARS = 1_000;
 const OPAQUE_ID = /^[a-f0-9]{32}$/u;
 
 function requiredText(value: string, name: string, maximum: number): string {
@@ -104,4 +105,38 @@ export function submitTraceRender(traceId: string): string {
 
 export function getTraceRender(renderId: string): string {
   return call("get", `/api/trace-explainers/${opaqueId(renderId, "render ID")}`);
+}
+
+function generationPath(generationId: string, action = ""): string {
+  const id = requiredText(generationId, "generation ID", MAX_PROPOSAL_ID_CHARS);
+  return `/music/generations/${encodeURIComponent(id)}${action}`;
+}
+
+export function submitSong(
+  brief: string,
+  workspace: string,
+  style: string,
+  durationSeconds: number,
+): string {
+  if (!Number.isInteger(durationSeconds) || durationSeconds < 30 || durationSeconds > 300) {
+    throw new Error("duration seconds must be an integer from 30 to 300");
+  }
+  return call("post", "/music/generations", JSON.stringify({
+    brief: requiredText(brief, "brief", MAX_INSTRUCTION_CHARS),
+    workspace: requiredText(workspace, "workspace", MAX_WORKSPACE_CHARS),
+    style: requiredText(style, "style", MAX_STYLE_CHARS),
+    durationSeconds,
+  }));
+}
+
+export function getSong(generationId: string): string {
+  return call("get", generationPath(generationId));
+}
+
+export function renderSong(generationId: string): string {
+  return call("post", generationPath(generationId, "/render"), "{}");
+}
+
+export function cancelSong(generationId: string): string {
+  return call("post", generationPath(generationId, "/cancel"), "{}");
 }

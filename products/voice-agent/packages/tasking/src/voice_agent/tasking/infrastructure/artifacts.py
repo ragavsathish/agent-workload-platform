@@ -18,6 +18,7 @@ import boto3
 from botocore.client import Config
 
 _WORKSPACE_NAME = re.compile(r"[a-z0-9][a-z0-9._-]{0,127}")
+_UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
 
 def validate_workspace_name(name: str, allowed: tuple[str, ...]) -> str:
@@ -175,3 +176,42 @@ class ArtifactStore:
             )
             uris[label] = f"s3://{self.bucket}/{key}"
         return uris
+
+    def put_song(self, *, generation_id: str, audio: bytes) -> dict[str, str]:
+        """Store one immutable, browser-friendly song artifact."""
+        if not re.fullmatch(_UUID, generation_id):
+            raise ValueError("song generation ID is invalid")
+        if not audio:
+            raise ValueError("song audio cannot be empty")
+        digest = hashlib.sha256(audio).hexdigest()
+        key = f"songs/{generation_id}/{digest}.m4a"
+        self.client.put_object(
+            Bucket=self.bucket,
+            Key=key,
+            Body=audio,
+            ContentType="audio/mp4",
+            Metadata={"sha256": digest},
+        )
+        return {
+            "audio": f"s3://{self.bucket}/{key}",
+            "sha256": digest,
+        }
+
+    def get_song(self, uri: str, *, max_bytes: int = 32 * 1024 * 1024) -> bytes:
+        parsed = urlparse(uri)
+        key = parsed.path.lstrip("/")
+        if (
+            parsed.scheme != "s3"
+            or parsed.netloc != self.bucket
+            or re.fullmatch(rf"songs/{_UUID}/[0-9a-f]{{64}}\.m4a", key)
+            is None
+        ):
+            raise ValueError("song artifact URI is invalid")
+        response = self.client.get_object(Bucket=self.bucket, Key=key)
+        content_length = int(response.get("ContentLength", 0))
+        if content_length <= 0 or content_length > max_bytes:
+            raise ValueError("song artifact is outside its allowed size")
+        audio = response["Body"].read(max_bytes + 1)
+        if len(audio) != content_length or len(audio) > max_bytes:
+            raise ValueError("song artifact read was incomplete")
+        return audio

@@ -16,6 +16,7 @@ from opentelemetry.trace import (
 
 from bot import (
     broker_sessions_request,
+    owner_gateway_audio,
     owner_gateway_request,
     playwright_trace_upstream,
     proxy_playwright_trace,
@@ -357,6 +358,46 @@ class GatewayTracePropagationTest(unittest.IsolatedAsyncioTestCase):
             observed_headers["traceparent"],
             "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01",
         )
+
+    async def test_song_audio_proxy_keeps_gateway_token_out_of_the_browser(self):
+        observed_url = ""
+
+        async def handler(upstream_request: httpx.Request) -> httpx.Response:
+            nonlocal observed_url
+            observed_url = str(upstream_request.url)
+            self.assertEqual(upstream_request.headers["authorization"], f"Bearer {'x' * 32}")
+            return httpx.Response(
+                200,
+                request=upstream_request,
+                content=b"m4a-audio",
+                headers={"Content-Type": "audio/mp4"},
+            )
+
+        @contextmanager
+        def observe(_operation: str):
+            yield
+
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "AGENT_GATEWAY_BASE_URL": "http://gateway.test/v1",
+                    "AGENT_GATEWAY_TOKEN": "x" * 32,
+                    "EDGE_ALLOWED_USERS": "owner@example.com",
+                    "PIPECAT_ALLOWED_ORIGINS": "https://voice.example.test",
+                },
+            ),
+            patch("bot.httpx.AsyncClient", return_value=client),
+            patch("bot.telemetry", SimpleNamespace(observe=observe)),
+        ):
+            audio = await owner_gateway_audio(
+                request("GET", identity="owner@example.com"),
+                "00000000-0000-0000-0000-000000000001",
+            )
+
+        self.assertEqual(audio, b"m4a-audio")
+        self.assertIn("identity=owner%40example.com", observed_url)
 
 
 if __name__ == "__main__":

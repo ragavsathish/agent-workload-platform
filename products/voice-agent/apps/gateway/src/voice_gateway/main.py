@@ -22,11 +22,13 @@ from uuid import uuid4
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi import Path as ApiPath
+from fastapi.responses import Response
 from opentelemetry.propagate import inject
 from pydantic import BaseModel, Field
 from voice_agent.shared.telemetry import configure_telemetry
 from voice_agent.tasking.application.pi_response import parse_pi_event_stream, response_from_text
 from voice_agent.tasking.application.service import ProposalError, TaskService
+from voice_agent.tasking.application.song_service import SongGenerationError, SongService
 from voice_agent.tasking.infrastructure.config import Settings
 
 load_dotenv(os.getenv("AGENT_GATEWAY_ENV_FILE", ".env"), override=True)
@@ -233,6 +235,13 @@ class ProposalRequest(IdentityRequest):
     workspace: str = Field(min_length=1, max_length=4_096)
 
 
+class SongGenerationRequest(IdentityRequest):
+    brief: str = Field(min_length=1, max_length=20_000)
+    workspace: str = Field(min_length=1, max_length=4_096)
+    style: str = Field(min_length=1, max_length=1_000)
+    duration_seconds: int = Field(default=120, alias="durationSeconds", ge=30, le=300)
+
+
 class DigitalTwinIngestionRequest(IdentityRequest):
     session_id: str = Field(alias="sessionId", min_length=1, max_length=128)
     message_id: str = Field(alias="messageId", min_length=1, max_length=128)
@@ -406,6 +415,10 @@ def voice_view(result: dict[str, object]) -> dict[str, object]:
 
 def service() -> TaskService:
     return TaskService(settings)
+
+
+def songs() -> SongService:
+    return SongService(settings)
 
 
 def _sparql_rows(query: str) -> list[dict[str, str]]:
@@ -977,6 +990,104 @@ async def cancel(
             return voice_view(result)
         except ProposalError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/v1/music/generations", status_code=202)
+async def create_song_generation(
+    body: SongGenerationRequest,
+    _: None = Depends(authenticate),
+):
+    with telemetry.observe("song.create"):
+        trace_context: dict[str, str] = {}
+        inject(trace_context)
+        try:
+            return await asyncio.to_thread(
+                songs().create,
+                identity=normalized_identity(body.identity),
+                brief=body.brief,
+                workspace=body.workspace,
+                style=body.style,
+                duration_seconds=body.duration_seconds,
+                trace_context=trace_context,
+            )
+        except (SongGenerationError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/v1/music/generations/{generation_id}")
+async def get_song_generation(
+    generation_id: str,
+    identity: str = Query(min_length=3, max_length=320),
+    _: None = Depends(authenticate),
+):
+    with telemetry.observe("song.get"):
+        try:
+            return await asyncio.to_thread(
+                songs().get,
+                identity=normalized_identity(identity),
+                generation_id=generation_id,
+            )
+        except SongGenerationError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/v1/music/generations/{generation_id}/render", status_code=202)
+async def render_song_generation(
+    generation_id: str,
+    body: IdentityRequest,
+    _: None = Depends(authenticate),
+):
+    with telemetry.observe("song.render.submit"):
+        trace_context: dict[str, str] = {}
+        inject(trace_context)
+        try:
+            return await asyncio.to_thread(
+                songs().render,
+                identity=normalized_identity(body.identity),
+                generation_id=generation_id,
+                trace_context=trace_context,
+            )
+        except SongGenerationError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/v1/music/generations/{generation_id}/cancel")
+async def cancel_song_generation(
+    generation_id: str,
+    body: IdentityRequest,
+    _: None = Depends(authenticate),
+):
+    with telemetry.observe("song.cancel"):
+        try:
+            return await asyncio.to_thread(
+                songs().cancel,
+                identity=normalized_identity(body.identity),
+                generation_id=generation_id,
+            )
+        except SongGenerationError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/v1/music/generations/{generation_id}/audio")
+async def get_song_audio(
+    generation_id: str,
+    identity: str = Query(min_length=3, max_length=320),
+    _: None = Depends(authenticate),
+):
+    with telemetry.observe("song.audio"):
+        try:
+            audio = await asyncio.to_thread(
+                songs().audio,
+                identity=normalized_identity(identity),
+                generation_id=generation_id,
+            )
+        except SongGenerationError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(
+        content=audio,
+        media_type="audio/mp4",
+        headers={"Cache-Control": "private, max-age=300"},
+    )
 
 
 if __name__ == "__main__":

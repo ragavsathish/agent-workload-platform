@@ -63,6 +63,9 @@ class Settings:
     node_binary: str = "/opt/homebrew/bin/node"
     digital_twin_runner: Path | None = None
     digital_twin_timeout_seconds: int = 120
+    music_generation_base_url: str = ""
+    music_generation_timeout_seconds: int = 600
+    music_ffmpeg_binary: str = "/opt/homebrew/bin/ffmpeg"
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -135,11 +138,22 @@ class Settings:
             digital_twin_timeout_seconds=int(
                 os.getenv("DIGITAL_TWIN_TIMEOUT_SECONDS", "120")
             ),
+            music_generation_base_url=_value("MUSIC_GENERATION_BASE_URL"),
+            music_generation_timeout_seconds=int(
+                os.getenv("MUSIC_GENERATION_TIMEOUT_SECONDS", "600")
+            ),
+            music_ffmpeg_binary=_value(
+                "MUSIC_FFMPEG_BINARY", "/opt/homebrew/bin/ffmpeg"
+            ),
         )
 
     @property
     def artifact_workspaces(self) -> bool:
         return bool(self.artifact_endpoint_url)
+
+    @property
+    def music_generation_enabled(self) -> bool:
+        return bool(self.music_generation_base_url)
 
     def require_api(self) -> None:
         missing = []
