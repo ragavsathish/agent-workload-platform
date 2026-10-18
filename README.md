@@ -79,4 +79,5 @@ The repository Makefile is the main orchestrator and delegates product work to
 - [Architecture views](products/voice-agent/docs/architecture/README.md)
 - [Product vocabulary](products/voice-agent/GLOSSARY.md)
 - [Repository organization](docs/monorepo-organization.md)
+- [Pull request soundtrack workflow](docs/pull-request-soundtrack-workflow.md)
 - [Imported source provenance](PROVENANCE.md)
