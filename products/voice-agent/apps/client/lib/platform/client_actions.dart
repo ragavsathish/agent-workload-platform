@@ -5,6 +5,8 @@ import 'client_actions_stub.dart'
 abstract final class ClientActions {
   static void openView(String view) => platform.openView(view);
 
+  static void openExternalUrl(String url) => platform.openExternalUrl(url);
+
   static Future<void> playSpeech(String spoken, {required String endpoint}) =>
       platform.playSpeech(spoken, endpoint: endpoint);
 

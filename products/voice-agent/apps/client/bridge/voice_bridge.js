@@ -82,6 +82,18 @@ const mcpApps = Object.freeze({
     toolInput: (presentation) => ({ presentation }),
     toolResult: (presentation) => ({ presentation }),
   },
+  'ui://playwright-trace-viewer/main.html': {
+    src: '/trace-explainer/main.html',
+    title: 'Playwright Trace Viewer',
+    toolInput: (presentation) => ({ presentation }),
+    toolResult: (presentation) => ({ presentation }),
+  },
+  'ui://journal-review/main.html': {
+    src: '/journal-review/main.html',
+    title: 'Journal Review',
+    toolInput: (presentation) => ({ presentation }),
+    toolResult: (presentation) => ({ presentation }),
+  },
   'ui://excalidraw/mcp-app.html': {
     src: '/excalidraw/mcp-app.html',
     title: 'Editable Excalidraw diagram',
@@ -129,6 +141,14 @@ const settleWithin = (promise, milliseconds = 250) => Promise.race([
   new Promise((resolve) => setTimeout(resolve, milliseconds)),
 ]);
 
+const textContent = (content) => Array.isArray(content)
+  ? content
+    .filter((block) => block?.type === 'text' && typeof block.text === 'string')
+    .map((block) => block.text)
+    .join('\n')
+    .slice(0, 8_000)
+  : '';
+
 const emit = (type, detail = {}) => events.push({ type, ...detail, at: Date.now() });
 const messagePresentation = (value) => {
   let payload = value;
@@ -146,7 +166,13 @@ const messagePresentation = (value) => {
         ? 'ui://excalidraw/mcp-app.html'
         : payload.presentation.kind === 'slides'
           ? 'ui://slides/marp.html'
-          : 'ui://mermaid/main',
+          : payload.presentation.kind === 'playwright-trace-viewer'
+            ? 'ui://playwright-trace-viewer/main.html'
+            : payload.presentation.kind === 'journal-review'
+              ? 'ui://journal-review/main.html'
+              : payload.presentation.kind === 'grafana-trace'
+                ? 'ui://grafana/trace.html'
+                : 'ui://mermaid/main',
   };
 };
 
@@ -299,7 +325,9 @@ window.voiceBridge = {
         null,
         { name: 'Pi Voice', version: '0.1.0' },
         {
+          openLinks: {},
           updateModelContext: { text: {}, structuredContent: {} },
+          message: { text: {} },
           logging: {},
           sandbox: {
             permissions: resourceUri === 'ui://excalidraw/mcp-app.html'
@@ -313,6 +341,7 @@ window.voiceBridge = {
             theme: 'dark',
             displayMode: 'inline',
             availableDisplayModes: resourceUri === 'ui://excalidraw/mcp-app.html'
+              || resourceUri === 'ui://playwright-trace-viewer/main.html'
               ? ['inline', 'fullscreen']
               : ['inline'],
             containerDimensions: {
@@ -327,13 +356,49 @@ window.voiceBridge = {
           },
         },
       );
+      let modelContext = '';
       bridge.onupdatemodelcontext = async (context) => {
+        const visibleContext = textContent(context.content);
+        const structuredContext = context.structuredContent
+          ? JSON.stringify(context.structuredContent).slice(0, 12_000)
+          : '';
+        modelContext = [visibleContext, structuredContext].filter(Boolean).join('\n');
         emit('mcp-app-context', { context });
         return {};
       };
+      bridge.onmessage = async ({ content }) => {
+        const question = textContent(content);
+        if (!question || !client?.connected) return { isError: true };
+        const prompt = modelContext
+          ? `MCP App context:\n${modelContext}\n\nUser question:\n${question}`
+          : question;
+        await client.sendText(prompt, { run_immediately: true, audio_response: true });
+        emit('mcp-app-message', { message: question });
+        return {};
+      };
       bridge.onloggingmessage = () => {};
+      bridge.onopenlink = async ({ url }) => {
+        const targetUrl = new URL(url, window.location.origin);
+        const narratedVideo = targetUrl.origin === window.location.origin
+          && /^\/api\/trace-explainers\/[a-f0-9]{32}\/video$/u.test(targetUrl.pathname)
+          && !targetUrl.search;
+        const trace = new URL(targetUrl.searchParams.get('trace') ?? 'invalid:', targetUrl);
+        const traceViewer = targetUrl.origin === window.location.origin
+          && targetUrl.pathname === '/trace-viewer/index.html'
+          && trace.origin === targetUrl.origin
+          && /^\/api\/playwright-traces\/[a-f0-9]{32}\/trace\.zip$/u.test(trace.pathname);
+        if (!traceViewer && !narratedVideo) {
+          throw new Error('MCP App requested an invalid Playwright artifact URL');
+        }
+        window.open(targetUrl.toString(), '_blank', 'noopener,noreferrer');
+        emit('mcp-app-open-link', { url: targetUrl.toString() });
+        return {};
+      };
       bridge.onrequestdisplaymode = async ({ mode }) => {
-        const fullscreen = resourceUri === 'ui://excalidraw/mcp-app.html' && mode === 'fullscreen';
+        const fullscreen = (
+          resourceUri === 'ui://excalidraw/mcp-app.html'
+          || resourceUri === 'ui://playwright-trace-viewer/main.html'
+        ) && mode === 'fullscreen';
         iframe.style.position = fullscreen ? 'fixed' : '';
         iframe.style.inset = fullscreen ? '0' : '';
         iframe.style.zIndex = fullscreen ? '2147483647' : '';
@@ -365,7 +430,16 @@ window.voiceBridge = {
       const connection = bridge.connect(
         new PostMessageTransport(iframe.contentWindow, iframe.contentWindow),
       );
-      iframe.src = appDefinition.src;
+      const iframeSource = new URL(appDefinition.src, window.location.origin);
+      if (
+        resourceUri === 'ui://journal-review/main.html'
+        && new URLSearchParams(window.location.search).get('prototype') === 'journal-review'
+      ) {
+        iframeSource.searchParams.set('prototype', '1');
+        const selectedVariant = new URLSearchParams(window.location.search).get('variant');
+        if (selectedVariant) iframeSource.searchParams.set('variant', selectedVariant);
+      }
+      iframe.src = `${iframeSource.pathname}${iframeSource.search}`;
       await connection;
       mcpAppHosts.set(target, { bridge, iframe });
       return JSON.stringify({ ok: true });
@@ -384,6 +458,13 @@ window.voiceBridge = {
         ? '/metrics/d/voice-c4-heatmap/c4-operational-heat-map'
       : `/?view=${encodeURIComponent(view)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
+  },
+  openExternalUrl(url) {
+    const target = new URL(url);
+    if (target.origin !== 'https://open.spotify.com' || !/^\/album\/[A-Za-z0-9]+$/u.test(target.pathname)) {
+      throw new Error('Only Spotify album links are allowed');
+    }
+    window.open(target.toString(), '_blank', 'noopener,noreferrer');
   },
   async playSpeech(spoken, endpoint = '/api/pi-speech') {
     if (currentAudio && currentAudioUrl && currentSpeech === spoken) {

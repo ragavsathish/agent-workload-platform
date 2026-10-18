@@ -1,0 +1,30 @@
+{
+  "name": "@agent-workload-platform/journal-review-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "journal-review-mcp": "dist/main.js"
+  },
+  "scripts": {
+    "clean": "node --input-type=module -e \"import fs from 'node:fs'; fs.rmSync('dist', { recursive: true, force: true })\"",
+    "build": "pnpm run clean && tsc && node scripts/build-app.mjs",
+    "check": "tsc --noEmit",
+    "start": "node dist/main.js",
+    "start:stdio": "node dist/main.js --stdio",
+    "test": "pnpm run build && node --test tests/server.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "0.4.2",
+    "@modelcontextprotocol/sdk": "1.25.2",
+    "@recogito/text-annotator": "4.2.5",
+    "express": "5.2.1",
+    "zod": "4.5.2"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.6",
+    "@types/node": "22.19.11",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3"
+  }
+}

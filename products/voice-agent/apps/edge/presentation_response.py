@@ -6,6 +6,7 @@ import json
 import math
 import re
 from dataclasses import dataclass
+from urllib.parse import parse_qs, urlparse
 
 MAX_SPOKEN_LENGTH = 2_000
 MAX_TITLE_LENGTH = 160
@@ -15,14 +16,21 @@ MAX_EDGES = 48
 MAX_EXCALIDRAW_ELEMENTS = 80
 MAX_EXCALIDRAW_BYTES = 64 * 1024
 MAX_MARP_BYTES = 64 * 1024
+MAX_JOURNAL_TRANSCRIPT_BYTES = 64 * 1024
 MERMAID_URI = "ui://mermaid/main"
 EXCALIDRAW_URI = "ui://excalidraw/mcp-app.html"
 MARP_URI = "ui://slides/marp.html"
 GRAFANA_TRACE_URI = "ui://grafana/trace.html"
+PLAYWRIGHT_TRACE_URI = "ui://playwright-trace-viewer/main.html"
+JOURNAL_REVIEW_URI = "ui://journal-review/main.html"
 EXCALIDRAW_TYPES = {
     "cameraUpdate", "rectangle", "ellipse", "diamond", "text", "arrow", "line"
 }
 EXCALIDRAW_CAMERA_SIZES = ((400, 300), (600, 450), (800, 600), (1200, 900), (1600, 1200))
+JOURNAL_ENTRY_TYPES = {
+    "thought", "idea", "question", "decision", "goal", "learning", "unclassified"
+}
+JOURNAL_OUTCOMES = {"pending", "accepted", "edited", "rejected", "missed", "empty"}
 
 
 @dataclass(frozen=True)
@@ -155,6 +163,8 @@ def _normalize_presentation(value: object, spoken: str) -> dict[str, object]:
         return _normalize_excalidraw(value, spoken)
     if kind == "slides":
         return _normalize_slides(value, spoken)
+    if kind == "journal-review":
+        return _normalize_journal_review(value, spoken)
     if kind == "grafana-trace":
         trace_id = value.get("traceId")
         datasource_uid = value.get("datasourceUid")
@@ -185,6 +195,99 @@ def _normalize_presentation(value: object, spoken: str) -> dict[str, object]:
         if focus_span_id is not None:
             presentation["focusSpanId"] = focus_span_id.lower()
         return presentation
+    if kind == "playwright-trace-viewer":
+        trace_id = value.get("traceId")
+        viewer_url = value.get("viewerUrl")
+        preview_url = value.get("previewUrl")
+        if (
+            not isinstance(trace_id, str)
+            or re.fullmatch(r"[0-9a-f]{32}", trace_id) is None
+            or not isinstance(viewer_url, str)
+        ):
+            return fallback_presentation(spoken)
+        viewer = urlparse(viewer_url)
+        trace_values = parse_qs(viewer.query).get("trace", [])
+        if (
+            viewer.scheme not in {"http", "https"}
+            or not viewer.netloc
+            or viewer.path != "/trace-viewer/index.html"
+            or len(trace_values) != 1
+        ):
+            return fallback_presentation(spoken)
+        trace = urlparse(trace_values[0])
+        if (
+            (trace.scheme, trace.netloc) != (viewer.scheme, viewer.netloc)
+            or trace.path != f"/api/playwright-traces/{trace_id}/trace.zip"
+        ):
+            return fallback_presentation(spoken)
+        preview = urlparse(preview_url) if isinstance(preview_url, str) else None
+        if preview is not None and (
+            (preview.scheme, preview.netloc) != (viewer.scheme, viewer.netloc)
+            or preview.path != f"/api/playwright-traces/{trace_id}/preview"
+            or preview.query
+        ):
+            return fallback_presentation(spoken)
+        narrated_video_url = value.get("narratedVideoUrl")
+        narrated_video = (
+            urlparse(narrated_video_url)
+            if isinstance(narrated_video_url, str)
+            else None
+        )
+        if narrated_video is not None and (
+            (narrated_video.scheme, narrated_video.netloc) != (viewer.scheme, viewer.netloc)
+            or re.fullmatch(r"/api/trace-explainers/[0-9a-f]{32}/video", narrated_video.path) is None
+            or narrated_video.query
+        ):
+            return fallback_presentation(spoken)
+        actions: list[dict[str, object]] = []
+        for raw_action in value.get("actions", [])[:12] if isinstance(value.get("actions"), list) else []:
+            if not isinstance(raw_action, dict):
+                continue
+            label = raw_action.get("label")
+            duration_ms = raw_action.get("durationMs")
+            status = raw_action.get("status")
+            if not isinstance(label, str) or not label.strip():
+                continue
+            actions.append({
+                "label": label.strip()[:240],
+                "durationMs": max(0, min(int(duration_ms), 3_600_000))
+                if isinstance(duration_ms, (int, float)) else 0,
+                "status": status if status in {"completed", "error"} else "completed",
+            })
+        result: dict[str, object] = {
+            "kind": "playwright-trace-viewer",
+            "title": title.strip()[:MAX_TITLE_LENGTH]
+            if isinstance(title, str) and title.strip()
+            else "Playwright trace",
+            "summary": str(value.get("summary", ""))[:MAX_LABEL_LENGTH],
+            "traceId": trace_id,
+            "project": str(value.get("project", "unknown"))[:80],
+            "run": str(value.get("run", "unknown"))[:120],
+            "modifiedAt": str(value.get("modifiedAt", ""))[:80],
+            "viewerUrl": viewer_url[:2_000],
+            "durationMs": max(0, min(int(value.get("durationMs", 0)), 3_600_000))
+            if isinstance(value.get("durationMs"), (int, float)) else 0,
+            "actionCount": max(0, min(int(value.get("actionCount", 0)), 100_000))
+            if isinstance(value.get("actionCount"), (int, float)) else len(actions),
+            "requestCount": max(0, min(int(value.get("requestCount", 0)), 1_000_000))
+            if isinstance(value.get("requestCount"), (int, float)) else 0,
+            "errorCount": max(0, min(int(value.get("errorCount", 0)), 100_000))
+            if isinstance(value.get("errorCount"), (int, float)) else 0,
+            "actions": actions,
+        }
+        if preview is not None:
+            result["previewUrl"] = preview_url[:2_000]
+        if narrated_video is not None:
+            result["narratedVideoUrl"] = narrated_video_url[:2_000]
+            result["narratedDurationSeconds"] = max(
+                0,
+                min(int(value.get("narratedDurationSeconds", 0)), 3_600),
+            ) if isinstance(value.get("narratedDurationSeconds"), (int, float)) else 0
+            result["narratedSceneCount"] = max(
+                0,
+                min(int(value.get("narratedSceneCount", 0)), 50),
+            ) if isinstance(value.get("narratedSceneCount"), (int, float)) else 0
+        return result
     if kind not in {"flow", "status"} or not isinstance(raw_nodes, list):
         return fallback_presentation(spoken)
 
@@ -370,6 +473,113 @@ def _normalize_slides(value: dict[object, object], spoken: str) -> dict[str, obj
     }
 
 
+def _normalize_journal_review(
+    value: dict[object, object], spoken: str
+) -> dict[str, object]:
+    transcript = value.get("transcript")
+    review_id = value.get("reviewId")
+    suggestion = value.get("suggestion")
+    if (
+        not isinstance(transcript, str)
+        or not transcript.strip()
+        or len(transcript.encode()) > MAX_JOURNAL_TRANSCRIPT_BYTES
+        or not isinstance(review_id, str)
+        or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9:._-]{0,199}", review_id) is None
+        or not isinstance(suggestion, dict)
+    ):
+        return fallback_presentation(spoken)
+
+    suggestion_id = suggestion.get("id")
+    kind = suggestion.get("type")
+    statement = suggestion.get("statement")
+    confidence = suggestion.get("confidence")
+    if (
+        not isinstance(suggestion_id, str)
+        or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9:._-]{0,199}", suggestion_id) is None
+        or kind not in JOURNAL_ENTRY_TYPES
+        or not isinstance(statement, str)
+        or not statement.strip()
+        or len(statement) > 2_000
+        or isinstance(confidence, bool)
+        or not isinstance(confidence, (int, float))
+        or not math.isfinite(confidence)
+        or confidence < 0
+        or confidence > 1
+    ):
+        return fallback_presentation(spoken)
+
+    topics_value = suggestion.get("topics", [])
+    if not isinstance(topics_value, list):
+        return fallback_presentation(spoken)
+    topics = [
+        topic.strip()[:100]
+        for topic in topics_value[:8]
+        if isinstance(topic, str) and topic.strip()
+    ]
+    normalized_suggestion: dict[str, object] = {
+        "id": suggestion_id,
+        "type": kind,
+        "statement": statement.strip(),
+        "topics": topics,
+        "confidence": confidence,
+    }
+    evidence = suggestion.get("evidence")
+    if evidence is not None:
+        if not isinstance(evidence, dict):
+            return fallback_presentation(spoken)
+        quote = evidence.get("quote")
+        start = evidence.get("start")
+        end = evidence.get("end")
+        if (
+            not isinstance(quote, str)
+            or not quote
+            or len(quote) > 4_000
+            or isinstance(start, bool)
+            or not isinstance(start, int)
+            or isinstance(end, bool)
+            or not isinstance(end, int)
+            or start < 0
+            or end <= start
+            or transcript[start:end] != quote
+        ):
+            return fallback_presentation(spoken)
+        normalized_suggestion["evidence"] = {"quote": quote, "start": start, "end": end}
+
+    progress_value = value.get("progress", {})
+    if not isinstance(progress_value, dict):
+        progress_value = {}
+
+    def progress_number(name: str, default: int) -> int:
+        candidate = progress_value.get(name)
+        if isinstance(candidate, bool) or not isinstance(candidate, int):
+            return default
+        return max(0, min(10_000, candidate))
+
+    outcome = value.get("outcome", "pending")
+    if outcome not in JOURNAL_OUTCOMES:
+        outcome = "pending"
+    title = value.get("title")
+    source = value.get("source")
+    return {
+        "kind": "journal-review",
+        "reviewId": review_id,
+        "title": title.strip()[:MAX_TITLE_LENGTH]
+        if isinstance(title, str) and title.strip()
+        else "Review journal extraction",
+        "source": source.strip()[:MAX_LABEL_LENGTH]
+        if isinstance(source, str) and source.strip()
+        else "Voice session",
+        "transcript": transcript,
+        "suggestion": normalized_suggestion,
+        "progress": {
+            "current": max(1, progress_number("current", 1)),
+            "total": max(1, progress_number("total", 1)),
+            "reviewed": progress_number("reviewed", 0),
+        },
+        "outcome": outcome,
+    }
+
+
 def parse_presentation_response(raw: str) -> PresentationResponse:
     """Return safe speech and a bounded structured MCP App presentation."""
     candidate = _strip_code_fence(raw)
@@ -418,6 +628,10 @@ def parse_presentation_response(raw: str) -> PresentationResponse:
         resource_uri = MARP_URI
     elif kind == "grafana-trace":
         resource_uri = GRAFANA_TRACE_URI
+    elif kind == "playwright-trace-viewer":
+        resource_uri = PLAYWRIGHT_TRACE_URI
+    elif kind == "journal-review":
+        resource_uri = JOURNAL_REVIEW_URI
     else:
         resource_uri = MERMAID_URI
     return PresentationResponse(

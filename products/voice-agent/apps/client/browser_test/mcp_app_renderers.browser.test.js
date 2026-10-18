@@ -52,6 +52,61 @@ const presentations = [
     },
   },
   {
+    name: 'Playwright trace viewer',
+    uri: 'ui://playwright-trace-viewer/main.html',
+    title: 'Playwright Trace Viewer',
+    src: '/trace-explainer/main.html',
+    selector: '#app[data-ready="true"]',
+    labels: [
+      'Responsive journey',
+      'voice · latest',
+      'Recorded journey',
+      'Navigate to dashboard',
+      'Open Trace Viewer',
+      'Explain the failure',
+    ],
+    value: {
+      kind: 'playwright-trace-viewer',
+      title: 'Responsive journey',
+      status: 'completed',
+      summary: 'voice · latest',
+      project: 'voice',
+      run: 'latest',
+      traceId: '0123456789abcdef0123456789abcdef',
+      viewerUrl: 'http://127.0.0.1:9450/trace-viewer/index.html?trace=http%3A%2F%2F127.0.0.1%3A9450%2Fapi%2Fplaywright-traces%2F0123456789abcdef0123456789abcdef%2Ftrace.zip',
+      narratedVideoUrl: 'http://127.0.0.1:9450/api/trace-explainers/abcdef0123456789abcdef0123456789/video',
+      durationMs: 1240,
+      actionCount: 1,
+      requestCount: 12,
+      errorCount: 0,
+      actions: [{ label: 'Navigate to dashboard', durationMs: 310, status: 'completed' }],
+    },
+  },
+  {
+    name: 'Journal review',
+    uri: 'ui://journal-review/main.html',
+    title: 'Journal Review',
+    src: '/journal-review/main.html',
+    selector: '#app[data-ready="true"]',
+    labels: ['Review journal extraction', 'Use reviewed labels before training', 'Voice stays active'],
+    value: {
+      kind: 'journal-review',
+      reviewId: 'review-fixture',
+      title: 'Review journal extraction',
+      source: 'Voice session · local fixture',
+      transcript: 'I want to improve the prompt and annotate examples first. Use reviewed labels before training a model.',
+      suggestion: {
+        id: 'suggestion-1',
+        type: 'decision',
+        statement: 'Use reviewed labels before training a model.',
+        topics: ['evaluation', 'annotation'],
+        confidence: 0.91,
+        evidence: { quote: 'Use reviewed labels before training a model.', start: 58, end: 102 },
+      },
+      progress: { current: 7, total: 40, reviewed: 6 },
+    },
+  },
+  {
     name: 'Excalidraw',
     uri: 'ui://excalidraw/mcp-app.html',
     title: 'Editable Excalidraw diagram',
@@ -213,6 +268,63 @@ describe('MCP App renderers', () => {
     expect(result).toEqual({ ok: false, error: 'Unsupported MCP App resource' });
     expect(document.querySelector(`#${hostId} iframe`)).toBeNull();
     expect(document.getElementById(hostId).textContent).toBe('Visual unavailable');
+  });
+
+  test('mounts the selected Playwright recording with conversational actions', async () => {
+    const traceViewer = presentations.find(({ name }) => name === 'Playwright trace viewer');
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    await mount(traceViewer);
+    const rendered = await commands.inspectMcpFrame({
+      title: traceViewer.title,
+      selector: '#conversation',
+    });
+
+    expect(rendered.text).toContain('Explain the failure');
+    expect(rendered.text).toContain('Summarize the trace');
+
+    const launch = await commands.inspectMcpFrame({
+      title: traceViewer.title,
+      selector: '#viewer-launch',
+    });
+    expect(launch.text).toContain('Open Trace Viewer');
+    expect(launch.text).toContain('Open narrated video');
+    await commands.clickMcpFrame({ title: traceViewer.title, selector: '#open-viewer' });
+    await vi.waitFor(() => expect(open).toHaveBeenCalledOnce());
+    const opened = new URL(open.mock.calls[0][0]);
+    expect(opened.origin).toBe(window.location.origin);
+    expect(opened.pathname).toBe('/trace-viewer/index.html');
+    expect(new URL(opened.searchParams.get('trace')).origin).toBe(window.location.origin);
+    await commands.clickMcpFrame({ title: traceViewer.title, selector: '#open-video' });
+    await vi.waitFor(() => expect(open).toHaveBeenCalledTimes(2));
+    const video = new URL(open.mock.calls[1][0]);
+    expect(video.origin).toBe(window.location.origin);
+    expect(video.pathname).toBe('/api/trace-explainers/abcdef0123456789abcdef0123456789/video');
+    open.mockRestore();
+  });
+
+  test('mounts the dark Recogito reviewer without claiming unconfirmed acceptance', async () => {
+    const journal = presentations.find(({ name }) => name === 'Journal review');
+    await mount(journal);
+    const transcript = await commands.inspectMcpFrame({
+      title: journal.title,
+      selector: '#transcript',
+      attribute: 'data-recogito-ready',
+    });
+    expect(transcript.attribute).toBe('true');
+    expect(transcript.text).toContain('annotate examples first');
+
+    await commands.clickMcpFrame({ title: journal.title, selector: '#review-accept' });
+    const state = await commands.inspectMcpFrame({
+      title: journal.title,
+      selector: '#review-state',
+      attribute: 'data-outcome',
+    });
+    expect(state.attribute).toBe('pending');
+    expect(state.text).toBe('pending');
+    await commands.screenshotMcpFrame({
+      title: journal.title,
+      path: 'build/vitest-screenshots/journal-review-dark.png',
+    });
   });
 
   test('waits for a host element created after rendering starts', async () => {

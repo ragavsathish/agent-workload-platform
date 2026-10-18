@@ -15,8 +15,22 @@ bridge in a sandboxed iframe. A locally bundled Mermaid app handles normal
 status and flow views; a locally bundled Excalidraw app handles explicit rich or
 editable diagram requests. Excalidraw and its fonts are built from
 `vendor/excalidraw-mcp`, are loaded only when selected, and make no CDN request.
-Both apps receive only bounded presentation data. The host does not expose task
+The dark journal-review app uses Recogito Text Annotator for exact evidence spans
+and sends natural-language review requests back through the active voice session.
+These apps receive only bounded presentation data. The host does not expose task
 approval, execution, credentials, links, exports, or server tools.
+
+Preview the journal reviewer through the actual Flutter Web host without
+Tailscale or a running voice backend:
+
+```bash
+npm run prototype:journal-review
+```
+
+Then open
+`http://127.0.0.1:8765/?view=journal-review-preview&prototype=journal-review&variant=A`.
+Variants `A`, `B`, and `C` are available only on that prototype URL; the normal
+MCP App does not render the prototype switcher.
 
 Override the production workspace at build time when needed:
 
@@ -38,8 +52,8 @@ npm run test:patrol
 npm run profile:web
 ```
 
-`test:browser` exercises the MCP App bridge and the Mermaid, Marp, and
-Excalidraw renderers with Vitest Browser Mode using its Playwright provider.
+`test:browser` exercises the MCP App bridge and the Mermaid, Marp, Recogito
+journal-review, and Excalidraw renderers with Vitest Browser Mode using its Playwright provider.
 The tests keep the production opaque-origin iframe sandbox intact, verify its
 least-privilege permissions and resource allowlist, and inspect renderer output
 through Playwright's server-side frame API. A Playwright trace is attached for

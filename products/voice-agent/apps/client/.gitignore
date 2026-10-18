@@ -23,6 +23,8 @@ test_bundle.dart
 web/voice_bridge.js
 web/bridge
 web/voice-runtime
+web/trace-explainer/
+web/journal-review/
 dist
 dist-ssr
 *.local

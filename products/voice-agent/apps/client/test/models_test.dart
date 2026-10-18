@@ -38,6 +38,80 @@ void main() {
     expect(response?.resourceUri, 'ui://slides/marp.html');
   });
 
+  test('routes a Playwright trace response to the trace viewer app', () {
+    final response = VisualResponse.fromValue({
+      'spoken': 'Trace viewer ready.',
+      'presentation': {
+        'kind': 'playwright-trace-viewer',
+        'title': 'Responsive journey',
+        'status': 'completed',
+        'traceId': '0123456789abcdef0123456789abcdef',
+      },
+    });
+
+    expect(response?.resourceUri, 'ui://playwright-trace-viewer/main.html');
+  });
+
+  test('routes a journal review response to the Recogito app', () {
+    final response = VisualResponse.fromValue({
+      'spoken': 'Review ready.',
+      'presentation': {
+        'kind': 'journal-review',
+        'reviewId': 'review-1',
+        'transcript': 'Use reviewed labels before training.',
+      },
+    });
+
+    expect(response?.resourceUri, 'ui://journal-review/main.html');
+  });
+
+  test('routes a restored Grafana trace response to the Grafana app', () {
+    final response = VisualResponse.fromValue({
+      'spoken': 'Trace ready.',
+      'presentation': {
+        'kind': 'grafana-trace',
+        'title': 'Latest trace',
+        'traceId': '0123456789abcdef0123456789abcdef',
+        'datasourceUid': 'tempo',
+      },
+    });
+
+    expect(response?.resourceUri, 'ui://grafana/trace.html');
+  });
+
+  test('restores the latest visual response from a persisted transcript', () {
+    final snapshot = TranscriptSnapshot.fromJson({
+      'revision': 4,
+      'entries': [
+        {
+          'id': '1',
+          'timestamp': 1,
+          'role': 'assistant',
+          'text': 'Plain answer',
+        },
+        {
+          'id': '2',
+          'timestamp': 2,
+          'role': 'assistant',
+          'status': 'completed',
+          'text': jsonEncode({
+            'spoken': 'Trace restored.',
+            'presentation': {
+              'kind': 'playwright-trace-viewer',
+              'traceId': '0123456789abcdef0123456789abcdef',
+            },
+          }),
+        },
+      ],
+    });
+
+    expect(snapshot.latestVisualResponse?.spoken, 'Trace restored.');
+    expect(
+      snapshot.latestVisualResponse?.resourceUri,
+      'ui://playwright-trace-viewer/main.html',
+    );
+  });
+
   test('unwraps a JSON-encoded Marp transcript response', () {
     final response = VisualResponse.fromValue(
       jsonEncode(
@@ -74,14 +148,11 @@ void main() {
   });
 
   test('repairs one extra trailing brace in a nested Marp response', () {
-    final nested = '${jsonEncode({
-      'spoken': 'Slides ready.',
-      'presentation': {
-        'kind': 'slides',
-        'title': 'Live check',
-        'markdown': '# Live check',
-      },
-    })}}';
+    final nested =
+        '${jsonEncode({
+          'spoken': 'Slides ready.',
+          'presentation': {'kind': 'slides', 'title': 'Live check', 'markdown': '# Live check'},
+        })}}';
     final response = VisualResponse.fromValue({'spoken': nested});
 
     expect(response?.spoken, 'Slides ready.');
@@ -102,5 +173,28 @@ void main() {
 
     expect(task.state, 'running');
     expect(task.isActive, isTrue);
+  });
+
+  test('parses a server-assigned jazz session identity', () {
+    final task = AgentTask.fromJson({
+      'id': 'task-1',
+      'instruction': 'Inspect the repository',
+      'workspace': '/workspace',
+      'plan_hash': 'abc',
+      'status': 'pending',
+      'created_at': '2026-10-15T20:00:00Z',
+      'session_name': 'Kind of Blue',
+      'session_reference': {
+        'artist': 'Miles Davis',
+        'spotify_url': 'https://open.spotify.com/album/1weenld61qoidwYuZ1GESA',
+      },
+    });
+
+    expect(task.sessionName, 'Kind of Blue');
+    expect(task.sessionArtist, 'Miles Davis');
+    expect(
+      task.sessionSpotifyUrl,
+      'https://open.spotify.com/album/1weenld61qoidwYuZ1GESA',
+    );
   });
 }

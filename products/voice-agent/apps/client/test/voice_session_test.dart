@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:voice_agent_client/api_client.dart';
 import 'package:voice_agent_client/platform/voice_session.dart';
 import 'package:voice_agent_client/theme.dart';
@@ -73,6 +76,100 @@ void main() {
     await tester.pump();
     expect(session.disconnectCount, 1);
     expect(find.byKey(const Key('start-conversation')), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await session.close();
+  });
+
+  testWidgets(
+    'journal review mounts without replacing the voice conversation controls',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final session = FakeVoiceSession();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildTheme(),
+          home: VoiceView(api: VoiceApi(), session: session),
+        ),
+      );
+
+      await tester.tap(find.byKey(const Key('start-conversation')));
+      await tester.pump();
+      session.emit(
+        const VoiceEvent(
+          VoiceEventType.mcpApp,
+          resourceUri: 'ui://journal-review/main.html',
+          presentation: {
+            'kind': 'journal-review',
+            'reviewId': 'review-1',
+            'transcript': 'Use reviewed labels before training.',
+          },
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byKey(const Key('live-mcp-app')), findsOneWidget);
+      expect(find.byKey(const Key('mute-conversation')), findsOneWidget);
+      expect(find.byKey(const Key('end-conversation')), findsOneWidget);
+      final voiceState = tester.widget<Semantics>(
+        find.byKey(const Key('voice-state')),
+      );
+      expect(voiceState.properties.label, 'Listening');
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await session.close();
+    },
+  );
+
+  testWidgets('restores the latest MCP App after the Flutter view reconnects', (
+    tester,
+  ) async {
+    final session = FakeVoiceSession();
+    final api = VoiceApi(
+      client: MockClient((request) async {
+        if (request.url.path == '/api/pi-context') {
+          return http.Response(jsonEncode({
+            'tokens': 1,
+            'contextWindow': 100,
+            'percent': 1,
+            'estimated': false,
+            'canCompact': false,
+          }), 200);
+        }
+        if (request.url.path == '/api/pi-transcript') {
+          return http.Response(jsonEncode({
+            'revision': 2,
+            'entries': [
+              {
+                'id': '2',
+                'timestamp': 2,
+                'role': 'assistant',
+                'status': 'completed',
+                'text': jsonEncode({
+                  'spoken': 'Trace restored.',
+                  'presentation': {
+                    'kind': 'playwright-trace-viewer',
+                    'title': 'Gitea commits',
+                    'traceId': '0123456789abcdef0123456789abcdef',
+                  },
+                }),
+              },
+            ],
+          }), 200);
+        }
+        return http.Response('{}', 404);
+      }),
+    );
+    await tester.pumpWidget(
+      MaterialApp(theme: buildTheme(), home: VoiceView(api: api, session: session)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('live-mcp-app')), findsOneWidget);
+    expect(find.byKey(const Key('open-system-health')), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await session.close();

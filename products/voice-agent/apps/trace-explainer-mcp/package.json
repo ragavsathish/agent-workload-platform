@@ -1,0 +1,33 @@
+{
+  "name": "@agent-workload-platform/trace-explainer-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "trace-explainer-mcp": "dist/main.js"
+  },
+  "scripts": {
+    "clean": "node --input-type=module -e \"import fs from 'node:fs'; fs.rmSync('dist', { recursive: true, force: true })\"",
+    "build": "pnpm run clean && tsc && node scripts/build-app.mjs",
+    "check": "tsc --noEmit",
+    "start": "node dist/main.js",
+    "start:stdio": "node dist/main.js --stdio",
+    "test": "pnpm run build && node --test tests/server.test.mjs tests/remote-backend.test.mjs",
+    "test:blackbox": "pnpm run build && node --test tests/blackbox.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "0.4.2",
+    "@modelcontextprotocol/sdk": "1.25.2",
+    "express": "5.2.1",
+    "fflate": "0.8.3",
+    "playwright-core": "1.58.2",
+    "zod": "4.5.2"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.6",
+    "@types/node": "22.19.11",
+    "esbuild": "0.28.2",
+    "playwright": "1.58.2",
+    "typescript": "5.9.3"
+  }
+}
