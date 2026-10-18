@@ -161,7 +161,11 @@ class PresentationResponseTest(unittest.TestCase):
 
         self.assertEqual(result.resource_uri, "ui://journal-review/main.html")
         self.assertEqual(result.presentation["kind"], "journal-review")
-        self.assertEqual(result.presentation["suggestion"]["evidence"]["quote"], quote)
+        suggestion = result.presentation["suggestion"]
+        assert isinstance(suggestion, dict)
+        evidence = suggestion["evidence"]
+        assert isinstance(evidence, dict)
+        self.assertEqual(evidence["quote"], quote)
 
     def test_rejects_journal_evidence_that_is_not_an_exact_quote(self):
         result = parse_presentation_response(json.dumps({

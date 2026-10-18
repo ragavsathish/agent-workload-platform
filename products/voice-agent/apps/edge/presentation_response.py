@@ -275,9 +275,9 @@ def _normalize_presentation(value: object, spoken: str) -> dict[str, object]:
             if isinstance(value.get("errorCount"), (int, float)) else 0,
             "actions": actions,
         }
-        if preview is not None:
+        if preview is not None and isinstance(preview_url, str):
             result["previewUrl"] = preview_url[:2_000]
-        if narrated_video is not None:
+        if narrated_video is not None and isinstance(narrated_video_url, str):
             result["narratedVideoUrl"] = narrated_video_url[:2_000]
             result["narratedDurationSeconds"] = max(
                 0,

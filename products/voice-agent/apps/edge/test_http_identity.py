@@ -143,7 +143,10 @@ class PlaywrightTraceProxyTest(unittest.IsolatedAsyncioTestCase):
                 trace_request,
                 "api/playwright-traces/0123456789abcdef0123456789abcdef/trace.zip",
             )
-            body = b"".join([chunk async for chunk in response.body_iterator])
+            body = b"".join([
+                chunk.encode() if isinstance(chunk, str) else bytes(chunk)
+                async for chunk in response.body_iterator
+            ])
             if response.background is not None:
                 await response.background()
 
