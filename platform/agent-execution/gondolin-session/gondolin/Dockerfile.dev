@@ -25,17 +25,17 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && apt-get install --yes --no-install-recommends \
         ca-certificates curl docker.io libglu1-mesa unzip xz-utils zip \
     && chmod 0555 /usr/local/bin/start-dev-docker /usr/local/bin/dev-compose \
-    && npm install --global pnpm@11.19.0 \
+    && cp /etc/ssl/certs/ca-certificates.crt /tmp/build-ca-bundle.crt \
+    && if [ -f /run/secrets/gondolin_mitm_ca ]; then \
+         cat /run/secrets/gondolin_mitm_ca >> /tmp/build-ca-bundle.crt; \
+       fi \
+    && NODE_EXTRA_CA_CERTS=/tmp/build-ca-bundle.crt npm install --global pnpm@11.19.0 \
     && case "$(dpkg --print-architecture)" in \
          arm64) compose_arch=aarch64; compose_sha=733ec76717ceb59052a9609b9dadfb523b2df8eab57a54212872d10a58078ea2 ;; \
          amd64) compose_arch=x86_64; compose_sha=40343e21ca777173e69cff5dbafeb37c6f81f3b0d57d9e597f036e95eb63e76a ;; \
          *) exit 1 ;; \
        esac \
     && mkdir -p /usr/local/libexec/docker/cli-plugins \
-    && cp /etc/ssl/certs/ca-certificates.crt /tmp/build-ca-bundle.crt \
-    && if [ -f /run/secrets/gondolin_mitm_ca ]; then \
-         cat /run/secrets/gondolin_mitm_ca >> /tmp/build-ca-bundle.crt; \
-       fi \
     && curl --cacert /tmp/build-ca-bundle.crt --fail --location --silent --show-error \
          "https://github.com/docker/compose/releases/download/v5.6.0/docker-compose-linux-${compose_arch}" \
          --output /usr/local/libexec/docker/cli-plugins/docker-compose \
