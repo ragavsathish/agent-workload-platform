@@ -155,6 +155,7 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
       setState(() {
         _selectedSession = session;
         _historicalSnapshot = snapshot;
+        _expanded.clear();
       });
       _scrollToEnd();
     } on Object catch (error) {
@@ -166,6 +167,7 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
     _selectedSession = null;
     _historicalSnapshot = null;
     _section = WorkspaceSection.conversation;
+    _expanded.clear();
   });
 
   Future<void> _resumeSelectedSession() async {
@@ -908,7 +910,11 @@ class _ConversationPane extends StatelessWidget {
                 key: const Key('return-live-session'),
                 onPressed: onReturnLive,
                 icon: const Icon(Icons.graphic_eq_rounded, size: 16),
-                label: const Text('Back to live'),
+                label: Text(
+                  MediaQuery.sizeOf(context).width < 480
+                      ? 'Live'
+                      : 'Back to live',
+                ),
               ),
               const SizedBox(width: 6),
               FilledButton.icon(

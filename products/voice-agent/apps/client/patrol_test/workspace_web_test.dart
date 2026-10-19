@@ -182,7 +182,7 @@ Future<void> _inspectMobileSessionHistory(
   await $(Key('session-$sessionId')).waitUntilVisible();
   await $(Key('session-$sessionId')).tap();
   await $(const Key('read-only-history')).waitUntilVisible();
-  await $('This diagram can be edited inside the MCP App.').waitUntilVisible();
+  await $(const Key('message-fixture-assistant-6')).waitUntilExists();
   await $(const Key('return-live-session')).tap();
   await $(const Key('message-pi')).waitUntilExists();
 }

@@ -17,7 +17,7 @@
     "test:patrol": "npm run build:mermaid && npm run build:marp && npm run build:trace-explainer && npm run build:journal-review && npm run build:bridge && ./tool/run-patrol-web",
     "dev:mock": "npm run build && node tool/mock-host-services.mjs",
     "dev:mock:serve": "node tool/mock-host-services.mjs",
-    "test:mock": "node --test tool/patrol-fixture-scenes.test.mjs",
+    "test:mock": "node --test tool/patrol-fixture-scenes.test.mjs tool/patrolw.test.mjs",
     "profile:web": "./tool/profile-web",
     "prototype:journal-review": "npm run build && python3 -m http.server 8765 --bind 127.0.0.1 --directory build/web",
     "prototype:trace-explainer": "node tool/prototype-trace-explainer.mjs"

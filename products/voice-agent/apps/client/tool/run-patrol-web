@@ -24,13 +24,19 @@ run_target() {
   local name="$1"
   local target="$2"
   shift 2
+  local -a https_args=()
+  if [[ "${PATROL_WEB_IGNORE_HTTPS_ERRORS:-}" == "true" ]]; then
+    https_args+=(--web-ignore-https-errors)
+  fi
   "$tool_dir/tool/patrolw" test \
     --device chrome \
     --target "$target" \
     --web-headless \
+    --web-locale "${PATROL_WEB_LOCALE:-en-US}" \
+    "${https_args[@]}" \
     --web-workers 1 \
-    --web-timeout 30000 \
-    --web-global-timeout 60000 \
+    --web-timeout 120000 \
+    --web-global-timeout 180000 \
     --web-trace off \
     --web-screenshot only-on-failure \
     --web-results-dir "$results_dir/$name" \

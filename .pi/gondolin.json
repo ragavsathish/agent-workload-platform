@@ -8,6 +8,10 @@
   },
   "memory": "8G",
   "cpus": 4,
+  "environment": {
+    "PATROL_WEB_LOCALE": "en-US",
+    "PATROL_WEB_IGNORE_HTTPS_ERRORS": "true"
+  },
   "development": {
     "docker": true,
     "disk": "64G",

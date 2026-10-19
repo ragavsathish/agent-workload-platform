@@ -37,6 +37,12 @@ does not copy host process credentials or `.env` files, and starts a private
 Docker daemon in the guest. Worktree-local environment files stay with that
 worktree. The VM and its Docker store, volumes, networks, and ports disappear
 at session shutdown. Builds and tests run through that VM, not on the host.
+The optional `environment` map in `.pi/gondolin.json` supplies explicit
+worktree-scoped guest environment variables without forwarding the host
+process environment. This repository sets `PATROL_WEB_LOCALE=en-US` there for
+its browser tests and enables Playwright's HTTPS certificate bypass only in
+the disposable task VM, where Chromium does not trust the development egress
+certificate used for Flutter's fallback font CDN.
 
 `GONDOLIN_DEV_IMAGE_CACHE` optionally points to a trusted host directory of
 pre-exported Compose images. It is mounted read-only at `/image-cache` in each

@@ -28,12 +28,14 @@ type ResolvedGondolinConfig = {
   networkEnabled: boolean;
   allowedHosts: string[];
   skillsDirectory: string | undefined;
+  environment: Record<string, string>;
 };
 type ProjectVmConfig = {
   image?: string;
   memory?: string;
   cpus?: number;
   policy?: string;
+  environment?: Record<string, string>;
   development?: { docker?: boolean; disk?: string; sessionStartHook?: string };
 };
 const extensionDir = path.dirname(fileURLToPath(import.meta.url));
@@ -101,6 +103,12 @@ function resolveGondolinConfig(options: {
   }
   if (raw.policy !== undefined && typeof raw.policy !== "string") {
     throw new Error("gondolin.policy must be a string");
+  }
+  if (raw.environment !== undefined &&
+    (!record(raw.environment) || Object.entries(raw.environment).some(
+      ([key, value]) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || typeof value !== "string",
+    ))) {
+    throw new Error("gondolin.environment must map environment variable names to strings");
   }
   if (raw.development !== undefined && !record(raw.development)) {
     throw new Error("gondolin.development must be an object");
@@ -175,6 +183,7 @@ function resolveGondolinConfig(options: {
     networkEnabled,
     allowedHosts,
     skillsDirectory: options.skillsDirectory,
+    environment: config.environment ?? {},
   };
 }
 
@@ -275,13 +284,16 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
         network: configured.networkEnabled
           ? { allowedHosts: configured.allowedHosts }
           : false,
-        environment: devSession ? {
-          PATH: "/opt/flutter/bin:/opt/flutter/bin/cache/dart-sdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-          FLUTTER_HOME: "/opt/flutter",
-          FLUTTER_ROOT: "/opt/flutter",
-          PUB_CACHE: "/var/cache/pub",
-          PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright",
-        } : undefined,
+        environment: {
+          ...(devSession ? {
+            PATH: "/opt/flutter/bin:/opt/flutter/bin/cache/dart-sdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            FLUTTER_HOME: "/opt/flutter",
+            FLUTTER_ROOT: "/opt/flutter",
+            PUB_CACHE: "/var/cache/pub",
+            PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright",
+          } : {}),
+          ...configured.environment,
+        },
         memory: configured.memory,
         cpus: configured.cpus,
         rootfs: devSession ? { mode: "cow", size: configured.development.disk } : undefined,
