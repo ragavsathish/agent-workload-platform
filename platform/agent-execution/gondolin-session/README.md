@@ -52,6 +52,10 @@ so multi-container Compose startup remains a separate unverified capability.
 Use a clean worktree for Linux builds: macOS `node_modules` contains native
 binaries that cannot run in the guest. Durable S3 workspaces already materialize
 clean Git checkouts; install dependencies inside their session VM.
+For browser tests, install the browser revision selected by that worktree's
+Playwright lockfile inside the VM (for example, `npx playwright install chromium`
+after `npm ci`). The reusable image's bundled browser serves its own tooling
+and is not guaranteed to match every repository's Playwright version.
 
 ## Lifecycle contract
 

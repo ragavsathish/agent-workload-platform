@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { cpSync, renameSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -22,8 +22,18 @@ renameSync(
   resolve(outputDirectory, 'mcp-app.html'),
 );
 rmSync(resolve(outputDirectory, 'src'), { force: true, recursive: true });
-cpSync(
+// Node's cpSync can create write-only files through Gondolin's workspace
+// mount. writeFileSync uses the same path as the other generated web assets.
+const copyFonts = (source, destination) => {
+  mkdirSync(destination, { recursive: true });
+  for (const entry of readdirSync(source, { withFileTypes: true })) {
+    const from = resolve(source, entry.name);
+    const to = resolve(destination, entry.name);
+    if (entry.isDirectory()) copyFonts(from, to);
+    else if (entry.isFile()) writeFileSync(to, readFileSync(from), { mode: 0o644 });
+  }
+};
+copyFonts(
   resolve(vendorDirectory, 'node_modules/@excalidraw/excalidraw/dist/prod/fonts'),
   resolve(outputDirectory, 'fonts'),
-  { recursive: true },
 );

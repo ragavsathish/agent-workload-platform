@@ -62,6 +62,10 @@ Use a clean worktree: macOS `node_modules` contains native binaries such as
 `esbuild` that fail in Linux. The durable task's materialized Git checkout is
 clean, and `npm ci` installs Linux dependencies there without touching the
 developer machine's checkout.
+After `npm ci`, run `npx playwright install chromium` inside each fresh VM
+before browser tests. The reusable image carries a browser for its bundled MCP
+tooling, but the client's lockfile can select a different Playwright revision;
+forcing the bundled executable caused pointer actions to miss MCP App controls.
 
 Optionally run `make gondolin-dev-cache` from the repository root to export its Compose
 images once. Set `GONDOLIN_DEV_IMAGE_CACHE` to the resulting
