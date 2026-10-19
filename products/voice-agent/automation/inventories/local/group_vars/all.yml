@@ -79,6 +79,7 @@ capability_protected_endpoints:
 
 launch_agents:
   - com.sathish.pipecat-broker
+  - com.sathish.pipecat-music-generation
   - com.sathish.pipecat-digital-twin-classifier
   - com.sathish.pipecat-digital-twin-listener
   - com.sathish.pipecat-host-observability

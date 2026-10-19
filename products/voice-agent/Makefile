@@ -12,6 +12,7 @@ WASM_ACTIONS := setup build check install clean
 .PHONY: blackbox-voice blackbox-e2e blackbox-personal-knowledge blackbox-remote-session
 .PHONY: playwright-voice playwright-diagnostics playwright-grafana playwright-readme-demo playwright-tailnet-voice
 .PHONY: playwright-tailnet-diagnostics host-preflight install-host-services
+.PHONY: native-start native-stop native-restart native-status
 .PHONY: config-init config-check
 .PHONY: grafana-c4-dashboard digital-twin-image-build digital-twin-load digital-twin-query
 .PHONY: digital-twin-validate digital-twin-test digital-twin-identify-skills
@@ -42,7 +43,9 @@ help:
 		'                      Build a checksummed native Pi RPC supervisor' \
 		'  make pi-rpc-host-smoke' \
 		'                      Exercise worker, Rust RPC, Pi, and Gondolin locally' \
-		'  make start|up|down  Operate the deployment' \
+		'  make start|up|down  Operate the full deployment' \
+		'  make native-start|native-stop|native-restart|native-status' \
+		'                      Manage all eight macOS services' \
 		'  make digital-twin-artifact-verify' \
 		'                      Verify DVC artifacts through local S3Mock' \
 		'  make digital-twin-mlflow-verify' \
@@ -118,6 +121,7 @@ config-check:
 logs:
 	@mkdir -p "$$HOME/Library/Logs/PipecatEdge"
 	@touch "$$HOME/Library/Logs/PipecatEdge/broker.log" "$$HOME/Library/Logs/PipecatEdge/pi-voice.log" "$$HOME/Library/Logs/PipecatEdge/worker.log" "$$HOME/Library/Logs/PipecatEdge/image-builder.log" "$$HOME/Library/Logs/PipecatEdge/host-observability.log" "$$HOME/Library/Logs/PipecatEdge/digital-twin-listener.log"
+	@touch "$$HOME/Library/Logs/PipecatEdge/music-generation.log"
 	@chmod 600 "$$HOME/Library/Logs/PipecatEdge/"*.log
 	@interrupted=0; \
 	tail -n 100 -F "$$HOME/Library/Logs/PipecatEdge/"*.log & tail_pid=$$!; \
@@ -129,10 +133,24 @@ logs:
 	exit "$$status"
 
 down:
+	$(MAKE) native-stop
 	$(COMPOSE) down
+
+native-start:
+	$(ANSIBLE) automation/playbooks/native_services.yml -e native_action=start
+
+native-stop:
+	$(ANSIBLE) automation/playbooks/native_services.yml -e native_action=stop
+
+native-restart:
+	$(ANSIBLE) automation/playbooks/native_services.yml -e native_action=restart
+
+native-status:
+	$(ANSIBLE) automation/playbooks/native_services.yml -e native_action=status
 
 recreate:
 	$(COMPOSE) up -d --wait --force-recreate
+	$(MAKE) native-start
 	$(MAKE) automation-verify
 
 verify: automation-verify
@@ -150,6 +168,7 @@ automation-check:
 	$(ANSIBLE) --syntax-check automation/playbooks/playwright_e2e.yml -e playwright_project=voice
 	$(ANSIBLE) --syntax-check automation/playbooks/blackbox_voice.yml
 	$(ANSIBLE) --syntax-check automation/playbooks/install_host_services.yml
+	$(ANSIBLE) --syntax-check automation/playbooks/native_services.yml
 	ANSIBLE_CONFIG=automation/ansible.cfg uvx --from ansible-lint ansible-lint automation/playbooks automation/roles
 
 automation-verify:
@@ -183,10 +202,7 @@ login:
 status:
 	$(COMPOSE) ps
 	$(COMPOSE) exec -T tailscale tailscale --socket=/tmp/tailscaled.sock status || true
-	launchctl print "gui/$$UID/com.sathish.pipecat-broker" | sed -n '1,20p'
-	launchctl print "gui/$$UID/com.sathish.pipecat-host-observability" | sed -n '1,20p'
-	launchctl print "gui/$$UID/com.sathish.pipecat-worker" | sed -n '1,20p'
-	launchctl print "gui/$$UID/com.sathish.pipecat-image-builder" | sed -n '1,20p'
+	$(MAKE) native-status
 
 grafana-password:
 	@test -s deploy/secrets/grafana-admin-password || { echo "Run make up first" >&2; exit 1; }

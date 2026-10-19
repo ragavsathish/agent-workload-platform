@@ -93,6 +93,8 @@ make login
 
 Use `make status` to inspect the deployment, `make verify` to check its security
 and capability boundaries, and `make check` for the full development suite.
+Use `make native-status`, `make native-start`, `make native-stop`, or `make native-restart`
+to operate all eight macOS services. `make down` stops those services and Compose.
 The repository Makefile is the main orchestrator and delegates product work to
 `products/voice-agent`. Additional product targets are available as
 `make voice-TARGET`; for example, `make voice-pull-model`.

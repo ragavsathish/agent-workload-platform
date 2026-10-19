@@ -23,6 +23,8 @@ host_services_gondolin_assets_source: "{{ voice_agent_root }}/../../artifacts/go
 host_services_builder_assets_source: "{{ voice_agent_root }}/../../artifacts/gondolin-builder/{{ host_services_architecture }}"
 host_services_wassette_override: "{{ lookup('ansible.builtin.env', 'WASSETTE_BIN') }}"
 host_services_skills_override: "{{ lookup('ansible.builtin.env', 'PI_VOICE_SKILLS_SOURCE') }}"
+host_services_music_dir: "{{ host_services_runtime_dir }}/apps/music-generation"
+host_services_music_ref: ca1e85fe9430179831e6bc6be790c332190a3866
 
 host_services_runtime_directories:
   - bin
@@ -51,6 +53,7 @@ host_services_secure_directories:
 
 host_services_log_names:
   - broker
+  - music-generation
   - pi-voice
   - worker
   - image-builder

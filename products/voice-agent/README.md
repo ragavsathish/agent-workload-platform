@@ -158,6 +158,10 @@ name when the Mac itself is not connected as a Tailscale client.
 make status       # Compose services, tailnet state, native service state
 make start        # deploy, verify, and return after services become healthy
 make up           # deploy, verify, and follow service stdout
+make native-status # inspect all eight launchd services
+make native-start  # start the installed native services; Compose dependencies must be running
+make native-stop   # unload the native services in reverse order
+make native-restart # restart the native services and wait for model readiness
 make logs         # follow container and native-service stdout
 make verify       # isolation, capabilities, ingress, broker, and gateway checks
 make grafana-password # print the local Grafana credential after make up
@@ -173,9 +177,15 @@ make digital-twin-load-judge # load Selene with the API identifier used by the e
 make digital-twin-eval # compare Von, optional Jev, and local Clef; LM Studio Selene judges outputs
 make digital-twin-judge-calibration # run grouped development/holdout judge calibration
 make digital-twin-judge-report RESULTS=digital-twin/eval/results/judge-calibration.json
-make down         # stop Compose services; preserve Postgres and Tailscale volumes
+make down         # stop native and Compose services; preserve Postgres and Tailscale volumes
 make check        # tests, lint, type checks, build, Compose and plist validation
 ```
+
+`make start` installs and starts the native services after Postgres, S3Mock, and Gitea are healthy.
+Use `make native-start` after installation when those container dependencies are already running.
+`make native-stop` unloads the services, so launchd will not immediately restart jobs configured
+with `KeepAlive`. `make down` stops native services before stopping Compose. `make native-status`
+reads launchd state without changing it; `make verify` checks service readiness.
 
 Postgres and S3Mock are published only on host loopback so the native Pi worker can consume the
 queue and immutable workspace bundles. The bearer-protected agent gateway is also published on
@@ -186,6 +196,10 @@ attachable Pi session that writes a bounded lyric manifest. A later explicit ren
 the reviewed manifest to a loopback-only ACE-Step host API, encodes the result as M4A, and stores it
 in S3Mock. The browser retrieves completed audio through the identity-checked edge proxy; model
 weights, S3 credentials, lyrics, and audio never enter MCP arguments or OpenTelemetry.
+The host-service install pins ACE-Step 1.5 in the persistent `PipecatEdge/apps/music-generation`
+directory and runs its loopback API as a launchd service. `make start` installs and starts it;
+`make status` shows its launchd state. The first start may take several minutes while the model
+downloads and loads. `make verify` checks that both audio and language models are ready.
 The native inference broker listens on `127.0.0.1:9443`; Docker Desktop makes that protected
 capability available through the private `inference-broker` host-gateway alias. No service listens
 on the Mac LAN interface; browser access is available only through the tailnet listener.

@@ -3,6 +3,7 @@
 VOICE_AGENT_DIR := products/voice-agent
 VOICE_AGENT_TARGETS := setup build check start up logs status verify down recreate
 VOICE_AGENT_TARGETS += login host-preflight pull-model install-host-services
+VOICE_AGENT_TARGETS += native-start native-stop native-restart native-status
 WASM_TARGETS := wasm-setup wasm-build wasm-check wasm-install wasm-clean
 
 HOST_ARCH := $(shell uname -m)
@@ -30,6 +31,8 @@ help:
 		'  make build          Build the Voice Agent and every WASM component' \
 		'  make check          Run the complete development suite' \
 		'  make start|up|down  Operate the Voice Agent deployment' \
+		'  make native-start|native-stop|native-restart|native-status' \
+		'                      Manage the eight macOS services' \
 		'  make login          Authenticate and configure tailnet ingress' \
 		'  make verify         Verify deployed infrastructure' \
 		'  make wasm-build     Build every WASM component' \

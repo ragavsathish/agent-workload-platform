@@ -59,6 +59,18 @@
     label: "{{ item.name }}"
   tags: [http, security]
 
+- name: Verify ACE-Step is ready for music generation
+  ansible.builtin.uri:
+    url: http://127.0.0.1:8001/health
+    status_code: 200
+    use_netrc: false
+  register: verify_infrastructure_music_health
+  failed_when: >-
+    verify_infrastructure_music_health.status != 200
+    or not (verify_infrastructure_music_health.json.data.models_initialized | default(false))
+    or not (verify_infrastructure_music_health.json.data.llm_initialized | default(false))
+  tags: [http, application_probe]
+
 - name: Read the voice-edge feature contract inside its network namespace
   community.docker.docker_compose_v2_exec:
     project_src: "{{ compose_project_src }}"

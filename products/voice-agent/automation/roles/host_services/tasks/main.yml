@@ -141,6 +141,25 @@
     state: directory
     mode: "0700"
 
+- name: Install pinned ACE-Step source
+  ansible.builtin.git:
+    repo: https://github.com/ace-step/ACE-Step-1.5.git
+    dest: "{{ host_services_music_dir }}"
+    version: "{{ host_services_music_ref }}"
+    update: false
+  notify: Restart host services
+
+- name: Install ACE-Step dependencies
+  ansible.builtin.command:
+    argv: [uv, sync, --frozen, --python, '3.12']
+    chdir: "{{ host_services_music_dir }}"
+  register: host_services_music_sync
+  changed_when: >-
+    'Installed ' in (host_services_music_sync.stdout + host_services_music_sync.stderr)
+    or 'Uninstalled ' in (host_services_music_sync.stdout + host_services_music_sync.stderr)
+    or 'Updated ' in (host_services_music_sync.stdout + host_services_music_sync.stderr)
+  notify: Restart host services
+
 - name: Create LaunchAgent and log directories
   ansible.builtin.file:
     path: "{{ item }}"
@@ -517,6 +536,18 @@
   until: host_services_native_endpoint.status == 401
   retries: 30
   delay: 2
+
+- name: Wait for ACE-Step models to be ready
+  ansible.builtin.uri:
+    url: http://127.0.0.1:8001/health
+    status_code: 200
+    use_netrc: false
+  register: host_services_music_health
+  until: >-
+    host_services_music_health.json.data.models_initialized | default(false)
+    and host_services_music_health.json.data.llm_initialized | default(false)
+  retries: 240
+  delay: 5
 
 - name: Wait for native host metrics
   ansible.builtin.uri:
