@@ -77,8 +77,12 @@ to that worktree's Compose path and `COMPOSE_CACHE_SERVICES` to the needed
 service names before using `dev-compose` for image-consuming commands. It loads
 only selected images and applies a no-pull override. It does not share environment
 files: provide any Compose `.env` or `--env-file` from the session's worktree.
-This dev guest build currently lacks usable Docker bridge networking, so the cache does
-not yet make the complete multi-container stack runnable in the guest.
+This dev guest build lacks usable Docker bridge networking. Pi's `session_start`
+hook automatically layers the VM-only `.pi/compose.dev.yml` over the existing
+deployment Compose file on guest host networking when the shared cache is
+mounted. It starts observability, S3Mock, Oxigraph,
+Postgres, and Gitea with disposable state. It does not run the production
+voice-edge/gateway/Tailscale stack or copy host secrets into the VM.
 
 Playwright and the mock can both use guest loopback. External browser preview
 requires an explicit, loopback-scoped Gondolin ingress route; guest ports are

@@ -10,7 +10,8 @@
   "cpus": 4,
   "development": {
     "docker": true,
-    "disk": "64G"
+    "disk": "64G",
+    "sessionStartHook": ".pi/hooks/start-dev-stack.mjs"
   },
   "policy": ".pi/gondolin-policy.json"
 }

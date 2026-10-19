@@ -28,7 +28,7 @@ from voice_agent.tasking.domain.song_generation import (
     manifest_from_pi_result,
     validate_song_manifest,
 )
-from voice_agent.tasking.domain.workspaces import resolve_workspace
+from voice_agent.tasking.domain.workspaces import is_scratch_workspace, resolve_workspace
 from voice_agent.tasking.infrastructure.ace_step import create_ace_step_renderer
 from voice_agent.tasking.infrastructure.artifacts import ArtifactStore
 from voice_agent.tasking.infrastructure.config import Settings
@@ -151,9 +151,8 @@ def validate_worker(settings: Settings) -> None:
         raise RuntimeError(f"Skills directory not found: {settings.skills_dir}")
     if not settings.gondolin_extension and not settings.allow_unsandboxed:
         raise RuntimeError("secure worker requires PI_GONDOLIN_EXTENSION")
-    if settings.artifact_workspaces:
-        settings.worker_scratch_root.mkdir(parents=True, exist_ok=True, mode=0o700)
-        os.chmod(settings.worker_scratch_root, 0o700)
+    settings.worker_scratch_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(settings.worker_scratch_root, 0o700)
     settings.pi_session_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(settings.pi_session_dir, 0o700)
     settings.pi_rpc_socket_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -177,6 +176,8 @@ def run_pi(
         process_environment = os.environ.copy()
         if image_ref is not None:
             process_environment["GONDOLIN_EXECUTION_IMAGE_REF"] = image_ref
+        else:
+            process_environment.pop("GONDOLIN_EXECUTION_IMAGE_REF", None)
         trace_carrier: dict[str, str] = {}
         inject(trace_carrier)
         if traceparent := trace_carrier.get("traceparent"):
@@ -452,7 +453,31 @@ def create_worker(settings: Settings) -> Absurd:
             ctx.complete_step(intent, {"started": True, "session_id": task_id})
             return None
 
-        if artifacts:
+        if is_scratch_workspace(str(params["workspace"])):
+            if settings.gondolin_extension is None:
+                raise RuntimeError("scratch tasks require PI_GONDOLIN_EXTENSION")
+            with tempfile.TemporaryDirectory(
+                prefix=f"task-{task_id}-", dir=settings.worker_scratch_root
+            ) as temporary:
+                workspace = Path(temporary)
+                reconciliation = checkpoint_pi_intent()
+                if reconciliation:
+                    return reconciliation
+                result = run_pi(
+                    settings,
+                    task_id=task_id,
+                    instruction=str(params["instruction"]),
+                    workspace=workspace,
+                    image_ref=settings.scratch_image_ref or None,
+                )
+                if artifacts:
+                    result["artifacts"] = artifacts.capture_scratch_result(
+                        task_id=task_id,
+                        workspace=workspace,
+                        execution=result,
+                        max_bytes=settings.max_artifact_bytes,
+                    )
+        elif artifacts:
             with artifacts.materialize_workspace(
                 str(params["workspace"]), settings.worker_scratch_root
             ) as workspace:

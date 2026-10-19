@@ -1,0 +1,115 @@
+name: awp-task-dev
+
+# Layered over products/voice-agent/deploy/compose.yml only inside a task VM.
+# Selected services keep production image pins and most hardening, but use
+# guest host networking because Gondolin cannot create a Docker bridge.
+services:
+  otel-lgtm:
+    entrypoint: ["/otel-lgtm/run-all.sh"]
+    command: !reset []
+    network_mode: host
+    networks: !reset []
+    ports: !reset []
+    secrets: !reset []
+    environment: !override
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_SECURITY_ADMIN_PASSWORD: disposable-task-vm-only
+    volumes: !override
+      - otel-dev-data:/data
+
+  s3mock:
+    depends_on: !reset []
+    network_mode: host
+    networks: !reset []
+    ports: !reset []
+    environment: !override
+      COM_ADOBE_TESTING_S3MOCK_HTTP_PORT: "9092"
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: agent-artifacts
+      COM_ADOBE_TESTING_S3MOCK_STORE_ROOT: /s3mockroot
+    volumes: !override
+      - s3-dev-data:/s3mockroot
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:9092/favicon.ico"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  oxigraph:
+    depends_on: !reset []
+    network_mode: host
+    networks: !reset []
+    ports: !reset []
+    user: !reset null
+    command: ["serve", "--location", "/data", "--bind", "127.0.0.1:7878"]
+    volumes: !override
+      - oxigraph-dev-data:/data
+
+  postgres:
+    network_mode: host
+    networks: !reset []
+    ports: !reset []
+    secrets: !reset []
+    environment: !override
+      POSTGRES_DB: voice_agents
+      POSTGRES_USER: voice_agents
+      POSTGRES_PASSWORD: disposable-task-vm-only
+    volumes: !override
+      - postgres-dev-data:/var/lib/postgresql/data
+
+  gitea:
+    network_mode: host
+    networks: !reset []
+    ports: !reset []
+    environment: !override
+      GITEA__actions__ENABLED: "false"
+      GITEA__database__DB_TYPE: sqlite3
+      GITEA__database__PATH: /var/lib/gitea/data/gitea.db
+      GITEA__server__HTTP_ADDR: 127.0.0.1
+      GITEA__server__HTTP_PORT: "3001"
+      GITEA__server__ROOT_URL: http://127.0.0.1:3001/
+      GITEA__server__DISABLE_SSH: "true"
+      GITEA__security__SECRET_KEY: disposable-task-vm-only
+      GITEA__service__DISABLE_REGISTRATION: "true"
+    volumes: !override
+      - gitea-dev-data:/var/lib/gitea
+      - gitea-dev-config:/etc/gitea
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3001/api/healthz"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  # The production edge requires tailnet ingress, native inference, and host
+  # secrets. Keep those services out of the Pi dependency selection.
+  agent-gateway:
+    profiles: [production]
+  fluent-bit:
+    profiles: [production]
+  grafana-mcp:
+    profiles: [production]
+  grafana-mcp-bootstrap:
+    profiles: [production]
+  habitat:
+    profiles: [production]
+  oxigraph-init:
+    profiles: [production]
+  s3mock-init:
+    profiles: [production]
+  tailscale:
+    profiles: [production]
+  trace-render-worker:
+    profiles: [production]
+  traefik:
+    profiles: [production]
+  voice-edge:
+    profiles: [production]
+    env_file: !reset []
+
+volumes:
+  otel-dev-data:
+  s3-dev-data:
+  oxigraph-dev-data:
+  postgres-dev-data:
+  gitea-dev-data:
+  gitea-dev-config:

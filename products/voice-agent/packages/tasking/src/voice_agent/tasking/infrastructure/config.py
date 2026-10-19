@@ -49,6 +49,7 @@ class Settings:
     artifact_secret_key: str = ""
     allowed_workspaces: tuple[str, ...] = ()
     worker_scratch_root: Path = Path("~/.local/share/agent-workload-platform/workspaces")
+    scratch_image_ref: str = ""
     max_artifact_bytes: int = 16_777_216
     defer_workspace_validation: bool = False
     image_build_timeout_seconds: int = 7200
@@ -113,6 +114,7 @@ class Settings:
                     "~/.local/share/agent-workload-platform/workspaces",
                 )
             ).expanduser(),
+            scratch_image_ref=_value("WORKER_SCRATCH_IMAGE_REF") or _value("GONDOLIN_BROWSER_ASSETS"),
             max_artifact_bytes=int(os.getenv("WORKER_MAX_ARTIFACT_BYTES", "16777216")),
             defer_workspace_validation=_bool_env("ORCHESTRATOR_DEFER_WORKSPACE_VALIDATION"),
             image_build_timeout_seconds=int(os.getenv("IMAGE_BUILD_TIMEOUT_SECONDS", "7200")),
@@ -180,9 +182,5 @@ class Settings:
                 missing.append("ARTIFACT_BUCKET")
             if not self.artifact_access_key or not self.artifact_secret_key:
                 missing.append("ARTIFACT_ACCESS_KEY/ARTIFACT_SECRET_KEY")
-            if not self.allowed_workspaces:
-                missing.append("ORCHESTRATOR_ALLOWED_WORKSPACES")
-        elif not self.workspace_roots:
-            missing.append("ORCHESTRATOR_WORKSPACE_ROOTS")
         if missing:
             raise RuntimeError("Missing secure orchestrator configuration: " + ", ".join(missing))

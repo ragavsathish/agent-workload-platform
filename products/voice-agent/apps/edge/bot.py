@@ -718,7 +718,7 @@ async def run_bot(transport: BaseTransport, identity: str):
                 },
                 "workspace": {
                     "type": "string",
-                    "description": "Allowlisted logical name of the intended project workspace.",
+                    "description": "Allowlisted project name, or 'scratch' when no repository is selected. A missing named project never falls back automatically.",
                 },
             },
             required=["instruction", "workspace"],
@@ -755,7 +755,7 @@ async def run_bot(transport: BaseTransport, identity: str):
                 },
                 "workspace": {
                     "type": "string",
-                    "description": "Allowlisted logical name of the project workspace.",
+                    "description": "Allowlisted project name, or 'scratch' when no repository is selected. A missing named project never falls back automatically.",
                 },
             },
             required=["instruction", "workspace"],

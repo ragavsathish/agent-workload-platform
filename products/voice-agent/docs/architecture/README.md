@@ -96,8 +96,11 @@ only their component-specific settings through a mode-0600 env file. This path i
 Gondolin VM used by Pi's native file and shell tools.
 Delegated work is separate. The **Agent Gateway** owns identity and task-lifecycle policy. PostgreSQL
 stores both the proposal records and Absurd durable queue schema. S3Mock stores immutable Git bundles
-and bounded task outputs. The native **Pi Task Worker** materializes one bundle into temporary scratch
-space and invokes Pi with the Gondolin extension. Optional external integrations are exposed through
+and bounded task outputs. The native **Pi Task Worker** materializes a selected bundle into temporary
+task space, or allocates an empty task-scoped `scratch` workspace when no repository was selected,
+then invokes Pi with the Gondolin extension. Scratch tasks use a worker-controlled default image and
+publish a bounded workspace ZIP rather than a Git patch. Missing named repositories fail explicitly;
+they never silently become scratch tasks. Optional external integrations are exposed through
 Wassette with explicit permissions. When `.pi/gondolin.json` declares a project image build, the
 task worker checks Gitea Packages and dispatches the repository's fixed Gitea Actions workflow on a cache miss.
 The content address covers the declared Docker context, Dockerfile, asset configuration, named build

@@ -47,6 +47,22 @@ guest, set `COMPOSE_FILE` to that worktree's Compose path and
 `COMPOSE_CACHE_SERVICES` to the needed service names, then use `dev-compose`
 to load only those cached image tags and apply its no-pull override. The
 image bytes are shared; no Docker data root, named volume, or port is shared.
+For this repository, `.pi/gondolin.json` selects `.pi/hooks/start-dev-stack.mjs`
+as a Pi `session_start` hook. After the private Docker daemon starts, the hook
+uses `dev-compose` to load the cached images and layer `.pi/compose.dev.yml`
+over the existing `products/voice-agent/deploy/compose.yml`. The Pi override
+selects only task-VM dependencies, replaces host networking and secrets with
+guest-local settings, and retains the base image pins. It starts Grafana/OTel/Prometheus, S3Mock, Oxigraph,
+Postgres, and Gitea, then checks readiness before Pi receives coding tools.
+The guest loopback ports are 3000/4318/9090 for observability, 9092 for S3Mock,
+7878 for Oxigraph, 5432 for Postgres, and 3001 for Gitea. When
+`GONDOLIN_DEV_IMAGE_CACHE` is unset, the hook reports a skip and leaves the task
+usable without the stack. The override's hardcoded dev passwords are disposable
+and never used by host deployment. Containers and data disappear with the task VM; no
+host service or port is shared. The agent should query these services, not
+start them in its prompt. This is a disposable development dependency stack,
+not the production Compose deployment: voice-edge, gateway, Tailscale, and
+host inference are not started in the guest.
 Docker bridge networking is not currently available in this dev guest build,
 so multi-container Compose startup remains a separate unverified capability.
 Use a clean worktree for Linux builds: macOS `node_modules` contains native
@@ -61,9 +77,10 @@ and is not guaranteed to match every repository's Playwright version.
 
 1. The Pi Adapter synchronously replaces `read`, `write`, `edit`, and `bash`
    while the extension loads. No process or VM starts during this step.
-2. `session_start` starts the Agent Session and discovers enabled Capability
-   Providers. A configuration or startup error is rethrown; Pi never falls
-   back to host coding tools.
+2. `session_start` starts the Agent Session, runs the optional worktree-confined
+   development startup hook, and discovers enabled Capability Providers. A
+   configuration or startup error is rethrown; Pi never falls back to host
+   coding tools.
 3. Coding operations, Playwright, and user `!` commands share the same VM.
 4. The product-selected workspace is mounted read-write at `/workspace`.
    Trusted skills, when present, are mounted read-only at `/skills`.

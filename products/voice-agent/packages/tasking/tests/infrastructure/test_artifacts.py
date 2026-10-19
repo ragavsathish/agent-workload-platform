@@ -1,8 +1,10 @@
 import io
 import subprocess
+import zipfile
 from pathlib import Path
 
 import pytest
+from botocore.exceptions import ClientError
 from voice_agent.tasking.infrastructure.artifacts import (
     ArtifactStore,
     validate_workspace_name,
@@ -17,6 +19,8 @@ def test_workspace_name_is_logical_and_allowlisted() -> None:
         validate_workspace_name("/Users/me/Documents/project", allowed)
     with pytest.raises(ValueError, match="not allowed"):
         validate_workspace_name("another-project", allowed)
+    with pytest.raises(ValueError, match="reserved"):
+        validate_workspace_name("scratch", ("scratch",))
 
 
 def test_source_uri_must_target_expected_bucket_and_digest() -> None:
@@ -65,3 +69,46 @@ def test_workspace_bundle_preserves_source_branch(tmp_path: Path) -> None:
     with store.materialize_workspace(uri, tmp_path / "scratch") as workspace:
         assert _workflow_ref(workspace) == "refs/heads/feature/dev-vm"
         assert (workspace / "README.md").read_text() == "source snapshot\n"
+
+
+def test_missing_published_workspace_suggests_explicit_scratch() -> None:
+    class Client:
+        def get_object(self, **_):
+            raise ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject")
+
+    store = object.__new__(ArtifactStore)
+    store.bucket = "test-bucket"
+    store.client = Client()
+    with pytest.raises(ValueError, match="choose 'scratch'"):
+        store.resolve_workspace("project", ("project",))
+
+
+def test_scratch_result_saves_bounded_files_without_git(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "notes.txt").write_text("hello\n")
+    (workspace / "nested").mkdir()
+    (workspace / "nested" / "result.txt").write_text("world\n")
+    (workspace / "outside-link").symlink_to(tmp_path)
+    objects = {}
+
+    class Client:
+        def put_object(self, *, Key, Body, **_):
+            objects[Key] = Body
+
+    store = object.__new__(ArtifactStore)
+    store.bucket = "test-bucket"
+    store.client = Client()
+    uris = store.capture_scratch_result(
+        task_id="task-1", workspace=workspace, execution={"exit_code": 0}, max_bytes=1024
+    )
+    assert set(uris) == {"workspace", "execution"}
+    with zipfile.ZipFile(io.BytesIO(objects["tasks/task-1/workspace.zip"])) as archive:
+        assert archive.namelist() == ["nested/result.txt", "notes.txt"]
+        assert archive.read("notes.txt") == b"hello\n"
+
+    with pytest.raises(ValueError, match="exceeds WORKER_MAX_ARTIFACT_BYTES"):
+        store.capture_scratch_result(
+            task_id="task-2", workspace=workspace, execution={}, max_bytes=2
+        )
+    assert "tasks/task-2/workspace.zip" not in objects

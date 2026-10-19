@@ -1,6 +1,8 @@
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
 from voice_agent.tasking.application.service import (
     TaskService,
     bounded_trace_context,
@@ -146,6 +148,46 @@ def test_plan_hash_accepts_legacy_rows_but_new_rows_bind_the_album() -> None:
     assert not persisted_plan_hash_is_valid(
         {**row, "session_name": "Kind of Blue · Take 3", "plan_hash": current}
     )
+
+
+def test_scratch_plan_does_not_resolve_a_repository(tmp_path: Path) -> None:
+    service = TaskService(settings(tmp_path))
+    assert service._plan("  Explore an idea  ", "scratch") == {
+        "instruction": "Explore an idea",
+        "workspace": "scratch",
+    }
+
+
+def test_scratch_only_configuration_needs_no_repository_allowlist(tmp_path: Path) -> None:
+    configured = replace(settings(tmp_path), workspace_roots=())
+    service = TaskService(configured)
+    assert service._plan("Explore an idea", "scratch")["workspace"] == "scratch"
+    with pytest.raises(ValueError, match="outside"):
+        service._plan("Explore an idea", str(tmp_path / "missing"))
+
+
+def test_scratch_plan_does_not_query_the_artifact_store(tmp_path: Path, monkeypatch) -> None:
+    configured = replace(
+        settings(tmp_path),
+        artifact_endpoint_url="http://s3.test",
+        artifact_bucket="test-bucket",
+        artifact_access_key="test-key",
+        artifact_secret_key="test-secret",
+        workspace_roots=(),
+    )
+    service = TaskService(configured)
+
+    def unexpected(*_args):
+        raise AssertionError("scratch must not resolve an S3 repository pointer")
+
+    monkeypatch.setattr(service.artifacts, "resolve_workspace", unexpected)
+    assert service._plan("Explore an idea", "scratch")["workspace"] == "scratch"
+
+
+def test_missing_named_repository_does_not_become_scratch(tmp_path: Path) -> None:
+    service = TaskService(settings(tmp_path))
+    with pytest.raises(ValueError, match="choose 'scratch'"):
+        service._plan("Explore an idea", str(tmp_path / "missing"))
 
 
 def test_durable_trace_context_keeps_only_bounded_w3c_fields() -> None:

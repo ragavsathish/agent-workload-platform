@@ -15,6 +15,17 @@ if (!composeArgument || !cacheArgument) {
 const composePath = path.resolve(composeArgument);
 const cacheDirectory = path.resolve(cacheArgument);
 const docker = (...args) => execFileSync("docker", args, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }).trim();
+function validateArchive(archive) {
+  const files = new Set(execFileSync("tar", ["-tf", archive], { encoding: "utf8" }).trim().split("\n"));
+  const manifests = JSON.parse(execFileSync("tar", ["-xOf", archive, "manifest.json"], { encoding: "utf8" }));
+  for (const manifest of manifests) {
+    for (const file of [manifest.Config, ...manifest.Layers]) {
+      if (!files.has(file)) {
+        throw new Error(`incomplete Docker image archive ${archive}: missing ${file}`);
+      }
+    }
+  }
+}
 const config = JSON.parse(docker("compose", "-f", composePath, "config", "--format", "json"));
 if (!config.services || typeof config.services !== "object") {
   throw new Error("Compose configuration has no services");
@@ -52,10 +63,14 @@ const imageDirectory = path.join(cacheDirectory, "images");
 fs.mkdirSync(imageDirectory, { recursive: true });
 for (const image of images.keys()) {
   const archive = path.join(imageDirectory, `${image.split(":")[1]}.tar`);
-  if (fs.existsSync(archive)) continue;
+  if (fs.existsSync(archive)) {
+    validateArchive(archive);
+    continue;
+  }
   const temporaryArchive = `${archive}.${process.pid}.tmp`;
   try {
     docker("save", "--output", temporaryArchive, image);
+    validateArchive(temporaryArchive);
     fs.renameSync(temporaryArchive, archive);
   } finally {
     fs.rmSync(temporaryArchive, { force: true });

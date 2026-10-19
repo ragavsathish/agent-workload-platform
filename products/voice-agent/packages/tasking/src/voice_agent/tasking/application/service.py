@@ -24,6 +24,8 @@ from voice_agent.tasking.domain.session_albums import (
     session_name_for_take,
 )
 from voice_agent.tasking.domain.workspaces import (
+    SCRATCH_WORKSPACE,
+    is_scratch_workspace,
     resolve_workspace,
     validate_workspace_boundary,
 )
@@ -87,6 +89,8 @@ class TaskService:
         cleaned = instruction.strip()
         if not cleaned:
             raise ProposalError("instruction cannot be empty")
+        if is_scratch_workspace(workspace):
+            return {"instruction": cleaned, "workspace": SCRATCH_WORKSPACE}
         if self.artifacts:
             resolved = self.artifacts.resolve_workspace(
                 workspace, self.settings.allowed_workspaces

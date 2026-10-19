@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import re
+import stat
 import subprocess
 import tempfile
+import zipfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -16,12 +19,16 @@ from urllib.parse import urlparse
 
 import boto3
 from botocore.client import Config
+from botocore.exceptions import ClientError
+from voice_agent.tasking.domain.workspaces import SCRATCH_WORKSPACE
 
 _WORKSPACE_NAME = re.compile(r"[a-z0-9][a-z0-9._-]{0,127}")
 _UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
 
 def validate_workspace_name(name: str, allowed: tuple[str, ...]) -> str:
+    if name == SCRATCH_WORKSPACE:
+        raise ValueError("workspace name 'scratch' is reserved for repository-free tasks")
     if not _WORKSPACE_NAME.fullmatch(name):
         raise ValueError("workspace must be a lowercase logical name")
     if name not in allowed:
@@ -94,9 +101,16 @@ class ArtifactStore:
 
     def resolve_workspace(self, name: str, allowed: tuple[str, ...]) -> str:
         validate_workspace_name(name, allowed)
-        response = self.client.get_object(
-            Bucket=self.bucket, Key=f"workspaces/{name}/current.json"
-        )
+        try:
+            response = self.client.get_object(
+                Bucket=self.bucket, Key=f"workspaces/{name}/current.json"
+            )
+        except ClientError as error:
+            if error.response.get("Error", {}).get("Code") in {"NoSuchKey", "404"}:
+                raise ValueError(
+                    f"workspace {name!r} was not published; choose 'scratch' for a task without a repository"
+                ) from error
+            raise
         pointer = json.loads(response["Body"].read())
         key = str(pointer["source_key"])
         digest = str(pointer["sha256"])
@@ -200,6 +214,48 @@ class ArtifactStore:
                 Key=key,
                 Body=body,
                 ContentType=content_type,
+            )
+            uris[label] = f"s3://{self.bucket}/{key}"
+        return uris
+
+    def capture_scratch_result(
+        self, *, task_id: str, workspace: Path, execution: dict[str, Any], max_bytes: int
+    ) -> dict[str, str]:
+        """Save bounded files from a repository-free task without inventing a Git branch."""
+        archive_buffer = io.BytesIO()
+        total_bytes = 0
+        file_count = 0
+        with zipfile.ZipFile(archive_buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for candidate in sorted(workspace.rglob("*")):
+                if candidate.is_symlink() or not candidate.is_file():
+                    continue
+                if not candidate.resolve().is_relative_to(workspace.resolve()):
+                    raise ValueError("scratch artifact escaped the task workspace")
+                file_count += 1
+                if file_count > 1_000:
+                    raise ValueError("scratch workspace exceeds 1000 files")
+                descriptor = os.open(candidate, os.O_RDONLY | os.O_NOFOLLOW)
+                with os.fdopen(descriptor, "rb") as source:
+                    if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+                        continue
+                    content = source.read(max_bytes - total_bytes + 1)
+                total_bytes += len(content)
+                if total_bytes > max_bytes:
+                    raise ValueError("scratch workspace exceeds WORKER_MAX_ARTIFACT_BYTES")
+                archive.writestr(candidate.relative_to(workspace).as_posix(), content)
+        archive_bytes = archive_buffer.getvalue()
+        if len(archive_bytes) > max_bytes:
+            raise ValueError("scratch archive exceeds WORKER_MAX_ARTIFACT_BYTES")
+        result = json.dumps(execution, sort_keys=True, default=str).encode()
+        prefix = f"tasks/{task_id}"
+        objects = {
+            "workspace": (f"{prefix}/workspace.zip", archive_bytes, "application/zip"),
+            "execution": (f"{prefix}/execution.json", result, "application/json"),
+        }
+        uris: dict[str, str] = {}
+        for label, (key, body, content_type) in objects.items():
+            self.client.put_object(
+                Bucket=self.bucket, Key=key, Body=body, ContentType=content_type
             )
             uris[label] = f"s3://{self.bucket}/{key}"
         return uris

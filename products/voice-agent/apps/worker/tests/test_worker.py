@@ -3,16 +3,17 @@ import subprocess
 from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 
 import pytest
 from opentelemetry.propagate import inject
 from psycopg import OperationalError
 from voice_agent.tasking.infrastructure.config import Settings
-
 from voice_worker.main import (
     build_pi_command,
     build_rpc_command,
     continue_task_trace,
+    create_worker,
     record_journal_decision,
     run_digital_twin,
     run_pi,
@@ -232,3 +233,70 @@ def test_worker_reconnects_after_a_temporary_database_outage(
     run_worker(settings(tmp_path, sandboxed=True))
 
     assert events == ["start", "sleep:2.0", "close", "start", "close"]
+
+
+def test_repository_free_task_uses_fresh_scratch_vm_and_captures_files(
+    tmp_path: Path, monkeypatch
+) -> None:
+    registered = {}
+    observed = {}
+
+    class Queue:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def register_task(self, name, **_kwargs):
+            def keep(task):
+                registered[name] = task
+                return task
+
+            return keep
+
+    class Artifacts:
+        def __init__(self, **_kwargs):
+            pass
+
+        def capture_scratch_result(self, *, workspace, **_kwargs):
+            assert (workspace / "result.txt").read_text() == "done"
+            return {"workspace": "s3://bucket/tasks/task-1/workspace.zip"}
+
+    class Context:
+        task_id = "task-1"
+
+        def begin_step(self, _name):
+            return SimpleNamespace(done=False)
+
+        def complete_step(self, _handle, state):
+            return state
+
+    def fake_run_pi(_settings, *, task_id, instruction, workspace, image_ref):
+        assert task_id == "task-1"
+        assert instruction == "Explore the idea"
+        assert image_ref == "default:image"
+        assert list(workspace.iterdir()) == []
+        observed["workspace"] = workspace
+        (workspace / "result.txt").write_text("done")
+        return {"exit_code": 0}
+
+    monkeypatch.setattr("voice_worker.main.Absurd", Queue)
+    monkeypatch.setattr("voice_worker.main.ArtifactStore", Artifacts)
+    monkeypatch.setattr("voice_worker.main.validate_worker", lambda _settings: None)
+    monkeypatch.setattr("voice_worker.main.run_pi", fake_run_pi)
+    configured = replace(
+        settings(tmp_path, sandboxed=True),
+        artifact_endpoint_url="http://s3.test",
+        scratch_image_ref="default:image",
+        worker_scratch_root=tmp_path / "scratch",
+    )
+    configured.worker_scratch_root.mkdir()
+
+    result = create_worker(configured)
+    assert isinstance(result, Queue)
+    completed = registered["agent-run"](
+        {"workspace": "scratch", "instruction": "Explore the idea"}, Context()
+    )
+
+    assert completed["artifacts"] == {
+        "workspace": "s3://bucket/tasks/task-1/workspace.zip"
+    }
+    assert not observed["workspace"].exists()

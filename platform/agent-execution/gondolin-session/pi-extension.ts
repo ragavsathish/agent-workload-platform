@@ -24,7 +24,7 @@ type ResolvedGondolinConfig = {
   imagePath: string;
   memory: string | undefined;
   cpus: number | undefined;
-  development: { docker: boolean; disk: string };
+  development: { docker: boolean; disk: string; sessionStartHook: string | undefined };
   networkEnabled: boolean;
   allowedHosts: string[];
   skillsDirectory: string | undefined;
@@ -34,7 +34,7 @@ type ProjectVmConfig = {
   memory?: string;
   cpus?: number;
   policy?: string;
-  development?: { docker?: boolean; disk?: string };
+  development?: { docker?: boolean; disk?: string; sessionStartHook?: string };
 };
 const extensionDir = path.dirname(fileURLToPath(import.meta.url));
 const runtimeDir = path.basename(extensionDir) === "dist"
@@ -113,6 +113,10 @@ function resolveGondolinConfig(options: {
       (typeof raw.development.disk !== "string" || !/^\d+[MG]$/.test(raw.development.disk))) {
       throw new Error("gondolin.development.disk must be a size such as 64G");
     }
+    if (raw.development.sessionStartHook !== undefined &&
+      (typeof raw.development.sessionStartHook !== "string" || !raw.development.sessionStartHook)) {
+      throw new Error("gondolin.development.sessionStartHook must be a non-empty path");
+    }
     if (typeof raw.development.disk === "string") {
       const amount = Number(raw.development.disk.slice(0, -1));
       const gibibytes = raw.development.disk.endsWith("G") ? amount : amount / 1024;
@@ -122,6 +126,21 @@ function resolveGondolinConfig(options: {
     }
   }
   const config = raw as ProjectVmConfig;
+  let sessionStartHook: string | undefined;
+  if (config.development?.sessionStartHook) {
+    if (!config.development.docker) {
+      throw new Error("gondolin.development.sessionStartHook requires docker: true");
+    }
+    const requestedHookPath = path.resolve(projectDirectory, config.development.sessionStartHook);
+    if (!insideDirectory(projectDirectory, requestedHookPath)) {
+      throw new Error("gondolin.development.sessionStartHook must stay inside the task workspace");
+    }
+    const hookPath = fs.realpathSync(requestedHookPath);
+    if (!insideDirectory(projectDirectory, hookPath) || !fs.statSync(hookPath).isFile()) {
+      throw new Error("gondolin.development.sessionStartHook must be a file inside the task workspace");
+    }
+    sessionStartHook = `/workspace/${path.relative(projectDirectory, hookPath).split(path.sep).join("/")}`;
+  }
 
   let networkEnabled = options.fallbackPublicInternet;
   let allowedHosts = networkEnabled ? ["*"] : [];
@@ -151,6 +170,7 @@ function resolveGondolinConfig(options: {
     development: {
       docker: config.development?.docker ?? false,
       disk: config.development?.disk ?? "64G",
+      sessionStartHook,
     },
     networkEnabled,
     allowedHosts,
@@ -266,7 +286,12 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
         cpus: configured.cpus,
         rootfs: devSession ? { mode: "cow", size: configured.development.disk } : undefined,
         maxHttpResponseBodyBytes: devSession ? 512 * 1024 * 1024 : undefined,
-        startupCommands: devSession ? [["/usr/local/bin/start-dev-docker"]] : undefined,
+        startupCommands: devSession ? [
+          ["/usr/local/bin/start-dev-docker"],
+          ...(configured.development.sessionStartHook
+            ? [["/usr/local/bin/node", configured.development.sessionStartHook]]
+            : []),
+        ] : undefined,
         sessionLabel: devSession ? "pi-dev-worktree" : "pi-agent-workload",
       });
       codingTools = await session.codingTools();

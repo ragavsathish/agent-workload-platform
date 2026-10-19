@@ -1565,7 +1565,9 @@ class _TaskCard extends StatelessWidget {
           expandedCrossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SelectableText(
-              'Workspace: ${task.workspace}',
+              task.workspace == 'scratch'
+                  ? 'Workspace: Scratch VM (no repository)'
+                  : 'Workspace: ${task.workspace}',
               style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
             ),
             const SizedBox(height: 7),
