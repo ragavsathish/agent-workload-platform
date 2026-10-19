@@ -4,9 +4,11 @@
 
 - Apple Silicon Mac, macOS 14 or newer
 - 8 GiB RAM minimum; 16 GiB recommended
-- 20 GiB free disk minimum; 40 GiB recommended for images, telemetry, and model caches
+- 15 GiB free disk minimum for `make host-preflight`; 40 GiB recommended for images,
+  telemetry, and model caches
 - Docker Desktop with Docker Compose
-- uv with Python 3.13, Node.js/npm, Ollama, curl, and Homebrew `libpq` and `fluent-bit`
+- uv with Python 3.13 (and Python 3.12 for ACE-Step), Node.js/npm, Rust/Cargo,
+  Ollama, FFmpeg/FFprobe, curl, and Homebrew `libpq` and `fluent-bit`
 - Pi, Wassette, the repository's built Gondolin agent extension, and any approved Wassette components
 - A Tailscale account shared with the browser device
 
@@ -39,22 +41,29 @@ The worker does not require Documents, Desktop, or Downloads access. Scratch wor
 task. Publishing a repository is an explicit interactive action; only that invoking terminal needs
 access when the source happens to be under a macOS privacy-protected folder.
 
-`make install-host-services` copies the generic Gondolin extension into
+`make install-host-services` builds and installs the Rust Pi task RPC supervisor,
+copies the generic Gondolin extension into
 `~/Library/Application Support/PipecatEdge/gondolin-agent`, the product-owned Pi
 Voice Service into `voice-pi-agent`, and the pinned VM image into
-`gondolin-assets`. The LaunchAgents never load executable code or VM assets from
+`gondolin-assets`. It also installs pinned ACE-Step 1.5 under
+`PipecatEdge/apps/music-generation` and starts its loopback API. The LaunchAgents
+never load executable code or VM assets from
 `~/Documents`, so they do not need Full Disk Access or Documents-folder
 permission.
 
 `make up` derives root-only Compose secret files under ignored `deploy/secrets/`; no secret is baked
-into an image. It also installs four LaunchAgents in
-`~/Library/Application Support/PipecatEdge`:
+into an image. It installs eight LaunchAgents in `~/Library/LaunchAgents`:
 
 - inference broker: local Parakeet v3 MLX, Ollama, and Kokoro capability on `127.0.0.1:9443`;
+- music generation: ACE-Step audio and language models on `127.0.0.1:8001`;
+- digital-twin classifier and listener: local extraction/classification inference
+  and journal capture;
 - host observability: macOS and registered Gondolin VM metrics on `127.0.0.1:2022` and `:9465`;
+- image builder: trusted Gitea workflow image builds in an isolated Gondolin VM;
 - Pi Voice Service: persistent owner conversation, Gondolin-isolated native tools, and deferred
   host-side Wassette MCP tools on `127.0.0.1:9446`;
-- Pi worker: consumes approved tasks from Postgres and invokes Gondolin/Wassette.
+- Pi worker: consumes approved tasks from Postgres and invokes Gondolin/Wassette and the
+  installed Pi task RPC supervisor.
 
 The worker routes Pi's standard `read`, `write`, `edit`, and `bash` tools
 through the micro-VM with only the immutable task workspace mounted at
@@ -73,8 +82,10 @@ broker and gateway bearer tokens. Tailscale state and Postgres data use named Do
 S3Mock artifacts use another named volume inside Docker Desktop and never bind-mount a host folder.
 Rootless Gitea also uses named volumes and receives a committed repository mirror during `make up`;
 it does not bind-mount a host repository. The persistent voice VM contains AWS CLI and Git and may
-reach only synthetic S3Mock and Gitea origins. A host network hook rewrites those origins to their
-configured loopback endpoints; direct VM internet access remains denied. The mock credentials do
+reach only allowlisted synthetic S3Mock, Gitea, Prometheus, and Oxigraph origins. A host network hook
+rewrites those origins to their configured loopback endpoints; direct VM internet access remains denied.
+The Oxigraph CLI permits raw RDF queries and updates inside that VM; this is an intentional
+single-owner capability, not a bounded personal-knowledge API. The mock credentials do
 not grant access to real AWS S3. The VM's checksum-pinned Tea client receives only a restricted,
 public-read token; it never receives the Gitea publisher credential.
 
@@ -83,24 +94,32 @@ public-read token; it never receives the Gitea publisher credential.
 | Address | Owner | Purpose |
 |---|---|---|
 | tailnet HTTPS 443 | Tailscale Serve | owner-only HTTPS; `/`, `/metrics/`, `/git/`, and `/queue/` only |
-| shared loopback `127.0.0.1:8080` | Traefik | exact-owner forward-auth and path routing behind Tailscale Serve |
-| shared loopback `127.0.0.1:7860` | Pipecat voice edge | browser UI and WebSocket audio behind Serve |
+| host loopback `127.0.0.1:8080` | Traefik local-test ingress | browser tests without Tailscale; enabled only when `EDGE_ALLOW_LOCAL_INGRESS=true` |
+| shared Tailscale/Traefik loopback | Traefik and Pipecat voice edge | exact-owner forward-auth and browser UI behind Serve |
 | `127.0.0.1:54329` | Docker Postgres | native Pi worker queue access |
 | `127.0.0.1:9090` | Docker S3Mock | native worker immutable inputs and task result artifacts |
 | `127.0.0.1:3001` | Docker Gitea | committed source mirror; anonymous read, bootstrap publisher writes |
 | `127.0.0.1:3300` | Docker Grafana | authenticated local metrics and traces UI |
 | `127.0.0.1:4318` | Docker OTel collector | OTLP/HTTP from the native MLX broker |
+| `127.0.0.1:9091` | Docker Prometheus | local metrics queries for the voice VM |
+| `127.0.0.1:8000` | Docker Grafana MCP | authenticated read-only dashboards and traces |
+| `127.0.0.1:9444` | Docker Agent Gateway | bearer-protected task, song, and personal-knowledge API |
+| `127.0.0.1:7878` | Docker Oxigraph | private RDF query and update endpoint |
 | `127.0.0.1:9443` | native inference broker | authenticated STT, dialogue, and TTS |
+| `127.0.0.1:9446` | native Pi Voice Service | authenticated conversation backend |
+| `127.0.0.1:8001` | native ACE-Step | music render API and model health |
 | `127.0.0.1:11434` | Ollama | local exact-model inference |
 
-The agent gateway is reachable only on Compose's private networks. The voice/Tailscale network
-namespace publishes no Docker port. Docker Desktop may reach host loopback through its host
+The gateway is also published on host loopback for the native worker and Pi Voice Service, but it
+has no LAN or tailnet route. The voice/Tailscale network namespace publishes only the local-test
+ingress on host loopback. Docker Desktop may reach host loopback through its host
 gateway. Compose assigns the dedicated `inference-broker` alias because Tailscale can also
 synthesize an IPv6 answer for `host.docker.internal`; the random broker capability and exact
 route/model limits are therefore part of the security boundary.
 
-The `otel-lgtm` bundle is connected to the private control network. Only Grafana and OTLP/HTTP are
-published, both on loopback; collector and datastore ports are not exposed to the LAN or tailnet.
+The `otel-lgtm` bundle is connected to the private control network. Grafana, Prometheus, and
+OTLP/HTTP are published only on loopback; collector and datastore ports are not exposed to the LAN
+or tailnet.
 Fluent Bit collects aggregate Docker Desktop VM system metrics through read-only `/proc` and `/sys`
 mounts and exports them only on an internal Compose monitoring network. It has no Docker socket and
 publishes no host port. Homebrew Fluent Bit is also required on macOS. The host-observability

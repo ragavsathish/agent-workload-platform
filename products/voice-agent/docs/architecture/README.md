@@ -82,8 +82,10 @@ capability-limited **Inference Broker**, which converts the streamed native Pi r
 OpenAI-compatible protocol consumed by Pipecat. The Pi service keeps the conversation session,
 public transcript projection, native Pi tools, and a persistent Gondolin voice VM. Ollama remains a
 configured fallback behind the broker; it is not the active production path. The voice VM includes
-AWS CLI and has one explicit network capability: a synthetic S3Mock origin is rewritten to the
-mock's host-loopback endpoint, while other HTTP destinations are denied.
+AWS CLI and has four explicit synthetic network origins—S3Mock, read-only Gitea,
+Prometheus, and Oxigraph—rewritten to their host-loopback endpoints, while
+other HTTP destinations are denied. Unlike the bounded gateway knowledge tool,
+the Oxigraph CLI permits raw RDF updates in this single-owner deployment.
 The Pi Voice Service also registers a host-native Wassette subprocess through Pi's deferred MCP
 extension. `tool_search` discovers tools from the configured component directory without adding all
 schemas to every model turn. The child receives a credential-scrubbed environment and its WASM

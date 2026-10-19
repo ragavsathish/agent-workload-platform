@@ -1,147 +1,183 @@
 # Pull request soundtrack workflow
 
-Use this workflow when a large or memorable change benefits from a pull request
-description that is both an engineering summary and a generated song. The song
-is optional; the pull request must remain understandable without playing it.
+Use this workflow when a large change benefits from a pull request description
+that includes both an engineering summary and a song. The song is optional; the
+pull request must remain understandable without playing it.
 
-## Prerequisites
+## Prerequisites and boundaries
 
-- Git and the authenticated GitHub CLI (`gh`)
-- `ffmpeg` and `ffprobe`
-- A local music-generation tool when a sung version is wanted. This repository
-  used [ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5) with its MLX
-  backend on Apple Silicon.
+- Git and an authenticated GitHub CLI (`gh`) for the pull request.
+- A running Voice Agent edge, gateway, durable worker, and S3Mock artifact store.
+- The worker's configured ACE-Step API on host loopback. Before requesting a
+  render, confirm its `/health` endpoint reports both models initialized. A
+  successful proxy or a completed lyric task does not prove that music rendering
+  is available.
+- `ffprobe` for checking the delivered M4A. The worker, not the caller, uses
+  FFmpeg to convert ACE-Step's WAV output to AAC/M4A.
 
-Do not commit model weights, generation caches, raw prompts containing private
-data, or large uncompressed WAV files.
+The owner-facing song API is `/api/music/generations` on the authenticated Voice
+Agent origin. The examples below use the host's **loopback-only** ingress at
+`http://127.0.0.1:8080`; a remote caller must use the authenticated tailnet
+origin. Do not submit work directly to ACE-Step or access S3Mock from a browser
+or Pi tool. Pi Voice can use `submit_song`, `get_song`, `render_song`, and
+`cancel_song` instead of the HTTP examples.
 
-## 1. Prepare the branch
+| Action | Pi Voice tool | Owner-facing HTTP endpoint |
+|---|---|---|
+| Start lyric work | `submit_song` | `POST /api/music/generations` |
+| Review status and manifest | `get_song` | `GET /api/music/generations/{id}` |
+| Start approved render | `render_song` | `POST /api/music/generations/{id}/render` |
+| Cancel | `cancel_song` | `POST /api/music/generations/{id}/cancel` |
+| Play completed artifact | returned `audio_path` | `GET /api/music/generations/{id}/audio` |
 
-Review all changes, split them into coherent commits, and run the checks that
-match each changed boundary.
+Do not put credentials, private transcripts, identities, unreviewed personal
+information, or production payloads in the lyric brief, song, or pull request.
+Do not commit model weights, generation caches, or raw WAV files.
+
+## 1. Prepare the engineering pull request
+
+Review the diff, split unrelated changes into coherent commits, and run checks
+for the boundaries changed. Stage explicit paths when the worktree also has
+other work in progress.
 
 ```bash
 git status --short
 git diff --stat
-git switch -c <branch-name>
-
-# Repeat for each coherent change group.
-git add <paths>
+git add path/to/reviewed/file
 git commit -m "<scope>: <outcome>"
-
-git push -u origin <branch-name>
+git push -u origin HEAD
 ```
 
-Do not combine unrelated application, infrastructure, documentation, and media
-changes merely to reduce the number of commits.
+Write an initial pull request body with the outcome, architecture or security
+decisions, and verified checks. Create it with `gh pr create --body-file` so the
+technical summary exists before any optional music is generated. Do not use the
+song as a substitute for the engineering description.
 
-## 2. Create the engineering pull request
+## 2. Submit a grounded lyric brief
 
-Write the initial body in a temporary Markdown file. Include the outcome,
-important architecture or security decisions, and verified checks. Create the
-pull request with `--body-file` so shell quoting cannot damage the Markdown.
+Ground the brief in the actual diff and C4 architecture. Lead with the human
+outcome, not a service inventory: the chorus should say why the work matters;
+verses can carry selected request-path, durability, security, learning, and
+observability details. Spell initialisms phonetically in lyrics when needed,
+while keeping normal spelling in the technical pull request text.
 
 ```bash
-gh pr create \
-  --base main \
-  --head <branch-name> \
-  --title "<clear engineering title>" \
-  --body-file /tmp/pr-body.md
+song_api=http://127.0.0.1:8080/api/music/generations
+curl -fsS -X POST "$song_api" \
+  -H 'Content-Type: application/json' \
+  -H 'Origin: http://127.0.0.1:8080' \
+  --data '{
+    "brief": "Write a song about the reviewed change and its developer benefit...",
+    "style": "Warm R&B, lead vocal, piano, bass, restrained drums...",
+    "durationSeconds": 160
+  }' | jq '{id,status,lyrics_task_id}'
 ```
 
-At this point the pull request is complete enough to review. The soundtrack is
-an additional presentation layer, not a substitute for the technical summary.
+`workspace` is optional and defaults to the configured Voice Agent workspace;
+an explicit workspace must be on the gateway's allowlist. Save the returned
+generation ID. Submission starts a durable `song-lyrics` Pi task and normally
+returns `writing_lyrics`, not audio.
 
-## 3. Turn the change into lyrics
+## 3. Review the lyric manifest before rendering
 
-Ground every line in the actual diff and architecture. A useful short form is:
-
-1. Verse 1: request path and runtime changes.
-2. Pre-chorus: the user-facing transition or handoff.
-3. Chorus: the central outcome, phrased memorably.
-4. Verse 2: learning, data, UI, or operational changes.
-5. Bridge: isolation, security, and observability boundaries.
-6. Repeated chorus and outro: restate the outcome and branch theme.
-
-Spell initialisms phonetically in the generation lyrics when necessary (for
-example, `M C P`, `D V C`, and `O Tel`). Keep the normal spelling in the PR text.
-Never place credentials, private transcript text, identities, or production
-payloads in lyrics.
-
-## 4. Generate and validate the song
-
-For **Signals After Midnight**, ACE-Step 1.5 generated a two-minute R&B track
-locally with the following shape:
-
-- 120 seconds, 82 BPM, D minor, 4/4
-- warm lead vocal, backing harmonies, Rhodes, bass, relaxed drums, and guitar
-- verse, pre-chorus, chorus, verse, bridge, repeated chorus, and outro
-- WAV generation followed by AAC/M4A delivery
-
-Run ACE-Step outside the repository or in an ignored build directory. Its API
-accepts the style prompt, sectioned lyrics, duration, tempo, key, and output
-format. Preserve only the final delivery artifact.
-
-Convert the generated WAV to a compact format GitHub and browsers can deliver:
+Query the generation until it reaches `lyrics_ready`:
 
 ```bash
-ffmpeg -i song.wav \
-  -c:a aac -b:a 256k -movflags +faststart \
-  song.m4a
+song_id=PASTE_GENERATION_ID
+curl -fsS "$song_api/$song_id" |
+  jq '{status,manifest,failure}'
+```
 
+Show the owner the **complete** title, style, and lyrics. Render only after the
+owner explicitly approves that manifest in a later turn. If a lyric or factual
+claim changes, review the changed version again. A style-only alternate take
+uses a new generation: ask Pi to preserve the approved lyric lines, then compare
+the new `manifest.lyrics` to the approved text before rendering.
+
+The public states are `writing_lyrics`, `lyrics_ready`, `generating_music`,
+`complete`, `failed`, and `cancelled`. `failure` is a bounded public explanation;
+do not treat a pending or failed generation as a playable song.
+
+## 4. Render through the durable API
+
+Check the configured host music service before crossing the review gate:
+
+```bash
+curl -fsS http://127.0.0.1:8001/health |
+  jq -e '.data.models_initialized and .data.llm_initialized'
+```
+
+After explicit approval, submit one render command. It returns a durable render
+task ID and normally projects `generating_music`:
+
+```bash
+curl -fsS -X POST "$song_api/$song_id/render" \
+  -H 'Origin: http://127.0.0.1:8080' |
+  jq '{status,render_task_id,failure}'
+```
+
+The worker sends the reviewed manifest to ACE-Step on loopback, waits for its
+audio, converts it to AAC/M4A, and stores the bounded artifact in S3Mock. Query
+the generation until `complete` and `audio_path` are present; the owner-checked
+edge serves that path as `audio/mp4`. Never expose the ACE-Step file path or a
+direct S3Mock URL.
+
+```bash
+curl -fsS "$song_api/$song_id" |
+  jq '{status,audio_path,failure}'
+curl -fsS -o song.m4a "$song_api/$song_id/audio"
 ffprobe -v error \
   -show_entries format=duration,size \
   -show_entries stream=codec_name,sample_rate,channels \
   -of json song.m4a
 ```
 
-Listen to the complete result before publishing it. Confirm that it contains no
-unintended private material and that its duration, sample rate, and channels are
-as expected.
+Listen to the complete result before publishing it. Confirm the vocal and
+instrumental result is audible, the words are appropriate, and the duration and
+format are plausible. If rendering fails, fix the service first. A generation
+has one render request and the worker uses one durable attempt; retrying its
+`/render` endpoint does not restart the failed job. Start a new generation,
+preserve and recheck the approved lyrics, then explicitly approve its render.
+Use `POST /api/music/generations/<id>/cancel` to cancel work that should stop.
 
-## 5. Publish the audio
+## 5. Publish a compact artifact and relative README links
 
-Store the compact artifact with the relevant product documentation. For this
-repository:
+The API's `audio_path` is a private, tailnet-authenticated listening link. It
+is not a permanent public pull request asset. For a repository soundtrack,
+copy only the reviewed compact M4A into product documentation and commit it:
 
 ```bash
-cp song.m4a \
-  products/voice-agent/docs/assets/<album-slug>.m4a
-git add products/voice-agent/docs/assets/<album-slug>.m4a
-git commit -m "docs: add <album-name> audio"
+song_slug=let-me-hear-the-work
+cp song.m4a "products/voice-agent/docs/assets/$song_slug.m4a"
+git add "products/voice-agent/docs/assets/$song_slug.m4a"
+git commit -m "docs: add reviewed soundtrack"
 git push
 ```
 
-Keep the media commit separate so reviewers can identify the binary addition.
-GitHub's normal file limit still applies; use external artifact storage instead
-of Git for large media.
+Keep media separate from unrelated application or infrastructure changes. If
+the same song has multiple arrangements, use distinct filenames and say that
+the lyrics are shared. For example, this guide links to the committed
+[R&B take](../products/voice-agent/docs/assets/let-me-hear-the-work.m4a).
+Use repository-relative links in both READMEs:
 
-After pushing, link to the audio by commit SHA rather than only by branch name.
-The commit-pinned URL remains valid if the branch is deleted:
-
-```text
-https://raw.githubusercontent.com/<owner>/<repository>/<commit-sha>/<path>.m4a
-```
+In the repository root README use `products/voice-agent/docs/assets/<song-slug>.m4a`;
+in `products/voice-agent/README.md` use `docs/assets/<song-slug>.m4a`.
+For a pull request body, use an access-checked,
+commit-pinned GitHub artifact link rather than a private tailnet URL or a
+branch-only URL. Large media belongs in artifact storage, not Git.
 
 ## 6. Update and verify the pull request
 
-Add the audio link and complete lyric sheet to the existing technical body, then
-choose a concise album-style title based on the change's emotional and technical
-theme.
+Add the complete lyrics, a link to each published arrangement, and a short note
+about how the song relates to the engineering change. Keep the original test
+summary and architecture decisions. An album-style title is optional.
 
 ```bash
-gh pr edit <number> --title "<album-style title>"
-gh pr edit <number> --body-file /tmp/pr-body-with-song.md
-gh pr view <number> --json title,url,body
+gh pr edit --body-file /tmp/pr-body-with-song.md
+gh pr view --json title,url,body
 ```
 
-For the example PR, remote voice sessions, signals, tracing, and the R&B mood
-became **Signals After Midnight**. The final verification is:
-
-```bash
-git status --short
-gh pr view <number> --web
-```
-
-Check that the title is correct, the full lyrics render cleanly, the audio link
-opens, the engineering test summary remains present, and the worktree is clean.
+Check that the links play for the intended reviewers, the lyrics match the
+approved manifest, and no private payload or unrelated worktree change entered
+the commit. The song generation and playback API emits payload-free telemetry;
+do not add lyrics or audio bytes to logs or traces.

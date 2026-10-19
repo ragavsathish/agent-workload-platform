@@ -28,6 +28,8 @@ worker emits Kokoro audio, captions, and payload-free render telemetry.
 Listen to **Let Me Hear the Work** in its
 [contemporary R&B](docs/assets/let-me-hear-the-work.m4a) or
 [late-1950s soul](docs/assets/let-me-hear-the-work-soul-take.m4a) arrangement.
+The [pull request soundtrack workflow](../../docs/pull-request-soundtrack-workflow.md)
+documents lyric review, durable rendering, artifact checks, and publication.
 
 ## Product structure
 
@@ -353,8 +355,9 @@ process and therefore use its existing context, workspace, tools, and Gondolin V
 database transcript projection, or polling loop sits between the two sessions. Disconnecting voice
 releases the attachment, and an unattached settled task exits after the bounded RPC idle grace.
 Run `make pi-rpc-host-release` to produce a platform-labelled executable and SHA-256 manifest under
-`apps/pi-rpc-host/dist`, then set `PI_TASK_RPC_HOST_BINARY` to the verified executable. Production
-installation remains intentionally separate from Ansible in this change.
+`apps/pi-rpc-host/dist`. `make install-host-services` builds and installs that
+executable under `PipecatEdge/bin`; the worker's configured
+`PI_TASK_RPC_HOST_BINARY` points to the installed copy.
 Run `make pi-rpc-host-smoke` for a local, non-installing check of the worker, Rust supervisor, Pi,
 and Gondolin path. It reads the local worker environment, uses temporary session and socket
 directories under `/tmp`, emits only bounded status JSON, and does not restart deployed services.
