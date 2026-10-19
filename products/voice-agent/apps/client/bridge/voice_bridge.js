@@ -451,6 +451,18 @@ window.voiceBridge = {
       if (mcpAppMountQueues.get(target) === mountSlot) mcpAppMountQueues.delete(target);
     }
   },
+  async unmountMcpApp(elementId) {
+    const target = document.getElementById(elementId);
+    if (!target) return JSON.stringify({ ok: true });
+    const host = mcpAppHosts.get(target);
+    if (host) {
+      await settleWithin(host.bridge.teardownResource({}));
+      await settleWithin(host.bridge.close());
+      mcpAppHosts.delete(target);
+    }
+    target.replaceChildren();
+    return JSON.stringify({ ok: true });
+  },
   openView(view) {
     const url = view === 'audio-diagnostics'
       ? '/diagnostics/'

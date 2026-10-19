@@ -11,6 +11,30 @@ direct access to host credentials or files.
 
 ![Voice Agent mobile web interface](products/voice-agent/docs/assets/voice-agent-mobile.png)
 
+## Product tour
+
+[![Watch the narrated Voice Agent product tour](products/voice-agent/docs/assets/voice-agent-demo.png)](products/voice-agent/docs/assets/voice-agent-demo.mp4)
+
+[Read the timed video transcript](products/voice-agent/docs/assets/voice-agent-demo.srt).
+
+The tour starts with the reason for this project: developers should be able to
+listen to, see, and explore agent work instead of reading long conversations.
+It follows a synthetic voice session into durable work, shows how to switch
+sessions, and moves through Mermaid, Marp, and editable Excalidraw views. The
+Playwright Trace Viewer and Grafana make behavior and telemetry inspectable.
+The final Journal Review scene shows how chosen, source-backed knowledge could
+eventually shape a digital professional twin, without treating extraction as
+automatic memory.
+
+Each app gets a full-resolution frame instead of remaining
+clipped inside its task card. Click the image to play the video. Deterministic
+local fixtures keep the run independent of Tailscale, while the containerized
+renderer adds Kokoro TTS, captions, and payload-free OpenTelemetry.
+
+The companion song, **Let Me Hear the Work**, uses the same lyrics in two arrangements:
+[contemporary R&B](products/voice-agent/docs/assets/let-me-hear-the-work.m4a) and
+[late-1950s soul](products/voice-agent/docs/assets/let-me-hear-the-work-soul-take.m4a).
+
 The same response surface renders structured MCP App output:
 
 **Excalidraw**

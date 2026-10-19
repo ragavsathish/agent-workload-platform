@@ -10,7 +10,7 @@ WASM_ACTIONS := setup build check install clean
 .PHONY: automation-blackbox-voice automation-observability
 .PHONY: login status grafana-password grafana-mcp-token warm-models benchmark-mlx publish-workspace
 .PHONY: blackbox-voice blackbox-e2e blackbox-personal-knowledge blackbox-remote-session
-.PHONY: playwright-voice playwright-diagnostics playwright-grafana playwright-tailnet-voice
+.PHONY: playwright-voice playwright-diagnostics playwright-grafana playwright-readme-demo playwright-tailnet-voice
 .PHONY: playwright-tailnet-diagnostics host-preflight install-host-services
 .PHONY: config-init config-check
 .PHONY: grafana-c4-dashboard digital-twin-image-build digital-twin-load digital-twin-query
@@ -47,6 +47,8 @@ help:
 		'                      Verify DVC artifacts through local S3Mock' \
 		'  make digital-twin-mlflow-verify' \
 		'                      Verify MLflow model versioning through local S3Mock' \
+		'  make playwright-readme-demo' \
+		'                      Rebuild the narrated README product tour locally' \
 		'  make verify         Verify deployed infrastructure' \
 		'  make wasm-ACTION    Run setup, build, check, install, or clean for all components' \
 		'  make wasm-ACTION-COMPONENT' \
@@ -228,6 +230,9 @@ playwright-diagnostics:
 
 playwright-grafana:
 	$(MAKE) automation-playwright PLAYWRIGHT_PROJECT=grafana
+
+playwright-readme-demo:
+	node scripts/build-readme-demo.mjs
 
 playwright-tailnet-voice:
 	$(MAKE) automation-playwright PLAYWRIGHT_PROJECT=voice

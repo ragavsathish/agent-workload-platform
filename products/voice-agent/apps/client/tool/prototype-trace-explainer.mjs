@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import {
   applyNarrationBrief,
   applyNarrationPlan,
+  applyTourFrameAttachments,
   assertSafeOutputDirectory,
   buildTraceScenes,
 } from './trace-explainer-analysis.mjs';
@@ -110,6 +111,7 @@ let scenes = buildTraceScenes({
   sourceDuration,
   framePath,
 });
+scenes = applyTourFrameAttachments(scenes, events);
 scenes = applyNarrationBrief(scenes, narrationBrief);
 
 const parseEnv = (path) => {
@@ -183,13 +185,21 @@ const formatSrtTime = (seconds) => {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')},${String(millis).padStart(3, '0')}`;
 };
 
-const sceneWindow = sourceDuration / scenes.length;
-const captionsPath = join(outputDir, 'captions.srt');
-writeFileSync(captionsPath, `${scenes.map((scene, index) => [
-  String(index + 1),
-  `${formatSrtTime(index * sceneWindow)} --> ${formatSrtTime((index + 1) * sceneWindow)}`,
-  scene.spoken,
-].join('\n')).join('\n\n')}\n`);
+const formatAssTime = (seconds) => {
+  const centiseconds = Math.round(seconds * 100);
+  const hours = Math.floor(centiseconds / 360_000);
+  const minutes = Math.floor((centiseconds % 360_000) / 6_000);
+  const secs = Math.floor((centiseconds % 6_000) / 100);
+  const fraction = centiseconds % 100;
+  return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${String(fraction).padStart(2, '0')}`;
+};
+
+const escapeAss = (value) => String(value)
+  .replaceAll('\\', '\\\\')
+  .replaceAll('{', '\\{')
+  .replaceAll('}', '\\}')
+  .replaceAll(/\r?\n/gu, '\\N');
+
 console.log(`Prepared ${scenes.length} evidence-backed narration scenes`);
 
 const wavFromPcm = (pcm, sampleRate = 24_000, channels = 1) => {
@@ -250,15 +260,103 @@ const kokoroProvider = {
   async dispose() {},
 };
 
+const audio = await kokoroProvider.synthesize(
+  scenes.map(({ spoken }) => spoken),
+  { workDir: join(outputDir, 'audio') },
+);
+await kokoroProvider.dispose();
+
+const framesDirectory = join(outputDir, 'frames');
+const segmentsDirectory = join(outputDir, 'segments');
+mkdirSync(framesDirectory, { recursive: true });
+mkdirSync(segmentsDirectory, { recursive: true });
+const holdSeconds = 0.6;
+const segmentDurations = [];
+const segmentPaths = [];
+for (const [index, scene] of scenes.entries()) {
+  const member = scene.evidence.frame ?? framePath(pageFrames.at(-1));
+  const imagePath = join(framesDirectory, `scene-${index + 1}.jpg`);
+  writeFileSync(imagePath, execFileSync(
+    'unzip', ['-p', tracePath, member], { maxBuffer: 32 * 1024 * 1024 },
+  ));
+  const duration = (audio[index].durationMs / 1000) + holdSeconds;
+  const segmentPath = join(segmentsDirectory, `scene-${index + 1}.mp4`);
+  execFileSync('ffmpeg', [
+    '-hide_banner', '-loglevel', 'error', '-y',
+    '-loop', '1', '-i', imagePath,
+    '-i', audio[index].path,
+    '-vf', [
+      'scale=1920:1080:force_original_aspect_ratio=decrease',
+      'pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=0x0b0f12',
+      'pad=1920:1240:0:0:color=0x0b0f12',
+      'format=yuv420p',
+    ].join(','),
+    '-af', `apad=pad_dur=${holdSeconds}`,
+    '-t', duration.toFixed(3), '-r', '30',
+    '-c:v', 'libx264', '-preset', 'medium', '-crf', '20',
+    '-c:a', 'aac', '-b:a', '128k', '-ar', '48000',
+    segmentPath,
+  ]);
+  segmentDurations.push(duration);
+  segmentPaths.push(segmentPath);
+}
+
+let captionClock = 0;
+const sceneTimings = [];
+const captionsPath = join(outputDir, 'captions.srt');
+writeFileSync(captionsPath, `${scenes.map((scene, index) => {
+  const start = captionClock;
+  const end = start + (audio[index].durationMs / 1000);
+  captionClock += segmentDurations[index];
+  sceneTimings.push({ start, narrationEnd: end, sceneEnd: captionClock });
+  return [
+    String(index + 1),
+    `${formatSrtTime(start)} --> ${formatSrtTime(end)}`,
+    scene.spoken,
+  ].join('\n');
+}).join('\n\n')}\n`);
+
+const presentationPath = join(outputDir, 'presentation.ass');
+const assHeader = `[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1240
+WrapStyle: 0
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Title,Arial,44,&H00FFFFFF,&H00FFFFFF,&H0010171B,&H980B0F12,-1,0,0,0,100,100,0,0,3,1,0,7,54,54,44,1
+Style: Caption,Arial,31,&H00FFFFFF,&H00FFFFFF,&H0010171B,&H000B0F12,0,0,0,0,100,100,0,0,1,1,0,2,80,80,36,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;
+const titleEvents = scenes.map((scene, index) => (
+  `Dialogue: 1,${formatAssTime(sceneTimings[index].start)},${formatAssTime(sceneTimings[index].sceneEnd)},Title,,0,0,0,,${escapeAss(scene.title)}`
+));
+const captionEvents = scenes.map((scene, index) => (
+  `Dialogue: 2,${formatAssTime(sceneTimings[index].start)},${formatAssTime(sceneTimings[index].narrationEnd)},Caption,,0,0,0,,${escapeAss(scene.spoken)}`
+));
+writeFileSync(presentationPath, `${assHeader}\n${[...titleEvents, ...captionEvents].join('\n')}\n`);
+
+const concatPath = join(outputDir, 'segments.txt');
+writeFileSync(concatPath, `${segmentPaths.map((path) => `file '${path}'`).join('\n')}\n`);
+const silentCaptionsVideo = join(outputDir, 'trace-explainer-without-captions.mp4');
+execFileSync('ffmpeg', [
+  '-hide_banner', '-loglevel', 'error', '-y',
+  '-f', 'concat', '-safe', '0', '-i', concatPath,
+  '-c', 'copy', silentCaptionsVideo,
+]);
 const finalVideo = join(outputDir, 'trace-explainer.mp4');
-const { Recast } = await import('playwright-recast');
-await Recast
-  .from(tracePath)
-  .parse()
-  .subtitlesFromSrt(captionsPath)
-  .voiceover(kokoroProvider)
-  .render({ format: 'mp4', resolution: '720p', fps: 30, embedSubtitles: true })
-  .toFile(finalVideo);
+execFileSync('ffmpeg', [
+  '-hide_banner', '-loglevel', 'error', '-y',
+  '-i', silentCaptionsVideo, '-i', captionsPath,
+  '-map', '0:v:0', '-map', '0:a:0', '-map', '1:0',
+  '-vf', `ass=${presentationPath}`,
+  '-c:v', 'libx264', '-preset', 'medium', '-crf', '20',
+  '-c:a', 'copy', '-c:s', 'mov_text',
+  '-metadata:s:s:0', 'language=eng', '-movflags', '+faststart', finalVideo,
+]);
 
 const outputDurationSeconds = Number(execFileSync('ffprobe', [
   '-v', 'error', '-show_entries', 'format=duration',
@@ -270,7 +368,7 @@ const manifest = {
   title: 'Playwright trace explainer',
   status: 'completed',
   summary: `${pageFrames.length} screenshots, ${calls.length} browser actions, ${actionErrors.length} action errors`,
-  renderer: { name: 'playwright-recast', version: '0.23.0' },
+  renderer: { name: 'playwright-evidence-slides', version: '2' },
   trace: relative(clientRoot, tracePath),
   traceSha256: sha256(tracePath),
   narrationBriefSha256: createHash('sha256').update(narrationBrief).digest('hex'),

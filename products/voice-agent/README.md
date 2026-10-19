@@ -8,6 +8,27 @@ tool isolation are available.
 The [C4 architecture views](docs/architecture/README.md) include the deployment and security
 boundaries as authoritative Mermaid sources.
 
+[![Watch the narrated Voice Agent product tour](docs/assets/voice-agent-demo.png)](docs/assets/voice-agent-demo.mp4)
+
+[Read the timed video transcript](docs/assets/voice-agent-demo.srt).
+
+The conference-style tour starts with a developer who would rather listen to,
+see, and explore agent work than read long conversations. Public synthetic
+content shows a live voice session, a switch to durable work, and Mermaid,
+Marp, and editable Excalidraw views. Playwright Trace Viewer and Grafana let
+the developer inspect browser evidence and telemetry. Journal Review closes
+the story: source-backed, human-chosen knowledge may eventually shape a
+digital professional twin, but extraction alone is not memory. Rebuild its
+Playwright trace, narration, transcript, poster, and MP4 locally with
+`make playwright-readme-demo`; the workflow does not require Tailscale. Named
+`Tour:` steps are both browser actions and grounded speaker notes. Full-size
+1920×1080 MCP App captures preserve readable evidence, while the container
+worker emits Kokoro audio, captions, and payload-free render telemetry.
+
+Listen to **Let Me Hear the Work** in its
+[contemporary R&B](docs/assets/let-me-hear-the-work.m4a) or
+[late-1950s soul](docs/assets/let-me-hear-the-work-soul-take.m4a) arrangement.
+
 ## Product structure
 
 Deployable processes live in `apps/`. Code shared by multiple apps lives in `packages/`.

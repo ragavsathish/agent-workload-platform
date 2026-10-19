@@ -23,6 +23,7 @@ export function applyNarrationPlan(scenes, plan) {
     throw new Error('Narration plan scene IDs must match the evidence scene IDs');
   }
   return scenes.map((scene, index) => {
+    if (scene.narrationSource === 'playwright-tour-step') return scene;
     const spoken = plan.scenes[index]?.spoken?.trim();
     if (!spoken || spoken.length > 320 || /https?:\/\//iu.test(spoken)) {
       throw new Error(`Narration for ${scene.id} is outside its allowed bounds`);
@@ -45,16 +46,46 @@ export function applyNarrationBrief(scenes, narrationBrief) {
   const focus = boundedWords(brief
     .replaceAll(/https?:\/\/\S+/giu, 'a referenced page')
     .replaceAll(/[\n\r\t]+/gu, ' ')
-    .replaceAll(/\s+/gu, ' '), 90);
+    .replaceAll(/\s+/gu, ' '), 180);
   return scenes.map((scene, index) => index === 0
     ? (() => {
-        const introduction = `The requested explanation is: “${focus}”. `;
         return {
           ...scene,
-          spoken: `${introduction}${boundedWords(scene.spoken, 320 - introduction.length)}`,
+          spoken: boundedWords(
+            `${focus} Every scene stays grounded in recorded browser evidence.`,
+            320,
+          ),
         };
       })()
     : scene);
+}
+
+const tourFrameKey = (value) => String(value ?? '')
+  .toLocaleLowerCase('en-US')
+  .replaceAll(/[^a-z0-9]+/gu, '-')
+  .replaceAll(/^-|-$/gu, '');
+
+export function applyTourFrameAttachments(scenes, events) {
+  const frames = events.flatMap((event) => (
+    event?.type === 'after' && Array.isArray(event.attachments)
+      ? event.attachments
+      : []
+  )).flatMap((attachment) => {
+    const match = String(attachment?.name ?? '').match(/^tour-frame:(.+)$/u);
+    const sha1 = typeof attachment?.sha1 === 'string' ? attachment.sha1 : '';
+    return match && /^[a-f0-9]{40}$/u.test(sha1)
+      ? [[tourFrameKey(match[1]), `resources/${sha1}`]]
+      : [];
+  });
+  if (!frames.length) return scenes;
+  const byTitle = new Map(frames);
+  const firstFrame = frames[0][1];
+  return scenes.map((scene, index) => {
+    const frame = index === 0 ? firstFrame : byTitle.get(tourFrameKey(scene.title));
+    return frame
+      ? { ...scene, evidence: { ...scene.evidence, frame } }
+      : scene;
+  });
 }
 
 const errorPhrase = (count) => count === 0
@@ -138,31 +169,72 @@ const actionNarration = (call, outcome) => {
   }
 };
 
+const tourNarration = (call, calls) => {
+  const testEvents = new Map(calls
+    .filter((candidate) => candidate?.class === 'Test')
+    .flatMap((candidate) => {
+      const id = candidate.stepId ?? candidate.callId;
+      return id ? [[id, candidate]] : [];
+    }));
+  let stepId = call.stepId;
+  for (let depth = 0; stepId && depth < 12; depth += 1) {
+    const event = testEvents.get(stepId);
+    if (!event) return '';
+    if (event.method === 'test.step' && typeof event.title === 'string') {
+      const match = event.title.match(/^Tour(?:\s+\[([^\]]+)\])?:\s*(.+)$/u);
+      return match ? {
+        stepId,
+        title: match[1]?.trim().slice(0, 80),
+        spoken: match[2].trim().slice(0, 320),
+      } : undefined;
+    }
+    stepId = event.parentId;
+  }
+  return undefined;
+};
+
 const actionScenes = ({ pageId, pageFrames, calls, framePath }) => {
   const scenes = [];
+  const narratedTourSteps = new Set();
   for (const [index, call] of calls.entries()) {
     if (!isSemanticAction(call) || call.pageId !== pageId) continue;
+    const tour = tourNarration(call, calls);
+    if (tour && narratedTourSteps.has(tour.stepId)) continue;
+    if (tour) narratedTourSteps.add(tour.stepId);
     const following = calls.slice(index + 1);
-    const outcome = following
-      .slice(0, following.findIndex(isSemanticAction) < 0
-        ? following.length
-        : following.findIndex(isSemanticAction))
+    const nextSemanticIndex = following.findIndex(isSemanticAction);
+    const beforeNextAction = following.slice(
+      0,
+      nextSemanticIndex < 0 ? following.length : nextSemanticIndex,
+    );
+    const outcome = beforeNextAction
       .find((candidate) => candidate.pageId === pageId && candidate.method === 'waitForSelector');
-    const frame = pageFrames.find((candidate) => candidate.timestamp >= call.startTime)
+    const nextSemantic = nextSemanticIndex < 0 ? undefined : following[nextSemanticIndex];
+    const stableFrames = pageFrames.filter((candidate) => (
+      candidate.timestamp >= (call.endTime ?? call.startTime)
+      && (!nextSemantic || candidate.timestamp < nextSemantic.startTime)
+    ));
+    const frame = stableFrames.at(-1)
+      ?? pageFrames.find((candidate) => candidate.timestamp >= (call.endTime ?? call.startTime))
       ?? pageFrames.at(-1);
     const eventIds = [call.callId, outcome?.callId].filter(Boolean);
+    const speakerNotes = tour?.spoken ?? '';
     scenes.push({
       id: `action-${String(call.callId).replaceAll(/[^a-z0-9]+/giu, '-')}`,
-      title: `${call.method} ${actionTarget(call)}`,
+      title: tour?.title || `${call.method} ${actionTarget(call)}`,
       frame,
-      spoken: actionNarration(call, outcome),
+      spoken: speakerNotes || actionNarration(call, outcome),
+      sourceTimeSeconds: Math.max(0, (
+        call.startTime - (pageFrames[0]?.timestamp ?? call.startTime)
+      ) / 1000),
+      ...(speakerNotes ? { narrationSource: 'playwright-tour-step' } : {}),
       evidence: {
         pageId,
         frame: frame ? framePath(frame) : undefined,
         eventIds,
       },
     });
-    if (scenes.length === 8) break;
+    if (scenes.length === 12) break;
   }
   return scenes;
 };
@@ -179,9 +251,15 @@ export function buildTraceScenes({
   const behaviorScenes = actionScenes({ pageId, pageFrames, calls, framePath });
   const scenes = [{
     id: 'summary',
-    title: 'Trace overview',
+    title: 'Agent Workload Platform',
+    frame: behaviorScenes[0]?.frame ?? pageFrames.at(0),
+    sourceTimeSeconds: 0,
     spoken: `This developer walkthrough follows ${behaviorScenes.length} user-visible ${behaviorScenes.length === 1 ? 'interaction' : 'interactions'} from a Playwright trace with ${pageFrames.length} screenshots and ${observedErrors}.`,
-    evidence: { pageId, eventIds: calls.slice(0, 1).map((event) => event.callId).filter(Boolean) },
+    evidence: {
+      pageId,
+      frame: behaviorScenes[0]?.evidence.frame ?? (pageFrames[0] ? framePath(pageFrames[0]) : undefined),
+      eventIds: calls.slice(0, 1).map((event) => event.callId).filter(Boolean),
+    },
   }];
 
   if (behaviorScenes.length) return [...scenes, ...behaviorScenes];

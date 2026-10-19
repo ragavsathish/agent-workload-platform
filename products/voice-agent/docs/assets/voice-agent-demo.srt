@@ -1,0 +1,43 @@
+1
+00:00:00,000 --> 00:00:12,700
+I should not have to read every agent transcript. Let me hear and see the work, move between sessions, and choose what becomes lasting knowledge. Every scene stays grounded in recorded browser evidence.
+
+2
+00:00:13,300 --> 00:00:28,450
+I am tired of reading endless agent conversations. This private workspace lets me speak to the agent, see its work, and decide what to explore. The local and tailnet entry points keep that experience inside an explicit access boundary.
+
+3
+00:00:29,050 --> 00:00:44,125
+Voice and typed turns share a resumable Pi session. I can listen first, then inspect the transcript only when I need exact words or evidence. This synthetic tour needs no microphone, private conversation, or Tailscale connection.
+
+4
+00:00:44,725 --> 00:00:58,100
+When work takes longer, I can switch from the live conversation to its durable session without losing the thread. Status, artifacts, and a memorable name help me return to the right job and ask what happens next.
+
+5
+00:00:58,700 --> 00:01:13,375
+A Mermaid map lets me see the journey before reading implementation details. It shows how conversation hands work to the gateway and durable worker, then into an isolated Gondolin VM. The boundary is visible enough to question.
+
+6
+00:01:13,975 --> 00:01:27,475
+The same result becomes Marp slides. I can move from exploring a system to presenting what I found without rewriting the agent output. The slides are a way to discuss the work, not a replacement for its evidence.
+
+7
+00:01:28,075 --> 00:01:40,225
+Excalidraw makes the architecture editable. I can move a component, challenge a boundary, and bring the corrected picture back to the conversation. Seeing the model is useful; being able to change it is better.
+
+8
+00:01:40,825 --> 00:01:55,500
+The Trace MCP App lets me explore what the browser actually did. Screenshots, actions, requests, and errors sit beside the agent story, so I can verify a claim and find the exact moment something worked or failed.
+
+9
+00:01:56,100 --> 00:02:10,375
+OpenTelemetry and Grafana connect that visible browser moment to the services behind it. I can follow a symptom into the responsible span and understand the path of a durable task without piecing together disconnected logs.
+
+10
+00:02:10,975 --> 00:02:25,375
+The verified trace can become this narrated onboarding video. A new developer can listen to the story, then return to the interactive evidence to explore a detail. The walkthrough comes from the tested product rather than a separate screen recording.
+
+11
+00:02:25,975 --> 00:02:41,175
+Finally, Journal Review puts a proposed fact beside its source quote. I choose what enters my personal knowledge graph. Over time, reviewed learning can shape a digital professional twin; a confident extraction alone cannot speak for me.

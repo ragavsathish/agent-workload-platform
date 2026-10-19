@@ -5,6 +5,7 @@ import test from 'node:test';
 import {
   applyNarrationBrief,
   applyNarrationPlan,
+  applyTourFrameAttachments,
   assertSafeOutputDirectory,
   buildTraceScenes,
 } from './trace-explainer-analysis.mjs';
@@ -114,6 +115,78 @@ test('explains user-visible behavior and drops protocol noise', () => {
   assert.ok(actionScenes.every(({ frame }) => frame));
 });
 
+test('uses explicit Playwright tour steps as grounded speaker notes', () => {
+  const frames = [
+    { width: 1440, height: 1000, timestamp: 100, pageId: 'page@1', sha1: 'start.jpeg' },
+    { width: 1440, height: 1000, timestamp: 210, pageId: 'page@1', sha1: 'opening.jpeg' },
+    { width: 1440, height: 1000, timestamp: 290, pageId: 'page@1', sha1: 'result.jpeg' },
+    { width: 1440, height: 1000, timestamp: 500, pageId: 'page@1', sha1: 'closed.jpeg' },
+  ];
+  const calls = [
+    {
+      callId: 'test.step@1', stepId: 'test.step@1', class: 'Test', method: 'test.step',
+      title: 'Tour [Browser evidence]: Developers can inspect the exact browser evidence behind this scene.',
+    },
+    {
+      callId: 'pw:api@2', stepId: 'pw:api@2', parentId: 'test.step@1',
+      class: 'Test', method: 'pw:api', title: 'Click the evidence control',
+    },
+    {
+      callId: 'call@3', stepId: 'pw:api@2', class: 'Frame', method: 'click',
+      startTime: 200, endTime: 220, pageId: 'page@1',
+      params: { selector: 'internal:role=button[name="Evidence"s]' },
+    },
+    {
+      callId: 'call@4', stepId: 'pw:api@2', class: 'Frame', method: 'click',
+      startTime: 300, pageId: 'page@1', params: { selector: 'internal:role=button[name="Close"s]' },
+    },
+  ];
+  const scenes = buildTraceScenes({
+    pageId: 'page@1',
+    pageFrames: frames,
+    calls,
+    actionErrors: [],
+    sourceDuration: 0.4,
+    framePath: (frame) => `resources/${frame.sha1}`,
+  });
+  const action = scenes.find(({ id }) => id === 'action-call-3');
+  assert.equal(
+    action.spoken,
+    'Developers can inspect the exact browser evidence behind this scene.',
+  );
+  assert.equal(action.narrationSource, 'playwright-tour-step');
+  assert.equal(action.title, 'Browser evidence');
+  assert.equal(action.evidence.frame, 'resources/result.jpeg');
+  assert.equal(action.sourceTimeSeconds, 0.1);
+  assert.equal(scenes.filter(({ id }) => id.startsWith('action-')).length, 1);
+
+  const planned = applyNarrationPlan(scenes, {
+    scenes: scenes.map(({ id }) => ({ id, spoken: `Generated narration for ${id}.` })),
+  });
+  assert.equal(planned.find(({ id }) => id === action.id).spoken, action.spoken);
+});
+
+test('prefers full-resolution named tour attachments over screencast frames', () => {
+  const scenes = [
+    { id: 'summary', title: 'Agent Workload Platform', evidence: { frame: 'resources/low-summary.jpeg', eventIds: [] } },
+    { id: 'mermaid', title: 'Mermaid', evidence: { frame: 'resources/low-mermaid.jpeg', eventIds: ['call@1'] } },
+    { id: 'marp', title: 'Marp slides', evidence: { frame: 'resources/low-marp.jpeg', eventIds: ['call@2'] } },
+  ];
+  const events = [{
+    type: 'after',
+    attachments: [
+      { name: 'tour-frame:Agent Workload Platform', sha1: 'a'.repeat(40) },
+      { name: 'tour-frame:Mermaid', sha1: 'b'.repeat(40) },
+    ],
+  }];
+
+  const framed = applyTourFrameAttachments(scenes, events);
+  assert.equal(framed[0].evidence.frame, `resources/${'a'.repeat(40)}`);
+  assert.equal(framed[1].evidence.frame, `resources/${'b'.repeat(40)}`);
+  assert.equal(framed[2].evidence.frame, 'resources/low-marp.jpeg');
+  assert.deepEqual(framed[1].evidence.eventIds, ['call@1']);
+});
+
 test('accepts only a complete bounded narration plan', () => {
   const scenes = [
     { id: 'summary', spoken: 'Fallback summary.', evidence: { eventIds: [] } },
@@ -156,6 +229,8 @@ test('keeps conversational intent in the grounded fallback without leaking URLs'
   );
 
   assert.match(contextualized[0].spoken, /backend reviewer/iu);
+  assert.match(contextualized[0].spoken, /recorded browser evidence/iu);
+  assert.doesNotMatch(contextualized[0].spoken, /requested explanation/iu);
   assert.doesNotMatch(contextualized[0].spoken, /https?:|private\.example/iu);
   assert.ok(contextualized[0].spoken.length <= 320);
   assert.match(contextualized[0].spoken, /\.$/u);

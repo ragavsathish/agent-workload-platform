@@ -69,6 +69,11 @@ module.exports = defineConfig({
       use: { viewport: { width: 390, height: 844 } },
     },
     {
+      name: 'readme-demo',
+      testMatch: /readme-demo\.spec\.ts/,
+      use: { viewport: { width: 1920, height: 1080 } },
+    },
+    {
       name: 'ux-profile',
       testMatch: /ux-profile\.spec\.ts/,
       use: {
