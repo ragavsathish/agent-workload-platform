@@ -1,3 +1,5 @@
+import { responseForFixtureMessage } from './patrol-fixture-scenes.mjs';
+
 const deepFreeze = (value) => {
   if (value && typeof value === 'object' && !Object.isFrozen(value)) {
     Object.freeze(value);
@@ -271,16 +273,9 @@ const replaceAssistant = (entries, assistantId, change) => deepFreeze(
   entries.map((entry) => entry.id === assistantId ? { ...entry, ...change } : entry),
 );
 
-export const completeTurn = (state, turnId) => {
+export const completeTurn = (state, turnId, origin) => {
   if (!state.activeTurn || state.activeTurn.id !== turnId) return state;
-  const visual = deepFreeze({
-    spoken: `Fixture response to: ${state.activeTurn.message}`,
-    presentation: {
-      kind: 'flow', title: 'Response',
-      nodes: [{ id: 'request', label: 'Request' }, { id: 'response', label: 'Response' }],
-      edges: [{ from: 'request', to: 'response' }],
-    },
-  });
+  const visual = responseForFixtureMessage(state.activeTurn.message, origin);
   return deepFreeze({
     ...state,
     revision: state.revision + 1,
@@ -306,14 +301,8 @@ export const abortActiveTurn = (state) => {
   return ok(next, deepFreeze({ turnId }));
 };
 
-export const completedTurnResponse = (message) => deepFreeze({
-  spoken: `Fixture response to: ${message}`,
-  presentation: {
-    kind: 'flow', title: 'Response',
-    nodes: [{ id: 'request', label: 'Request' }, { id: 'response', label: 'Response' }],
-    edges: [{ from: 'request', to: 'response' }],
-  },
-});
+export const completedTurnResponse = (message, origin) =>
+  deepFreeze(responseForFixtureMessage(message, origin));
 
 export const interruptedTurnResponse = () => deepFreeze({
   spoken: 'Response stopped.',

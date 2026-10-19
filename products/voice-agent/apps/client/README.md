@@ -20,6 +20,50 @@ and sends natural-language review requests back through the active voice session
 These apps receive only bounded presentation data. The host does not expose task
 approval, execution, credentials, links, exports, or server tools.
 
+## Host-free UX development
+
+Run the Flutter web client and a separate synthetic host-services API on one
+loopback origin, without LaunchAgents, a voice model, Gondolin, or Tailscale:
+
+```bash
+npm run dev:mock
+```
+
+Open `http://127.0.0.1:8766/?view=transcript`. Type “Show a Mermaid diagram”,
+“Show Marp slides”, “Show editable Excalidraw”, “Show the Playwright trace”,
+or “Review the journal annotation”, then open the visual in the transcript.
+The mock serves the built Flutter client and deterministic `/api/pi-*` and
+`/api/tasks` responses; `GET /api/mock/scenes` lists its presentation scenes.
+To reuse an existing build, run `npm run dev:mock:serve`. Set `MOCK_HOST_PORT`
+to choose another loopback port.
+
+This is a UI/MCP contract fixture, not a simulated voice model or a durable
+task VM. Trace artifact links, the official Grafana MCP App, speech recognition,
+and task execution still require their integration services. The production
+client and iframe bridge are unchanged; the fixture is a separate process.
+
+The development image builds Flutter Web and the bundled MCP Apps inside
+Docker, then serves the same mock as a non-root container. The following is a
+host-only smoke test from the repository root, **not** the source of the image
+for a Gondolin task VM:
+
+```bash
+docker build -f products/voice-agent/apps/client/Dockerfile.dev -t voice-ux-mock:dev .
+docker run --rm -p 127.0.0.1:8767:8766 voice-ux-mock:dev
+```
+
+Open `http://127.0.0.1:8767/?view=transcript`. Port 8767 lets the container
+coexist with the local mock on 8766. The image needs no host-mounted source or
+macOS service. A Gondolin development VM still needs its own container network
+but no host port forwarding when Playwright and the app both run inside that VM.
+An explicit, scoped bridge is needed only to view the app in a browser outside
+the VM. The existing image-builder VM disables Docker bridging and is not a
+general-purpose app runtime. For a task-VM check, build and publish the app
+image from a committed revision through the Gitea-backed image builder, then
+pull that immutable image into a separate disposable dev VM. The current
+Gitea workflow is scoped to execution images; the app-image build path still
+needs its own workflow or an explicit generalization.
+
 Preview the journal reviewer through the actual Flutter Web host without
 Tailscale or a running voice backend:
 
@@ -65,7 +109,8 @@ the responsive voice shell and the typed Pi/task workspace. The workspace uses
 the production `VoiceApi` against an external deterministic HTTP fixture rather
 than constructing screens or injecting a Dart fake. It covers context compaction,
 resuming a persisted Pi session, consecutive typed turns without waiting for TTS,
-streamed response interruption, task approval, task creation, and task cancellation.
+streamed response interruption, task approval, task creation, task cancellation,
+and opening Mermaid, Marp, Excalidraw, trace, and journal MCP presentations.
 
 The wrapper applies a version-checked workaround for Patrol 4.10.0's trace
 teardown failure, validates each archive, and reads a redacted evidence summary

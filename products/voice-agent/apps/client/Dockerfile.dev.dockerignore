@@ -1,0 +1,11 @@
+.git
+.pnpm-store
+**/node_modules
+**/.flutter_tooling
+**/.dart_tool
+**/build
+**/coverage
+**/dist
+**/.patrol.env
+**/test_bundle.dart
+**/.DS_Store

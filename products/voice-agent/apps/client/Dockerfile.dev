@@ -1,0 +1,46 @@
+FROM docker.io/library/node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS build
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    FLUTTER_HOME=/opt/flutter \
+    PATH=/opt/flutter/bin:${PATH}
+
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends \
+        ca-certificates curl git libglu1-mesa unzip xz-utils zip \
+    && rm -rf /var/lib/apt/lists/* \
+    && git clone --depth 1 --branch 3.47.7 https://github.com/flutter/flutter.git "$FLUTTER_HOME" \
+    && flutter config --enable-web \
+    && flutter precache --web \
+    && npm install --global pnpm@10.11.0
+
+WORKDIR /src
+
+COPY vendor/excalidraw-mcp/package.json vendor/excalidraw-mcp/pnpm-lock.yaml ./vendor/excalidraw-mcp/
+RUN cd vendor/excalidraw-mcp && pnpm install --frozen-lockfile --ignore-scripts
+
+COPY products/voice-agent/apps/client/package.json products/voice-agent/apps/client/package-lock.json ./products/voice-agent/apps/client/
+RUN cd products/voice-agent/apps/client && npm ci
+
+COPY vendor/excalidraw-mcp ./vendor/excalidraw-mcp
+COPY products/voice-agent/apps/client ./products/voice-agent/apps/client
+RUN cd products/voice-agent/apps/client && npm run build
+
+FROM docker.io/library/node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+
+ENV NODE_ENV=production \
+    MOCK_HOST_PORT=8766 \
+    MOCK_HOST_BIND=0.0.0.0
+
+WORKDIR /app
+COPY --from=build --chown=node:node /src/products/voice-agent/apps/client/build/web ./build/web
+COPY --from=build --chown=node:node /src/products/voice-agent/apps/client/tool/mock-host-services.mjs ./tool/mock-host-services.mjs
+COPY --from=build --chown=node:node /src/products/voice-agent/apps/client/tool/patrol-fixture-server.mjs ./tool/patrol-fixture-server.mjs
+COPY --from=build --chown=node:node /src/products/voice-agent/apps/client/tool/patrol-fixture-domain.mjs ./tool/patrol-fixture-domain.mjs
+COPY --from=build --chown=node:node /src/products/voice-agent/apps/client/tool/patrol-fixture-scenes.mjs ./tool/patrol-fixture-scenes.mjs
+COPY --from=build --chown=node:node /src/products/voice-agent/apps/client/tool/patrol-fixture-static.mjs ./tool/patrol-fixture-static.mjs
+
+USER node
+EXPOSE 8766
+HEALTHCHECK --interval=5s --timeout=3s --start-period=10s --retries=12 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:8766/health').then(r=>{if(!r.ok)process.exit(1)})"]
+CMD ["node", "tool/mock-host-services.mjs"]

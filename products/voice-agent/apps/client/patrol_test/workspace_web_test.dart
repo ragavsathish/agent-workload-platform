@@ -20,6 +20,24 @@ void main() {
     await $.platform.web.resizeWindow(size: const Size(1440, 1000));
 
     await _observeWorkspace($);
+    await _showFixtureMcpApp(
+      $,
+      'Show the Playwright trace',
+      'This trace card shows the recorded journey and its failing action.',
+      2,
+    );
+    await _showFixtureMcpApp(
+      $,
+      'Review the journal annotation',
+      'Review the suggested decision against its highlighted evidence.',
+      4,
+    );
+    await _showFixtureMcpApp(
+      $,
+      'Show editable Excalidraw',
+      'This diagram can be edited inside the MCP App.',
+      6,
+    );
     await _viewHistoricalSession($, 'fixture-history');
     await _resumeHistoricalSession($, 'fixture-history');
     await _compactSessionContext($);
@@ -33,6 +51,23 @@ void main() {
     await _startFreshVoiceSession($);
     await _completeFreshSessionTurn($, 'Start the fresh session');
   });
+}
+
+Future<void> _showFixtureMcpApp(
+  PatrolIntegrationTester $,
+  String message,
+  String spoken,
+  int revision,
+) async {
+  await $(const Key('send-message')).waitUntilExists();
+  await $(const Key('message-pi')).tap();
+  await $(const Key('message-pi')).enterText(message);
+  await $(const Key('send-message')).tap(settlePolicy: SettlePolicy.noSettle);
+  await $(spoken).waitUntilVisible();
+  await $(const Key('send-message')).waitUntilExists();
+  await $(Key('diagram-fixture-assistant-$revision')).tap();
+  await $(Key('mcp-app-fixture-assistant-$revision')).waitUntilExists();
+  expect($('Visual unavailable'), findsNothing);
 }
 
 Future<void> _observeWorkspace(PatrolIntegrationTester $) async {
@@ -147,7 +182,7 @@ Future<void> _inspectMobileSessionHistory(
   await $(Key('session-$sessionId')).waitUntilVisible();
   await $(Key('session-$sessionId')).tap();
   await $(const Key('read-only-history')).waitUntilVisible();
-  await $('Ready from the HTTP fixture.').waitUntilVisible();
+  await $('This diagram can be edited inside the MCP App.').waitUntilVisible();
   await $(const Key('return-live-session')).tap();
   await $(const Key('message-pi')).waitUntilExists();
 }

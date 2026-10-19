@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
+import { resolve } from 'node:path';
 
 import {
   abortActiveTurn,
@@ -19,10 +20,17 @@ import {
   startNewSession,
   transcriptSnapshot,
 } from './patrol-fixture-domain.mjs';
+import { fixtureSceneNames } from './patrol-fixture-scenes.mjs';
+import { serveStatic } from './patrol-fixture-static.mjs';
 
 const requestedPort = Number(process.env.PATROL_FIXTURE_PORT ?? 54321);
+const requestedHost = process.env.PATROL_FIXTURE_HOST ?? '127.0.0.1';
 const readyFile = process.env.PATROL_FIXTURE_READY_FILE;
 const fixtureNonce = process.env.PATROL_FIXTURE_NONCE ?? randomUUID();
+const fixtureName = process.env.PATROL_FIXTURE_NAME ?? 'voice-agent-patrol';
+const staticRoot = process.env.PATROL_FIXTURE_STATIC_ROOT
+  ? resolve(process.env.PATROL_FIXTURE_STATIC_ROOT)
+  : null;
 const clock = Object.freeze({
   now: () => new Date().toISOString(),
   timestamp: () => Date.now(),
@@ -91,7 +99,7 @@ const bodyOf = async (request) => {
   return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
 };
 
-const completeActiveTurn = async (message) => {
+const completeActiveTurn = async (message, origin) => {
   const started = apply(beginTurn(state, message, { now: clock.timestamp }));
   if (started.type === 'Err') return started;
   const turn = started.value;
@@ -105,12 +113,12 @@ const completeActiveTurn = async (message) => {
     });
   });
   pendingTurns.delete(turn.id);
-  if (outcome === 'completed') state = completeTurn(state, turn.id);
+  if (outcome === 'completed') state = completeTurn(state, turn.id, origin);
   return {
     type: 'Ok',
     state,
     value: outcome === 'completed'
-      ? completedTurnResponse(message)
+      ? completedTurnResponse(message, origin)
       : interruptedTurnResponse(),
   };
 };
@@ -125,9 +133,13 @@ const server = http.createServer(async (request, response) => {
   if (request.method === 'GET' && url.pathname === '/health') {
     json(response, 200, {
       ok: true,
-      fixture: 'voice-agent-patrol',
+      fixture: fixtureName,
       nonce: fixtureNonce,
     });
+    return;
+  }
+  if (request.method === 'GET' && url.pathname === '/api/mock/scenes') {
+    json(response, 200, { scenes: fixtureSceneNames() });
     return;
   }
   if (request.method === 'POST' && url.pathname === '/api/pi-speech') {
@@ -173,7 +185,7 @@ const server = http.createServer(async (request, response) => {
   }
   if (request.method === 'POST' && url.pathname === '/api/pi-message') {
     const body = await bodyOf(request);
-    sendTransition(response, await completeActiveTurn(body.message));
+    sendTransition(response, await completeActiveTurn(body.message, request.headers.origin));
     return;
   }
   if (request.method === 'POST' && url.pathname === '/api/pi-turn/abort') {
@@ -198,21 +210,24 @@ const server = http.createServer(async (request, response) => {
     sendTransition(response, apply(changeTaskStatus(state, action[1], status)));
     return;
   }
+  if (staticRoot && request.method === 'GET' && !url.pathname.startsWith('/api/')) {
+    if (await serveStatic(response, staticRoot, url.pathname)) return;
+  }
   json(response, 404, { detail: 'fixture route not found' });
 });
 
-server.listen(requestedPort, '127.0.0.1', () => {
+server.listen(requestedPort, requestedHost, () => {
   const address = server.address();
   if (!address || typeof address === 'string') {
     throw new Error('Patrol fixture did not bind a TCP address.');
   }
   const ready = {
-    fixture: 'voice-agent-patrol',
+    fixture: fixtureName,
     nonce: fixtureNonce,
     port: address.port,
   };
   if (readyFile) fs.writeFileSync(readyFile, `${JSON.stringify(ready)}\n`);
-  console.log(`Patrol fixture listening on http://127.0.0.1:${address.port}`);
+  console.log(`${fixtureName} listening on http://${requestedHost}:${address.port}`);
 });
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
