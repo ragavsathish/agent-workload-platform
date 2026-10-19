@@ -13,6 +13,8 @@ import {
   type BuildConfig,
 } from "@earendil-works/gondolin";
 
+import { localImageTag } from "./local-image.js";
+
 const DIGEST = /^sha256:[a-f0-9]{64}$/;
 
 function run(
@@ -72,7 +74,77 @@ function cachedImage(cacheReference: string, imageRef: string, arch: BuildConfig
   }
 }
 
+async function importDockerImage(
+  assetConfigPath: string,
+  config: BuildConfig,
+  dockerImage: string,
+  imageRef: string,
+  temporary: string,
+  cacheReference?: string,
+) {
+  config.oci = {
+    image: dockerImage,
+    runtime: "docker",
+    platform: config.oci!.platform ?? `linux/${config.arch}`,
+    pullPolicy: "never",
+  };
+  const assets = path.join(temporary, "assets");
+  await buildAssets(config, {
+    configDir: path.dirname(assetConfigPath),
+    outputDir: assets,
+    verbose: true,
+    workDir: path.join(temporary, "work"),
+  });
+  const imported = importImageFromDirectory(assets);
+  if (cacheReference) setImageRef(cacheReference, imported.buildId, imported.arch);
+  const reference = setImageRef(imageRef, imported.buildId, imported.arch);
+  return { arch: imported.arch, buildId: imported.buildId, cached: false, reference: reference.reference };
+}
+
 async function main() {
+  if (process.argv[2] === "inspect") {
+    const [, assetConfigPath, imageRef] = process.argv.slice(2);
+    if (!assetConfigPath || !imageRef) {
+      throw new Error("usage: image-builder/installer inspect <asset-config> <image-ref>");
+    }
+    const config = parseBuildConfig(fs.readFileSync(assetConfigPath, "utf8"));
+    let present = false;
+    try {
+      const image = resolveImageSelector(imageRef, config.arch);
+      present = Boolean(image.buildId && image.arch);
+    } catch {
+      // A missing or unusable local ref must be installed before Pi starts.
+    }
+    process.stdout.write(`${JSON.stringify({ present })}\n`);
+    return;
+  }
+  if (process.argv[2] === "local-install") {
+    const [, assetConfigPath, archivePath, imageRef, artifactVersion] = process.argv.slice(2);
+    if (!assetConfigPath || !archivePath || !imageRef || !/^v2-[a-f0-9]{32}$/.test(artifactVersion ?? "")) {
+      throw new Error("usage: image-builder/installer local-install <asset-config> <archive> <image-ref> <artifact-version>");
+    }
+    if (path.basename(archivePath) !== `${artifactVersion}.tar` || !fs.lstatSync(archivePath).isFile()) {
+      throw new Error("local image archive must be a regular versioned file");
+    }
+    const config = parseBuildConfig(fs.readFileSync(assetConfigPath, "utf8"));
+    assertHostSafeConfig(config);
+    const cached = cachedImage(imageRef, imageRef, config.arch);
+    if (cached) {
+      process.stdout.write(`${JSON.stringify(cached)}\n`);
+      return;
+    }
+    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "gondolin-oci-install-"));
+    try {
+      await run("docker", ["load", "--input", archivePath]);
+      const dockerImage = localImageTag(artifactVersion!);
+      await run("docker", ["image", "inspect", "--format", "{{.Id}}", dockerImage]);
+      const installed = await importDockerImage(assetConfigPath, config, dockerImage, imageRef, temporary);
+      process.stdout.write(`${JSON.stringify(installed)}\n`);
+    } finally {
+      fs.rmSync(temporary, { recursive: true, force: true });
+    }
+    return;
+  }
   const [assetConfigPath, registryImage, imageRef, digest] = process.argv.slice(2);
   const token = process.env.GITEA_BUILDER_TOKEN;
   if (!assetConfigPath || !registryImage || !imageRef || !digest || !token) {
@@ -112,28 +184,12 @@ async function main() {
       env: dockerEnv,
     });
     process.env.DOCKER_CONFIG = dockerConfig;
-    config.oci = {
-      image: registryImage,
-      runtime: "docker",
-      platform: config.oci!.platform ?? `linux/${config.arch}`,
-      pullPolicy: "never",
-    };
-    const assets = path.join(temporary, "assets");
-    await buildAssets(config, {
-      configDir: path.dirname(assetConfigPath),
-      outputDir: assets,
-      verbose: true,
-      workDir: path.join(temporary, "work"),
-    });
-    const imported = importImageFromDirectory(assets);
-    setImageRef(cacheReference, imported.buildId, imported.arch);
-    const reference = setImageRef(imageRef, imported.buildId, imported.arch);
+    const installed = await importDockerImage(
+      assetConfigPath, config, registryImage, imageRef, temporary, cacheReference,
+    );
     process.stdout.write(`${JSON.stringify({
-      arch: imported.arch,
-      buildId: imported.buildId,
-      cached: false,
+      ...installed,
       digest,
-      reference: reference.reference,
     })}\n`);
   } finally {
     if (previousDockerConfig === undefined) delete process.env.DOCKER_CONFIG;

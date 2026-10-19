@@ -8,6 +8,7 @@ import pytest
 from opentelemetry.propagate import inject
 from psycopg import OperationalError
 from voice_agent.tasking.infrastructure.config import Settings
+
 from voice_worker.main import (
     build_pi_command,
     build_rpc_command,
@@ -75,6 +76,7 @@ import os
 import sys
 assert "spoken" in sys.stdin.read()
 assert os.environ["TRACEPARENT"] == "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+assert os.environ["GONDOLIN_EXECUTION_IMAGE_REF"] == "project-build:v1-v2-example"
 answer = {"spoken": "Done.", "presentation": {"kind": "status", "title": "Done", "nodes": [{"id": "done", "label": "Done"}], "edges": []}}
 print(json.dumps({"type": "message_end", "message": {"role": "assistant", "content": [{"type": "text", "text": json.dumps(answer)}]}}))
 print(json.dumps({"type": "agent_settled"}))
@@ -101,6 +103,7 @@ print(json.dumps({"type": "agent_settled"}))
             task_id="00000000-0000-0000-0000-000000000001",
             instruction="Work",
             workspace=tmp_path,
+            image_ref="project-build:v1-v2-example",
         )
 
     assert result["exit_code"] == 0

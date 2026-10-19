@@ -170,10 +170,13 @@ def run_pi(
     task_id: str,
     instruction: str,
     workspace: Path,
+    image_ref: str | None = None,
 ) -> dict[str, Any]:
     with telemetry.observe("agent-task.pi-rpc"):
         command = build_rpc_command(settings, task_id=task_id)
         process_environment = os.environ.copy()
+        if image_ref is not None:
+            process_environment["GONDOLIN_EXECUTION_IMAGE_REF"] = image_ref
         trace_carrier: dict[str, str] = {}
         inject(trace_carrier)
         if traceparent := trace_carrier.get("traceparent"):
@@ -246,6 +249,7 @@ def run_song_lyrics(
     style: str,
     duration_seconds: int,
     workspace: Path,
+    image_ref: str | None = None,
 ) -> dict[str, Any]:
     result = run_pi(
         settings,
@@ -256,6 +260,7 @@ def run_song_lyrics(
             duration_seconds=duration_seconds,
         ),
         workspace=workspace,
+        image_ref=image_ref,
     )
     manifest = manifest_from_pi_result(result)
     return {**result, "manifest": manifest.to_dict()}
@@ -368,7 +373,7 @@ def create_worker(settings: Settings) -> Absurd:
             with telemetry.observe("song.lyrics"):
                 task_id = str(ctx.task_id)
                 def run_in_workspace(workspace: Path) -> dict[str, Any]:
-                    ctx.step(
+                    image_ref = ctx.step(
                         "ensure-execution-image",
                         lambda: prepare_repository_image(
                             settings,
@@ -391,6 +396,7 @@ def create_worker(settings: Settings) -> Absurd:
                         style=str(params["style"]),
                         duration_seconds=int(params["duration_seconds"]),
                         workspace=workspace,
+                        image_ref=image_ref,
                     )
 
                 if artifacts:
@@ -450,7 +456,7 @@ def create_worker(settings: Settings) -> Absurd:
             with artifacts.materialize_workspace(
                 str(params["workspace"]), settings.worker_scratch_root
             ) as workspace:
-                ctx.step(
+                image_ref = ctx.step(
                     "ensure-execution-image",
                     lambda: prepare_repository_image(
                         settings,
@@ -466,6 +472,7 @@ def create_worker(settings: Settings) -> Absurd:
                     task_id=task_id,
                     instruction=str(params["instruction"]),
                     workspace=workspace,
+                    image_ref=image_ref,
                 )
                 result["artifacts"] = artifacts.capture_result(
                     task_id=task_id,
@@ -480,7 +487,7 @@ def create_worker(settings: Settings) -> Absurd:
                     resolve_workspace(str(params["workspace"]), settings.workspace_roots)
                 ),
             )
-            ctx.step(
+            image_ref = ctx.step(
                 "ensure-execution-image",
                 lambda: prepare_repository_image(
                     settings,
@@ -496,6 +503,7 @@ def create_worker(settings: Settings) -> Absurd:
                 task_id=task_id,
                 instruction=str(params["instruction"]),
                 workspace=Path(workspace),
+                image_ref=image_ref,
             )
         return ctx.complete_step(run_handle, result)
 

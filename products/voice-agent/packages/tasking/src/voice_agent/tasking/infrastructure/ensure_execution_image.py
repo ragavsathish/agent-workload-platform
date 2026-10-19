@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import subprocess
 import time
@@ -13,7 +12,6 @@ from urllib.parse import urlparse
 from voice_agent.tasking.domain.execution_images import load_execution_image_plan
 from voice_agent.tasking.infrastructure.config import Settings
 from voice_agent.tasking.infrastructure.gitea_actions import GiteaActions
-from voice_agent.tasking.infrastructure.image_packages import GiteaImagePackages
 
 
 def _git(workspace: Path, *args: str) -> str:
@@ -55,7 +53,7 @@ def _workflow_ref(workspace: Path) -> str:
 def ensure_execution_image(
     settings: Settings, *, workspace: Path, workspace_reference: str
 ) -> str | None:
-    """Build on a package miss, verify the artifact, then install its Gondolin ref."""
+    """Build on a local cache miss, then import the image into Gondolin."""
 
     if not (workspace / ".pi/gondolin.json").is_file():
         return None
@@ -65,17 +63,25 @@ def ensure_execution_image(
         return None
     if not settings.image_installer_cli or not settings.image_installer_cli.is_file():
         raise RuntimeError("IMAGE_INSTALLER_CLI is required for repository-declared images")
-    if not settings.gitea_builder_token:
-        raise RuntimeError("Gitea builder token is required for repository images")
-
-    repository = _repository_name(workspace, workspace_reference)
-    packages = GiteaImagePackages(
-        settings.gitea_endpoint_url, settings.gitea_package_owner, settings.gitea_builder_token
+    inspected = subprocess.run(
+        [
+            settings.node_binary,
+            str(settings.image_installer_cli),
+            "inspect",
+            str(workspace / plan.asset_config),
+            plan.installed_image_ref,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
     )
-    manifest = packages.try_manifest(package="execution-images", version=plan.artifact_version)
-    if manifest is None:
+    if json.loads(inspected.stdout).get("present") is True:
+        return plan.installed_image_ref
+    archive = settings.execution_image_handoff_dir / f"{plan.artifact_version}.tar"
+    if not archive.exists():
         if not settings.gitea_actions_token:
             raise RuntimeError("Gitea dispatcher token is required to build a missing image")
+        repository = _repository_name(workspace, workspace_reference)
         actions = GiteaActions(
             settings.gitea_endpoint_url, settings.gitea_source_owner, settings.gitea_actions_token
         )
@@ -101,38 +107,23 @@ def ensure_execution_image(
                 f"execution image workflow {run.id} concluded "
                 f"{run.conclusion or 'without a result'}"
             )
-        manifest = packages.try_manifest(package="execution-images", version=plan.artifact_version)
-
-    if manifest is None:
-        raise RuntimeError("execution image workflow completed without a manifest")
-    digest = manifest.get("digest")
-    if (
-        not isinstance(digest, str)
-        or re.fullmatch(r"sha256:[a-f0-9]{64}", digest) is None
-        or manifest.get("artifactVersion") != plan.artifact_version
-        or manifest.get("imageRef") != plan.image_ref
-        or manifest.get("registryRepository") != "image-builder/execution-images"
-    ):
-        raise RuntimeError("execution image manifest does not match the repository declaration")
-    registry = urlparse(settings.gitea_endpoint_url)
-    if registry.scheme != "http" or registry.hostname not in {"127.0.0.1", "localhost"}:
-        raise RuntimeError("image installer requires a loopback Gitea endpoint")
-    registry_image = f"{registry.netloc}/image-builder/execution-images@{digest}"
+    if archive.is_symlink() or not archive.is_file():
+        raise RuntimeError("execution image workflow did not produce a regular local archive")
     completed = subprocess.run(
         [
             settings.node_binary,
             str(settings.image_installer_cli),
+            "local-install",
             str(workspace / plan.asset_config),
-            registry_image,
-            plan.image_ref,
-            digest,
+            str(archive),
+            plan.installed_image_ref,
+            plan.artifact_version,
         ],
         check=True,
         capture_output=True,
         text=True,
-        env={**os.environ, "GITEA_BUILDER_TOKEN": settings.gitea_builder_token},
     )
     installed = json.loads(completed.stdout)
-    if installed.get("reference") != plan.image_ref:
+    if installed.get("reference") != plan.installed_image_ref:
         raise RuntimeError("installed Gondolin image reference did not match the plan")
-    return plan.image_ref
+    return plan.installed_image_ref

@@ -145,7 +145,7 @@ function resolveGondolinConfig(options: {
   }
 
   return {
-    imagePath: config.image || options.fallbackImagePath,
+    imagePath: process.env.GONDOLIN_EXECUTION_IMAGE_REF || config.image || options.fallbackImagePath,
     memory: config.memory,
     cpus: config.cpus,
     development: {

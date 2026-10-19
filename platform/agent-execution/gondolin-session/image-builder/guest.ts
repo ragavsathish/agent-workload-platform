@@ -1,7 +1,8 @@
-import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
+
+import { localImageTag } from "./local-image.js";
 
 type GuestPlan = {
   artifactVersion: string;
@@ -75,7 +76,7 @@ if (!fs.existsSync(gondolinMitmCa)) {
   throw new Error(`Gondolin MITM CA is unavailable: ${gondolinMitmCa}`);
 }
 const token = process.env.IMAGE_BUILDER_TOKEN;
-if (!token) throw new Error("IMAGE_BUILDER_TOKEN is required");
+if (!token) throw new Error("IMAGE_BUILDER_TOKEN is required for the trusted base image");
 const registry = plan.registryRef.slice(0, plan.registryRef.indexOf("/"));
 if (!registry || registry !== "gitea.local:3001") {
   throw new Error(`unsupported image registry: ${registry || plan.registryRef}`);
@@ -86,7 +87,7 @@ await run(
   `${token}\n`,
 );
 await importTrustedBaseImages();
-const localTag = `local/task-image:${createHash("sha256").update(plan.artifactVersion).digest("hex").slice(0, 20)}`;
+const localTag = localImageTag(plan.artifactVersion);
 const buildArgs = [
   "build",
   "--network=host",
@@ -111,6 +112,11 @@ if (plan.publish) {
   digest = pushedDigest;
   registryRepository = "image-builder/execution-images";
 } else {
+  const archive = `/image-handoff/${plan.artifactVersion}.tar`;
+  const staging = `${archive}.partial`;
+  fs.rmSync(staging, { force: true });
+  await run("docker", ["save", "--output", staging, localTag]);
+  fs.renameSync(staging, archive);
   digest = await run("docker", ["image", "inspect", "--format", "{{.Id}}", localTag]);
   if (!/^sha256:[a-f0-9]{64}$/.test(digest)) throw new Error("docker build did not report an image digest");
 }

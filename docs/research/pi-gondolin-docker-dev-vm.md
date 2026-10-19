@@ -7,8 +7,13 @@ _Live probe and design revision: 2026-10-19. This supersedes the per-commit appl
 Each durable task materializes a repository worktree. Its `.pi/gondolin.json`
 selects the guest image, build inputs, CPU, memory, and network policy. Before
 Pi starts, the task worker computes the image cache key from committed build
-inputs. On a Gitea package miss it dispatches the trusted, existing image-builder
-workflow, verifies the published manifest, and installs the Gondolin image ref.
+inputs. The declared `image` is a logical base tag; the effective Gondolin tag
+also includes that cache key. The worker asks Gondolin whether this exact tag is
+installed. On a local miss it dispatches the trusted image-builder workflow
+from the snapshot's source branch, waits for completion, and imports the
+versioned image from a host-local handoff directory. The Action runs in the
+separate builder VM and writes only to that handoff directory; it does not
+publish this development image to Gitea packages or the OCI registry.
 Then Pi's [Gondolin extension](../../platform/agent-execution/gondolin-session/pi-extension.ts)
 starts **one VM for that Pi session** with that worktree at `/workspace`.
 Closing the Pi session closes the VM. The image is reusable across worktrees;

@@ -53,6 +53,7 @@ class Settings:
     defer_workspace_validation: bool = False
     image_build_timeout_seconds: int = 7200
     image_installer_cli: Path | None = None
+    image_handoff_dir: Path | None = None
     gitea_endpoint_url: str = ""
     gitea_source_owner: str = "source-publisher"
     gitea_image_workflow: str = "build-execution-image.yml"
@@ -120,6 +121,11 @@ class Settings:
                 if _value("IMAGE_INSTALLER_CLI")
                 else None
             ),
+            image_handoff_dir=(
+                Path(_value("GONDOLIN_IMAGE_HANDOFF_DIR")).expanduser().resolve()
+                if _value("GONDOLIN_IMAGE_HANDOFF_DIR")
+                else None
+            ),
             gitea_endpoint_url=_value("GITEA_ENDPOINT_URL", "http://127.0.0.1:3001"),
             gitea_source_owner=_value("GITEA_OWNER", "source-publisher"),
             gitea_image_workflow=_value(
@@ -150,6 +156,14 @@ class Settings:
     @property
     def artifact_workspaces(self) -> bool:
         return bool(self.artifact_endpoint_url)
+
+    @property
+    def execution_image_handoff_dir(self) -> Path:
+        if self.image_handoff_dir is not None:
+            return self.image_handoff_dir
+        if self.image_installer_cli is None:
+            raise RuntimeError("IMAGE_INSTALLER_CLI is required for execution image handoff")
+        return self.image_installer_cli.parents[3] / "gondolin-image-handoff"
 
     @property
     def music_generation_enabled(self) -> bool:

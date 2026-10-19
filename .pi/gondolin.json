@@ -4,7 +4,7 @@
     "context": "platform/agent-execution/gondolin-session/gondolin",
     "dockerfile": "platform/agent-execution/gondolin-session/gondolin/Dockerfile.dev",
     "assetConfig": "platform/agent-execution/gondolin-session/gondolin/dev.aarch64.json",
-    "publish": true
+    "publish": false
   },
   "memory": "8G",
   "cpus": 4,

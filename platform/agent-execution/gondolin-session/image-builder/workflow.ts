@@ -164,8 +164,10 @@ async function main() {
   fs.mkdirSync("/output", { mode: 0o700 });
   fs.writeFileSync("/output/plan.json", `${JSON.stringify(plan)}\n`, { mode: 0o600 });
   await run("node", ["/runner/dist/image-builder/guest.js", "/output/plan.json"]);
-  const base = `http://gitea.local:3001/api/packages/image-builder/generic/execution-images/${requestedVersion}`;
-  await upload("/output/result.json", `${base}/manifest.json`, token);
+  if (plan.publish) {
+    const base = `http://gitea.local:3001/api/packages/image-builder/generic/execution-images/${requestedVersion}`;
+    await upload("/output/result.json", `${base}/manifest.json`, token);
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
