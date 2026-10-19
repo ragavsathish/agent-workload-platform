@@ -4,26 +4,61 @@ ENV DEBIAN_FRONTEND=noninteractive \
     FLUTTER_HOME=/opt/flutter \
     PATH=/opt/flutter/bin:${PATH}
 
-RUN apt-get update \
+RUN --mount=type=secret,id=gondolin_mitm_ca,required=false \
+    apt-get update \
     && apt-get install --yes --no-install-recommends \
         ca-certificates curl git libglu1-mesa unzip xz-utils zip \
     && rm -rf /var/lib/apt/lists/* \
+    && cp /etc/ssl/certs/ca-certificates.crt /tmp/build-ca-bundle.crt \
+    && if [ -f /run/secrets/gondolin_mitm_ca ]; then \
+         cat /run/secrets/gondolin_mitm_ca >> /tmp/build-ca-bundle.crt; \
+       fi \
+    && export GIT_SSL_CAINFO=/tmp/build-ca-bundle.crt \
+              SSL_CERT_FILE=/tmp/build-ca-bundle.crt \
+              CURL_CA_BUNDLE=/tmp/build-ca-bundle.crt \
+              NODE_EXTRA_CA_CERTS=/tmp/build-ca-bundle.crt \
     && git clone --depth 1 --branch 3.47.7 https://github.com/flutter/flutter.git "$FLUTTER_HOME" \
     && flutter config --enable-web \
     && flutter precache --web \
-    && npm install --global pnpm@10.11.0
+    && npm install --global pnpm@10.11.0 \
+    && rm /tmp/build-ca-bundle.crt
 
 WORKDIR /src
 
 COPY vendor/excalidraw-mcp/package.json vendor/excalidraw-mcp/pnpm-lock.yaml ./vendor/excalidraw-mcp/
-RUN cd vendor/excalidraw-mcp && pnpm install --frozen-lockfile --ignore-scripts
+RUN --mount=type=secret,id=gondolin_mitm_ca,required=false \
+    cp /etc/ssl/certs/ca-certificates.crt /tmp/build-ca-bundle.crt \
+    && if [ -f /run/secrets/gondolin_mitm_ca ]; then \
+         cat /run/secrets/gondolin_mitm_ca >> /tmp/build-ca-bundle.crt; \
+       fi \
+    && cd vendor/excalidraw-mcp \
+    && NODE_EXTRA_CA_CERTS=/tmp/build-ca-bundle.crt pnpm install --frozen-lockfile --ignore-scripts \
+    && rm /tmp/build-ca-bundle.crt
 
 COPY products/voice-agent/apps/client/package.json products/voice-agent/apps/client/package-lock.json ./products/voice-agent/apps/client/
-RUN cd products/voice-agent/apps/client && npm ci
+RUN --mount=type=secret,id=gondolin_mitm_ca,required=false \
+    cp /etc/ssl/certs/ca-certificates.crt /tmp/build-ca-bundle.crt \
+    && if [ -f /run/secrets/gondolin_mitm_ca ]; then \
+         cat /run/secrets/gondolin_mitm_ca >> /tmp/build-ca-bundle.crt; \
+       fi \
+    && cd products/voice-agent/apps/client \
+    && NODE_EXTRA_CA_CERTS=/tmp/build-ca-bundle.crt npm ci \
+    && rm /tmp/build-ca-bundle.crt
 
 COPY vendor/excalidraw-mcp ./vendor/excalidraw-mcp
 COPY products/voice-agent/apps/client ./products/voice-agent/apps/client
-RUN cd products/voice-agent/apps/client && npm run build
+RUN --mount=type=secret,id=gondolin_mitm_ca,required=false \
+    cp /etc/ssl/certs/ca-certificates.crt /tmp/build-ca-bundle.crt \
+    && if [ -f /run/secrets/gondolin_mitm_ca ]; then \
+         cat /run/secrets/gondolin_mitm_ca >> /tmp/build-ca-bundle.crt; \
+       fi \
+    && export GIT_SSL_CAINFO=/tmp/build-ca-bundle.crt \
+              SSL_CERT_FILE=/tmp/build-ca-bundle.crt \
+              CURL_CA_BUNDLE=/tmp/build-ca-bundle.crt \
+              NODE_EXTRA_CA_CERTS=/tmp/build-ca-bundle.crt \
+    && cd products/voice-agent/apps/client \
+    && npm run build \
+    && rm /tmp/build-ca-bundle.crt
 
 FROM docker.io/library/node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
 
