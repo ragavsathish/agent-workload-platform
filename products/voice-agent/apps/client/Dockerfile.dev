@@ -9,10 +9,11 @@ RUN --mount=type=secret,id=gondolin_mitm_ca,required=false \
     && apt-get install --yes --no-install-recommends \
         ca-certificates curl git libglu1-mesa unzip xz-utils zip \
     && rm -rf /var/lib/apt/lists/* \
-    && cp /etc/ssl/certs/ca-certificates.crt /tmp/build-ca-bundle.crt \
     && if [ -f /run/secrets/gondolin_mitm_ca ]; then \
-         cat /run/secrets/gondolin_mitm_ca >> /tmp/build-ca-bundle.crt; \
+         cp /run/secrets/gondolin_mitm_ca /usr/local/share/ca-certificates/gondolin-build.crt; \
+         update-ca-certificates; \
        fi \
+    && cp /etc/ssl/certs/ca-certificates.crt /tmp/build-ca-bundle.crt \
     && export GIT_SSL_CAINFO=/tmp/build-ca-bundle.crt \
               SSL_CERT_FILE=/tmp/build-ca-bundle.crt \
               CURL_CA_BUNDLE=/tmp/build-ca-bundle.crt \
