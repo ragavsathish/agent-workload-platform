@@ -9,6 +9,7 @@ import pytest
 from opentelemetry.propagate import inject
 from psycopg import OperationalError
 from voice_agent.tasking.infrastructure.config import Settings
+
 from voice_worker.main import (
     build_pi_command,
     build_rpc_command,
@@ -19,6 +20,7 @@ from voice_worker.main import (
     run_pi,
     run_song_render,
     run_worker,
+    scratch_root_reaches_account_home,
 )
 
 
@@ -66,6 +68,18 @@ def test_command_refuses_unsandboxed_execution_by_default(tmp_path: Path) -> Non
         build_pi_command(settings(tmp_path, sandboxed=False), task_id="abc")
 
 
+def test_command_requires_the_explicit_git_skills_bundle(tmp_path: Path) -> None:
+    configured = replace(settings(tmp_path, sandboxed=True), skills_dir=None)
+    with pytest.raises(RuntimeError, match="PI_TASK_SKILLS_DIR"):
+        build_pi_command(configured, task_id="abc")
+
+
+def test_scratch_root_stays_outside_account_home(tmp_path: Path) -> None:
+    home = tmp_path / "owner"
+    assert scratch_root_reaches_account_home(home / "runtime" / "scratch", home)
+    assert not scratch_root_reaches_account_home(tmp_path / "scratch", home)
+
+
 def test_run_pi_uses_rust_rpc_host_and_returns_the_initial_settled_response(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -78,6 +92,7 @@ import sys
 assert "spoken" in sys.stdin.read()
 assert os.environ["TRACEPARENT"] == "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
 assert os.environ["GONDOLIN_EXECUTION_IMAGE_REF"] == "project-build:v1-v2-example"
+assert os.environ["PI_TASK_SKILLS_DIR"] == sys.argv[sys.argv.index("--skill") + 1]
 answer = {"spoken": "Done.", "presentation": {"kind": "status", "title": "Done", "nodes": [{"id": "done", "label": "Done"}], "edges": []}}
 print(json.dumps({"type": "message_end", "message": {"role": "assistant", "content": [{"type": "text", "text": json.dumps(answer)}]}}))
 print(json.dumps({"type": "agent_settled"}))
@@ -95,7 +110,6 @@ print(json.dumps({"type": "agent_settled"}))
         configured = replace(
             settings(tmp_path, sandboxed=True),
             pi_rpc_host_binary=executable,
-            skills_dir=None,
             pi_rpc_socket_dir=Path(rpc_directory),
         )
 

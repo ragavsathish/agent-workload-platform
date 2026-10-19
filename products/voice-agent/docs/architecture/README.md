@@ -107,6 +107,11 @@ The content address covers the declared Docker context, Dockerfile, asset config
 contexts, image reference, and build options—not the whole repository revision—so application-only
 commits reuse an immutable toolchain image package while every declared build-input change invalidates
 the cache.
+The worker requires the installed Git skills bundle for every durable Pi session: Pi receives it
+through its explicit `--skill` option, and Gondolin mounts the same directory read-only at `/skills`.
+The scratch root stays outside the account home because Pi discovers `.agents/skills` in workspace
+ancestors; a home-rooted scratch task can otherwise follow the owner's skill symlinks into protected
+`Documents` paths before its first RPC response.
 One capacity-one Gitea Runner in a warm, shared Gondolin VM checks out the immutable revision, runs
 Docker against its private cached daemon, and publishes completed Gondolin assets as an immutable
 generic package. The task worker checkpoints the workflow run ID, verifies the package digest, and

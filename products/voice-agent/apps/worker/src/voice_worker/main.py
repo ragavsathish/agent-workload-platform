@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import pwd
 import subprocess
 import tempfile
 import time
@@ -96,6 +97,8 @@ def continue_task_trace(params: dict[str, Any]) -> Iterator[None]:
 
 
 def build_pi_command(settings: Settings, *, task_id: str) -> list[str]:
+    if settings.gondolin_extension and settings.skills_dir is None:
+        raise RuntimeError("PI_TASK_SKILLS_DIR is required for Gondolin task sessions")
     command = [
         settings.pi_binary,
         "--mode",
@@ -139,6 +142,10 @@ def build_rpc_command(settings: Settings, *, task_id: str) -> list[str]:
     ]
 
 
+def scratch_root_reaches_account_home(scratch_root: Path, account_home: Path) -> bool:
+    return scratch_root.resolve().is_relative_to(account_home.resolve())
+
+
 def validate_worker(settings: Settings) -> None:
     settings.require_api()
     if not Path(settings.pi_binary).is_file():
@@ -147,10 +154,18 @@ def validate_worker(settings: Settings) -> None:
         raise RuntimeError(f"Pi RPC host binary not found: {settings.pi_rpc_host_binary}")
     if settings.gondolin_extension and not settings.gondolin_extension.is_file():
         raise RuntimeError(f"Gondolin extension not found: {settings.gondolin_extension}")
+    if settings.gondolin_extension and settings.skills_dir is None:
+        raise RuntimeError("PI_TASK_SKILLS_DIR is required for Gondolin task sessions")
     if settings.skills_dir and not settings.skills_dir.is_dir():
         raise RuntimeError(f"Skills directory not found: {settings.skills_dir}")
     if not settings.gondolin_extension and not settings.allow_unsandboxed:
         raise RuntimeError("secure worker requires PI_GONDOLIN_EXTENSION")
+    account_home = Path(pwd.getpwuid(os.getuid()).pw_dir)
+    if scratch_root_reaches_account_home(settings.worker_scratch_root, account_home):
+        raise RuntimeError(
+            "WORKER_SCRATCH_ROOT must be outside the account home so Pi cannot "
+            "discover ancestor skills"
+        )
     settings.worker_scratch_root.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(settings.worker_scratch_root, 0o700)
     settings.pi_session_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -174,6 +189,8 @@ def run_pi(
     with telemetry.observe("agent-task.pi-rpc"):
         command = build_rpc_command(settings, task_id=task_id)
         process_environment = os.environ.copy()
+        if settings.skills_dir is not None:
+            process_environment["PI_TASK_SKILLS_DIR"] = str(settings.skills_dir)
         if image_ref is not None:
             process_environment["GONDOLIN_EXECUTION_IMAGE_REF"] = image_ref
         else:

@@ -101,7 +101,6 @@ fn run(telemetry: &telemetry::Telemetry) -> Result<(), String> {
     if initial_prompt.trim().is_empty() || initial_prompt.chars().count() > MAX_MESSAGE_CHARS {
         return Err("initial prompt is empty or too large".into());
     }
-    telemetry.event(&session_context, "startup.prompt_read", "ok");
 
     prepare_socket_dir(&options.socket_dir)?;
     let socket_path = options.socket_dir.join(format!("{}.sock", options.task_id));
@@ -118,7 +117,6 @@ fn run(telemetry: &telemetry::Telemetry) -> Result<(), String> {
     listener
         .set_nonblocking(true)
         .map_err(|error| format!("cannot configure socket: {error}"))?;
-    telemetry.event(&session_context, "startup.socket_ready", "ok");
 
     let mut child = ChildGuard(
         Command::new(&options.command[0])
@@ -129,14 +127,12 @@ fn run(telemetry: &telemetry::Telemetry) -> Result<(), String> {
             .spawn()
             .map_err(|error| format!("cannot start Pi: {error}"))?,
     );
-    telemetry.event(&session_context, "startup.pi_spawned", "ok");
     let child_stdin = Arc::new(Mutex::new(child.stdin.take()));
     let child_stdout = child.stdout.take().ok_or("Pi stdout is unavailable")?;
     send_command(
         &child_stdin,
         &json!({"id":"initial-task","type":"prompt","message":initial_prompt}),
     )?;
-    telemetry.event(&session_context, "startup.prompt_sent", "ok");
 
     let stopping = Arc::new(AtomicBool::new(false));
     let settled = Arc::new(AtomicBool::new(false));
@@ -179,7 +175,6 @@ fn run(telemetry: &telemetry::Telemetry) -> Result<(), String> {
 
     let deadline = Instant::now() + options.timeout;
     let mut initial_settled = false;
-    let mut first_record_seen = false;
     let mut protocol_error = None;
     while Instant::now() < deadline {
         match receiver.recv_timeout(Duration::from_millis(100)) {
@@ -192,10 +187,6 @@ fn run(telemetry: &telemetry::Telemetry) -> Result<(), String> {
                         continue;
                     }
                 };
-                if !first_record_seen {
-                    first_record_seen = true;
-                    telemetry.event(&session_context, "startup.first_record", "ok");
-                }
                 if !initial_settled {
                     print!("{line}");
                     io::stdout().flush().map_err(|error| error.to_string())?;

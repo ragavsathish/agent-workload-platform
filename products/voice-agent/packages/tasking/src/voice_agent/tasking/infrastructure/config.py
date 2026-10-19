@@ -111,7 +111,7 @@ class Settings:
             worker_scratch_root=Path(
                 _value(
                     "WORKER_SCRATCH_ROOT",
-                    "~/.local/share/agent-workload-platform/workspaces",
+                    "/tmp/agent-workload-platform/workspaces",
                 )
             ).expanduser(),
             scratch_image_ref=_value("WORKER_SCRATCH_IMAGE_REF") or _value("GONDOLIN_BROWSER_ASSETS"),
