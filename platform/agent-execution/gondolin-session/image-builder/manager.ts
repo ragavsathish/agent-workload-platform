@@ -15,6 +15,9 @@ import {
 
 export const BUILDER_LABEL = "gondolin-builder:host";
 export const DEFAULT_BUILDER_DISK = "128G";
+// Flutter's Linux Dart SDK archive is ~236 MiB; keep this larger response cap
+// on the trusted image-builder VM rather than widening ordinary task egress.
+const BUILDER_MAX_HTTP_RESPONSE_BYTES = 512 * 1024 * 1024;
 const GITEA_GUEST_ORIGIN = "http://gitea.local:3001";
 const OTEL_GUEST_ORIGIN = "http://otel.local:4318";
 
@@ -114,6 +117,7 @@ export class BuilderManager {
       sandbox: { imagePath: this.options.imagePath, netEnabled: true },
       dns: { mode: "synthetic" as const, syntheticHostMapping: "per-host" as const },
       httpHooks: service.httpHooks,
+      maxHttpResponseBodyBytes: BUILDER_MAX_HTTP_RESPONSE_BYTES,
       env: service.env,
       memory: process.env.GONDOLIN_BUILDER_MEMORY ?? "8G",
       cpus: Number(process.env.GONDOLIN_BUILDER_CPUS ?? "4"),
