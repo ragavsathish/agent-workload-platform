@@ -1,0 +1,48 @@
+# syntax=docker/dockerfile:1.7
+
+# Reusable development VM rootfs: tools only, never a checkout or built app.
+ARG FLUTTER_TOOLCHAIN_IMAGE=docker.io/plugfox/flutter:3.47.7-web@sha256:bdff6627c0421b1c05f830d60e2792e5930da222318de1c70ffbae954b88c491
+ARG VOICE_RUNTIME_IMAGE=gitea.local:3001/image-builder/base-playwright-mcp:v0.0.79-arm64@sha256:2f69a7a48fb9e5eea360f8f160192b11241e6e7d124389c103164f39e6fd2f8d
+FROM ${FLUTTER_TOOLCHAIN_IMAGE} AS flutter-toolchain
+FROM ${VOICE_RUNTIME_IMAGE}
+
+USER root
+COPY --from=flutter-toolchain /opt/flutter /opt/flutter
+COPY --from=flutter-toolchain /var/cache/pub /var/cache/pub
+COPY start-dev-docker.sh /usr/local/bin/start-dev-docker
+COPY dev-compose /usr/local/bin/dev-compose
+COPY select-compose-images.mjs /usr/local/libexec/select-compose-images.mjs
+
+ENV FLUTTER_HOME=/opt/flutter \
+    FLUTTER_ROOT=/opt/flutter \
+    PUB_CACHE=/var/cache/pub \
+    PATH=/opt/flutter/bin:/opt/flutter/bin/cache/dart-sdk/bin:${PATH}
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=secret,id=gondolin_mitm_ca,required=false \
+    apt-get update \
+    && apt-get install --yes --no-install-recommends \
+        ca-certificates curl docker.io libglu1-mesa unzip xz-utils zip \
+    && chmod 0555 /usr/local/bin/start-dev-docker /usr/local/bin/dev-compose \
+    && npm install --global pnpm@11.19.0 \
+    && case "$(dpkg --print-architecture)" in \
+         arm64) compose_arch=aarch64; compose_sha=733ec76717ceb59052a9609b9dadfb523b2df8eab57a54212872d10a58078ea2 ;; \
+         amd64) compose_arch=x86_64; compose_sha=40343e21ca777173e69cff5dbafeb37c6f81f3b0d57d9e597f036e95eb63e76a ;; \
+         *) exit 1 ;; \
+       esac \
+    && mkdir -p /usr/local/libexec/docker/cli-plugins \
+    && cp /etc/ssl/certs/ca-certificates.crt /tmp/build-ca-bundle.crt \
+    && if [ -f /run/secrets/gondolin_mitm_ca ]; then \
+         cat /run/secrets/gondolin_mitm_ca >> /tmp/build-ca-bundle.crt; \
+       fi \
+    && curl --cacert /tmp/build-ca-bundle.crt --fail --location --silent --show-error \
+         "https://github.com/docker/compose/releases/download/v5.6.0/docker-compose-linux-${compose_arch}" \
+         --output /usr/local/libexec/docker/cli-plugins/docker-compose \
+    && echo "${compose_sha}  /usr/local/libexec/docker/cli-plugins/docker-compose" | sha256sum --check \
+    && chmod 0555 /usr/local/libexec/docker/cli-plugins/docker-compose \
+    && rm /tmp/build-ca-bundle.crt \
+    && git config --system --add safe.directory /workspace \
+    && docker compose version
+
+WORKDIR /workspace

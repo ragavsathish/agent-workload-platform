@@ -28,6 +28,31 @@ workflow, guest executor, installer, Dockerfile, Compose definition, and
 architecture manifests. It produces and installs the image selected by
 `.pi/gondolin.json`; it does not participate in an active Pi Agent Session.
 
+For a manual probe, `make gondolin-dev-build` prepares a reusable
+Flutter/Node/Docker/Playwright toolchain image without repository source or app
+output. Normal durable tasks select and provision their image through the
+repository's `.pi/gondolin.json` before Pi starts. The extension remains
+project-agnostic: it mounts only that session's chosen worktree at `/workspace`,
+does not copy host process credentials or `.env` files, and starts a private
+Docker daemon in the guest. Worktree-local environment files stay with that
+worktree. The VM and its Docker store, volumes, networks, and ports disappear
+at session shutdown. Builds and tests run through that VM, not on the host.
+
+`GONDOLIN_DEV_IMAGE_CACHE` optionally points to a trusted host directory of
+pre-exported Compose images. It is mounted read-only at `/image-cache` in each
+VM. The source repository's `make gondolin-dev-cache` prepares the Voice Agent
+image set as one example; other repositories can use
+`gondolin/prepare-compose-cache.mjs <compose.yml> <cache-directory>`. In the
+guest, set `COMPOSE_FILE` to that worktree's Compose path and
+`COMPOSE_CACHE_SERVICES` to the needed service names, then use `dev-compose`
+to load only those cached image tags and apply its no-pull override. The
+image bytes are shared; no Docker data root, named volume, or port is shared.
+Docker bridge networking is not currently available in this dev guest build,
+so multi-container Compose startup remains a separate unverified capability.
+Use a clean worktree for Linux builds: macOS `node_modules` contains native
+binaries that cannot run in the guest. Durable S3 workspaces already materialize
+clean Git checkouts; install dependencies inside their session VM.
+
 ## Lifecycle contract
 
 1. The Pi Adapter synchronously replaces `read`, `write`, `edit`, and `bash`

@@ -24,6 +24,7 @@ type ResolvedGondolinConfig = {
   imagePath: string;
   memory: string | undefined;
   cpus: number | undefined;
+  development: { docker: boolean; disk: string };
   networkEnabled: boolean;
   allowedHosts: string[];
   skillsDirectory: string | undefined;
@@ -33,6 +34,7 @@ type ProjectVmConfig = {
   memory?: string;
   cpus?: number;
   policy?: string;
+  development?: { docker?: boolean; disk?: string };
 };
 const extensionDir = path.dirname(fileURLToPath(import.meta.url));
 const runtimeDir = path.basename(extensionDir) === "dist"
@@ -100,6 +102,25 @@ function resolveGondolinConfig(options: {
   if (raw.policy !== undefined && typeof raw.policy !== "string") {
     throw new Error("gondolin.policy must be a string");
   }
+  if (raw.development !== undefined && !record(raw.development)) {
+    throw new Error("gondolin.development must be an object");
+  }
+  if (record(raw.development)) {
+    if (raw.development.docker !== undefined && typeof raw.development.docker !== "boolean") {
+      throw new Error("gondolin.development.docker must be a boolean");
+    }
+    if (raw.development.disk !== undefined &&
+      (typeof raw.development.disk !== "string" || !/^\d+[MG]$/.test(raw.development.disk))) {
+      throw new Error("gondolin.development.disk must be a size such as 64G");
+    }
+    if (typeof raw.development.disk === "string") {
+      const amount = Number(raw.development.disk.slice(0, -1));
+      const gibibytes = raw.development.disk.endsWith("G") ? amount : amount / 1024;
+      if (!Number.isFinite(gibibytes) || gibibytes < 1 || gibibytes > 128) {
+        throw new Error("gondolin.development.disk must be between 1G and 128G");
+      }
+    }
+  }
   const config = raw as ProjectVmConfig;
 
   let networkEnabled = options.fallbackPublicInternet;
@@ -127,6 +148,10 @@ function resolveGondolinConfig(options: {
     imagePath: config.image || options.fallbackImagePath,
     memory: config.memory,
     cpus: config.cpus,
+    development: {
+      docker: config.development?.docker ?? false,
+      disk: config.development?.disk ?? "64G",
+    },
     networkEnabled,
     allowedHosts,
     skillsDirectory: options.skillsDirectory,
@@ -193,8 +218,10 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
   for (const tool of deferredCodingTools(projectDirectory, activeCodingTools)) pi.registerTool(tool);
 
   try {
+    const devAssets = process.env.GONDOLIN_DEV_ASSETS;
     const fallbackImagePath = path.resolve(
-      process.env.GONDOLIN_BROWSER_ASSETS
+      devAssets
+        ?? process.env.GONDOLIN_BROWSER_ASSETS
         ?? path.join(repositoryRoot, "artifacts", "gondolin-browser", architecture),
     );
     config = resolveGondolinConfig({
@@ -210,10 +237,17 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
   pi.on("session_start", async (_event, context) => {
     try {
       const configured = activeConfig();
+      const devSession = configured.development.docker;
       session = new GondolinSession({
         imagePath: configured.imagePath,
         mounts: {
           "/workspace": projectDirectory,
+          ...(devSession && process.env.GONDOLIN_DEV_IMAGE_CACHE
+            ? { "/image-cache": {
+              hostPath: path.resolve(process.env.GONDOLIN_DEV_IMAGE_CACHE),
+              readonly: true,
+            } }
+            : {}),
           ...(configured.skillsDirectory
             ? { "/skills": { hostPath: configured.skillsDirectory, readonly: true } }
             : {}),
@@ -221,9 +255,19 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
         network: configured.networkEnabled
           ? { allowedHosts: configured.allowedHosts }
           : false,
+        environment: devSession ? {
+          PATH: "/opt/flutter/bin:/opt/flutter/bin/cache/dart-sdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          FLUTTER_HOME: "/opt/flutter",
+          FLUTTER_ROOT: "/opt/flutter",
+          PUB_CACHE: "/var/cache/pub",
+          PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright",
+        } : undefined,
         memory: configured.memory,
         cpus: configured.cpus,
-        sessionLabel: "pi-agent-workload",
+        rootfs: devSession ? { mode: "cow", size: configured.development.disk } : undefined,
+        maxHttpResponseBodyBytes: devSession ? 512 * 1024 * 1024 : undefined,
+        startupCommands: devSession ? [["/usr/local/bin/start-dev-docker"]] : undefined,
+        sessionLabel: devSession ? "pi-dev-worktree" : "pi-agent-workload",
       });
       codingTools = await session.codingTools();
       context.ui.notify(

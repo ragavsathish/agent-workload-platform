@@ -1,9 +1,0 @@
-{
-  "image": "voice-ux-mock:dev",
-  "build": {
-    "context": ".",
-    "dockerfile": "products/voice-agent/apps/client/Dockerfile.dev",
-    "assetConfig": "products/voice-agent/apps/client/gitea-image.json",
-    "publish": true
-  }
-}

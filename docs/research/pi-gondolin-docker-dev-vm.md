@@ -1,41 +1,57 @@
-# Pi + Gondolin Docker development VM
+# Pi + Gondolin development VM
 
-_Research and probe date: 2026-10-19. Primary sources only. Pi-to-Gondolin and Docker-daemon startup passed live checks; the Gitea-built mock image and in-VM browser journey have not yet been tested._
+_Live probe and design revision: 2026-10-19. This supersedes the per-commit application-image experiment._
 
-## Placement and lifecycle
+## Selection and lifecycle
 
-The repository's current Pi task architecture runs **Pi RPC on the host** and loads `pi-extension.ts`. At `session_start`, that extension creates one Gondolin VM, mounts the task workspace at `/workspace`, and replaces Pi's `read`/`write`/`edit`/`bash` capabilities with guest-executed operations. Its optional Playwright MCP transport also runs in that same VM. `session_shutdown` closes the VM. This is the supported starting point for a development probe; installing a second Pi inside the guest would be a different topology with a second session/auth/control boundary, not a prerequisite for testing the guest Docker app ([repository session contract](../../platform/agent-execution/gondolin-session/README.md), [extension](../../platform/agent-execution/gondolin-session/pi-extension.ts), [worker's Pi command](../../products/voice-agent/apps/worker/src/voice_worker/main.py), [Pi extension lifecycle](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md)).
+Each durable task materializes a repository worktree. Its `.pi/gondolin.json`
+selects the guest image, build inputs, CPU, memory, and network policy. Before
+Pi starts, the task worker computes the image cache key from committed build
+inputs. On a Gitea package miss it dispatches the trusted, existing image-builder
+workflow, verifies the published manifest, and installs the Gondolin image ref.
+Then Pi's [Gondolin extension](../../platform/agent-execution/gondolin-session/pi-extension.ts)
+starts **one VM for that Pi session** with that worktree at `/workspace`.
+Closing the Pi session closes the VM. The image is reusable across worktrees;
+Docker runtime state, volumes, networks, ports, and mounts are not.
 
-Pi's official process-integration mode is `pi --mode rpc`; it exchanges LF-delimited JSON records over stdin/stdout. A `prompt` response means accepted, **not** completed: continue reading events until `agent_settled`. `pi --help` is authoritative for the installed version's flags. The repository's worker already starts Pi with `--mode rpc`, session identity/directory, `--no-builtin-tools`, and `--extension <built-gondolin-extension>` ([Pi RPC documentation](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md), [worker's command builder](../../products/voice-agent/apps/worker/src/voice_worker/main.py)).
+The repo-specific [dev Dockerfile](../../platform/agent-execution/gondolin-session/gondolin/Dockerfile.dev)
+contains toolchains, not app source or a built product. Its narrow build context
+is the `gondolin/` toolchain directory, so ordinary application commits do not
+invalidate the image. `make gondolin-dev-build` remains a manual, local toolchain
+probe; normal durable tasks use `.pi/gondolin.json` and the trusted builder.
+Durable tasks materialize clean Git checkouts; this matters because a macOS
+`node_modules` tree contains native packages that cannot run in Linux. Install
+dependencies inside the VM and keep the developer host's dependency tree out.
+No host Docker socket is exposed to a task VM. Pi runs on the host and routes
+coding/Playwright operations to the guest, following [Pi's extension lifecycle](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md).
 
-## Reusing the Docker-capable image safely
+## Shared image bytes
 
-The repository already builds an Alpine Gondolin guest image with `docker`, `containerd`, `docker-cli`, Node, and `e2fsprogs-extra`. Its builder manager mounts cgroup v2, starts a private `dockerd` with `overlay2`, waits for `docker info`, and then runs a Gitea runner. That daemon deliberately uses `--iptables=false --bridge=none --ip-forward=false --ip-masq=false` and should **not** be reused as the dev-app VM: it is a separate persistent builder with a Gitea registration token and checkpoint. Reuse its *image/tooling pattern* in a separate disposable VM, not its manager, token, checkpoint, or service role ([builder Dockerfile](../../platform/agent-execution/gondolin-session/image-builder/Dockerfile), [builder manager](../../platform/agent-execution/gondolin-session/image-builder/manager.ts), [builder image config](../../platform/agent-execution/gondolin-session/image-builder/gondolin.aarch64.json)).
+The optional [Compose cache preparer](../../platform/agent-execution/gondolin-session/gondolin/prepare-compose-cache.mjs)
+exports per-image archives and a no-pull override without building source. A trusted path
+in `GONDOLIN_DEV_IMAGE_CACHE` is mounted read-only at `/image-cache`. `dev-compose`
+loads only images named in `COMPOSE_CACHE_SERVICES` into each VM's private
+Docker data root, then uses the worktree-selected `COMPOSE_FILE` plus the
+override. The image archives are shared;
+the loaded store and all mutable runtime state are not. Worktree `.env` files
+remain worktree-local and are not copied from host process environment.
+The guest's `vfs` driver expands layers substantially; loading all 15 service
+images eagerly grew a disposable VM disk by about 32 GiB, so selection is
+mandatory for image-consuming commands.
 
-For a first single-container UX probe, a private Docker daemon without bridge/NAT can run the mock image with `docker run --network host`. On Linux, Docker documents that `host` mode shares the **Docker host's** network namespace and ignores `-p`; here that host is the **Gondolin guest**, not macOS. The current mock image binds `0.0.0.0:8766` inside the container. This is a reasonable first hypothesis to **verify live**, not proof that arbitrary multi-container Compose networking works under Gondolin. If the test needs service-to-service Docker bridge DNS, that is a separate networking spike ([Docker host-network documentation](https://docs.docker.com/engine/network/drivers/host/), [mock Dockerfile](../../products/voice-agent/apps/client/Dockerfile.dev), [mock README](../../products/voice-agent/apps/client/README.md)).
+## Live result and remaining gate
 
-Gondolin's image-builder config has a 2 GiB initial rootfs and `cow` runtime default. Its running builder expands the copy-on-write root disk to 128 GiB through `rootfs.size`, with 8 GiB RAM and 4 CPUs by default. A dev VM that builds or loads the Flutter image needs a deliberately sized root disk because image layers and container state accumulate there; the default task config is only 2 GiB RAM/2 CPUs. Gondolin CLI also has `--rootfs-size SIZE` (requires `resize2fs` in the guest); SDK users specify the rootfs size at `VM.create`. Check disk use during the probe rather than copying 128 GiB automatically ([builder manager](../../platform/agent-execution/gondolin-session/image-builder/manager.ts), [task config](../../.pi/gondolin.json), [Gondolin CLI](https://earendil-works.github.io/gondolin/cli/), [custom image guide](https://earendil-works.github.io/gondolin/custom-images/)).
+Flutter 3.47.7 ran inside a Gondolin VM. A private Docker daemon started with
+`vfs`, loaded a cached BusyBox archive, and ran a container with
+`--network=none`. `overlay2` and Docker bridge networks failed in this guest:
+kernel module insertion returned an exec-format error and bridge creation
+reported `package not installed`. Therefore the full multi-container Compose
+stack is **not yet verified or supported** in this dev guest build. The image cache avoids
+remote image pulls but does not fix the guest networking limitation. A
+single-process mock UX and in-VM Playwright can still use guest loopback.
+External browser preview needs explicit [Gondolin ingress](https://earendil-works.github.io/gondolin/ingress/);
+guest ports are not automatically exposed to macOS or Tailscale.
 
-## VM-local ports versus host ingress
-
-For Playwright and the mock server both in the guest, run the mock on guest loopback and have Playwright use `http://127.0.0.1:8766/`; **do not enable Gondolin ingress**. Docker `--network host` makes the container's bound listener part of guest networking. Gondolin ingress is specifically a host-side HTTP gateway to a guest-loopback listener and is only needed when a macOS process/browser must reach that server. It is not a generic `-p` forward. If an external preview is later needed, SDK code can call `vm.enableIngress({listenHost: "127.0.0.1", listenPort: 0})` and `vm.setIngressRoutes([{prefix: "/", port: 8766, stripPrefix: true}])`; the default host bind is loopback ([Gondolin ingress](https://earendil-works.github.io/gondolin/ingress/), [SDK ingress](https://earendil-works.github.io/gondolin/sdk-network/), [Docker host networking](https://docs.docker.com/engine/network/drivers/host/)).
-
-Gondolin's network policy is for guest **egress**, not guest loopback. Its default mediated network accepts HTTP/1.x and WebSocket upgrades, but Gondolin documents no QUIC/WebRTC support. Thus typed UX/MCP/HTTP testing is plausible in the guest; a full live WebRTC voice journey is not an appropriate success criterion for this first probe ([Gondolin network SDK](https://earendil-works.github.io/gondolin/sdk-network/), [Gondolin limitations](https://earendil-works.github.io/gondolin/limitations/)).
-
-## Minimal live probe sequence
-
-The following is the operational sequence to test, not an already validated one-command recipe:
-
-1. Select the existing Docker-capable guest assets or build a **separate** dev image from the builder Dockerfile/config pattern. Start a disposable VM with enough RAM, CPUs, and a larger COW root disk; mount only the checkout/artifacts needed for the probe. The SDK `VM.create()`/`vm.exec()`/`vm.close()` lifecycle is the documented integration path ([Gondolin VM control](https://earendil-works.github.io/gondolin/sdk-vm/), [builder image config](../../platform/agent-execution/gondolin-session/image-builder/gondolin.aarch64.json)).
-2. Inside the guest, mount cgroup v2 and start private `dockerd --host=unix:///var/run/docker.sock --storage-driver=overlay2 --iptables=false --bridge=none --ip-forward=false --ip-masq=false`; verify `docker info`. These exact daemon flags are proven by the repository builder, but the guest image/runtime must still be probed for the dev use case ([builder manager](../../platform/agent-execution/gondolin-session/image-builder/manager.ts)).
-3. Build the mock app image with the **Gitea-backed shared image builder** from a committed source revision, publish an immutable registry reference, and pull that reference into the disposable dev VM. Do not use a host-Docker-built tar as the source of truth. The current workflow is specifically named and packaged for execution images, so a mock-app image needs either a separate workflow or an explicit generalization before dispatch. Then run it with `docker run --rm --network host <pinned-image-ref>`. Verify from **inside the guest** using `http://127.0.0.1:8766/health`, then use the same URL in in-VM Playwright. Do not pass `-p` with host networking ([repository workflow](../../.gitea/workflows/build-execution-image.yml), [Docker host-network documentation](https://docs.docker.com/engine/network/drivers/host/), [mock Dockerfile](../../products/voice-agent/apps/client/Dockerfile.dev)).
-4. Run Pi on the host with the built Gondolin extension (or attach to the existing host-side Pi RPC session) and ask it to inspect the guest app via its guest coding/Playwright capabilities. Avoid creating a Pi-in-guest process until there is a specific requirement for guest-owned model control or session storage ([repository extension](../../platform/agent-execution/gondolin-session/pi-extension.ts), [Pi RPC docs](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md)).
-5. Close the Pi session/VM and confirm no dockerd, app process, or COW disk remains. Keep durable test artifacts outside the disposable guest rootfs. Gondolin explicitly recommends per-task VMs and VFS/external persistence over relying on guest rootfs state ([Gondolin workloads](https://earendil-works.github.io/gondolin/workloads/)).
-
-For manual inspection of a running VM, official Gondolin CLI offers `gondolin list`, `gondolin attach <session-id>`, and `gondolin exec --sock <session-id> -- <command>`. External attach is to the **VM**, not to Pi's conversational state; Pi RPC or the repository's task RPC remains the conversation-control interface ([Gondolin CLI](https://earendil-works.github.io/gondolin/cli/), [Pi RPC](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md)).
-
-## Live check on 2026-10-19
-
-- Host Pi 1.3.0 loaded the built Gondolin extension in a no-session, read-only tool probe. Its `bash` call returned `/workspace` and `Linux` from the guest, and Pi reached `agent_settled`.
-- A **separate disposable** VM started from `artifacts/gondolin-builder/aarch64` with 4 GiB RAM, 2 CPUs, and a 12 GiB COW root disk. cgroup v2 mounted, a private Docker daemon started with `overlay2` and no bridge/NAT, and `docker info` confirmed `overlay2`. The daemon and VM then shut down cleanly.
-- Gitea responded on the local API, but the mock Dockerfile is currently uncommitted. The existing workflow accepts a committed source revision and is tailored to execution images. No Gitea app-image build, registry pull, in-guest mock HTTP check, or Playwright run was claimed.
+The next gate is to reconcile the dev guest's kernel and module artifacts (the
+separate trusted builder VM already runs a private `overlay2` daemon), then
+prove a Compose bridge and service-to-service traffic in a bounded VM test.

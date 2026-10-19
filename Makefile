@@ -21,7 +21,11 @@ GONDOLIN_BROWSER_SERVICE := voice-runtime-$(GONDOLIN_PROFILE)
 GONDOLIN_BUILDER_ASSETS := artifacts/gondolin-builder/$(GONDOLIN_ARCH)
 GONDOLIN_BUILDER_CONFIG := platform/agent-execution/gondolin-session/image-builder/gondolin.$(GONDOLIN_ARCH).json
 GONDOLIN_BUILDER_SERVICE := image-builder-$(GONDOLIN_PROFILE)
-.PHONY: help FORCE $(VOICE_AGENT_TARGETS) $(WASM_TARGETS) gondolin-session-build gondolin-builder-build
+GONDOLIN_DEV_ASSETS := artifacts/gondolin-dev/$(GONDOLIN_ARCH)
+GONDOLIN_DEV_CONFIG := platform/agent-execution/gondolin-session/gondolin/dev.$(GONDOLIN_ARCH).json
+GONDOLIN_DEV_SERVICE := dev-runtime-$(GONDOLIN_PROFILE)
+GONDOLIN_DEV_IMAGE_CACHE := artifacts/gondolin-dev-images/$(GONDOLIN_ARCH)
+.PHONY: help FORCE $(VOICE_AGENT_TARGETS) $(WASM_TARGETS) gondolin-session-build gondolin-builder-build gondolin-dev-build gondolin-dev-cache
 
 help:
 	@printf '%s\n' \
@@ -39,7 +43,8 @@ help:
 		'  make wasm-check     Check every WASM component' \
 		'  make wasm-install   Install every WASM component into Wassette' \
 		'  make voice-TARGET   Run any additional Voice Agent target' \
-		'  make gondolin-session-build | gondolin-builder-build'
+		'  make gondolin-session-build | gondolin-builder-build | gondolin-dev-build' \
+		'  make gondolin-dev-cache  Cache Compose images for read-only VM mounts'
 
 $(VOICE_AGENT_TARGETS) $(WASM_TARGETS):
 	$(MAKE) -C $(VOICE_AGENT_DIR) $@
@@ -58,3 +63,11 @@ gondolin-builder-build:
 	docker compose --profile $(GONDOLIN_PROFILE) -f platform/agent-execution/gondolin-session/image-builder/compose.yaml build $(GONDOLIN_BUILDER_SERVICE)
 	mkdir -p $(GONDOLIN_BUILDER_ASSETS)
 	$(GONDOLIN) build --config $(GONDOLIN_BUILDER_CONFIG) --output $(GONDOLIN_BUILDER_ASSETS)
+
+gondolin-dev-build:
+	docker compose --profile $(GONDOLIN_PROFILE) -f platform/agent-execution/gondolin-session/gondolin/dev-compose.yaml build $(GONDOLIN_DEV_SERVICE)
+	mkdir -p $(GONDOLIN_DEV_ASSETS)
+	$(GONDOLIN) build --config $(GONDOLIN_DEV_CONFIG) --output $(GONDOLIN_DEV_ASSETS)
+
+gondolin-dev-cache:
+	node platform/agent-execution/gondolin-session/gondolin/prepare-compose-cache.mjs products/voice-agent/deploy/compose.yml $(GONDOLIN_DEV_IMAGE_CACHE)

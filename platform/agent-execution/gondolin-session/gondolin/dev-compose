@@ -1,0 +1,31 @@
+#!/bin/sh
+set -eu
+
+cache=/image-cache
+if [ -z "${COMPOSE_FILE:-}" ]; then
+  echo "Set COMPOSE_FILE to the worktree's Compose file(s) before using dev-compose." >&2
+  exit 1
+fi
+if [ ! -r "$cache/index.json" ] || [ ! -r "$cache/compose.override.json" ]; then
+  echo "Shared Compose image cache is not mounted; set GONDOLIN_DEV_IMAGE_CACHE for this Pi session." >&2
+  exit 1
+fi
+
+if [ "${1:-}" != config ]; then
+  if [ -z "${COMPOSE_CACHE_SERVICES:-}" ]; then
+    echo "Set COMPOSE_CACHE_SERVICES to the service images needed for this command." >&2
+    exit 1
+  fi
+  archives=$(node /usr/local/libexec/select-compose-images.mjs \
+    "$cache/index.json" "$COMPOSE_CACHE_SERVICES")
+  printf '%s\n' "$archives" | while IFS= read -r archive; do
+    marker="/var/lib/docker/.gondolin-cache-${archive%.tar}"
+    if [ ! -e "$marker" ]; then
+      docker load --input "$cache/images/$archive"
+      touch "$marker"
+    fi
+  done
+fi
+
+export COMPOSE_FILE="$COMPOSE_FILE:$cache/compose.override.json"
+exec docker compose "$@"

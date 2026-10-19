@@ -20,16 +20,17 @@ and sends natural-language review requests back through the active voice session
 These apps receive only bounded presentation data. The host does not expose task
 approval, execution, credentials, links, exports, or server tools.
 
-## Host-free UX development
+## Isolated UX development
 
-Run the Flutter web client and a separate synthetic host-services API on one
-loopback origin, without LaunchAgents, a voice model, Gondolin, or Tailscale:
+Within a Pi development VM, run the Flutter web client and a synthetic
+host-services API on one guest-loopback origin, without LaunchAgents, a voice
+model, or Tailscale:
 
 ```bash
 npm run dev:mock
 ```
 
-Open `http://127.0.0.1:8766/?view=transcript`. Type “Show a Mermaid diagram”,
+Open `http://127.0.0.1:8766/?view=transcript` in guest Playwright. Type “Show a Mermaid diagram”,
 “Show Marp slides”, “Show editable Excalidraw”, “Show the Playwright trace”,
 or “Review the journal annotation”, then open the visual in the transcript.
 The mock serves the built Flutter client and deterministic `/api/pi-*` and
@@ -42,36 +43,52 @@ task VM. Trace artifact links, the official Grafana MCP App, speech recognition,
 and task execution still require their integration services. The production
 client and iframe bridge are unchanged; the fixture is a separate process.
 
-The development image takes Flutter 3.47.7 and its web toolchain from a
-digest-pinned builder image, builds Flutter Web and the bundled MCP Apps inside
-Docker, then serves the same mock as a non-root container. The following is a
-host-only smoke test from the repository root, **not** the source of the image
-for a Gondolin task VM:
+For a manual toolchain probe, prepare the reusable Gondolin dev image once
+from the repository root:
 
 ```bash
-docker build -f products/voice-agent/apps/client/Dockerfile.dev -t voice-ux-mock:dev .
-docker run --rm -p 127.0.0.1:8767:8766 voice-ux-mock:dev
+make gondolin-dev-build
 ```
 
-Open `http://127.0.0.1:8767/?view=transcript`. Port 8767 lets the container
-coexist with the local mock on 8766. The image needs no host-mounted source or
-macOS service. A Gondolin development VM still needs its own container network
-but no host port forwarding when Playwright and the app both run inside that VM.
-An explicit, scoped bridge is needed only to view the app in a browser outside
-the VM. The existing image-builder VM disables Docker bridging and is not a
-general-purpose app runtime. For a task-VM check, build and publish the app
-image from a committed revision through the Gitea-backed image builder using
-`gitea-image.json`, then pull that immutable image into a separate disposable
-dev VM.
+This packages Flutter, Node, Docker, and Playwright tools; it does not build
+the project. Normal durable tasks instead read this repository's
+`.pi/gondolin.json`: the task worker asks the trusted image builder for the
+toolchain image only on a cache miss, then Pi starts one VM for that task
+session with its worktree mounted at `/workspace`. Run `npm ci`, `npm run build`,
+browser tests, and the mock server through Pi's Gondolin tools **inside that
+VM**. Later sessions reuse the image but get fresh VMs and private Docker
+state. Neither the host nor Gitea builds a per-commit app image.
+Use a clean worktree: macOS `node_modules` contains native binaries such as
+`esbuild` that fail in Linux. The durable task's materialized Git checkout is
+clean, and `npm ci` installs Linux dependencies there without touching the
+developer machine's checkout.
 
-Preview the journal reviewer through the actual Flutter Web host without
+Optionally run `make gondolin-dev-cache` from the repository root to export its Compose
+images once. Set `GONDOLIN_DEV_IMAGE_CACHE` to the resulting
+`artifacts/gondolin-dev-images/<architecture>` directory before starting Pi.
+The image archives are shared read-only; Docker volumes, networks, ports, and
+runtime layers remain private to each VM. For another worktree or project,
+prepare its own cache from its Compose file. Inside the guest, set `COMPOSE_FILE`
+to that worktree's Compose path and `COMPOSE_CACHE_SERVICES` to the needed
+service names before using `dev-compose` for image-consuming commands. It loads
+only selected images and applies a no-pull override. It does not share environment
+files: provide any Compose `.env` or `--env-file` from the session's worktree.
+This dev guest build currently lacks usable Docker bridge networking, so the cache does
+not yet make the complete multi-container stack runnable in the guest.
+
+Playwright and the mock can both use guest loopback. External browser preview
+requires an explicit, loopback-scoped Gondolin ingress route; guest ports are
+not automatically published to the Mac or Tailscale. The separate Gitea image
+builder is not used for interactive development sessions.
+
+Preview the journal reviewer through the Flutter Web host in the VM without
 Tailscale or a running voice backend:
 
 ```bash
 npm run prototype:journal-review
 ```
 
-Then open
+Then open in guest Playwright
 `http://127.0.0.1:8765/?view=journal-review-preview&prototype=journal-review&variant=A`.
 Variants `A`, `B`, and `C` are available only on that prototype URL; the normal
 MCP App does not render the prototype switcher.
@@ -83,7 +100,7 @@ Override the production workspace at build time when needed:
   --dart-define=VOICE_WEB_URL=https://pipecat-edge.tailf6d713.ts.net/
 ```
 
-## Verify
+## Verify inside the Pi development VM
 
 ```bash
 ./tool/flutterw analyze

@@ -1,0 +1,20 @@
+services:
+  dev-runtime-amd64:
+    profiles: [amd64]
+    image: voice-agent-gondolin:dev-amd64
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        VOICE_RUNTIME_IMAGE: voice-agent-gondolin:playwright-mcp-0.0.79-amd64
+
+  dev-runtime-arm64:
+    profiles: [arm64]
+    image: voice-agent-gondolin:dev-arm64
+    platform: linux/arm64
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        VOICE_RUNTIME_IMAGE: voice-agent-gondolin:playwright-mcp-0.0.79-arm64

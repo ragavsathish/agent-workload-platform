@@ -1,5 +1,16 @@
 {
-  "memory": "2G",
-  "cpus": 2,
+  "image": "agent-workload-platform/dev:v1",
+  "build": {
+    "context": "platform/agent-execution/gondolin-session/gondolin",
+    "dockerfile": "platform/agent-execution/gondolin-session/gondolin/Dockerfile.dev",
+    "assetConfig": "platform/agent-execution/gondolin-session/gondolin/dev.aarch64.json",
+    "publish": true
+  },
+  "memory": "8G",
+  "cpus": 4,
+  "development": {
+    "docker": true,
+    "disk": "64G"
+  },
   "policy": ".pi/gondolin-policy.json"
 }

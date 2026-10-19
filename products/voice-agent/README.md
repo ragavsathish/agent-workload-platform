@@ -391,12 +391,13 @@ The VM image includes the checksum-verified `tea` CLI. Deployment provisions a s
 VM configures that token as Tea login `local`; it cannot publish code or mutate issues and pull
 requests. The deployment-only `source-publisher` credential never enters the VM.
 
-Project-specific task images are declared in `.pi/gondolin.json`. On a cache miss, the task worker
-dispatches the repository's fixed Gitea workflow and checkpoints its run ID. One shared, capacity-one
+Project-specific task images are declared in `.pi/gondolin.json`. Before Pi starts, the task worker
+checks for the immutable image package and dispatches the repository's fixed Gitea workflow on a miss. One shared, capacity-one
 Gitea Runner executes trusted repository workflows inside a warm Gondolin builder VM. Its private
 Docker daemon keeps an `overlay2` layer cache; it never receives the macOS Docker socket. The VM
 publishes a checksummed archive and manifest to Gitea Generic Packages. The task worker verifies the
-manifest and digest before registering the requested Gondolin image reference. The builder VM is a
+manifest and digest before registering the requested Gondolin image reference. Pi then starts one
+VM for the task's session using the repository's `.pi` policy. The builder VM is a
 shared trust domain, so only administrator-approved repositories may use its runner label.
 
 See [BENCHMARKS.md](BENCHMARKS.md) for the measured M4 Pro CPU, unified-memory, LLM throughput,

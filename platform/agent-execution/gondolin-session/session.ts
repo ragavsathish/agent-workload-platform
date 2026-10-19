@@ -51,6 +51,8 @@ export type GondolinSessionOptions = {
   environment?: Record<string, string>;
   dns?: VMOptions["dns"];
   sandbox?: Omit<NonNullable<VMOptions["sandbox"]>, "imagePath" | "netEnabled">;
+  rootfs?: VMOptions["rootfs"];
+  maxHttpResponseBodyBytes?: number;
   startupCommands?: readonly (readonly string[])[];
   memory?: string;
   cpus?: number;
@@ -263,6 +265,8 @@ export class GondolinSession {
       env: { ...network?.env, ...this.options.environment },
       dns: this.options.dns,
       vfs: { mounts },
+      rootfs: this.options.rootfs,
+      maxHttpResponseBodyBytes: this.options.maxHttpResponseBodyBytes,
       memory: configuredMemory,
       cpus: configuredCpus,
       sessionLabel: this.options.sessionLabel ?? "pi-playwright-mcp",

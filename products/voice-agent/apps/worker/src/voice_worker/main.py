@@ -32,6 +32,7 @@ from voice_agent.tasking.domain.workspaces import resolve_workspace
 from voice_agent.tasking.infrastructure.ace_step import create_ace_step_renderer
 from voice_agent.tasking.infrastructure.artifacts import ArtifactStore
 from voice_agent.tasking.infrastructure.config import Settings
+from voice_agent.tasking.infrastructure.ensure_execution_image import ensure_execution_image
 
 telemetry = configure_telemetry("pipecat-task-worker")
 logger = logging.getLogger(__name__)
@@ -42,6 +43,15 @@ DATABASE_RETRY_DELAY_SECONDS = 2.0
 
 type RenderSong = Callable[[SongManifest], bytes]
 type StoreSong = Callable[[str, bytes], dict[str, str]]
+
+
+def prepare_repository_image(
+    settings: Settings, *, workspace: Path, workspace_reference: str
+) -> str | None:
+    with telemetry.observe("agent-task.image-ensure"):
+        return ensure_execution_image(
+            settings, workspace=workspace, workspace_reference=workspace_reference
+        )
 
 
 def create_song_renderer(settings: Settings) -> RenderSong | None:
@@ -313,7 +323,9 @@ def create_worker(settings: Settings) -> Absurd:
         "agent-run",
         queue=settings.queue,
         default_max_attempts=1,
-        default_cancellation={"max_duration": settings.task_timeout_seconds + 60},
+        default_cancellation={
+            "max_duration": settings.image_build_timeout_seconds + settings.task_timeout_seconds + 60
+        },
     )
     def agent_run(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
         with continue_task_trace(params):
@@ -347,42 +359,47 @@ def create_worker(settings: Settings) -> Absurd:
         "song-lyrics",
         queue=settings.queue,
         default_max_attempts=1,
-        default_cancellation={"max_duration": settings.task_timeout_seconds + 60},
+        default_cancellation={
+            "max_duration": settings.image_build_timeout_seconds + settings.task_timeout_seconds + 60
+        },
     )
     def song_lyrics(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
         with continue_task_trace(params):
             with telemetry.observe("song.lyrics"):
                 task_id = str(ctx.task_id)
-                intent = ctx.begin_step("lyrics-intent")
-                if intent.done:
-                    return {
-                        "state": "needs_manual_reconciliation",
-                        "session_id": task_id,
-                        "message": "Pi lyric generation started previously without a result; not rerun.",
-                    }
-                ctx.complete_step(intent, {"started": True, "session_id": task_id})
+                def run_in_workspace(workspace: Path) -> dict[str, Any]:
+                    ctx.step(
+                        "ensure-execution-image",
+                        lambda: prepare_repository_image(
+                            settings,
+                            workspace=workspace,
+                            workspace_reference=str(params["workspace"]),
+                        ),
+                    )
+                    intent = ctx.begin_step("lyrics-intent")
+                    if intent.done:
+                        return {
+                            "state": "needs_manual_reconciliation",
+                            "session_id": task_id,
+                            "message": "Pi lyric generation started previously without a result; not rerun.",
+                        }
+                    ctx.complete_step(intent, {"started": True, "session_id": task_id})
+                    return run_song_lyrics(
+                        settings,
+                        task_id=task_id,
+                        brief=str(params["brief"]),
+                        style=str(params["style"]),
+                        duration_seconds=int(params["duration_seconds"]),
+                        workspace=workspace,
+                    )
+
                 if artifacts:
                     with artifacts.materialize_workspace(
                         str(params["workspace"]), settings.worker_scratch_root
                     ) as workspace:
-                        return run_song_lyrics(
-                            settings,
-                            task_id=task_id,
-                            brief=str(params["brief"]),
-                            style=str(params["style"]),
-                            duration_seconds=int(params["duration_seconds"]),
-                            workspace=workspace,
-                        )
-                workspace = resolve_workspace(
-                    str(params["workspace"]), settings.workspace_roots
-                )
-                return run_song_lyrics(
-                    settings,
-                    task_id=task_id,
-                    brief=str(params["brief"]),
-                    style=str(params["style"]),
-                    duration_seconds=int(params["duration_seconds"]),
-                    workspace=workspace,
+                        return run_in_workspace(workspace)
+                return run_in_workspace(
+                    resolve_workspace(str(params["workspace"]), settings.workspace_roots)
                 )
 
     @absurd.register_task(
@@ -433,6 +450,14 @@ def create_worker(settings: Settings) -> Absurd:
             with artifacts.materialize_workspace(
                 str(params["workspace"]), settings.worker_scratch_root
             ) as workspace:
+                ctx.step(
+                    "ensure-execution-image",
+                    lambda: prepare_repository_image(
+                        settings,
+                        workspace=workspace,
+                        workspace_reference=str(params["workspace"]),
+                    ),
+                )
                 reconciliation = checkpoint_pi_intent()
                 if reconciliation:
                     return reconciliation
@@ -453,6 +478,14 @@ def create_worker(settings: Settings) -> Absurd:
                 "prepare-workspace",
                 lambda: str(
                     resolve_workspace(str(params["workspace"]), settings.workspace_roots)
+                ),
+            )
+            ctx.step(
+                "ensure-execution-image",
+                lambda: prepare_repository_image(
+                    settings,
+                    workspace=Path(workspace),
+                    workspace_reference=str(params["workspace"]),
                 ),
             )
             reconciliation = checkpoint_pi_intent()
