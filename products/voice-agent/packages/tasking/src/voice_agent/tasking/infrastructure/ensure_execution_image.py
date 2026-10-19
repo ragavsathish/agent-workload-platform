@@ -37,6 +37,21 @@ def _repository_name(workspace: Path, workspace_reference: str) -> str:
     return match.group(1)
 
 
+def _workflow_ref(workspace: Path) -> str:
+    """Use the snapshot's branch for the workflow definition and source checkout."""
+
+    try:
+        branch_ref = _git(workspace, "symbolic-ref", "--quiet", "HEAD")
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(
+            "repository image build requires a named source branch; "
+            "publish a branch-bearing workspace snapshot"
+        ) from error
+    if not branch_ref.startswith("refs/heads/"):
+        raise RuntimeError("repository image build requires a local source branch")
+    return branch_ref
+
+
 def ensure_execution_image(
     settings: Settings, *, workspace: Path, workspace_reference: str
 ) -> str | None:
@@ -67,7 +82,7 @@ def ensure_execution_image(
         run = actions.dispatch(
             repository=repository,
             workflow=settings.gitea_image_workflow,
-            ref=settings.gitea_workflow_ref,
+            ref=_workflow_ref(workspace),
             inputs={
                 "artifact_version": plan.artifact_version,
                 "source_revision": revision,

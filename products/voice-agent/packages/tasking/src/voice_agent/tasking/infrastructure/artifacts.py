@@ -61,10 +61,13 @@ class ArtifactStore:
         commit = subprocess.check_output(
             ["git", "-C", str(root), "rev-parse", "HEAD"], text=True
         ).strip()
+        branch_ref = subprocess.check_output(
+            ["git", "-C", str(root), "symbolic-ref", "--quiet", "HEAD"], text=True
+        ).strip()
         with tempfile.TemporaryDirectory(prefix="workspace-publish-") as temporary:
             bundle = Path(temporary) / "source.bundle"
             subprocess.run(
-                ["git", "-C", str(root), "bundle", "create", str(bundle), "HEAD"],
+                ["git", "-C", str(root), "bundle", "create", str(bundle), branch_ref],
                 check=True,
             )
             payload = bundle.read_bytes()
@@ -129,14 +132,38 @@ class ArtifactStore:
             workspace = task_root / "workspace"
             workspace.mkdir(mode=0o700)
             subprocess.run(["git", "-C", str(workspace), "init", "--quiet"], check=True)
-            subprocess.run(
-                ["git", "-C", str(workspace), "fetch", "--quiet", str(bundle), "HEAD"],
-                check=True,
-            )
-            subprocess.run(
-                ["git", "-C", str(workspace), "checkout", "--quiet", "--detach", "FETCH_HEAD"],
-                check=True,
-            )
+            bundle_heads = subprocess.check_output(
+                ["git", "bundle", "list-heads", str(bundle)], text=True
+            ).splitlines()
+            branch_refs = [
+                line.split(" ", 1)[1]
+                for line in bundle_heads
+                if " " in line and line.split(" ", 1)[1].startswith("refs/heads/")
+            ]
+            if len(branch_refs) == 1 and len(bundle_heads) == 1:
+                branch_ref = branch_refs[0]
+                subprocess.run(
+                    ["git", "-C", str(workspace), "fetch", "--quiet", str(bundle),
+                     f"{branch_ref}:{branch_ref}"],
+                    check=True,
+                )
+                subprocess.run(
+                    ["git", "-C", str(workspace), "checkout", "--quiet",
+                     branch_ref.removeprefix("refs/heads/")],
+                    check=True,
+                )
+            elif len(bundle_heads) == 1 and bundle_heads[0].endswith(" HEAD"):
+                # Snapshots published before branch-bearing bundles remain readable.
+                subprocess.run(
+                    ["git", "-C", str(workspace), "fetch", "--quiet", str(bundle), "HEAD"],
+                    check=True,
+                )
+                subprocess.run(
+                    ["git", "-C", str(workspace), "checkout", "--quiet", "--detach", "FETCH_HEAD"],
+                    check=True,
+                )
+            else:
+                raise ValueError("workspace bundle must contain exactly one source ref")
             yield workspace
 
     def capture_result(
