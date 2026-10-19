@@ -1,7 +1,14 @@
+FROM docker.io/plugfox/flutter:3.47.7-web@sha256:bdff6627c0421b1c05f830d60e2792e5930da222318de1c70ffbae954b88c491 AS flutter-toolchain
+
 FROM docker.io/library/node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS build
+
+COPY --from=flutter-toolchain /opt/flutter /opt/flutter
+COPY --from=flutter-toolchain /var/cache/pub /var/cache/pub
 
 ENV DEBIAN_FRONTEND=noninteractive \
     FLUTTER_HOME=/opt/flutter \
+    FLUTTER_ROOT=/opt/flutter \
+    PUB_CACHE=/var/cache/pub \
     PATH=/opt/flutter/bin:${PATH}
 
 RUN --mount=type=secret,id=gondolin_mitm_ca,required=false \
@@ -13,16 +20,7 @@ RUN --mount=type=secret,id=gondolin_mitm_ca,required=false \
          cp /run/secrets/gondolin_mitm_ca /usr/local/share/ca-certificates/gondolin-build.crt; \
          update-ca-certificates; \
        fi \
-    && cp /etc/ssl/certs/ca-certificates.crt /tmp/build-ca-bundle.crt \
-    && export GIT_SSL_CAINFO=/tmp/build-ca-bundle.crt \
-              SSL_CERT_FILE=/tmp/build-ca-bundle.crt \
-              CURL_CA_BUNDLE=/tmp/build-ca-bundle.crt \
-              NODE_EXTRA_CA_CERTS=/tmp/build-ca-bundle.crt \
-    && git clone --depth 1 --branch 3.47.7 https://github.com/flutter/flutter.git "$FLUTTER_HOME" \
-    && flutter config --enable-web \
-    && flutter precache --web \
-    && npm install --global pnpm@10.11.0 \
-    && rm /tmp/build-ca-bundle.crt
+    && npm install --global pnpm@10.11.0
 
 WORKDIR /src
 

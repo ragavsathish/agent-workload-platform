@@ -42,7 +42,8 @@ task VM. Trace artifact links, the official Grafana MCP App, speech recognition,
 and task execution still require their integration services. The production
 client and iframe bridge are unchanged; the fixture is a separate process.
 
-The development image builds Flutter Web and the bundled MCP Apps inside
+The development image takes Flutter 3.47.7 and its web toolchain from a
+digest-pinned builder image, builds Flutter Web and the bundled MCP Apps inside
 Docker, then serves the same mock as a non-root container. The following is a
 host-only smoke test from the repository root, **not** the source of the image
 for a Gondolin task VM:
@@ -59,10 +60,9 @@ but no host port forwarding when Playwright and the app both run inside that VM.
 An explicit, scoped bridge is needed only to view the app in a browser outside
 the VM. The existing image-builder VM disables Docker bridging and is not a
 general-purpose app runtime. For a task-VM check, build and publish the app
-image from a committed revision through the Gitea-backed image builder, then
-pull that immutable image into a separate disposable dev VM. The current
-Gitea workflow is scoped to execution images; the app-image build path still
-needs its own workflow or an explicit generalization.
+image from a committed revision through the Gitea-backed image builder using
+`gitea-image.json`, then pull that immutable image into a separate disposable
+dev VM.
 
 Preview the journal reviewer through the actual Flutter Web host without
 Tailscale or a running voice backend:
