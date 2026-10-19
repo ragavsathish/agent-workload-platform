@@ -23,7 +23,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=secret,id=gondolin_mitm_ca,required=false \
     apt-get update \
     && apt-get install --yes --no-install-recommends \
-        ca-certificates curl docker.io libglu1-mesa unzip xz-utils zip \
+        ca-certificates curl docker.io git libglu1-mesa unzip xz-utils zip \
     && chmod 0555 /usr/local/bin/start-dev-docker /usr/local/bin/dev-compose \
     && cp /etc/ssl/certs/ca-certificates.crt /tmp/build-ca-bundle.crt \
     && if [ -f /run/secrets/gondolin_mitm_ca ]; then \
