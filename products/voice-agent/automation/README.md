@@ -33,6 +33,12 @@ make playwright-grafana
 make automation-check
 ```
 
+`playbooks/benchmark.yml` selects a benchmark category and calls its Python
+Ansible module in `library/`. Shared module helpers live in `module_utils/`,
+and the Markdown report task and template live in `tasks/` and `templates/`.
+See `platform/agent-execution/gondolin-session/benchmarks_py/docs/` for inputs
+and measured comparisons.
+
 Make targets are the only infrastructure-test entry points. Tests do not carry
 shell compatibility wrappers.
 

@@ -1,0 +1,39 @@
+# {{ benchmark_run.benchmark | replace('_', ' ') | title }} benchmark
+
+| Field | Value |
+| --- | --- |
+| Status | {{ 'passed' if benchmark_run.success else 'failed' }} |
+| Host | {{ benchmark_run.host }} |
+| Started (UTC) | {{ benchmark_run.started_at_utc }} |
+| Finished (UTC) | {{ benchmark_run.finished_at_utc }} |
+| Runner exit code | {{ benchmark_run.return_code if benchmark_run.return_code is not none else 'unavailable' }} |
+| Error | {{ benchmark_run.error | default('none', true) | replace('|', '\\|') }} |
+
+## Measurements
+
+| Metric | Value |
+| --- | --- |
+{% for metric, value in benchmark_run.summary.items() %}
+| {{ metric | replace('_', ' ') }} | {{ (value | to_json) | replace('|', '\\|') }} |
+{% else %}
+| Runner metrics | No parseable result was produced. |
+{% endfor %}
+
+## Inputs
+
+| Parameter | Value |
+| --- | --- |
+{% for parameter, value in benchmark_run.parameters.items() | sort %}
+| {{ parameter }} | {{ (value | to_json) | replace('|', '\\|') }} |
+{% endfor %}
+
+## Evidence
+
+- Full runner result: `{{ benchmark_run.evidence_path | default('unavailable', true) }}`
+- Runner log: `{{ benchmark_run.runner_log }}`
+{% if benchmark_run.warm_log %}
+- Model warm-up log: `{{ benchmark_run.warm_log }}`
+{% endif %}
+- Structured report: `{{ benchmark_run.json_report }}`
+
+The measurements describe this host, image, workload, and run. A single successful run does not establish a reliable capacity limit.

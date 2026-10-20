@@ -161,14 +161,9 @@ automation-setup:
 	$(ANSIBLE_GALAXY) collection install --upgrade -r automation/requirements.yml
 
 automation-check:
-	$(ANSIBLE) --syntax-check automation/playbooks/preflight.yml
-	$(ANSIBLE) --syntax-check automation/playbooks/verify.yml
-	$(ANSIBLE) --syntax-check automation/playbooks/lifecycle.yml
-	$(ANSIBLE) --syntax-check automation/playbooks/digital_twin_e2e.yml
-	$(ANSIBLE) --syntax-check automation/playbooks/playwright_e2e.yml -e playwright_project=voice
-	$(ANSIBLE) --syntax-check automation/playbooks/blackbox_voice.yml
-	$(ANSIBLE) --syntax-check automation/playbooks/install_host_services.yml
-	$(ANSIBLE) --syntax-check automation/playbooks/native_services.yml
+	@for playbook in automation/playbooks/*.yml; do \
+		$(ANSIBLE) --syntax-check "$$playbook" || exit 1; \
+	done
 	ANSIBLE_CONFIG=automation/ansible.cfg uvx --from ansible-lint ansible-lint automation/playbooks automation/roles
 
 automation-verify:

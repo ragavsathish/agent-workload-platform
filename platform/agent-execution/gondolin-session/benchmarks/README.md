@@ -5,7 +5,10 @@ macOS 26.6.2. Each Patrol VM had four vCPUs, 8 GiB guest memory, and a 64 GiB
 copy-on-write root disk. These results describe this host and workload; they
 are not universal capacity limits.
 
-This is the consolidated measurement and reproduction report. For rationale
+This is the consolidated findings report. Run measurements through the shared
+[Ansible benchmark workflow](../../../../products/voice-agent/automation/playbooks/benchmark.yml);
+see the [task guide](../benchmarks_py/docs/BENCHMARK_TASK.md) and
+[category inputs](../benchmarks_py/docs/BENCHMARK_CATEGORIES.md). For rationale
 and source references, see the [Overlay2/VFS storage research note](../../../../docs/research/gondolin-docker-storage-driver-overlay2-vs-vfs.md),
 [loopback/Compose networking note](../../../../docs/research/gondolin-loopback-compose-networking.md),
 and [checkpoint disk note](../../../../docs/research/gondolin-checkpoint-disk-optimization.md).
@@ -47,9 +50,9 @@ The fifth VM remained in its Flutter build for 17,354 seconds (about 4 h 49 m)
 without producing a command exit status, so I interrupted it to continue the
 Compose comparison. Swap did not grow during this run (-136 MiB net), minimum
 free host memory was 35%, and minimum free disk was 63.96 GiB. The four
-successful VMs retained checkpoints of about 0.89 GiB each; the interrupted
-VM did not retain a checkpoint. This is 4/5 observed success, not a reliable
-5/5 capacity result. The raw result and per-VM logs are under
+successful VMs initially retained checkpoints of about 0.89 GiB each; these
+benchmark checkpoints have since been disposed. This is 4/5 observed success,
+not a reliable 5/5 capacity result. The raw result and per-VM logs are under
 `artifacts/benchmarks/patrol-concurrent-5vm-2026-10-20T120631Z/`.
 
 The earlier lightweight build tier completed at four VMs without measured
@@ -60,10 +63,56 @@ one earlier attempt stopped by the swap guard before Patrol began. The guard
 can overshoot its configured ceiling because host resource sampling occurs
 every five seconds.
 
+## Parallel full Compose startup
+
+I started the full-mock Compose profile in independent Overlay2 VMs at the
+same time. This measures startup and readiness only; no Patrol command ran.
+The first version of the runner pinned krun; after settling on QEMU, I changed
+its default to QEMU and repeated the tuned four-VM run there. All runs used a
+64 GiB copy-on-write root disk, 14 cached images, and a read-only image cache.
+
+| Parallel VMs | Backend and VM resources | Outcome | Time to readiness per VM | Wall clock | Host swap growth | Minimum free memory | Minimum free disk |
+| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 2 | krun, 8 GiB, 4 vCPUs | 2/2 ready | 65.443–65.510 s | 67.085 s | 0 MiB | 57% | 201.41 GiB |
+| 3 | krun, 8 GiB, 4 vCPUs | Guard tripped; timing record inconsistent | 72.559–72.756 s recorded | 48.494 s (inconsistent) | 442.44 MiB sampled | 34% | 199.77 GiB |
+| 4 | krun, 8 GiB, 4 vCPUs | Starts completed; memory floor breached | 80.689–81.929 s | 81.930 s | 0 MiB sampled through 33.3 s | 39% | 204.93 GiB |
+| 4 | QEMU, 6 GiB, 2 vCPUs, 1 GiB guest swap | 4/4 ready | 87.561–88.647 s | 90.005 s | 0 MiB | 59% | 172.72 GiB |
+| 4 | QEMU, 6 GiB, 2 vCPUs, no guest swap | 4/4 ready | 86.097–86.758 s | 88.907 s | 0 MiB | 58% | 176.49 GiB |
+
+The two-VM result is one successful trial, not a capacity guarantee. Both
+guests reported `overlay2`, used about 10.35 GiB on their guest root filesystems,
+and reported about 12.16 GiB apparent Docker data. All 15 Compose services
+passed startup readiness. The three-VM record is not comparable: its readiness
+times (about 72.6–72.8 s) exceed the recorded wall clock (48.494 s), so it is
+excluded from startup-time comparisons pending a rerun. It did record 442.44
+MiB swap growth and 34% minimum free memory.
+
+The earlier four-VM, 8 GiB krun run completed its four `session.start()` calls
+in about 80.7–81.9 s, but free memory crossed the 40% floor at 33.3 s. A later
+host reading showed swap 6,884 MiB above the run's baseline. Since that runner
+stopped sampling at 33.3 s and waited for startup promises, it cannot attribute
+that whole increase to the benchmark. The runner now closes guests at the first
+guard trip and samples during shutdown and after closure.
+
+With QEMU, 6 GiB RAM and 2 vCPUs per guest, all four stacks passed readiness
+while free memory stayed at or above 58%; host swap was unchanged through
+shutdown. A matched run with 1 GiB guest swap used at most 892 KiB of it; the
+run without guest swap also passed, with similar readiness and host memory
+results. These trials show no benefit from guest swap for this workload. Keep it
+disabled by default to avoid writing an extra 1 GiB file into each guest disk.
+The lower RAM and CPU settings are the meaningful change compared with the
+8 GiB/4-vCPU trial. Each QEMU guest reported `overlay2`, 14 images, and passed
+the Compose readiness gate. No checkpoints were saved. These are single trials,
+not a capacity guarantee. The host still reports about 39.8 GiB used swap, but
+that value was unchanged during both tests and free memory recovered to 70%.
+
+Raw records are in ignored `artifacts/benchmarks/compose-full-mock-overlay2-*`
+directories; curated summaries are in [`benchmark-results.json`](../benchmarks_py/benchmark-results.json).
+
 ## Full Compose stack with local mocks
 
-The full-stack profile passed one Patrol run on 2026-10-20 in 260.86 seconds
-with an 8 GiB, 4-vCPU VM. It started 15 Compose services and passed the
+An initial full-stack profile run used VFS and passed one Patrol run on
+2026-10-20 in 260.86 seconds with an 8 GiB, 4-vCPU VM. It started 15 Compose services and passed the
 stack's dependency health and endpoint readiness gates:
 `agent-gateway`, `fluent-bit`, `gitea`, `grafana-mcp`,
 `grafana-mcp-bootstrap`, `habitat`, `otel-lgtm`, `oxigraph`, `oxigraph-init`,
@@ -124,37 +173,13 @@ guest filesystem usage measurement. All four VMs were disposable and closed
 without saving checkpoints. A VFS run used about 55 GiB of guest Docker data
 and temporarily consumed about 55 GiB of host disk; host free space returned
 after disposal. The structured record, including both raw repetitions, is in
-[`benchmark-results.json`](benchmark-results.json).
+[`benchmark-results.json`](../benchmarks_py/benchmark-results.json).
 
 The Compose overrides use host networking and service URLs on `127.0.0.1`.
 Loopback behavior and backend-specific probes are documented in the
 [loopback/Compose networking note](../../../../docs/research/gondolin-loopback-compose-networking.md).
 Networking is independent of the Docker storage driver.
 
-Repeat either arm after building the corresponding local guest image:
-
-```sh
-node platform/agent-execution/gondolin-session/benchmarks/benchmark-compose-storage.mjs \
-  voice-agent-gondolin:dev-vfs-loopback-test vfs
-node platform/agent-execution/gondolin-session/benchmarks/benchmark-compose-storage.mjs \
-  voice-agent-gondolin:dev-overlay2-loopback-test overlay2
-```
-
-The runner prints one JSON result line and closes the guest without saving a
-checkpoint. The temporary image tags above are local benchmark inputs; use
-image variants built from the same guest base when repeating the comparison.
-
-Repeat the one-VM full-stack profile with:
-
-```sh
-GONDOLIN_BENCHMARK_IMAGE="$PWD/artifacts/gondolin-dev-overlay2-qemu-v2/aarch64" \
-python3 platform/agent-execution/gondolin-session/benchmarks/run-patrol-concurrency.py \
-  --parallelism 1 --vm-memory 8G --vm-cpus 4 --max-swap-growth-mib 4096 \
-  --full-compose-mock --vmm qemu \
-  --overlay .pi/compose.dev.yml \
-  --overlay products/voice-agent/apps/client/patrol_test/workspace_web_test.dart \
-  --overlay products/voice-agent/apps/client/tool/inspect-patrol-trace.mjs
-```
 
 ### Overlay2 Patrol result
 
@@ -186,9 +211,60 @@ npm registry. The QEMU image build ID is
 Raw result, session transcript, reports, and trace evidence are under
 [`artifacts/benchmarks/patrol-concurrent-1vm-2026-10-20T164656Z/`](../../../../artifacts/benchmarks/patrol-concurrent-1vm-2026-10-20T164656Z/)
 in the ignored local artifacts tree. The run is recorded in
-[`benchmark-results.json`](benchmark-results.json) for the OTLP publisher
+[`benchmark-results.json`](../benchmarks_py/benchmark-results.json) for the OTLP publisher
 below. The saved qcow2 checkpoint from the preceding VFS full-stack Patrol run
 was disposed; its raw logs and result remain in the ignored artifacts tree.
+
+### Staged QEMU qualification with strict host guardrails
+
+On 2026-10-20, I repeated the full-mock Compose plus Patrol run with QEMU,
+Overlay2, 6 GiB RAM, 2 vCPUs, and no guest swap. The benchmark required at
+least 40% free host memory, at most 128 MiB host swap growth, at least 256 MiB
+free host swap, and at least 100 GiB free disk. Each Pi VM started its own
+15-service Compose stack, waited for service and endpoint readiness, then ran
+the Patrol suite (voice shell/navigation and workspace HTTP journeys). The
+benchmark runner explicitly disposed its saved guest checkpoint after each
+Pi process exited.
+
+| Parallel VMs | Patrol commands passed | Journey results | Time per VM | Peak combined QEMU RSS | Minimum free memory | Host swap growth | Minimum free disk |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 1/1 | 2/2 passed | 215.69 s | 12.37 GB | 71% | -152.06 MiB | 200.14 GiB |
+| 3, first trial | 2/3 | 5/6 passed | 259.04–273.97 s | 32.82 GB | 60% | -8 MiB | 179.99 GiB |
+| 3, repeat | 3/3 | 6/6 passed | 278.57–282.27 s | 31.90 GB | 57% | 0 MiB | 177.33 GiB |
+| 4 | 4/4 | 8/8 passed | 326.43–331.36 s | 25.81 GB | 42% | -16 MiB | 166.00 GiB |
+
+Per-VM duration runs from Pi launch through guest startup, Compose readiness,
+dependency installation, Playwright setup, Patrol, and shutdown. It is an
+end-to-end duration, not a standalone VM boot or Compose readiness time. RSS
+is the sum of registered QEMU process RSS samples, not guest working-set bytes.
+
+The one-VM qualification passed. In the first three-VM trial, all guests
+reached the full Compose readiness gate and reported Docker `overlay2`; two
+Patrol suites passed both journeys. The remaining guest passed one journey,
+then its other journey failed while installing Node.js dependencies with
+`npm error code ETIMEDOUT`. A repeat passed all three suites. The four-VM tier
+then passed all four suites. Every recorded trace had zero bad responses and
+zero network failures; Patrol reported zero console errors.
+
+Four VMs are the highest tier tested in this sequence, not yet a repeated
+reliability result. Its minimum free host memory was 42%, two points above the
+40% stop floor. Host swap growth and free disk stayed within their limits.
+
+The first one-VM attempt in this sequence was invalidated by a runner typo that
+called `npm run test:patrol.`; the command was corrected before recording the
+passing result above. Raw results, logs, traces, and isolated workspaces are in
+the ignored local artifacts tree at
+[`patrol-concurrent-1vm-2026-10-20T175530Z`](../../../../artifacts/benchmarks/patrol-concurrent-1vm-2026-10-20T175530Z/)
+and
+[`patrol-concurrent-3vm-2026-10-20T175914Z`](../../../../artifacts/benchmarks/patrol-concurrent-3vm-2026-10-20T175914Z/).
+The successful three-VM repeat and four-VM run are under
+[`patrol-concurrent-3vm-2026-10-20T180619Z`](../../../../artifacts/benchmarks/patrol-concurrent-3vm-2026-10-20T180619Z/)
+and
+[`patrol-concurrent-4vm-2026-10-20T181111Z`](../../../../artifacts/benchmarks/patrol-concurrent-4vm-2026-10-20T181111Z/).
+The first one-VM attempt remains at
+`artifacts/benchmarks/patrol-concurrent-1vm-2026-10-20T175314Z/` for audit.
+All benchmark checkpoints were disposed; the report records the partial
+three-VM result in `../benchmarks_py/benchmark-results.json`.
 
 ## VM startup, resume, and disk
 
@@ -208,50 +284,12 @@ The root disk advertises 64 GiB; these values are allocated checkpoint space.
 Startup timing includes VM creation or resume, guest boot, and startup
 commands. It excludes Pi startup, model time, and Patrol execution.
 
-## Repeat the Patrol benchmark
-
-Run one Patrol command in each independent Pi VM:
-
-```sh
-python3 platform/agent-execution/gondolin-session/benchmarks/run-patrol-concurrency.py \
-  --parallelism 5 --vm-memory 6G --vm-cpus 2 --max-swap-growth-mib 4096 \
-  --overlay products/voice-agent/apps/client/patrol_test/workspace_web_test.dart \
-  --overlay products/voice-agent/apps/client/tool/inspect-patrol-trace.mjs
-```
-
-The runner records raw evidence under ignored `artifacts/benchmarks/` and
-supports 1–8 VMs. It requires at least 25% free host memory before starting
-and stops on low swap growth, disk, or free-memory headroom. VM memory and CPU
-limits can be set per run. It uses the current Git HEAD and the current
-prebuilt dev image by default. Set
-`GONDOLIN_BENCHMARK_IMAGE` to select another image. MCP servers and automatic
-skill discovery are disabled during the measurement; this keeps the load
-focused on VM-backed development and makes it optimistic for fully connected
-Pi sessions.
-
-To measure VM lifecycle using a Patrol run's `result.json`, pass that file to
-the lifecycle probe:
-
-```sh
-node platform/agent-execution/gondolin-session/benchmarks/benchmark-task-vm-lifecycle.mjs \
-  artifacts/benchmarks/patrol-concurrent-3vm-<timestamp>/result.json
-```
-
 ## Instrumentation
 
-[`benchmark-results.json`](benchmark-results.json) is the single curated,
-machine-readable result file. It contains the lightweight and Patrol tiers,
-resume verification, and lifecycle measurements. The OTLP publisher reads
-this file and emits the concurrency, lifecycle, and VFS/Overlay2 storage
-comparison gauges:
-
-```sh
-OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
-  node platform/agent-execution/gondolin-session/benchmarks/publish-otel.mjs \
-  platform/agent-execution/gondolin-session/benchmarks/benchmark-results.json
-```
-
-Publishing sends the recorded measurements to the configured OTLP endpoint;
-it does not run a benchmark. Saved qcow2 checkpoint disks from the completed
-benchmark VMs have been disposed. Ignored local logs, traces, workspaces, and
-result records remain for inspection.
+[`benchmark-results.json`](../benchmarks_py/benchmark-results.json) is the
+single curated machine-readable result file. It holds the measured workload
+summaries and lifecycle/storage comparisons. Publish it with the Python OTLP
+publisher described in the [benchmark task guide](../benchmarks_py/README.md).
+Publishing sends recorded measurements to the configured OTLP endpoint; it
+does not run a benchmark. Benchmark checkpoints have been disposed. Ignored
+local logs, traces, workspaces, and raw result records remain for inspection.

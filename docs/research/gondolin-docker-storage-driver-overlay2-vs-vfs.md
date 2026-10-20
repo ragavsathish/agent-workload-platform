@@ -62,16 +62,16 @@ The full-mock Compose profile uses `network_mode: host` and guest-local service 
 
 ## Reproduction
 
-Build both local guest image variants from the same base and cache, differing only in their storage-driver startup configuration. Then run the benchmark twice per driver, serially:
-
-```sh
-node platform/agent-execution/gondolin-session/benchmarks/benchmark-compose-storage.mjs \
-  voice-agent-gondolin:dev-vfs-loopback-test vfs
-node platform/agent-execution/gondolin-session/benchmarks/benchmark-compose-storage.mjs \
-  voice-agent-gondolin:dev-overlay2-loopback-test overlay2
-```
-
-The benchmark runner records the readiness duration, selected driver, guest `df` values, Docker directory apparent sizes, and unique image count, then closes each session without saving a checkpoint. The two raw repetitions and medians are retained in [`benchmark-results.json`](../../platform/agent-execution/gondolin-session/benchmarks/benchmark-results.json); the consolidated benchmark report and separate Overlay2 Patrol results are in [`benchmarks/README.md`](../../platform/agent-execution/gondolin-session/benchmarks/README.md). The benchmark workload is the full-mock 15-service Compose startup; it does not route the Patrol journeys through `voice-edge`.
+Run the `compose_storage` category in the shared
+[`benchmark.yml` workflow](../../products/voice-agent/automation/playbooks/benchmark.yml)
+once per driver, using matched guest images and Compose inputs. Invocation
+details and required variables are in the
+[benchmark task guide](../../platform/agent-execution/gondolin-session/benchmarks_py/docs/BENCHMARK_TASK.md).
+The runner records readiness, guest disk use, Docker directory sizes, and image
+count. Curated raw measurements are in
+[`benchmark-results.json`](../../platform/agent-execution/gondolin-session/benchmarks_py/benchmark-results.json);
+the consolidated results and Patrol findings are in the
+[benchmark report](../../platform/agent-execution/gondolin-session/benchmarks/README.md).
 
 ## References
 
