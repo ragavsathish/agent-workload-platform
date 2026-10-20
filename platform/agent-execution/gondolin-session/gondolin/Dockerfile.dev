@@ -6,6 +6,10 @@ ARG VOICE_RUNTIME_IMAGE=gitea.local:3001/image-builder/base-playwright-mcp:v0.0.
 FROM ${FLUTTER_TOOLCHAIN_IMAGE} AS flutter-toolchain
 FROM ${VOICE_RUNTIME_IMAGE}
 
+# Match products/voice-agent/apps/client/package-lock.json. Keep the base
+# image's browser for its bundled Playwright MCP tooling.
+ARG CLIENT_PLAYWRIGHT_VERSION=1.58.2
+
 USER root
 COPY --from=flutter-toolchain /opt/flutter /opt/flutter
 COPY --from=flutter-toolchain /var/cache/pub /var/cache/pub
@@ -16,6 +20,7 @@ COPY select-compose-images.mjs /usr/local/libexec/select-compose-images.mjs
 ENV FLUTTER_HOME=/opt/flutter \
     FLUTTER_ROOT=/opt/flutter \
     PUB_CACHE=/var/cache/pub \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     PATH=/opt/flutter/bin:/opt/flutter/bin/cache/dart-sdk/bin:${PATH}
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -29,7 +34,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && if [ -f /run/secrets/gondolin_mitm_ca ]; then \
          cat /run/secrets/gondolin_mitm_ca >> /tmp/build-ca-bundle.crt; \
        fi \
-    && NODE_EXTRA_CA_CERTS=/tmp/build-ca-bundle.crt npm install --global pnpm@11.19.0 \
+    && NODE_EXTRA_CA_CERTS=/tmp/build-ca-bundle.crt npm install --global pnpm@11.19.0 "playwright@${CLIENT_PLAYWRIGHT_VERSION}" \
+    && NODE_EXTRA_CA_CERTS=/tmp/build-ca-bundle.crt playwright install chromium \
+    && npm cache clean --force \
     && case "$(dpkg --print-architecture)" in \
          arm64) compose_arch=aarch64; compose_sha=733ec76717ceb59052a9609b9dadfb523b2df8eab57a54212872d10a58078ea2 ;; \
          amd64) compose_arch=x86_64; compose_sha=40343e21ca777173e69cff5dbafeb37c6f81f3b0d57d9e597f036e95eb63e76a ;; \
