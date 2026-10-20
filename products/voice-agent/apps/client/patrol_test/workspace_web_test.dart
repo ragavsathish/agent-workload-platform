@@ -112,6 +112,7 @@ Future<void> _resumeHistoricalSession(
 }
 
 Future<void> _compactSessionContext(PatrolIntegrationTester $) async {
+  await $('1k / 8k').waitUntilVisible();
   await $(const Key('compact-session')).tap();
   await $('600 / 8k').waitUntilVisible();
 }

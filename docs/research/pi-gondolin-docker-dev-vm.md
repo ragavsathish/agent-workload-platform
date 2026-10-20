@@ -1,6 +1,8 @@
 # Pi + Gondolin development VM
 
-_Live probe and design revision: 2026-10-19. This supersedes the per-commit application-image experiment._
+_Historical probe and design revision: 2026-10-19. The current task VM lifecycle
+checkpoints durable Pi sessions for explicit disposal; see the
+[Agent Session README](../../platform/agent-execution/gondolin-session/README.md)._
 
 ## Selection and lifecycle
 
@@ -46,17 +48,23 @@ mandatory for image-consuming commands.
 
 ## Live result and remaining gate
 
-Flutter 3.47.7 ran inside a Gondolin VM. A private Docker daemon started with
-`vfs`, loaded a cached BusyBox archive, and ran a container with
-`--network=none`. `overlay2` and Docker bridge networks failed in this guest:
-kernel module insertion returned an exec-format error and bridge creation
-reported `package not installed`. Therefore the full multi-container Compose
-stack is **not yet verified or supported** in this dev guest build. The image cache avoids
-remote image pulls but does not fix the guest networking limitation. A
-single-process mock UX and in-VM Playwright can still use guest loopback.
+Flutter 3.47.7 ran inside a Gondolin VM. Under the default QEMU backend, a
+private Docker daemon started with `vfs`; `overlay2` failed because the guest
+could not load the kernel module. Switching only the Docker flag is unsafe.
+The development VM now selects Gondolin's libkrun backend, whose bundled
+kernel exposes OverlayFS as built in. In the rebuilt dev rootfs,
+`start-dev-docker` started a private daemon reporting `overlay2`, and a direct
+OverlayFS write/read/remove probe passed. VFS is no longer selected for new
+Docker development VMs.
+
+The full multi-container Compose Patrol stack is still **not yet verified**.
+The benchmark harness failed before starting its Pi VM; a direct session got
+past Docker startup but its local mock inference broker did not become ready.
+The image cache avoids remote image pulls but does not establish that the
+Compose services can communicate correctly. A single-process mock UX and
+in-VM Playwright can still use guest loopback.
 External browser preview needs explicit [Gondolin ingress](https://earendil-works.github.io/gondolin/ingress/);
 guest ports are not automatically exposed to macOS or Tailscale.
 
-The next gate is to reconcile the dev guest's kernel and module artifacts (the
-separate trusted builder VM already runs a private `overlay2` daemon), then
-prove a Compose bridge and service-to-service traffic in a bounded VM test.
+The next gate is to diagnose the mock broker startup and then prove the full
+Compose service set and Patrol flow in a bounded VM test.

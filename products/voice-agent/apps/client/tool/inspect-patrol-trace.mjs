@@ -53,6 +53,7 @@ const requestOf = (event) => ({
   path: pathOf(event.snapshot?.request?.url ?? ''),
   initiator: routeOf(headerValue(event.snapshot?.request?.headers, 'referer')),
   status: event.snapshot?.response?.status ?? -1,
+  failureText: event.snapshot?.response?._failureText ?? '',
 });
 
 const methodCounts = (calls) => calls.reduce((counts, event) => {
@@ -83,7 +84,12 @@ const isExpectedCancellation = (request) => request.status <= 0 && (
   (request.method === 'POST' && request.path === '/api/pi-speech') ||
   (request.method === 'GET' &&
     isPopupStaticAsset(request) &&
-    isNavigationPopup(request))
+    isNavigationPopup(request)) ||
+  (request.method === 'GET' &&
+    request.failureText === 'net::ERR_ABORTED' &&
+    ((isPopupStaticAsset(request) && request.initiator === '<invalid-url>') ||
+      (request.path === '/excalidraw/mcp-app.html' &&
+        request.initiator === '/?view=transcript')))
 );
 
 const summarizeTrace = (tracePath) => {

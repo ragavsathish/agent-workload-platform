@@ -11,6 +11,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 
 import { GondolinSession } from "./session.js";
+import { taskVmCheckpointPath, TaskVmLease } from "./task-vm-state.js";
 
 // Pi exposes custom MCP transport factories but not its default factory. Resolve the implementation
 // beside Pi's public entry point so ordinary mcp.json servers continue to use Pi's native behavior.
@@ -24,7 +25,12 @@ type ResolvedGondolinConfig = {
   imagePath: string;
   memory: string | undefined;
   cpus: number | undefined;
-  development: { docker: boolean; disk: string; sessionStartHook: string | undefined };
+  development: {
+    docker: boolean;
+    disk: string;
+    vmm: "qemu" | "krun" | undefined;
+    sessionStartHook: string | undefined;
+  };
   networkEnabled: boolean;
   allowedHosts: string[];
   skillsDirectory: string | undefined;
@@ -36,7 +42,12 @@ type ProjectVmConfig = {
   cpus?: number;
   policy?: string;
   environment?: Record<string, string>;
-  development?: { docker?: boolean; disk?: string; sessionStartHook?: string };
+  development?: {
+    docker?: boolean;
+    disk?: string;
+    vmm?: "qemu" | "krun";
+    sessionStartHook?: string;
+  };
 };
 const extensionDir = path.dirname(fileURLToPath(import.meta.url));
 const runtimeDir = path.basename(extensionDir) === "dist"
@@ -121,6 +132,12 @@ function resolveGondolinConfig(options: {
       (typeof raw.development.disk !== "string" || !/^\d+[MG]$/.test(raw.development.disk))) {
       throw new Error("gondolin.development.disk must be a size such as 64G");
     }
+    if (raw.development.vmm !== undefined && raw.development.vmm !== "qemu" && raw.development.vmm !== "krun") {
+      throw new Error('gondolin.development.vmm must be "qemu" or "krun"');
+    }
+    if (raw.development.vmm !== undefined && raw.development.docker !== true) {
+      throw new Error("gondolin.development.vmm requires docker: true");
+    }
     if (raw.development.sessionStartHook !== undefined &&
       (typeof raw.development.sessionStartHook !== "string" || !raw.development.sessionStartHook)) {
       throw new Error("gondolin.development.sessionStartHook must be a non-empty path");
@@ -178,6 +195,7 @@ function resolveGondolinConfig(options: {
     development: {
       docker: config.development?.docker ?? false,
       disk: config.development?.disk ?? "64G",
+      vmm: config.development?.vmm,
       sessionStartHook,
     },
     networkEnabled,
@@ -216,6 +234,9 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
   const projectDirectory = path.resolve(process.cwd());
   let session: GondolinSession | undefined;
   let codingTools: CodingTools | undefined;
+  let sessionFile: string | undefined;
+  let checkpointPath: string | undefined;
+  let lease: TaskVmLease | undefined;
   let config: ResolvedGondolinConfig | undefined;
   let configurationError: Error | undefined;
 
@@ -237,14 +258,53 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
     return session;
   };
 
-  const close = async (): Promise<void> => {
+  const releaseActive = (): void => {
+    lease?.release();
+    lease = undefined;
+    sessionFile = undefined;
+    checkpointPath = undefined;
+  };
+
+  const checkpointActive = async (): Promise<void> => {
     const resource = session;
+    const savedFile = sessionFile;
+    const savedCheckpoint = checkpointPath;
     session = undefined;
     codingTools = undefined;
-    await resource?.close();
+    try {
+      if (resource && savedFile && savedCheckpoint && fs.existsSync(savedFile)) {
+        await resource.checkpoint(savedCheckpoint);
+      } else {
+        await resource?.close();
+      }
+    } finally {
+      releaseActive();
+    }
+  };
+
+  const disposeActive = async (): Promise<void> => {
+    const resource = session;
+    const savedCheckpoint = checkpointPath;
+    session = undefined;
+    codingTools = undefined;
+    try {
+      await resource?.close();
+      if (savedCheckpoint) fs.rmSync(savedCheckpoint, { force: true });
+    } finally {
+      releaseActive();
+    }
   };
 
   for (const tool of deferredCodingTools(projectDirectory, activeCodingTools)) pi.registerTool(tool);
+
+  pi.registerCommand("gondolin-dispose", {
+    description: "Dispose this Pi task's Gondolin VM and saved guest disk, then exit",
+    handler: async (_args, context) => {
+      await disposeActive();
+      context.ui.notify("Gondolin task VM and saved guest disk disposed", "info");
+      context.shutdown();
+    },
+  });
 
   try {
     const devAssets = process.env.GONDOLIN_DEV_ASSETS;
@@ -265,10 +325,17 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
 
   pi.on("session_start", async (_event, context) => {
     try {
+      await checkpointActive();
       const configured = activeConfig();
       const devSession = configured.development.docker;
+      sessionFile = context.sessionManager.getSessionFile();
+      checkpointPath = sessionFile ? taskVmCheckpointPath(sessionFile) : undefined;
+      lease = checkpointPath ? TaskVmLease.acquire(checkpointPath) : undefined;
       session = new GondolinSession({
         imagePath: configured.imagePath,
+        ...(devSession && configured.development.vmm
+          ? { sandbox: { vmm: configured.development.vmm } }
+          : {}),
         mounts: {
           "/workspace": projectDirectory,
           ...(devSession && process.env.GONDOLIN_DEV_IMAGE_CACHE
@@ -296,7 +363,7 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
         },
         memory: configured.memory,
         cpus: configured.cpus,
-        rootfs: devSession ? { mode: "cow", size: configured.development.disk } : undefined,
+        rootfs: { mode: "cow", ...(devSession ? { size: configured.development.disk } : {}) },
         maxHttpResponseBodyBytes: devSession ? 512 * 1024 * 1024 : undefined,
         startupCommands: devSession ? [
           ["/usr/local/bin/start-dev-docker"],
@@ -305,6 +372,7 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
             : []),
         ] : undefined,
         sessionLabel: devSession ? "pi-dev-worktree" : "pi-agent-workload",
+        resumeCheckpointPath: checkpointPath,
       });
       codingTools = await session.codingTools();
       context.ui.notify(
@@ -312,7 +380,11 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
         "info",
       );
     } catch (error) {
-      await close().catch(() => undefined);
+      const failedSession = session;
+      session = undefined;
+      codingTools = undefined;
+      await failedSession?.close().catch(() => undefined);
+      releaseActive();
       context.ui.notify(asError(error).message, "error");
       throw error;
     }
@@ -345,6 +417,6 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
   }
 
   pi.on("session_shutdown", async () => {
-    await close();
+    await checkpointActive();
   });
 }

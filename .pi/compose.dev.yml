@@ -36,11 +36,10 @@ services:
       retries: 30
 
   oxigraph:
-    depends_on: !reset []
     network_mode: host
     networks: !reset []
     ports: !reset []
-    user: !reset null
+    user: "65532:65532"
     command: ["serve", "--location", "/data", "--bind", "127.0.0.1:7878"]
     volumes: !override
       - oxigraph-dev-data:/data
