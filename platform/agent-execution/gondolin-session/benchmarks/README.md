@@ -5,6 +5,11 @@ macOS 26.6.2. Each Patrol VM had four vCPUs, 8 GiB guest memory, and a 64 GiB
 copy-on-write root disk. These results describe this host and workload; they
 are not universal capacity limits.
 
+This is the consolidated measurement and reproduction report. For rationale
+and source references, see the [Overlay2/VFS storage research note](../../../../docs/research/gondolin-docker-storage-driver-overlay2-vs-vfs.md),
+[loopback/Compose networking note](../../../../docs/research/gondolin-loopback-compose-networking.md),
+and [checkpoint disk note](../../../../docs/research/gondolin-checkpoint-disk-optimization.md).
+
 ## Results
 
 | Workload | Parallel VMs | Passed | Time per run | Peak VM RSS | Minimum free memory | Swap growth | Minimum free disk |
@@ -79,36 +84,19 @@ The run passed (`piExitCode: 0`, `commandExitCode: 0`), reported -8 MiB swap
 growth, 60% minimum free host memory, and 153.94 GiB minimum free disk from a
 213.15 GiB baseline. The runner's registered-process RSS metric peaked at
 16.74 GB; treat it as an aggregate process metric rather than guest RAM use.
-The retained checkpoint directory occupies about 59 GiB. A second successful
-14-service checkpoint from the immediately preceding run is also retained.
-Neither has been disposed. A five-VM full-stack run was not attempted: five
+At the time, the retained checkpoint directory occupied about 59 GiB. A
+second successful 14-service checkpoint from the preceding run was similar.
+Both saved VFS checkpoints have since been disposed; their logs and result
+records remain. A five-VM full-stack run was not attempted: five
 copies at the observed disk footprint would need roughly 295 GiB, while this
 host had 154 GiB free after the successful run and less than 0.5 GiB of free
 swap.
 
-The 59 GiB is mostly Docker's private data inside the guest, not Patrol output.
-An offline audit of a temporary resumed overlay showed 62 GiB used on the 63
-GiB guest root filesystem, with 58 GiB under `/var/lib/docker/vfs/dir`.
-`start-dev-docker.sh` explicitly selects Docker's `vfs` storage driver. VFS
-deep-copies parent directories for each image layer and container, so the
-stack's roughly 6.4 GiB of Docker image data expands to many repeated copies.
-Docker volumes accounted for about 115 MiB; Playwright's browsers used 2.5
-GiB. The VM retains the guest's Docker image store and volume state when it
-shuts down. The audit resumed a temporary overlay and discarded it; both
-saved checkpoints remain unchanged. Docker documents that VFS has no
-copy-on-write and deep-copies each layer in its
-[VFS storage driver guide](https://docs.docker.com/engine/storage/drivers/vfs-driver/).
-
-The default QEMU guest kernel (`6.18.52-0-virt`) did not expose OverlayFS; its
-module was missing on a later probe and could not be loaded on an earlier one
-(`Exec format error`). Installing `kmod` alone did not fix it. The development
-VM now selects Gondolin's libkrun kernel instead. Its bundled kernel reports
-`6.12.68` and exposes OverlayFS as a built-in filesystem. I rebuilt the dev
-rootfs locally and verified its actual `start-dev-docker` startup: Docker
-reported `driver=overlay2`, and a direct overlay mount passed a
-write/read/remove test. The startup script checks `/proc/filesystems` and
-fails instead of silently expanding the disk with VFS if OverlayFS is
-unavailable.
+The 59 GiB was mostly Docker's private data inside the guest, not Patrol
+output. An offline audit showed 58 GiB under `/var/lib/docker/vfs/dir`; Docker
+volumes accounted for about 115 MiB and Playwright browsers used 2.5 GiB. VFS
+layer-copy behavior, OverlayFS kernel support, and the fail-closed Overlay2
+startup requirement are documented in the [storage research note](../../../../docs/research/gondolin-docker-storage-driver-overlay2-vs-vfs.md).
 
 ### Controlled VFS versus Overlay2 startup
 
@@ -138,23 +126,10 @@ and temporarily consumed about 55 GiB of host disk; host free space returned
 after disposal. The structured record, including both raw repetitions, is in
 [`benchmark-results.json`](benchmark-results.json).
 
-Loopback matters here because the Compose overrides use host networking and
-service URLs on `127.0.0.1`; Docker host mode shares the guest network namespace
-and does not create a per-container network interface
-([Docker host network driver](https://docs.docker.com/engine/network/drivers/host/)).
-The startup script normalizes `lo` and `127.0.0.1/8` across guest images. A
-direct probe of the current krun image showed `lo` UP with `127.0.0.1/8` before
-that script ran, and a guest-local HTTP request to a server bound on loopback
-passed; the [probe record](../../../../artifacts/benchmarks/krun-loopback-probe-2026-10-20.json)
-preserves its output. The QEMU Patrol preflight also showed `lo` UP. The earlier
-explanation that krun left loopback down is therefore not supported for these
-images. Loopback is independent of the Docker storage driver. Gondolin supports
-QEMU and optional krun backends
-([Gondolin host documentation](https://github.com/earendil-works/gondolin/blob/main/host/README.md));
-libkrun supports TSI networking without an interface and virtio-net networking
-([libkrun networking documentation](https://github.com/libkrun/libkrun#networking)),
-so interface behavior should be established from the guest probe, not assumed
-from the backend name.
+The Compose overrides use host networking and service URLs on `127.0.0.1`.
+Loopback behavior and backend-specific probes are documented in the
+[loopback/Compose networking note](../../../../docs/research/gondolin-loopback-compose-networking.md).
+Networking is independent of the Docker storage driver.
 
 Repeat either arm after building the corresponding local guest image:
 
@@ -212,8 +187,8 @@ Raw result, session transcript, reports, and trace evidence are under
 [`artifacts/benchmarks/patrol-concurrent-1vm-2026-10-20T164656Z/`](../../../../artifacts/benchmarks/patrol-concurrent-1vm-2026-10-20T164656Z/)
 in the ignored local artifacts tree. The run is recorded in
 [`benchmark-results.json`](benchmark-results.json) for the OTLP publisher
-below. The prior VFS full-stack Patrol run remains under
-`artifacts/benchmarks/patrol-concurrent-1vm-2026-10-20T140639Z/`.
+below. The saved qcow2 checkpoint from the preceding VFS full-stack Patrol run
+was disposed; its raw logs and result remain in the ignored artifacts tree.
 
 ## VM startup, resume, and disk
 
@@ -277,5 +252,6 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
 ```
 
 Publishing sends the recorded measurements to the configured OTLP endpoint;
-it does not run a benchmark. Raw logs, traces, workspaces, and checkpoints
-from completed benchmark runs have been removed after recording the results.
+it does not run a benchmark. Saved qcow2 checkpoint disks from the completed
+benchmark VMs have been disposed. Ignored local logs, traces, workspaces, and
+result records remain for inspection.

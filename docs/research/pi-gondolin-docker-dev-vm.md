@@ -1,7 +1,9 @@
 # Pi + Gondolin development VM
 
-_Historical probe and design revision: 2026-10-19. The current task VM lifecycle
-checkpoints durable Pi sessions for explicit disposal; see the
+_Architecture and original probe notes, 2026-10-19. The measured implementation
+status was updated on 2026-10-20; see the [benchmark report](../../platform/agent-execution/gondolin-session/benchmarks/README.md),
+[Overlay2 storage decision](gondolin-docker-storage-driver-overlay2-vs-vfs.md),
+[loopback findings](gondolin-loopback-compose-networking.md), and
 [Agent Session README](../../platform/agent-execution/gondolin-session/README.md)._
 
 ## Selection and lifecycle
@@ -42,29 +44,21 @@ Docker data root, then uses the worktree-selected `COMPOSE_FILE` plus the
 override. The image archives are shared;
 the loaded store and all mutable runtime state are not. Worktree `.env` files
 remain worktree-local and are not copied from host process environment.
-The guest's `vfs` driver expands layers substantially; loading all 15 service
-images eagerly grew a disposable VM disk by about 32 GiB, so selection is
-mandatory for image-consuming commands.
+Docker uses Overlay2 in the development VM. The earlier VFS disk-growth
+observation is superseded by the controlled VFS/Overlay2 comparison in the
+[storage decision note](gondolin-docker-storage-driver-overlay2-vs-vfs.md).
 
-## Live result and remaining gate
+## Verified status (2026-10-20)
 
-Flutter 3.47.7 ran inside a Gondolin VM. Under the default QEMU backend, a
-private Docker daemon started with `vfs`; `overlay2` failed because the guest
-could not load the kernel module. Switching only the Docker flag is unsafe.
-The development VM now selects Gondolin's libkrun backend, whose bundled
-kernel exposes OverlayFS as built in. In the rebuilt dev rootfs,
-`start-dev-docker` started a private daemon reporting `overlay2`, and a direct
-OverlayFS write/read/remove probe passed. VFS is no longer selected for new
-Docker development VMs.
+The dev image loads OverlayFS as needed and requires Docker's `overlay2`
+storage driver; it fails closed if OverlayFS is unavailable. Both the libkrun
+and QEMU guest kernels were validated, with QEMU used for the passing Patrol
+run because it had working registry DNS in that test. The full-mock profile
+started 15 services and passed readiness checks. A separate Patrol run passed
+both journeys, but those journeys were not routed through voice-edge. See the
+[benchmark report](../../platform/agent-execution/gondolin-session/benchmarks/README.md)
+for exact scope and evidence paths. The measured storage tradeoff and
+alternative backends are in the [Overlay2 storage note](gondolin-docker-storage-driver-overlay2-vs-vfs.md).
 
-The full multi-container Compose Patrol stack is still **not yet verified**.
-The benchmark harness failed before starting its Pi VM; a direct session got
-past Docker startup but its local mock inference broker did not become ready.
-The image cache avoids remote image pulls but does not establish that the
-Compose services can communicate correctly. A single-process mock UX and
-in-VM Playwright can still use guest loopback.
-External browser preview needs explicit [Gondolin ingress](https://earendil-works.github.io/gondolin/ingress/);
+External browser preview still requires explicit [Gondolin ingress](https://earendil-works.github.io/gondolin/ingress/);
 guest ports are not automatically exposed to macOS or Tailscale.
-
-The next gate is to diagnose the mock broker startup and then prove the full
-Compose service set and Patrol flow in a bounded VM test.

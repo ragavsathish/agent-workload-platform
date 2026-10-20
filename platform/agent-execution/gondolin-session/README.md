@@ -30,7 +30,10 @@ architecture manifests. It produces and installs the image selected by
 `.pi/gondolin.json`; it does not participate in an active Pi Agent Session.
 
 Measured Mac capacity and OTel queries are in the
-[development-VM concurrency benchmark](benchmarks/README.md).
+[development-VM benchmark report](benchmarks/README.md). Focused research notes
+cover [Docker storage selection](../../../docs/research/gondolin-docker-storage-driver-overlay2-vs-vfs.md),
+[loopback and Compose networking](../../../docs/research/gondolin-loopback-compose-networking.md),
+and [checkpoint disk use](../../../docs/research/gondolin-checkpoint-disk-optimization.md).
 
 For a manual probe, `make gondolin-dev-build` prepares a reusable
 Flutter/Node/Docker/Playwright toolchain image without repository source or app
@@ -76,9 +79,15 @@ guest root-disk data survives for the next session. No host service or port is
 shared. The agent should query these services, not start them in its prompt.
 This is an isolated development dependency stack,
 not the production Compose deployment: voice-edge, gateway, Tailscale, and
-host inference are not started in the guest.
-Docker bridge networking is not currently available in this dev guest build,
-so multi-container Compose startup remains a separate unverified capability.
+host inference are not started in the default profile. The full-mock profile
+adds voice-edge, gateway, trace rendering, and local inference/ingress
+substitutes. It starts and passes readiness checks in the benchmark VM; the
+measured Patrol journeys are not routed through voice-edge. Docker storage is
+pinned to Overlay2 and startup fails if guest OverlayFS is unavailable. See the
+[benchmark report](benchmarks/README.md) for the verified scope, the
+[storage decision note](../../../docs/research/gondolin-docker-storage-driver-overlay2-vs-vfs.md)
+for the driver choice, and the [networking note](../../../docs/research/gondolin-loopback-compose-networking.md)
+for host-mode networking constraints.
 Use a clean worktree for Linux builds: macOS `node_modules` contains native
 binaries that cannot run in the guest. Durable S3 workspaces already materialize
 clean Git checkouts; install dependencies inside their session VM.
