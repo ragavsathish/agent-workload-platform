@@ -17,7 +17,7 @@ func TestBuildLogStreamsNewOutputWithoutRepeatingIt(t *testing.T) {
 	h := newTestHandler(t)
 	const jobID = "123e4567-e89b-12d3-a456-426614174000"
 	h.jobs.byID[jobID] = Job{ID: jobID, Type: "image-build", Status: "running"}
-	writer := &buildLogWriter{owner: h, jobID: jobID}
+	writer := &jobProgressWriter{owner: h, jobID: jobID}
 	var output bytes.Buffer
 	seen := int64(0)
 	for _, chunk := range []string{"#1 FROM base\n", "#2 RUN install\n"} {
@@ -29,7 +29,7 @@ func TestBuildLogStreamsNewOutputWithoutRepeatingIt(t *testing.T) {
 		if err := json.Unmarshal(response.Body.Bytes(), &job); err != nil {
 			t.Fatal(err)
 		}
-		seen = printNewBuildLog(job, seen, &output)
+		seen = printNewProgress(job, seen, &output)
 	}
 	if got := output.String(); got != "#1 FROM base\n#2 RUN install\n" {
 		t.Fatalf("unexpected streamed output: %q", got)
@@ -37,14 +37,14 @@ func TestBuildLogStreamsNewOutputWithoutRepeatingIt(t *testing.T) {
 	if seen != int64(output.Len()) {
 		t.Fatalf("wrong log offset: %d", seen)
 	}
-	if _, err := writer.Write(bytes.Repeat([]byte("x"), maxBuildLogBytes+1)); err != nil {
+	if _, err := writer.Write(bytes.Repeat([]byte("x"), maxProgressBytes+1)); err != nil {
 		t.Fatal(err)
 	}
-	if len(h.jobs.byID[jobID].BuildLog) != maxBuildLogBytes {
+	if len(h.jobs.byID[jobID].ProgressLog) != maxProgressBytes {
 		t.Fatal("build log exceeded its bound")
 	}
 	var truncated bytes.Buffer
-	if got := printNewBuildLog(h.jobs.byID[jobID], 0, &truncated); got != h.jobs.byID[jobID].BuildLogOffset || !strings.HasPrefix(truncated.String(), "[Buildx output truncated") {
+	if got := printNewProgress(h.jobs.byID[jobID], 0, &truncated); got != h.jobs.byID[jobID].ProgressOffset || !strings.HasPrefix(truncated.String(), "[Job progress truncated") {
 		t.Fatal("truncated build output was not reported to the client")
 	}
 }

@@ -270,7 +270,7 @@ func runImageBuildViaAPI(args []string, output io.Writer) error {
 		if err := composePullAPIRequest(client, composePullAPI, token, http.MethodGet, "/jobs/"+job.ID, nil, &job); err != nil {
 			return fmt.Errorf("read host image-build status: %w", err)
 		}
-		seen = printNewBuildLog(job, seen, output)
+		seen = printNewProgress(job, seen, output)
 		switch job.Status {
 		case "succeeded":
 			if job.Result == nil {
@@ -296,17 +296,17 @@ func runImageBuildViaAPI(args []string, output io.Writer) error {
 	return errors.New("timed out waiting for host image build (120 minutes)")
 }
 
-func printNewBuildLog(job Job, seen int64, output io.Writer) int64 {
-	start := job.BuildLogOffset - int64(len(job.BuildLog))
-	if job.BuildLogOffset <= seen || start < 0 {
+func printNewProgress(job Job, seen int64, output io.Writer) int64 {
+	start := job.ProgressOffset - int64(len(job.ProgressLog))
+	if job.ProgressOffset <= seen || start < 0 {
 		return seen
 	}
 	if seen < start {
-		fmt.Fprintf(output, "[Buildx output truncated by %d bytes]\n", start-seen)
+		fmt.Fprintf(output, "[Job progress truncated by %d bytes]\n", start-seen)
 		seen = start
 	}
-	_, _ = io.WriteString(output, job.BuildLog[seen-start:])
-	return job.BuildLogOffset
+	_, _ = io.WriteString(output, job.ProgressLog[seen-start:])
+	return job.ProgressOffset
 }
 
 func uploadImageBuildContext(endpoint, token, jobID, filePath string, size int64) error {

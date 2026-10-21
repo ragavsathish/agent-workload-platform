@@ -70,16 +70,17 @@ removed.
 ### `GET /v1/jobs/{id}`
 
 Read job status and metadata. Status values are `awaiting-context`, `queued`,
-`running`, `succeeded`, and `failed`. Image-build status includes a bounded
-`buildLog` tail and `buildLogOffset`; the VM CLI prints only new Buildx output
-into the Gitea workflow log while polling.
+`running`, `succeeded`, and `failed`. Image-build and Compose cache jobs include
+a bounded `progressLog` tail and `progressOffset`. The VM CLI prints only new
+progress into the Gitea workflow log while polling.
 
 ## Compose cache jobs
 
 The Gitea workflow runs `gondolin-oci compose pull --via-api` to submit the
 rendered Compose config to `POST /v1/jobs` as a `compose-cache` job and poll
 `GET /v1/jobs/{id}` through the manager HTTP hook. The host worker pulls and
-exports registry images. Services with Compose
+exports registry images, reporting each image resolution, pull, export, and
+handoff through job progress. Services with Compose
 `build:` are skipped because the request has no `builtImageIds`. The handoff
 contains `index.json`, `compose.override.json`, `cache-id`, and `agent/images`.
 The older `POST /v1/prepare` and `GET /v1/status?runId=…` routes remain for

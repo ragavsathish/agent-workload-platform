@@ -61,10 +61,12 @@ func composePullViaAPI(args []string, input io.Reader, token, endpoint string, c
 	if !jobIDPattern.MatchString(job.ID) {
 		return errors.New("host API returned an invalid job ID")
 	}
-	for attempt := 0; attempt < 510; attempt++ {
+	var seen int64
+	for attempt := 0; attempt < 1020; attempt++ {
 		if err := composePullAPIRequest(client, endpoint, token, http.MethodGet, "/jobs/"+job.ID, nil, &job); err != nil {
 			return fmt.Errorf("read Compose image pull status: %w", err)
 		}
+		seen = printNewProgress(job, seen, output)
 		switch job.Status {
 		case "succeeded":
 			if job.Handoff == "" {
@@ -76,7 +78,7 @@ func composePullViaAPI(args []string, input io.Reader, token, endpoint string, c
 		case "failed":
 			return fmt.Errorf("host Compose image pull failed: %s", job.Error)
 		case "queued", "running":
-			sleep(10 * time.Second)
+			sleep(5 * time.Second)
 		default:
 			return fmt.Errorf("unexpected host Compose image pull state: %s", job.Status)
 		}

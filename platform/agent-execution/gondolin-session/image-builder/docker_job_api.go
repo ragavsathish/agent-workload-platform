@@ -28,7 +28,7 @@ import (
 const (
 	maxJSONBytes     = 4 << 20
 	maxContextBytes  = 1 << 30
-	maxBuildLogBytes = 128 << 10
+	maxProgressBytes = 128 << 10
 )
 
 var (
@@ -94,14 +94,14 @@ type Job struct {
 	Images         int          `json:"images,omitempty"`
 	Services       int          `json:"services,omitempty"`
 	Result         *BuildResult `json:"result,omitempty"`
-	BuildLog       string       `json:"buildLog,omitempty"`
-	BuildLogOffset int64        `json:"buildLogOffset,omitempty"`
+	ProgressLog    string       `json:"progressLog,omitempty"`
+	ProgressOffset int64        `json:"progressOffset,omitempty"`
 	request        JobRequest
 }
 
-// Buildx writes from stdout and stderr on separate goroutines. Keep a bounded
-// tail in the job status so the VM client can show progress while the build runs.
-type buildLogWriter struct {
+// Keep a bounded tail in job status so VM clients can display ongoing work.
+// Buildx writes from stdout and stderr on separate goroutines.
+type jobProgressWriter struct {
 	mu     sync.Mutex
 	owner  *Handler
 	jobID  string
@@ -109,18 +109,18 @@ type buildLogWriter struct {
 	offset int64
 }
 
-func (w *buildLogWriter) Write(p []byte) (int, error) {
+func (w *jobProgressWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.offset += int64(len(p))
 	w.tail += string(p)
-	if len(w.tail) > maxBuildLogBytes {
-		w.tail = w.tail[len(w.tail)-maxBuildLogBytes:]
+	if len(w.tail) > maxProgressBytes {
+		w.tail = w.tail[len(w.tail)-maxProgressBytes:]
 	}
 	if w.jobID != "" {
 		w.owner.jobs.mu.Lock()
 		job := w.owner.jobs.byID[w.jobID]
-		job.BuildLog, job.BuildLogOffset = w.tail, w.offset
+		job.ProgressLog, job.ProgressOffset = w.tail, w.offset
 		w.owner.jobs.byID[w.jobID] = job
 		w.owner.jobs.mu.Unlock()
 	}
@@ -462,6 +462,8 @@ type cacheResult struct {
 type cacheImage struct{ Source, ImageID, Key, Tag, Archive, Checksum string }
 
 func (h *Handler) prepareComposeCache(job Job) (cacheResult, error) {
+	progress := &jobProgressWriter{owner: h, jobID: job.ID}
+	logProgress := func(format string, args ...any) { _, _ = fmt.Fprintf(progress, format+"\n", args...) }
 	var config struct {
 		Services map[string]struct {
 			Image string          `json:"image"`
@@ -471,13 +473,22 @@ func (h *Handler) prepareComposeCache(job Job) (cacheResult, error) {
 	if err := json.Unmarshal(job.request.ComposeConfig, &config); err != nil {
 		return cacheResult{}, fmt.Errorf("invalid Compose config: %w", err)
 	}
+	logProgress("Compose cache: resolving %d services", len(config.Services))
 	serviceImages := map[string]cacheImage{}
-	for name, service := range config.Services {
+	serviceNames := make([]string, 0, len(config.Services))
+	for name := range config.Services {
+		serviceNames = append(serviceNames, name)
+	}
+	sort.Strings(serviceNames)
+	for _, name := range serviceNames {
+		service := config.Services[name]
 		built := len(service.Build) != 0 && string(service.Build) != "null"
 		if built && job.request.BuiltImageIDs[name] == "" {
+			logProgress("Skipping build-only service %s (no host image)", name)
 			continue
 		}
 		if service.Image == "" {
+			logProgress("Skipping service %s (no image reference)", name)
 			continue
 		}
 		imageID, err := h.inspectImage(service.Image)
@@ -485,10 +496,16 @@ func (h *Handler) prepareComposeCache(job Job) (cacheResult, error) {
 			if built {
 				return cacheResult{}, fmt.Errorf("built image %s is missing from host Docker: %w", name, err)
 			}
+			logProgress("Pulling %s for %s", service.Image, name)
 			if err := h.pullImage(job.Arch, service.Image); err != nil {
 				return cacheResult{}, fmt.Errorf("pull %s: %w", service.Image, err)
 			}
 			imageID, err = h.inspectImage(service.Image)
+			if err == nil {
+				logProgress("Pulled %s", service.Image)
+			}
+		} else {
+			logProgress("Using host image %s for %s", service.Image, name)
 		}
 		if err != nil {
 			return cacheResult{}, fmt.Errorf("host Docker could not resolve image %s: %w", service.Image, err)
@@ -539,7 +556,10 @@ func (h *Handler) prepareComposeCache(job Job) (cacheResult, error) {
 			_ = os.RemoveAll(staging)
 		}
 	}()
-	for tag, image := range unique {
+	for index, entry := range entries {
+		tag := entry[0]
+		image := unique[tag]
+		logProgress("Exporting image %d/%d: %s", index+1, len(entries), image.Source)
 		if err := h.tagImage(image.ImageID, image.Tag); err != nil {
 			return cacheResult{}, fmt.Errorf("tag %s: %w", tag, err)
 		}
@@ -552,6 +572,7 @@ func (h *Handler) prepareComposeCache(job Job) (cacheResult, error) {
 			// missing layer blobs. Buildx fetches the pinned source and exports
 			// a complete, single-platform archive in that case.
 			_ = os.Remove(file)
+			logProgress("Engine archive incomplete for %s; exporting through Buildx", image.Source)
 			if buildErr := exportRemoteImage(image.Source, image.Tag, job.Arch, file); buildErr != nil {
 				return cacheResult{}, fmt.Errorf("export %s: incomplete Engine archive (%v); Buildx fallback: %w", tag, err, buildErr)
 			}
@@ -565,6 +586,9 @@ func (h *Handler) prepareComposeCache(job Job) (cacheResult, error) {
 		}
 		image.Checksum = checksum
 		unique[tag] = image
+		if info, err := os.Stat(file); err == nil {
+			logProgress("Exported image %d/%d: %s (%d bytes)", index+1, len(entries), image.Source, info.Size())
+		}
 	}
 	servicesOverride := map[string]any{}
 	indexServices := map[string]any{}
@@ -585,6 +609,7 @@ func (h *Handler) prepareComposeCache(job Job) (cacheResult, error) {
 		return cacheResult{}, err
 	}
 	cleanup = false
+	logProgress("Compose cache handoff complete: %d images, %d services", len(unique), len(serviceImages))
 	return cacheResult{Handoff: filepath.Join(h.handoffDisplay, filepath.Base(handoff)), CacheID: cacheID, Images: len(unique), Services: len(serviceImages)}, nil
 }
 
@@ -738,7 +763,7 @@ func (h *Handler) buildImage(job Job) (*BuildResult, error) {
 	command := exec.CommandContext(context.Background(), "docker", args...)
 	command.Stdin = contextFile
 	command.Env = append(os.Environ(), "DOCKER_HOST=unix:///var/run/docker.sock")
-	buildOutput := &buildLogWriter{owner: h, jobID: job.ID}
+	buildOutput := &jobProgressWriter{owner: h, jobID: job.ID}
 	command.Stdout = buildOutput
 	command.Stderr = buildOutput
 	if manifest.BaseImagePullToken != "" {
