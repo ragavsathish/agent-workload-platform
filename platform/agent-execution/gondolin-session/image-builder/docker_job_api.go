@@ -666,6 +666,7 @@ func (h *Handler) buildImage(job Job) (*BuildResult, error) {
 		"platform":    []string{platform},
 		"networkmode": []string{"host"},
 		"forcerm":     []string{"1"},
+		"version":     []string{"2"},
 	}
 	if len(manifest.BuildArgs) != 0 {
 		args, _ := json.Marshal(manifest.BuildArgs)

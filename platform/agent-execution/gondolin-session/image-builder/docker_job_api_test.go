@@ -252,6 +252,9 @@ func TestImageBuildWorkerBuildsAndSavesViaDockerEngineAPI(t *testing.T) {
 	if got := query.Get("buildargs"); !strings.Contains(got, "127.0.0.1:3001") {
 		t.Fatalf("host registry build argument missing: %s", got)
 	}
+	if got := query.Get("version"); got != "2" {
+		t.Fatalf("build must select BuildKit (version=2), got %q", got)
+	}
 	archive, err := os.ReadFile(filepath.Join(h.imageHandoffDir, version+".tar"))
 	if err != nil || !bytes.Equal(archive, engine.imageArchive) {
 		t.Fatalf("image handoff archive mismatch: %v", err)
