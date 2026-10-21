@@ -281,5 +281,7 @@
     (-main-with-diagnostics)
     (catch Exception error
       (binding [*out* *err*]
-        (println (str "dev Compose startup failed: " (.getMessage error))))
+        (println (str "dev Compose startup failed: " (.getMessage error)))
+        (when-let [detail (:stderr (ex-data error))]
+          (println (subs detail 0 (min 4000 (count detail))))))
       (System/exit 1))))

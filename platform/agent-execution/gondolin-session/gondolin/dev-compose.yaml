@@ -7,7 +7,7 @@ services:
       context: .
       dockerfile: Dockerfile.dev
       args:
-        VOICE_RUNTIME_IMAGE: voice-agent-gondolin:playwright-mcp-0.0.79-amd64
+        VOICE_RUNTIME_IMAGE: ${GONDOLIN_VOICE_RUNTIME_IMAGE_AMD64:-127.0.0.1:3001/image-builder/base-playwright-mcp:v0.0.79-amd64}
 
   dev-runtime-arm64:
     profiles: [arm64]
@@ -17,4 +17,4 @@ services:
       context: .
       dockerfile: Dockerfile.dev
       args:
-        VOICE_RUNTIME_IMAGE: voice-agent-gondolin:playwright-mcp-0.0.79-arm64
+        VOICE_RUNTIME_IMAGE: ${GONDOLIN_VOICE_RUNTIME_IMAGE_ARM64:-127.0.0.1:3001/image-builder/base-playwright-mcp:v0.0.79-arm64@sha256:2f69a7a48fb9e5eea360f8f160192b11241e6e7d124389c103164f39e6fd2f8d}

@@ -22,6 +22,19 @@
                  (get @posted "traceId") (get @posted "spanId")
                  {"benchmark.run_id" "run-1" "benchmark.vm_index" "2"})))))
 
+(deftest live-edge-check-requires-matching-application-span
+  (let [trace-id "1234567890abcdef1234567890abcdef"
+        response {"trace" {"resourceSpans"
+                           [{"resource" {"attributes" [{"key" "service.name" "value" {"stringValue" "pipecat-voice-edge"}}]}
+                             "scopeSpans" [{"spans" [{"traceId" trace-id
+                                                        "name" "pipecat-voice-edge.browser.pi.turn"
+                                                        "attributes" [{"key" "app.operation" "value" {"stringValue" "browser.pi.turn"}}]}]}]}]}}]
+    (is (true? (oracle/returned-edge-span? response trace-id)))
+    (is (false? (oracle/returned-edge-span? response "ffffffffffffffffffffffffffffffff")))
+    (is (false? (oracle/returned-edge-span?
+                 (assoc-in response ["trace" "resourceSpans" 0 "resource" "attributes" 0 "value" "stringValue"]
+                           "awp-patrol-oracle") trace-id)))))
+
 (deftest browser-trace-requires-workspace-message
   (let [run-dir (str (fs/create-temp-dir {:prefix "oracle-test-"}))]
     (try

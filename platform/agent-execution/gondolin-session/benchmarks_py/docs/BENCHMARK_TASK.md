@@ -64,17 +64,19 @@ guest argument vector that installs the client dependencies and runs
 each VM, executes Patrol once per VM after Compose is ready, and records each
 exit status, timing, log, and trace directory. Use
 `benchmark_workspace_overlays` for modified project files that are not yet in
-the checked-out commit. The benchmark passes only when every VM passes both
-Compose readiness and Patrol.
-For the repository's dev Compose profile, set `benchmark_patrol_oracle=true`.
-Each VM then checks that the two Patrol trace ZIPs match the inspected hashes,
+the checked-out commit. The benchmark passes only when every VM passes Compose
+readiness, Patrol, and any enabled Oracle checks.
+For the repository's Compose profiles, set `benchmark_patrol_oracle=true`.
+In the default dev profile, each VM checks that the two Patrol trace ZIPs match the inspected hashes,
 contain browser and network activity, have no recorded HTTP/network/console
 errors, and include the workspace message request. It also sends a unique OTLP
 canary span to the VM's collector at `127.0.0.1:4318` and requires Tempo at
 `127.0.0.1:3200` to return that exact span. The result includes a per-VM
 `patrolOracle` verdict and saves each verdict beside the captured traces.
-This proves the OTEL ingestion and query pipeline, not application spans from
-the Compose voice edge. See
+For `GONDOLIN_COMPOSE_PROFILE=full-mock`, a third Patrol journey forwards a
+typed turn through the running voice-edge. Oracle requires both its successful
+browser request and the matching `browser.pi.turn` application span in Tempo.
+See
 [`test-oracles-in-gondolin-patrol-harness.md`](../../../../../docs/research/test-oracles-in-gondolin-patrol-harness.md).
 `benchmark_patrol_timeout_seconds` defaults to 360 and terminates benchmark
 VMs if the parallel Patrol phase stalls.

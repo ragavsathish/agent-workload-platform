@@ -7,6 +7,9 @@
             [patrol-fixture-static :as static]
             [patrol-http :as http])
   (:import [java.nio ByteBuffer ByteOrder]
+           [java.net URI]
+           [java.net.http HttpClient HttpClient$Version HttpRequest HttpRequest$BodyPublishers HttpResponse$BodyHandlers]
+           [java.time Duration]
            [java.nio.file Files Paths]
            [java.util UUID]))
 
@@ -29,9 +32,35 @@
     (.putShort b (short 16)) (.put b (.getBytes "data" "US-ASCII")) (.putInt b (* samples 2))
     (.array b)))
 
+(defn- live-turn [base-url traceparent message]
+  (let [target (URI/create (str (str/replace base-url #"/$" "") "/api/pi-message"))]
+    (when-not (and (= "http" (.getScheme target))
+                   (= "127.0.0.1" (.getHost target))
+                   (re-matches #"00-[0-9a-f]{32}-[0-9a-f]{16}-01" traceparent))
+      (throw (ex-info "Invalid Patrol live edge configuration" {})))
+    (let [request (-> (HttpRequest/newBuilder target)
+                      (.timeout (Duration/ofSeconds 90))
+                      (.header "Content-Type" "application/json")
+                      (.header "Origin" "http://127.0.0.1:7860")
+                      (.header "X-Voice-Local-Ingress" "1")
+                      (.header "traceparent" traceparent)
+                      (.POST (HttpRequest$BodyPublishers/ofString
+                              (json/generate-string {:message message})))
+                      (.build))
+          client (-> (HttpClient/newBuilder) (.version HttpClient$Version/HTTP_1_1) (.build))
+          response (.send client request (HttpResponse$BodyHandlers/ofString))]
+      (if (= 200 (.statusCode response))
+        (json/parse-string (.body response) true)
+        (let [detail (try (:detail (json/parse-string (.body response) true))
+                          (catch Exception _ nil))]
+          (throw (ex-info "Live edge turn failed"
+                          {:status (.statusCode response)
+                           :detail (when (string? detail) (subs detail 0 (min 200 (count detail))))})))))))
+
 (defn start-server
   ([] (start-server {}))
-  ([{:keys [port host name nonce static-root ready-file turn-delay-ms speech-delay-ms]
+  ([{:keys [port host name nonce static-root ready-file turn-delay-ms speech-delay-ms
+            live-edge-url live-traceparent]
      :or {port 54321 host "127.0.0.1" name "voice-agent-patrol" turn-delay-ms 1800 speech-delay-ms 3000}}]
    (let [nonce (or nonce (str (UUID/randomUUID)))
          state (atom (domain/create-initial-fixture-state)) pending (atom {}) lock (Object.)
@@ -69,14 +98,24 @@
                          (transition-response started 200)
                          (let [{:keys [id]} (:value started) gate (promise)]
                            (swap! pending assoc id gate)
-                           (let [completed? (= ::timeout (deref gate (long turn-delay-ms) ::timeout))
+                           (let [live-response (when live-edge-url
+                                                 (try (live-turn live-edge-url live-traceparent message)
+                                                      (catch Exception error
+                                                        (println "Patrol live edge request failed:"
+                                                                 (.getMessage error) (select-keys (ex-data error) [:status :detail]))
+                                                        ::failed)))
+                                 completed? (and (not= ::failed live-response)
+                                                 (= ::timeout (deref gate (if live-edge-url 0 (long turn-delay-ms)) ::timeout)))
                                  value (locking lock
                                          (swap! pending dissoc id)
                                          (if completed?
-                                           (do (swap! state #(domain/complete-turn % id (get headers "origin")))
-                                               (domain/completed-turn-response message (get headers "origin")))
+                                           (if live-edge-url
+                                             (do (swap! state #(domain/complete-turn-with-response % id live-response))
+                                                 live-response)
+                                             (do (swap! state #(domain/complete-turn % id (get headers "origin")))
+                                                 (domain/completed-turn-response message (get headers "origin"))))
                                            (domain/interrupted-turn-response)))]
-                             (json-response 200 value)))))
+                             (json-response (if (= ::failed live-response) 502 200) value)))))
                      (and (= method "POST") (= path "/api/pi-turn/abort"))
                      (let [transition (locking lock
                                         (let [result (domain/abort-active-turn @state)]
@@ -112,7 +151,9 @@
                                 :name (or (System/getenv "PATROL_FIXTURE_NAME") "voice-agent-patrol")
                                 :nonce (or (System/getenv "PATROL_FIXTURE_NONCE") (str (UUID/randomUUID)))
                                 :static-root (System/getenv "PATROL_FIXTURE_STATIC_ROOT")
-                                :ready-file (System/getenv "PATROL_FIXTURE_READY_FILE")})]
+                                :ready-file (System/getenv "PATROL_FIXTURE_READY_FILE")
+                                :live-edge-url (not-empty (System/getenv "PATROL_LIVE_EDGE_URL"))
+                                :live-traceparent (System/getenv "PATROL_LIVE_TRACEPARENT")})]
     (.addShutdownHook (Runtime/getRuntime) (Thread. #(stop-server! instance)))
     @(promise)))
 (when (= *file* (System/getProperty "babashka.file")) (-main))

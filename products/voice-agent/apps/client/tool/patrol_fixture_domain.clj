@@ -110,16 +110,20 @@
 (defn- replace-assistant [entries assistant-id change]
   (mapv #(if (= assistant-id (:id %)) (merge % change) %) entries))
 
-(defn complete-turn [state turn-id origin]
+(defn complete-turn-with-response [state turn-id response]
   (if (not= turn-id (get-in state [:activeTurn :id]))
     state
     (-> state
         (update :revision inc)
         (update :entries replace-assistant (get-in state [:activeTurn :assistantId])
-                {:text (json/generate-string (scenes/response-for-fixture-message
-                                              (get-in state [:activeTurn :message]) origin))
+                {:text (json/generate-string response)
                  :status "completed"})
         (assoc :activeTurn nil))))
+
+(defn complete-turn [state turn-id origin]
+  (complete-turn-with-response
+   state turn-id (scenes/response-for-fixture-message
+                  (get-in state [:activeTurn :message]) origin)))
 
 (defn abort-active-turn [state]
   (if-let [turn (:activeTurn state)]

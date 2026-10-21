@@ -1,8 +1,9 @@
 # Gondolin VM benchmark report
 
 Measurements from a Mac mini M4 Pro with 14 CPU cores, 64 GiB memory, and
-macOS 26.6.2. Each Patrol VM had four vCPUs, 8 GiB guest memory, and a 64 GiB
-copy-on-write root disk. These results describe this host and workload; they
+macOS 26.6.2. The standalone Patrol tiers used four vCPUs and 8 GiB memory
+per VM; the latest Compose plus Patrol runs used two vCPUs and 6 GiB memory.
+Both used a 64 GiB copy-on-write root disk. These results describe this host and workload; they
 are not universal capacity limits.
 
 This is the consolidated findings report. Run measurements through the shared
@@ -113,6 +114,61 @@ stalled before one VM reached Patrol and was stopped; its other two completed
 traces were preserved under ignored artifacts. The passing retry used bounded
 npm fetching and a 360-second Patrol phase timeout. No benchmark VMs or
 checkpoints were retained.
+
+### Full-mock application-span qualification
+
+The new shared Compose cache includes the four host-built application images
+alongside the pulled images. A one-VM full-mock trial loaded them through the
+normal `dev-compose` preload path, with no temporary multi-image archive. It
+passed all three Patrol journeys and the browser, OTLP canary, and voice-edge
+span oracles. Readiness took 87.544 seconds and the complete run took
+272.351 seconds; see the [cache-backed one-VM result](../../../../artifacts/benchmarks/compose-overlay2-1vm-2026-10-21T123400Z/result.json).
+
+A subsequent three-VM cache-backed trial reached Compose readiness in all
+three guests in 103.075–106.292 seconds. Two guests produced all three Patrol
+trace sets in their temporary workspaces; the third stalled in its first
+Patrol target. The 600-second Patrol phase limit terminated the run, and the
+runner disposed all three VMs without retaining those temporary traces or
+per-VM Oracle verdicts. Minimum free host memory was 56%, swap did not grow,
+and minimum free disk was 63.1 GiB. The [failed raw result](../../../../artifacts/benchmarks/compose-overlay2-3vm-2026-10-21T123847Z/result.json)
+records the timeout. This trial does not establish whether the cache changes
+parallel Patrol reliability; the earlier archive-backed three-VM trial below
+passed once.
+
+An earlier 2026-10-21 run used a freshly built QEMU development image with
+Babashka and the current `dev-compose` installed. Three independent VMs
+(6 GiB RAM and 2 vCPUs each) started the full-mock Compose profile in
+parallel, then each ran one Patrol suite with all three journeys. All three
+passed the browser-trace oracle, the OTLP canary, and the voice-edge
+`browser.pi.turn` span check correlated to the live browser request. Compose
+readiness took 95.824–96.045 seconds; Patrol took 203.404–213.185 seconds
+per VM; the full run including Oracle and disposal took 322.528 seconds.
+Minimum free host memory was 60%, host swap did not grow, and minimum free
+disk was 63.59 GiB. The [raw result](../../../../artifacts/benchmarks/compose-overlay2-3vm-2026-10-21T121723Z/result.json)
+and [Allure report](../../../../artifacts/benchmarks/patrol-evidence/compose-overlay2-3vm-2026-10-21T121723Z/allure-report/index.html)
+contain the per-VM evidence. No VM checkpoints were retained. Startup
+includes importing four host-built application images from a temporary
+archive in each VM; it is not directly comparable with the six-service
+dev-profile runs.
+
+On 2026-10-21, a separate one-VM QEMU/Overlay2 run started the full-mock
+Compose profile and passed all three Patrol journeys: voice shell, fixture
+workspace, and a typed turn forwarded through the running voice-edge. Compose
+readiness took 78.608 seconds, Patrol took 167.890 seconds, and the complete
+run including Oracle and disposal took 251.133 seconds. All three browser
+traces had zero bad responses, network failures, and console errors. The live
+journey recorded `POST /api/pi-message` with HTTP 200. Oracle retrieved both
+its independent OTLP canary and the `pipecat-voice-edge.browser.pi.turn`
+application span under the live journey's trace ID from Tempo. See the
+[raw result](../../../../artifacts/benchmarks/compose-overlay2-1vm-2026-10-21T115521Z/result.json)
+and [Allure report](../../../../artifacts/benchmarks/patrol-evidence/compose-overlay2-1vm-2026-10-21T115521Z/allure-report/index.html).
+
+This run staged Babashka and the current `dev-compose` wrapper into an older
+local VM image, then imported four host-built application images before
+Compose startup. Its readiness time includes that import and should not be
+compared directly with the earlier six-service image-cache run. The
+qualification result and trace evidence are retained; the staging tar and
+Babashka copy were temporary local inputs.
 
 The preceding manual dev-stack benchmark uses the VM image built by Gitea run 57
 and the Compose cache prepared by Gitea run 58. Three independent QEMU guests

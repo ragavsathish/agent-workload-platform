@@ -49,6 +49,7 @@ type BuildManifest struct {
 	BaseImagePullToken string            `json:"baseImagePullToken,omitempty"`
 	ContextSHA256      string            `json:"contextSha256"`
 	ContextBytes       int64             `json:"contextBytes"`
+	SkipHandoff        bool              `json:"skipHandoff,omitempty"`
 }
 
 type BuildResult struct {
@@ -60,12 +61,13 @@ type BuildResult struct {
 }
 
 type JobRequest struct {
-	Type          string          `json:"type"`
-	RunID         string          `json:"runId"`
-	Revision      string          `json:"revision"`
-	Arch          string          `json:"arch"`
-	ComposeConfig json.RawMessage `json:"composeConfig,omitempty"`
-	BuildManifest *BuildManifest  `json:"buildManifest,omitempty"`
+	Type          string            `json:"type"`
+	RunID         string            `json:"runId"`
+	Revision      string            `json:"revision"`
+	Arch          string            `json:"arch"`
+	ComposeConfig json.RawMessage   `json:"composeConfig,omitempty"`
+	BuiltImageIDs map[string]string `json:"builtImageIds,omitempty"`
+	BuildManifest *BuildManifest    `json:"buildManifest,omitempty"`
 }
 
 type ContextInfo struct {
@@ -328,16 +330,17 @@ func (h *Handler) prepareCompat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		ComposeConfig json.RawMessage `json:"composeConfig"`
-		Revision      string          `json:"revision"`
-		Arch          string          `json:"arch"`
-		RunID         string          `json:"runId"`
+		ComposeConfig json.RawMessage   `json:"composeConfig"`
+		BuiltImageIDs map[string]string `json:"builtImageIds"`
+		Revision      string            `json:"revision"`
+		Arch          string            `json:"arch"`
+		RunID         string            `json:"runId"`
 	}
 	if err := json.Unmarshal(body, &input); err != nil {
 		writeError(w, http.StatusBadRequest, "request must contain JSON")
 		return
 	}
-	req := JobRequest{Type: "compose-cache", RunID: input.RunID, Revision: input.Revision, Arch: input.Arch, ComposeConfig: input.ComposeConfig}
+	req := JobRequest{Type: "compose-cache", RunID: input.RunID, Revision: input.Revision, Arch: input.Arch, ComposeConfig: input.ComposeConfig, BuiltImageIDs: input.BuiltImageIDs}
 	if err := validateJob(req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -438,7 +441,8 @@ func (h *Handler) prepareComposeCache(job Job) (cacheResult, error) {
 	}
 	serviceImages := map[string]cacheImage{}
 	for name, service := range config.Services {
-		if len(service.Build) != 0 && string(service.Build) != "null" {
+		built := len(service.Build) != 0 && string(service.Build) != "null"
+		if built && job.request.BuiltImageIDs[name] == "" {
 			continue
 		}
 		if service.Image == "" {
@@ -446,6 +450,9 @@ func (h *Handler) prepareComposeCache(job Job) (cacheResult, error) {
 		}
 		imageID, err := h.inspectImage(service.Image)
 		if err != nil {
+			if built {
+				return cacheResult{}, fmt.Errorf("built image %s is missing from host Docker: %w", name, err)
+			}
 			if err := h.pullImage(job.Arch, service.Image); err != nil {
 				return cacheResult{}, fmt.Errorf("pull %s: %w", service.Image, err)
 			}
@@ -453,6 +460,9 @@ func (h *Handler) prepareComposeCache(job Job) (cacheResult, error) {
 		}
 		if err != nil {
 			return cacheResult{}, fmt.Errorf("host Docker could not resolve image %s: %w", service.Image, err)
+		}
+		if built && imageID != job.request.BuiltImageIDs[name] {
+			return cacheResult{}, fmt.Errorf("built image %s changed: expected %s, found %s", name, job.request.BuiltImageIDs[name], imageID)
 		}
 		keyHash := sha256.Sum256([]byte(service.Image + "\n" + imageID))
 		key := hex.EncodeToString(keyHash[:])[:24]
@@ -729,6 +739,9 @@ func (h *Handler) buildImage(job Job) (*BuildResult, error) {
 		return nil, fmt.Errorf("inspect built image: %w", err)
 	}
 	result := &BuildResult{ArtifactVersion: artifactVersion, CacheReference: localTag, Digest: imageID, ImageRef: manifest.ImageRef}
+	if manifest.SkipHandoff {
+		return result, nil
+	}
 	if err := os.MkdirAll(h.imageHandoffDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create image handoff directory: %w", err)
 	}
@@ -895,7 +908,8 @@ func validateJob(req JobRequest) error {
 		}
 		var config struct {
 			Services map[string]struct {
-				Image string `json:"image"`
+				Image string          `json:"image"`
+				Build json.RawMessage `json:"build"`
 			} `json:"services"`
 		}
 		if len(req.ComposeConfig) == 0 || json.Unmarshal(req.ComposeConfig, &config) != nil || len(config.Services) == 0 || len(config.Services) > 128 {
@@ -904,6 +918,13 @@ func validateJob(req JobRequest) error {
 		for name, service := range config.Services {
 			if service.Image != "" && !imagePattern.MatchString(service.Image) {
 				return fmt.Errorf("invalid image reference for service %s", name)
+			}
+		}
+		for name, imageID := range req.BuiltImageIDs {
+			service, ok := config.Services[name]
+			if !ok || service.Image == "" || len(service.Build) == 0 || string(service.Build) == "null" ||
+				!regexp.MustCompile(`^sha256:[a-f0-9]{64}$`).MatchString(imageID) {
+				return fmt.Errorf("builtImageIds has an invalid entry for service %s", name)
 			}
 		}
 		for _, service := range config.Services {
@@ -915,6 +936,9 @@ func validateJob(req JobRequest) error {
 	}
 	if len(req.ComposeConfig) != 0 {
 		return errors.New("image-build jobs cannot contain composeConfig")
+	}
+	if len(req.BuiltImageIDs) != 0 {
+		return errors.New("image-build jobs cannot contain builtImageIds")
 	}
 	m := req.BuildManifest
 	if m == nil {

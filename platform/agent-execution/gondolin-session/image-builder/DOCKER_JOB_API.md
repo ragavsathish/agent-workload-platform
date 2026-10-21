@@ -73,9 +73,14 @@ Read job status and metadata. Status values are `awaiting-context`, `queued`,
 ## Compose cache compatibility endpoints
 
 The builder VM uses the existing `POST /v1/prepare` and `GET /v1/status?runId=…`
-routes through the manager HTTP hook. Compose services with `build:` are
-skipped. Pulled image archives and the `index.json`, `compose.override.json`,
-and `cache-id` files retain the existing handoff layout.
+routes through the manager HTTP hook. The Gitea workflow archives the committed
+`products/voice-agent` build context, submits each Compose `build:` service as
+an image-build job, and passes the returned `builtImageIds` to `/v1/prepare`.
+The cache worker refuses an image ID mismatch before exporting it. These build
+jobs set `skipHandoff: true`; the cache worker exports their images directly
+into the shared Compose store. A request without `builtImageIds` still skips
+build services. Both paths retain the `index.json`, `compose.override.json`,
+`cache-id`, and `agent/images` handoff layout.
 
 Start the host API with a shared internal API token:
 

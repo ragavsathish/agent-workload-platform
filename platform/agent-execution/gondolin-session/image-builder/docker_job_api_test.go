@@ -266,6 +266,15 @@ func TestImageBuildWorkerBuildsAndSavesViaDockerEngineAPI(t *testing.T) {
 	if err != nil || !bytes.Equal(archive, engine.imageArchive) {
 		t.Fatalf("image handoff archive mismatch: %v", err)
 	}
+	manifest.ArtifactVersion = "v2-" + strings.Repeat("c", 32)
+	manifest.SkipHandoff = true
+	result, err = h.buildImage(job)
+	if err != nil || result.Handoff != "" || result.Digest != engine.imageID {
+		t.Fatalf("compose build should remain in host Docker without a handoff: %+v (%v)", result, err)
+	}
+	if _, err := os.Stat(filepath.Join(h.imageHandoffDir, manifest.ArtifactVersion+".tar")); !os.IsNotExist(err) {
+		t.Fatalf("compose build unexpectedly exported an image archive: %v", err)
+	}
 }
 
 func (f *fakeDockerEngine) Do(req *http.Request) (*http.Response, error) {
@@ -349,6 +358,38 @@ func TestComposeCacheWorkerUsesDockerEngineAPIAndWritesHandoff(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("compose cache worker did not finish")
+}
+
+func TestComposeCacheIncludesOnlyVerifiedHostBuiltImage(t *testing.T) {
+	imageID := "sha256:" + strings.Repeat("d", 64)
+	image := "local/pipecat-edge:compose"
+	key := sha256.Sum256([]byte(image + "\n" + imageID))
+	tag := "gondolin-preload:" + hex.EncodeToString(key[:])[:24]
+	engine := &fakeDockerEngine{imageID: imageID, saved: dockerArchiveFixture(t, tag, true), inspectCalls: 1}
+	h, err := NewHandler(testToken, t.TempDir(), engine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := json.RawMessage(`{"services":{"voice-edge":{"image":"local/pipecat-edge:compose","build":{"context":"/workspace/products/voice-agent","dockerfile":"apps/edge/Containerfile"}}}}`)
+	request := JobRequest{Type: "compose-cache", RunID: "full-mock-1", Revision: strings.Repeat("a", 40), Arch: "aarch64", ComposeConfig: config, BuiltImageIDs: map[string]string{"voice-edge": imageID}}
+	if err := validateJob(request); err != nil {
+		t.Fatal(err)
+	}
+	result, err := h.prepareComposeCache(Job{RunID: request.RunID, Revision: request.Revision, Arch: request.Arch, request: request})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Images != 1 || result.Services != 1 {
+		t.Fatalf("built service was not cached: %+v", result)
+	}
+	index, err := os.ReadFile(filepath.Join(result.Handoff, "index.json"))
+	if err != nil || !strings.Contains(string(index), `"voice-edge"`) {
+		t.Fatalf("built service missing from cache index: %v %s", err, index)
+	}
+	request.BuiltImageIDs["voice-edge"] = "sha256:" + strings.Repeat("e", 64)
+	if _, err := h.prepareComposeCache(Job{RunID: "full-mock-2", Revision: request.Revision, Arch: request.Arch, request: request}); err == nil || !strings.Contains(err.Error(), "built image voice-edge changed") {
+		t.Fatalf("expected stale host image rejection, got %v", err)
+	}
 }
 
 func mustJSON(t *testing.T, value any) string {

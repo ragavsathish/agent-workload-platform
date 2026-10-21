@@ -2,6 +2,9 @@
 set -euo pipefail
 
 tool_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ "${GONDOLIN_COMPOSE_PROFILE:-}" == "full-mock" ]]; then
+  PATROL_LIVE_EDGE_URL="${PATROL_LIVE_EDGE_URL:-http://127.0.0.1:7860}"
+fi
 build_dir="$tool_dir/build"
 run_id="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 run_dir="$build_dir/patrol-runs/$run_id"
@@ -43,12 +46,16 @@ run_target() {
 }
 
 set +e
+voice_status=0
+workspace_status=0
+if [[ "${PATROL_LIVE_ONLY:-}" != "true" ]]; then
 run_target voice patrol_test/voice_web_test.dart
 voice_status=$?
 
 PATROL_FIXTURE_PORT=0 \
 PATROL_FIXTURE_NONCE="$fixture_nonce" \
 PATROL_FIXTURE_READY_FILE="$fixture_ready_file" \
+PATROL_LIVE_EDGE_URL= \
   bb -cp "$tool_dir/tool" "$tool_dir/tool/patrol_fixture_server.clj" >"$run_dir/fixture.log" 2>&1 &
 fixture_pid=$!
 fixture_ready=0
@@ -86,6 +93,57 @@ else
 fi
 stop_fixture
 fixture_pid=""
+fi
+
+live_status=0
+if [[ -n "${PATROL_LIVE_EDGE_URL:-}" ]]; then
+  fixture_nonce="$(node -e 'process.stdout.write(require("node:crypto").randomUUID())')"
+  fixture_ready_file="$run_dir/live-fixture-ready.json"
+  trace_id="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(16).toString("hex"))')"
+  parent_id="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(8).toString("hex"))')"
+  traceparent="00-$trace_id-$parent_id-01"
+  printf '{"traceId":"%s","parentSpanId":"%s"}\n' "$trace_id" "$parent_id" >"$run_dir/live-edge-evidence.json"
+  PATROL_FIXTURE_PORT=0 \
+  PATROL_FIXTURE_NONCE="$fixture_nonce" \
+  PATROL_FIXTURE_READY_FILE="$fixture_ready_file" \
+  PATROL_LIVE_EDGE_URL="$PATROL_LIVE_EDGE_URL" \
+  PATROL_LIVE_TRACEPARENT="$traceparent" \
+    bb -cp "$tool_dir/tool" "$tool_dir/tool/patrol_fixture_server.clj" >"$run_dir/live-fixture.log" 2>&1 &
+  fixture_pid=$!
+  fixture_ready=0
+  for _ in {1..50}; do
+    if [[ -f "$fixture_ready_file" ]]; then
+      fixture_port="$(node -e \
+        'const ready = require(process.argv[1]); process.stdout.write(String(ready.port))' \
+        "$fixture_ready_file")"
+      if curl --fail --silent "http://127.0.0.1:$fixture_port/health" | \
+        FIXTURE_NONCE="$fixture_nonce" node -e '
+          let input = "";
+          process.stdin.on("data", (chunk) => input += chunk);
+          process.stdin.on("end", () => {
+            const health = JSON.parse(input);
+            if (health.fixture !== "voice-agent-patrol" ||
+                health.nonce !== process.env.FIXTURE_NONCE) process.exit(1);
+          });
+        '
+      then
+        fixture_ready=1
+        break
+      fi
+    fi
+    sleep 0.1
+  done
+  if [[ "$fixture_ready" -eq 1 ]]; then
+    run_target live-edge patrol_test/live_edge_web_test.dart \
+      --dart-define "VOICE_API_ORIGIN=http://127.0.0.1:$fixture_port"
+    live_status=$?
+  else
+    echo "Patrol live edge relay did not become ready" >&2
+    live_status=1
+  fi
+  stop_fixture
+  fixture_pid=""
+fi
 set -e
 
 evidence_status=0
@@ -102,5 +160,8 @@ if [[ "$voice_status" -ne 0 ]]; then
 fi
 if [[ "$workspace_status" -ne 0 ]]; then
   exit "$workspace_status"
+fi
+if [[ "$live_status" -ne 0 ]]; then
+  exit "$live_status"
 fi
 exit "$evidence_status"

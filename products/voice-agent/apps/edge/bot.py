@@ -12,7 +12,8 @@ import httpx
 from dotenv import load_dotenv
 from fastapi import HTTPException, Request
 from loguru import logger
-from opentelemetry.propagate import inject
+from opentelemetry.context import attach, detach
+from opentelemetry.propagate import extract, inject
 from pipecat.adapters.schemas.direct_function import DirectFunction
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
@@ -925,7 +926,13 @@ if __name__ == "__main__":
                 validate_http_identity(request)
             except HTTPException as exc:
                 return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
-        response = await call_next(request)
+        # Preserve an inbound W3C trace context across the browser turn and its
+        # broker operation. The context contains identifiers, never payloads.
+        token = attach(extract(request.headers))
+        try:
+            response = await call_next(request)
+        finally:
+            detach(token)
         if path.startswith(("/mermaid/", "/marp/", "/excalidraw/", "/journal-review/")):
             # The MCP App runs in an opaque-origin sandbox. Permit only its
             # immutable static assets to load across that sandbox boundary.

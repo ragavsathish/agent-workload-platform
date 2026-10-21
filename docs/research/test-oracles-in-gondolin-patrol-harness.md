@@ -79,8 +79,46 @@ benchmark invokes it inside each VM, records the verdict, and fails if an
 enabled oracle fails. The canary proves the collector-to-Tempo path; it is not
 evidence that an application service emitted spans.
 
+## Full-mock voice-edge extension
+
+For `GONDOLIN_COMPOSE_PROFILE=full-mock`,
+[`run-patrol-web`](../../products/voice-agent/apps/client/tool/run-patrol-web)
+adds a third journey in the same VM. The browser types a turn through the
+production Flutter widget tree and `VoiceApi`. A loopback relay supplies the
+local ingress headers and forwards that request to the running Compose
+voice-edge; it stores the edge's returned response in the fixture transcript.
+This keeps the browser's read state deterministic while exercising the real
+edge command and its inference-broker dependency. The outer inference broker
+remains the profile's deterministic mock.
+
+The relay supplies a fresh W3C `traceparent` for that one request. The edge
+extracts it before the existing `browser.pi.turn` span, and Oracle requires
+the browser trace to show a successful message request **and** Tempo to return
+a `pipecat-voice-edge.browser.pi.turn` span with the same trace ID, service,
+and operation. The [W3C Trace Context specification](https://www.w3.org/TR/trace-context/)
+defines `traceparent`; OpenTelemetry's
+[context propagation guidance](https://opentelemetry.io/docs/concepts/context-propagation/)
+describes carrying it between services. This check ties a browser action to
+an application emitted span; the separate canary continues to diagnose the
+collector-to-Tempo path.
+
+The [2026-10-21 one-VM qualification result](../../artifacts/benchmarks/compose-overlay2-1vm-2026-10-21T115521Z/result.json)
+passed all three journeys and both telemetry checks. The live browser trace
+recorded HTTP 200 for `/api/pi-message` with zero bad responses, network
+failures, or console errors, and Tempo returned the matching edge span. This
+is one successful run of the full-mock profile.
+
+A [subsequent three-VM qualification](../../artifacts/benchmarks/compose-overlay2-3vm-2026-10-21T121723Z/result.json)
+used a freshly built image. Each independent QEMU/Overlay2 VM started the
+full-mock stack, passed all three Patrol journeys, and returned both its
+unique canary and the live voice-edge application span from Tempo. All three
+browser traces per VM passed inspection. This is one successful parallel
+trial, not a measured reliability rate. The temporary host-built application
+image archive was imported separately into each VM before Compose startup.
+
 Allure sits above this verdict as a presentation and history layer. Oracle
-emits one Allure test result per VM with browser-trace and OTEL steps, and the
+emits one Allure test result per VM with browser-trace and OTEL steps, plus the
+live-edge step in the full-mock profile, and the
 verdict JSON as an attachment. Each test has a stable `historyId` for its VM
 index, a fresh `uuid`, and an excluded run-ID parameter, matching Allure's
 [test result format](https://allurereport.org/docs/how-it-works-test-result-file/)

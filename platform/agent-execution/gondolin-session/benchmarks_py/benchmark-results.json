@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAtUtc": "2026-10-21T10:13:46Z",
+  "generatedAtUtc": "2026-10-21T12:51:48Z",
   "host": {
     "model": "Mac mini M4 Pro",
     "cores": 14,
@@ -786,10 +786,22 @@
         "image": "agent-workload-platform/dev:v2-e9a8d96b089bf217d82c14f0181dbbdc"
       },
       "outcome": "passed",
-      "composeReadinessMs": [47866, 45695, 45998],
+      "composeReadinessMs": [
+        47866,
+        45695,
+        45998
+      ],
       "composeWallClockMs": 47866,
-      "patrolDurationMs": [157047, 161394, 160100],
-      "patrolExitCodes": [0, 0, 0],
+      "patrolDurationMs": [
+        157047,
+        161394,
+        160100
+      ],
+      "patrolExitCodes": [
+        0,
+        0,
+        0
+      ],
       "patrolWallClockMs": 214333,
       "totalElapsedMs": 219787,
       "patrolJourneysPerVm": 2,
@@ -809,6 +821,191 @@
         "memoryGiB": 64
       },
       "note": "Three isolated QEMU/Overlay2 VMs passed dev Compose readiness, two Patrol journeys each, and the in-guest Babashka trace/OTEL oracle. Three distinct canaries returned from Tempo. No benchmark checkpoints were retained."
+    },
+    {
+      "id": "compose-full-mock-patrol-edge-oracle-overlay2-1vm-2026-10-21T115521Z",
+      "measuredAtUtc": "2026-10-21T11:55:21.833606+00:00",
+      "parallelism": 1,
+      "vm": {
+        "vmm": "qemu",
+        "memoryGiB": 6,
+        "cpus": 2,
+        "guestSwapGiB": 0,
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2",
+        "image": "voice-agent-gondolin:dev-overlay2-qemu-test2"
+      },
+      "outcome": "passed",
+      "composeReadinessMs": [
+        78608
+      ],
+      "composeWallClockMs": 78608,
+      "patrolDurationMs": [
+        167890
+      ],
+      "patrolExitCodes": [
+        0
+      ],
+      "patrolWallClockMs": 249265,
+      "totalElapsedMs": 251133,
+      "patrolJourneysPerVm": 3,
+      "capturedTraces": 3,
+      "browserTraceOraclePassedVms": 1,
+      "otelCanaryOraclePassedVms": 1,
+      "edgeApplicationSpanOraclePassedVms": 1,
+      "minFreeMemoryPercent": 72,
+      "hostSwapGrowthMiB": 0,
+      "minFreeDiskGiB": 99.41,
+      "checkpointsSaved": false,
+      "evidencePath": "artifacts/benchmarks/compose-overlay2-1vm-2026-10-21T115521Z/result.json",
+      "allureReportPath": "artifacts/benchmarks/patrol-evidence/compose-overlay2-1vm-2026-10-21T115521Z/allure-report/index.html",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64
+      },
+      "note": "One full-mock QEMU/Overlay2 VM passed three Patrol journeys and the in-guest Oracle, including a voice-edge browser.pi.turn span correlated by trace ID. The older local VM image required temporary Babashka, dev-compose, and four host-built application images staged before Compose; its readiness time is not directly comparable with cache-ready runs. The staging files and benchmark VM were removed."
+    },
+    {
+      "id": "compose-full-mock-patrol-edge-oracle-overlay2-3vm-2026-10-21T121723Z",
+      "measuredAtUtc": "2026-10-21T12:17:25.011519+00:00",
+      "parallelism": 3,
+      "vm": {
+        "vmm": "qemu",
+        "memoryGiB": 6,
+        "cpus": 2,
+        "guestSwapGiB": 0,
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2",
+        "image": "voice-agent-gondolin:dev-arm64 (Gondolin build c62cd11c-e69d-5eb5-ac70-bbb1c9854131)"
+      },
+      "outcome": "passed",
+      "composeReadinessMs": [
+        95824,
+        96045,
+        95841
+      ],
+      "composeWallClockMs": 96045,
+      "patrolDurationMs": [
+        213185,
+        203833,
+        203404
+      ],
+      "patrolExitCodes": [
+        0,
+        0,
+        0
+      ],
+      "patrolWallClockMs": 315469,
+      "totalElapsedMs": 322528,
+      "patrolJourneysPerVm": 3,
+      "capturedTraces": 9,
+      "browserTraceOraclePassedVms": 3,
+      "otelCanaryOraclePassedVms": 3,
+      "edgeApplicationSpanOraclePassedVms": 3,
+      "minFreeMemoryPercent": 60,
+      "hostSwapGrowthMiB": 0,
+      "minFreeDiskGiB": 63.59,
+      "checkpointsSaved": false,
+      "evidencePath": "artifacts/benchmarks/compose-overlay2-3vm-2026-10-21T121723Z/result.json",
+      "allureReportPath": "artifacts/benchmarks/patrol-evidence/compose-overlay2-3vm-2026-10-21T121723Z/allure-report/index.html",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64
+      },
+      "note": "Three independent full-mock QEMU/Overlay2 VMs passed all three Patrol journeys and the in-guest Oracle, including distinct voice-edge browser.pi.turn spans correlated by trace ID. A freshly built VM image included Babashka and current dev-compose. Four host-built application images were imported per VM from a temporary archive. No benchmark VM or checkpoint was retained."
+    },
+    {
+      "id": "compose-full-mock-shared-cache-passed-compose-overlay2-1vm-2026-10-21T123400Z",
+      "measuredAtUtc": "2026-10-21T12:34:00.695209+00:00",
+      "parallelism": 1,
+      "vm": {
+        "vmm": "qemu",
+        "memoryGiB": 6,
+        "cpus": 2,
+        "guestSwapGiB": 0,
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2",
+        "image": "Gondolin build c62cd11c-e69d-5eb5-ac70-bbb1c9854131"
+      },
+      "outcome": "passed",
+      "composeReadinessMs": [
+        87544
+      ],
+      "composeWallClockMs": 87544,
+      "patrolDurationMs": [
+        180500
+      ],
+      "patrolExitCodes": [
+        0
+      ],
+      "patrolWallClockMs": 270808,
+      "totalElapsedMs": 272351,
+      "patrolJourneysPerVm": 3,
+      "minFreeMemoryPercent": 68,
+      "hostSwapGrowthMiB": 0,
+      "minFreeDiskGiB": 81.35,
+      "checkpointsSaved": false,
+      "evidencePath": "artifacts/benchmarks/compose-overlay2-1vm-2026-10-21T123400Z/result.json",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64
+      },
+      "capturedTraces": 3,
+      "browserTraceOraclePassedVms": 1,
+      "otelCanaryOraclePassedVms": 1,
+      "edgeApplicationSpanOraclePassedVms": 1,
+      "allureReportPath": "artifacts/benchmarks/patrol-evidence/compose-overlay2-1vm-2026-10-21T123400Z/allure-report/index.html",
+      "note": "One QEMU/Overlay2 VM used the 16-service shared Compose cache with the four host-built application images, then passed all three Patrol journeys and the in-guest Oracle. No separate staging archive was loaded; the VM was disposed."
+    },
+    {
+      "id": "compose-full-mock-shared-cache-timed_out-compose-overlay2-3vm-2026-10-21T123847Z",
+      "measuredAtUtc": "2026-10-21T12:38:49.251555+00:00",
+      "parallelism": 3,
+      "vm": {
+        "vmm": "qemu",
+        "memoryGiB": 6,
+        "cpus": 2,
+        "guestSwapGiB": 0,
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2",
+        "image": "Gondolin build c62cd11c-e69d-5eb5-ac70-bbb1c9854131"
+      },
+      "outcome": "timed_out",
+      "composeReadinessMs": [
+        103075,
+        104881,
+        106292
+      ],
+      "composeWallClockMs": 106292,
+      "patrolDurationMs": [
+        null,
+        null,
+        null
+      ],
+      "patrolExitCodes": [
+        null,
+        null,
+        null
+      ],
+      "patrolWallClockMs": null,
+      "totalElapsedMs": 714686,
+      "patrolJourneysPerVm": 3,
+      "minFreeMemoryPercent": 56,
+      "hostSwapGrowthMiB": 0,
+      "minFreeDiskGiB": 63.1,
+      "checkpointsSaved": false,
+      "evidencePath": "artifacts/benchmarks/compose-overlay2-3vm-2026-10-21T123847Z/result.json",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64
+      },
+      "error": "patrol exceeded 600 seconds",
+      "allReady": true,
+      "note": "All three QEMU/Overlay2 VMs reached full-mock Compose readiness from the shared image cache. One Patrol run stalled in its first target; the 600-second phase timeout stopped the trial. No per-VM Oracle verdict was retained. All benchmark VMs were disposed."
     }
   ],
   "lifecycle": {
@@ -1054,7 +1251,7 @@
       "guardTrippedAtMs": 33273,
       "checkpointsSaved": false,
       "evidencePath": "artifacts/benchmarks/compose-full-mock-overlay2-4vm-2026-10-20T17-33-24-939Z/result.json",
-      "note": "All four session.start calls completed (about 80.7\u201381.9 s), but free memory fell below the 40% floor at 33.3 s. The old runner then waited for start promises, leaving a sampling gap. Host swap was later observed at 39,804.25 MiB versus 32,920.12 MiB at baseline (+6,884.13 MiB); because there were no samples after 33.3 s, this increase cannot be attributed solely to this run. Service-count probes were skipped.",
+      "note": "All four session.start calls completed (about 80.7–81.9 s), but free memory fell below the 40% floor at 33.3 s. The old runner then waited for start promises, leaving a sampling gap. Host swap was later observed at 39,804.25 MiB versus 32,920.12 MiB at baseline (+6,884.13 MiB); because there were no samples after 33.3 s, this increase cannot be attributed solely to this run. Service-count probes were skipped.",
       "host": {
         "model": "Mac mini M4 Pro",
         "cores": 14,
