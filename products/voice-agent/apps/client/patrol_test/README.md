@@ -11,7 +11,7 @@ command/event/reducer layer.
 
 The workspace journey talks to the external fixture server through the real
 HTTP client. The fixture keeps domain transitions in
-`tool/patrol-fixture-domain.mjs`; `tool/patrol-fixture-server.mjs` owns HTTP,
+`tool/patrol_fixture_domain.clj`; `tool/patrol_fixture_server.clj` owns HTTP,
 timers, and process lifecycle. Each run receives an OS-assigned port and a
 nonce-verified health endpoint so concurrent runs cannot share fixture state.
 

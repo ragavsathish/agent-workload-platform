@@ -59,7 +59,7 @@ jobs:
 
           const endpoint = "http://compose-cache.local:18080/v1";
           const headers = {
-            Authorization: `Bearer ${process.env.COMPOSE_CACHE_HOST_TOKEN}`,
+            Authorization: `Bearer ${process.env.DOCKER_JOB_API_VM_TOKEN}`,
             "Content-Type": "application/json",
           };
           const composeConfig = JSON.parse(fs.readFileSync("/tmp/compose-config.json", "utf8"));

@@ -35,7 +35,7 @@ flowchart TB
             WORKER["Container<br/><b>Pi Task Worker</b><br/>Python · Pi coding agent"]
             TASK_PI["Container<br/><b>Pi Task Session</b><br/>Pi CLI · one process per claimed task"]
             BUILDER_MANAGER["Container<br/><b>Builder VM Manager</b><br/>Node.js · launchd"]
-            BUILDER_VM["Container<br/><b>Shared Image Builder</b><br/>Gondolin · Gitea Runner · private Docker"]
+            BUILDER_VM["Container<br/><b>Shared Image Builder</b><br/>Gondolin · Gitea Runner · Docker CLI"]
             TASK_VM["Container<br/><b>Task Tool Sandbox</b><br/>Gondolin · one isolated workspace"]
             GATEWAY -->|"persist · enqueue"| TASKS
             HABITAT -->|"inspect · retry<br/>scoped SQL"| TASKS
@@ -50,7 +50,10 @@ flowchart TB
         subgraph DATA["Runtime data and operations"]
             direction LR
             VOICE_DATA[("Container data store<br/><b>Voice Runtime Data</b><br/>sessions · workspace · skills")]
-            GITEA[("Container data store<br/><b>Git and Image Packages</b><br/>rootless Gitea · refs · immutable assets")]
+            GITEA[("Container data store<br/><b>Git and Workflow State</b><br/>rootless Gitea · refs · Actions runs")]
+            DOCKER_JOB_API["Container<br/><b>Docker Job API</b><br/>Go · authenticated HTTP · Docker Engine client"]
+            HOST_DOCKER["External system<br/><b>Host Docker Engine</b><br/>shared layer cache · builds and pulls"]
+            IMAGE_HANDOFF[("Host filesystem<br/><b>Image Handoff</b><br/>versioned Docker image tar files")]
             ARTIFACTS[("Container data store<br/><b>Workspace and Result Store</b><br/>S3-compatible object storage")]
             OXIGRAPH[("Container data store<br/><b>Knowledge Graph Store</b><br/>Oxigraph · loopback SPARQL 1.1 · persistent RDF")]
             DOCKER_METRICS["Container<br/><b>Docker VM Metrics</b><br/>Fluent Bit · Linux VM aggregate"]
@@ -74,8 +77,12 @@ flowchart TB
         GATEWAY -->|"resolve workspace"| ARTIFACTS
         GATEWAY -->|"fixed read-only SPARQL<br/>profile and learning facts"| OXIGRAPH
         ARTIFACTS -->|"materialize · capture result"| WORKER
-        BUILDER_VM -->|"upload checksummed assets<br/>restricted workflow secret"| GITEA
-        GITEA -->|"download image assets"| WORKER
+        BUILDER_VM -->|"workflow checkout · run state"| GITEA
+        BUILDER_VM -->|"context · job status<br/>authenticated HTTP hook"| DOCKER_JOB_API
+        DOCKER_JOB_API -->|"Docker Engine API<br/>Unix socket"| HOST_DOCKER
+        HOST_DOCKER -->|"save built image tar"| IMAGE_HANDOFF
+        WORKER -->|"load local image tar"| IMAGE_HANDOFF
+        BUILDER_MANAGER -->|"host API writes image tar"| VOICE_DATA
         EDGE -.->|"metrics · traces"| OTEL
         BROKER -.->|"metrics · traces"| OTEL
         PI -.->|"metrics · traces"| OTEL
@@ -106,6 +113,6 @@ flowchart TB
     classDef container fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
     class USER person;
-    class TSC,MODELS,INTEGRATIONS external;
-    class BROWSER,DIAGNOSTICS,INGRESS,ROUTER,EDGE,BROKER,PI,VOICE_VM,GATEWAY,HABITAT,WORKER,TASK_PI,BUILDER_MANAGER,BUILDER_VM,TASK_VM,DOCKER_METRICS,HOST_METRICS,WASSETTE,OTEL,GRAFANA_MCP container;
-    class TASKS,VOICE_DATA,GITEA,ARTIFACTS,OXIGRAPH data;
+    class TSC,MODELS,INTEGRATIONS,HOST_DOCKER external;
+    class BROWSER,DIAGNOSTICS,INGRESS,ROUTER,EDGE,BROKER,PI,VOICE_VM,GATEWAY,HABITAT,WORKER,TASK_PI,BUILDER_MANAGER,BUILDER_VM,TASK_VM,DOCKER_JOB_API,DOCKER_METRICS,HOST_METRICS,WASSETTE,OTEL,GRAFANA_MCP container;
+    class TASKS,VOICE_DATA,GITEA,ARTIFACTS,OXIGRAPH,IMAGE_HANDOFF data;

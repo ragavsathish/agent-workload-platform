@@ -89,8 +89,9 @@ voice-edge/gateway/Tailscale stack or copy host secrets into the VM.
 
 Playwright and the mock can both use guest loopback. External browser preview
 requires an explicit, loopback-scoped Gondolin ingress route; guest ports are
-not automatically published to the Mac or Tailscale. The separate Gitea image
-builder is not used for interactive development sessions.
+not automatically published to the Mac or Tailscale. The shared Gitea runner
+only builds declared Gondolin toolchain images; it does not build per-commit
+interactive app images.
 
 Preview the journal reviewer through the Flutter Web host in the VM without
 Tailscale or a running voice backend:

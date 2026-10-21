@@ -14,7 +14,7 @@ WASM_ACTIONS := setup build check install clean
 .PHONY: playwright-tailnet-diagnostics host-preflight install-host-services
 .PHONY: native-start native-stop native-restart native-status
 .PHONY: config-init config-check
-.PHONY: grafana-c4-dashboard digital-twin-image-build digital-twin-load digital-twin-query
+.PHONY: grafana-c4-dashboard require-babashka digital-twin-image-build digital-twin-load digital-twin-query
 .PHONY: digital-twin-validate digital-twin-test digital-twin-identify-skills
 .PHONY: digital-twin-capture-journal digital-twin-eval digital-twin-journal-export digital-twin-journal-finalize
 .PHONY: digital-twin-journal-eval digital-twin-judge-calibration
@@ -267,8 +267,11 @@ wasm-setup-% wasm-build-% wasm-check-% wasm-install-% wasm-clean-%: FORCE
 
 FORCE:
 
-grafana-c4-dashboard:
-	node deploy/observability/generate-c4-heatmap.mjs
+grafana-c4-dashboard: require-babashka
+	bb deploy/observability/generate-c4-heatmap.clj
+
+require-babashka:
+	@command -v bb >/dev/null || { echo "Install Babashka (bb) to run the Clojure tooling." >&2; exit 1; }
 
 digital-twin-image-build:
 	$(MAKE) gitea-sync
@@ -384,8 +387,8 @@ pi-rpc-host-smoke: pi-rpc-host-release
 		env PI_TASK_RPC_HOST_BINARY="$$artifact" PYTHONPATH="apps/worker/src:packages/tasking/src:packages/telemetry/src" \
 		uv run --project apps/worker python -m voice_worker.smoke --artifact "$$artifact" --workspace "$$PWD"
 
-check: wasm-check automation-check
-	node --test deploy/observability/c4-dashboard.test.mjs
+check: require-babashka wasm-check automation-check
+	bb deploy/observability/c4-dashboard_test.clj
 	pnpm --dir ../.. --filter @agent-workload-platform/otel test
 	pnpm --dir ../.. --filter @agent-workload-platform/gondolin-session check
 	pnpm --dir ../.. --filter @agent-workload-platform/voice-pi-agent check

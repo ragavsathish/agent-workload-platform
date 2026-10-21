@@ -24,10 +24,13 @@ contains the separate trusted image-builder workflow.
   it delegates config loading and every other transport to Pi. Launch that mode
   with `--no-mcp` to disable Pi's duplicate built-in MCP extension.
 
-The `image-builder/` directory is a separate module containing its manager,
-workflow, guest executor, installer, Dockerfile, Compose definition, and
-architecture manifests. It produces and installs the image selected by
-`.pi/gondolin.json`; it does not participate in an active Pi Agent Session.
+The `image-builder/` directory contains the trusted Gitea runner manager, image
+workflow client, local image installer, and Go host Docker Job API. Gitea
+Actions checks out and sends the build context to that API; the host Docker
+Engine builds the image and writes a tar to a local handoff folder. The worker
+imports the tar into Gondolin before starting Pi. The runner VM keeps Docker
+CLI and Compose for config rendering, but runs no Docker daemon and has no host
+socket. See [DOCKER_JOB_API.md](image-builder/DOCKER_JOB_API.md).
 
 Measured Mac capacity and OTel queries are in the
 [development-VM benchmark report](benchmarks/README.md). Focused research notes
@@ -60,10 +63,12 @@ to the shared host store; these mount read-only at `/image-cache` and
 `/image-store` in each VM. The source repository's `make gondolin-dev-cache`
 prepares the Voice Agent image set locally using host Docker. The separate
 Gitea workflow `Prepare Compose image cache` resolves Compose in its builder VM,
-then asks the host builder manager to pull and export images using the same host
-Docker daemon. This reuses the host image cache without exposing the Docker
-socket to the VM. Run it for a committed revision, then use the printed handoff
-directory with `make gondolin-dev-cache-import
+then asks the host builder manager to bridge to the Go Docker job API. The Go
+service pulls and exports images through the host Docker Engine API without
+exposing its socket to the VM. Start it with `make gondolin-docker-job-api-up`
+before starting the builder manager; see [the API guide](image-builder/DOCKER_JOB_API.md)
+for shared API token setup. Run the workflow for a committed revision, then use
+the printed handoff directory with `make gondolin-dev-cache-import
 GONDOLIN_DEV_CACHE_HANDOFF=<host-handoff-path>`. The importer checks SHA-256
 checksums before installing archives into the shared store. The host cache job
 skips Compose services with `build:` entries; task VMs build those from their

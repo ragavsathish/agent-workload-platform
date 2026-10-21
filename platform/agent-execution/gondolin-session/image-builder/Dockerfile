@@ -9,8 +9,6 @@ COPY --from=gitea-runner /usr/local/bin/gitea-runner /usr/local/bin/gitea-runner
 RUN apk add --no-cache \
       bash=5.3.3-r1 \
       ca-certificates=20261020-r0 \
-      containerd=2.2.0-r8 \
-      docker=29.5.2-r0 \
       docker-cli=29.5.2-r0 \
       e2fsprogs=1.47.3-r0 \
       e2fsprogs-extra=1.47.3-r0 \

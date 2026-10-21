@@ -38,9 +38,9 @@ SPARQL endpoint. The host writer validates the structured payload. Journal entri
 journal graph; classifier output goes only to the pending-review graph.
 
 The guest image is not built by a runtime worker. Its declaration lives in
-`runtime/image/gondolin.json`; the trusted Gitea Actions builder publishes a digest-addressed OCI
-image and the host installer verifies that digest before registering `digital-twin-ingest:v1` with
-Gondolin:
+`runtime/image/gondolin.json`; a trusted Gitea Actions job asks the host Docker API to build it and
+write a versioned tar to the local image handoff. The host installer imports that tar and registers
+`digital-twin-ingest:v1` with Gondolin:
 
 ```bash
 make digital-twin-image-build

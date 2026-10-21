@@ -30,7 +30,9 @@ flowchart LR
             subgraph DATA_NET["data · internal"]
                 POSTGRES[("PostgreSQL<br/>proposals · queue · checkpoints")]
                 S3[("S3Mock<br/>workspaces · results")]
-                GITEA[("Gitea<br/>Git · Actions · packages")]
+                GITEA[("Gitea<br/>Git · Actions · workflow state")]
+                DOCKER_JOB_API["Docker Job API<br/>Go · authenticated jobs"]
+                HOST_DOCKER["Host Docker Engine<br/>Engine API · socket protected"]
                 OXIGRAPH[("Oxigraph<br/>loopback SPARQL · persistent RDF")]
             end
 
@@ -62,6 +64,7 @@ flowchart LR
             WORKER["Pi Task Worker<br/>claim · execute · checkpoint"]
             TASK_PI["Pi Task Session<br/>bounded child process"]
             BUILDER_MANAGER["Builder VM Manager<br/>warm VM lifecycle"]
+            IMAGE_HANDOFF[("Image Handoff<br/>versioned image tar files")]
             VOICE_WASSETTE["Voice Wassette MCP<br/>per-session child"]
             TASK_WASSETTE["Task Wassette MCP<br/>per-task child"]
             HOST_METRICS["Host Observability<br/>Mac + QEMU metrics"]
@@ -84,10 +87,10 @@ flowchart LR
             subgraph TASK_VM["Per-task VM · public egress enabled by current default"]
                 TASK_TOOLS["Task tools<br/>isolated workspace · project policy"]
             end
-            subgraph BUILDER_VM["Shared builder VM · public package egress"]
-                RUNNER["Gitea Runner"]
-                DOCKERD["Private Docker daemon and cache"]
-                RUNNER --> DOCKERD
+            subgraph BUILDER_VM["Shared builder VM · trusted workflows"]
+                RUNNER["Gitea Runner · Docker CLI/Compose"]
+                CLIENT["Host Docker Job API client"]
+                RUNNER --> CLIENT
             end
         end
 
@@ -99,9 +102,12 @@ flowchart LR
         VOICE_TOOLS -->|"synthetic allowlist"| GITEA
         VOICE_TOOLS -->|"synthetic allowlist"| S3
         VOICE_TOOLS -->|"raw SPARQL query/update<br/>loopback-published endpoint"| OXIGRAPH
-        RUNNER -->|"Actions · packages"| GITEA
+        RUNNER -->|"Actions · checkout"| GITEA
+        CLIENT -->|"authenticated context · job status"| DOCKER_JOB_API
+        DOCKER_JOB_API -->|"Engine API over Docker socket"| HOST_DOCKER
+        HOST_DOCKER -->|"versioned image tar"| IMAGE_HANDOFF
         RUNNER -.->|"OTLP job traces · runner metrics"| OTEL
-        WORKER -->|"verified package"| GITEA
+        WORKER -->|"local image tar"| IMAGE_HANDOFF
         HOST_METRICS -.->|"host-access scrape"| OTEL
     end
 
@@ -119,7 +125,7 @@ flowchart LR
     VOICE_WASSETTE -->|"granted capability"| INTERNET
     TASK_WASSETTE -->|"granted capability"| INTERNET
     TASK_TOOLS -->|"current default"| INTERNET
-    DOCKERD -->|"packages"| INTERNET
+    HOST_DOCKER -->|"base-image pulls and builds"| INTERNET
 
     classDef person fill:#084c8d,color:#fff,stroke:#05345f,stroke-width:2px;
     classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
@@ -128,8 +134,8 @@ flowchart LR
     classDef warning fill:#3b2027,color:#ffd7de,stroke:#ff778a,stroke-width:3px;
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
     class USER person;
-    class CONTROL,MODELS,INTERNET external;
-    class BROWSER,BROKER,PI,WORKER,TASK_PI,BUILDER_MANAGER,VOICE_WASSETTE,TASK_WASSETTE,HOST_METRICS,VOICE_TOOLS,TASK_TOOLS,RUNNER,DOCKERD,HABITAT,DOCKER_METRICS,OTEL,GRAFANA_MCP runtime;
+    class CONTROL,MODELS,INTERNET,HOST_DOCKER external;
+    class BROWSER,BROKER,PI,WORKER,TASK_PI,BUILDER_MANAGER,VOICE_WASSETTE,TASK_WASSETTE,HOST_METRICS,VOICE_TOOLS,TASK_TOOLS,RUNNER,CLIENT,DOCKER_JOB_API,HABITAT,DOCKER_METRICS,OTEL,GRAFANA_MCP runtime;
     class INGRESS,ROUTER,EDGE,GATEWAY security;
     class TRUST_RISK warning;
-    class POSTGRES,S3,GITEA,OXIGRAPH,RUNTIME data;
+    class POSTGRES,S3,GITEA,OXIGRAPH,RUNTIME,IMAGE_HANDOFF data;

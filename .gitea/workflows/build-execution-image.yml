@@ -27,9 +27,9 @@ jobs:
         with:
           ref: ${{ inputs.source_revision }}
           submodules: recursive
-      - name: Build and publish the voice runtime image
+      - name: Build the voice runtime image
         env:
           ARTIFACT_VERSION: ${{ inputs.artifact_version }}
           IMAGE_CONFIG: ${{ inputs.image_config }}
-          IMAGE_BUILDER_TOKEN: ${{ secrets.IMAGE_BUILDER_TOKEN }}
+          IMAGE_BASE_PULL_TOKEN: ${{ secrets.IMAGE_BASE_PULL_TOKEN }}
         run: node /runner/dist/image-builder/workflow.js

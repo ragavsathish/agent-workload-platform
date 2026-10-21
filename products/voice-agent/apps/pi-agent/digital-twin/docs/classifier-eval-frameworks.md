@@ -95,7 +95,7 @@ apps/pi-agent/digital-twin/eval/
 - `judge-calibration.promptfooconfig.mjs` keeps 20 paraphrase groups wholly within a 32-row
   development split or an 8-row locked holdout. Human verdicts live separately in
   `digital-twin-judge.labels.json`; unreviewed entries remain explicit.
-- `summarize-judge-results.mjs` excludes Promptfoo `graderError` rows from semantic agreement and
+- `summarize-judge-results.clj` excludes Promptfoo `graderError` rows from semantic agreement and
   reports them as `notJudged`.
 
 A case should carry enough metadata for slicing without leaking private session data:

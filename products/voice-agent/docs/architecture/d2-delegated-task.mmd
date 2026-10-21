@@ -31,11 +31,12 @@ sequenceDiagram
         Worker->>Gitea: Dispatch repository workflow and checkpoint run ID
         Gitea->>Builder: Assign job to capacity-one runner
         Builder->>Gitea: Check out immutable revision
-        Builder->>Builder: Build with private Docker and produce assets + SHA-256
-        Builder->>Gitea: Upload immutable generic package and manifest
+        Builder->>Host API: Stream context and poll image-build job
+        Host API->>Host Docker: Build image through Docker Engine API
+        Host Docker->>Handoff: Save versioned image tar
         Worker->>Gitea: Observe terminal workflow status
-        Worker->>Gitea: Download package
-        Worker->>Worker: Verify digest and register image ref
+        Worker->>Handoff: Read local image tar
+        Worker->>Worker: Import tar and register image ref
     end
     Worker->>Model: Run stateless Pi task-agent loop
     Worker->>Tools: Execute isolated workspace or integration tools

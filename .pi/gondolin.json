@@ -3,8 +3,7 @@
   "build": {
     "context": "platform/agent-execution/gondolin-session/gondolin",
     "dockerfile": "platform/agent-execution/gondolin-session/gondolin/Dockerfile.dev",
-    "assetConfig": "platform/agent-execution/gondolin-session/gondolin/dev.aarch64.json",
-    "publish": false
+    "assetConfig": "platform/agent-execution/gondolin-session/gondolin/dev.aarch64.json"
   },
   "memory": "8G",
   "cpus": 4,
@@ -14,7 +13,7 @@
   },
   "development": {
     "docker": true,
-    "vmm": "krun",
+    "vmm": "qemu",
     "disk": "64G",
     "sessionStartHook": ".pi/hooks/start-dev-stack.clj"
   },

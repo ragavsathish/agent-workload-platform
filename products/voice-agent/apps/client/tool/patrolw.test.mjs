@@ -18,7 +18,7 @@ test('patrol wrapper fetches the pinned runner before applying its trace patch',
     await mkdir(tool, { recursive: true });
     await mkdir(dirname(patrol), { recursive: true });
     await copyFile(join(source, 'patrolw'), join(tool, 'patrolw'));
-    await copyFile(join(source, 'patch-patrol-web-trace.mjs'), join(tool, 'patch-patrol-web-trace.mjs'));
+    await copyFile(join(source, 'patch-patrol-web-trace.clj'), join(tool, 'patch-patrol-web-trace.clj'));
     await writeFile(patrol, `#!/bin/sh\n# ${cache}\necho patrol_cli 4.8.0\n`);
     await chmod(patrol, 0o755);
     await writeFile(join(tool, 'flutterw'), `#!/bin/sh
@@ -41,7 +41,7 @@ exit 9
 
     const result = spawnSync('bash', [join(tool, 'patrolw'), '--version'], {
       cwd: root,
-      env: { ...process.env, FLUTTER_BIN: '/bin/true', PUB_CACHE: cache },
+      env: { ...process.env, PATH: `/tmp:${process.env.PATH}`, FLUTTER_BIN: '/bin/true', PUB_CACHE: cache },
       encoding: 'utf8',
     });
 

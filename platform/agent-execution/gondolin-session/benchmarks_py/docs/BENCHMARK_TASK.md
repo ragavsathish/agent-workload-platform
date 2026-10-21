@@ -67,9 +67,9 @@ tool. For this repository's browser journey, use
 image cache, browser assets, environment, overlays, and artifact capture path.
 The full mock voice-agent journey uses
 `benchmark_guest_environment.GONDOLIN_COMPOSE_PROFILE=full-mock`, overlays
-`.pi/hooks/start-dev-stack.mjs`, `.pi/compose.full-mock.yml`,
+`.pi/hooks/start-dev-stack.clj`, `.pi/compose.full-mock.yml`,
 `.pi/postgres-full-mock-init.sql.template`, and
-`products/voice-agent/apps/client/tool/patrol-mock-inference-broker.mjs`, and
+`products/voice-agent/apps/client/tool/patrol_mock_inference_broker.clj`, and
 captures `products/voice-agent/apps/client/build/patrol-latest`.
 The runner clones `benchmark_workspace` at its current Git revision for each
 VM. `benchmark_config_path` selects the project-relative Gondolin configuration.

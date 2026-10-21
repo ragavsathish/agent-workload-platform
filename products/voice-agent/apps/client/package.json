@@ -15,9 +15,9 @@
     "test": "./tool/flutterw test",
     "test:browser": "npm run build:mermaid && npm run build:marp && npm run build:trace-explainer && npm run build:journal-review && npm run build:excalidraw && npm run build:bridge && vitest run --config vitest.browser.config.mjs",
     "test:patrol": "npm run build:mermaid && npm run build:marp && npm run build:trace-explainer && npm run build:journal-review && npm run build:bridge && ./tool/run-patrol-web",
-    "dev:mock": "npm run build && node tool/mock-host-services.mjs",
-    "dev:mock:serve": "node tool/mock-host-services.mjs",
-    "test:mock": "node --test tool/patrol-fixture-scenes.test.mjs tool/patrolw.test.mjs",
+    "dev:mock": "npm run build && PATROL_FIXTURE_PORT=${MOCK_HOST_PORT:-8766} PATROL_FIXTURE_HOST=${MOCK_HOST_BIND:-127.0.0.1} PATROL_FIXTURE_NAME=voice-host-services-mock PATROL_FIXTURE_STATIC_ROOT=\"$PWD/build/web\" bb -cp tool tool/patrol_fixture_server.clj",
+    "dev:mock:serve": "PATROL_FIXTURE_PORT=${MOCK_HOST_PORT:-8766} PATROL_FIXTURE_HOST=${MOCK_HOST_BIND:-127.0.0.1} PATROL_FIXTURE_NAME=voice-host-services-mock PATROL_FIXTURE_STATIC_ROOT=\"$PWD/build/web\" bb -cp tool tool/patrol_fixture_server.clj",
+    "test:mock": "bb -cp tool tool/patrol-tools_test.clj && bb -cp tool tool/patrol_fixture_test.clj && node --test tool/patrolw.test.mjs",
     "profile:web": "./tool/profile-web",
     "prototype:journal-review": "npm run build && python3 -m http.server 8765 --bind 127.0.0.1 --directory build/web",
     "prototype:trace-explainer": "node tool/prototype-trace-explainer.mjs"

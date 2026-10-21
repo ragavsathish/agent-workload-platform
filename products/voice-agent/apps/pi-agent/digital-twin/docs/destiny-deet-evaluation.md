@@ -127,7 +127,7 @@ The POC extends the journal evaluator rather than invoking DEET end-to-end:
 5. store the private bundle with DVC and publish only safe aggregates; and
 6. compare the same frozen cases through Promptfoo as the release-gate view.
 
-The implementation lives in `eval/journal-annotation-export.mjs`,
+The implementation lives in `eval/journal_annotation_export.clj`,
 `eval/journal-annotation-finalize.mjs`, and `eval/journal-reviewed-eval.mjs`.
 It takes the useful scientific-evaluation structure from DESTINY without
 introducing a second extraction runtime, a Python bridge, duplicate model calls,

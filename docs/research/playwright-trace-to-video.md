@@ -161,8 +161,8 @@ for Vitest browser tests
 Patrol also forces `screenshots: true`, and the existing inspector already
 validates `trace.zip`, parses `trace.trace`/`trace.network`, and counts
 `screencast-frame` events
-([Patrol trace patch](../../products/voice-agent/apps/client/tool/patch-patrol-web-trace.mjs),
-[trace inspector](../../products/voice-agent/apps/client/tool/inspect-patrol-trace.mjs#L89-L120)).
+([Patrol trace patch](../../products/voice-agent/apps/client/tool/patch-patrol-web-trace.clj),
+[trace inspector](../../products/voice-agent/apps/client/tool/inspect-patrol-trace.clj)).
 FFmpeg is already an operational dependency of the browser E2E playbook
 ([Playwright E2E playbook](../../products/voice-agent/automation/playbooks/playwright_e2e.yml#L49-L83)).
 

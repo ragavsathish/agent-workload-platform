@@ -1,27 +1,27 @@
 flowchart LR
     TASK[(External data store<br/><b>PostgreSQL</b><br/>agent task and durable checkpoints)]
-    GITEA[External system<br/><b>Gitea Actions</b><br/>workflow scheduling and run state]
-    PACKAGES[(External data store<br/><b>Gitea Generic Packages</b><br/>immutable image archive and manifest)]
+    GITEA[External system<br/><b>Gitea Actions</b><br/>workflow dispatch and run state]
+    HANDOFF[(Host filesystem<br/><b>Image Handoff</b><br/>versioned image tar files)]
 
     subgraph WORKER["Container: Pi Task Worker · Python"]
         direction TB
-        PLAN["Component<br/><b>Execution Image Planner</b><br/>validates config and computes content key"]
-        CACHE["Component<br/><b>Package Cache Client</b><br/>checks and downloads immutable artifacts"]
+        PLAN["Component<br/><b>Execution Image Planner</b><br/>validates declaration and computes content key"]
+        CACHE["Component<br/><b>Local Handoff Lookup</b><br/>checks the versioned host archive"]
         ACTIONS["Component<br/><b>Gitea Actions Client</b><br/>dispatches, observes, and cancels workflow runs"]
-        INSTALL["Component<br/><b>Verified Image Installer</b><br/>checks digest and registers image ref"]
+        INSTALL["Component<br/><b>Local Image Installer</b><br/>loads tar and registers Gondolin image ref"]
         PLAN --> CACHE
         CACHE -->|"cache miss"| ACTIONS
         CACHE -->|"cache hit"| INSTALL
         ACTIONS -->|"successful run"| CACHE
     end
 
-    TASK -->|"claims agent-run and stores workflow run ID"| WORKER
+    TASK -->|"claims task and checkpoints workflow run ID"| WORKER
     ACTIONS -->|"workflow dispatch, status, cancel"| GITEA
-    CACHE -->|"manifest and archive"| PACKAGES
+    HANDOFF -->|"versioned tar"| INSTALL
 
     classDef component fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
     classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
     class PLAN,CACHE,ACTIONS,INSTALL component;
     class GITEA external;
-    class TASK,PACKAGES data;
+    class TASK,HANDOFF data;

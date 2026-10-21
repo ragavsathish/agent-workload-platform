@@ -1,7 +1,7 @@
 flowchart TB
     DB[(External data store<br/><b>PostgreSQL</b><br/>agent-run and image-build queues)]
     S3[(External data store<br/><b>S3Mock</b><br/>immutable source and bounded results)]
-    GITEA[(External data store<br/><b>Gitea Packages</b><br/>verified execution-image assets)]
+    HANDOFF[(Host filesystem<br/><b>Image Handoff</b><br/>versioned image tar files)]
     PI[External container<br/><b>Pi Task Session</b><br/>Pi CLI with in-process Gondolin extension]
 
     subgraph WORKER["Container: Pi Task Worker · native Python + Absurd"]
@@ -23,7 +23,7 @@ flowchart TB
     CLAIM -->|"steps and final checkpoint"| DB
     MATERIALIZE -->|"source bundle"| S3
     BUILD -->|"spawn and await image-build"| DB
-    BUILD -->|"download package"| GITEA
+    BUILD -->|"read local image tar"| HANDOFF
     EXECUTE -->|"one no-session invocation"| PI
     CAPTURE -->|"write task artifacts"| S3
     CAPTURE -->|"completed result"| DB
@@ -33,4 +33,4 @@ flowchart TB
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
     class CLAIM,MATERIALIZE,PLAN,BUILD,INTENT,COMMAND,EXECUTE,NORMALIZE,CAPTURE component;
     class PI,RUNTIME external;
-    class DB,S3,GITEA data;
+    class DB,S3,HANDOFF data;

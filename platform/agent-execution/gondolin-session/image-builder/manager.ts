@@ -1,7 +1,5 @@
-import { createHash, randomBytes } from "node:crypto";
-import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -25,81 +23,13 @@ const GITEA_GUEST_ORIGIN = "http://gitea.local:3001";
 const OTEL_GUEST_ORIGIN = "http://otel.local:4318";
 const COMPOSE_CACHE_GUEST_ORIGIN = "http://compose-cache.local:18080";
 
-type ComposeService = { image?: unknown; build?: unknown };
-type ComposeConfig = { services?: Record<string, ComposeService> };
-type ComposeCacheRequest = {
-  arch?: unknown;
-  composeConfig?: unknown;
-  revision?: unknown;
-  runId?: unknown;
-};
-
-type ComposeCacheJob =
-  | { status: "queued" | "running" }
-  | { status: "failed"; error: string }
-  | { status: "ready"; handoff: string; cacheId: string; images: number; services: number };
-
-function sha256(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
-}
-
-function sha256File(file: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const hash = createHash("sha256");
-    const stream = fs.createReadStream(file);
-    stream.on("data", (chunk) => { hash.update(chunk); });
-    stream.once("error", reject);
-    stream.once("end", () => resolve(hash.digest("hex")));
-  });
-}
-
-function hostDockerCommand(): string {
-  if (process.env.GONDOLIN_HOST_DOCKER) return process.env.GONDOLIN_HOST_DOCKER;
-  const pathCandidates = (process.env.PATH ?? "").split(path.delimiter)
-    .map((directory) => path.join(directory, "docker"));
-  const candidates = [
-    ...pathCandidates,
-    path.join(os.userInfo().homedir, ".rd", "bin", "docker"),
-    "/opt/homebrew/bin/docker",
-    "/usr/local/bin/docker",
-    "/usr/bin/docker",
-  ];
-  return candidates.find((candidate) => fs.existsSync(candidate)) ?? "docker";
-}
-
-function runHostCommand(command: string, args: string[], quietStderr = false): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      env: { ...process.env, HOME: os.userInfo().homedir },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString();
-      if (!quietStderr) process.stdout.write(chunk);
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString();
-      if (!quietStderr) process.stderr.write(chunk);
-    });
-    child.once("error", reject);
-    child.once("exit", (code) => code === 0
-      ? resolve(stdout.trim())
-      : reject(new Error(`${command} ${args[0]} exited with ${code ?? "a signal"}${stderr.trim() ? `: ${stderr.trim()}` : ""}`)));
-  });
-}
-
-function hostDockerImageId(image: string): Promise<string | undefined> {
-  return runHostCommand(hostDockerCommand(), ["image", "inspect", image, "--format", "{{.Id}}"], true)
-    .then((imageId) => /^sha256:[a-f0-9]{64}$/.test(imageId) ? imageId : undefined)
-    .catch(() => undefined);
-}
-
-export class ComposeCacheHostService {
-  private readonly jobs = new Map<string, ComposeCacheJob>();
-
-  constructor(private readonly handoffDirectory: string, private readonly token: string) {}
+export class DockerJobHostService {
+  constructor(
+    private readonly token: string,
+    private readonly apiEndpoint: string,
+    private readonly apiToken: string,
+    private readonly fetcher: typeof fetch = fetch,
+  ) {}
 
   async handle(request: Request): Promise<Response | undefined> {
     const url = new URL(request.url);
@@ -107,113 +37,26 @@ export class ComposeCacheHostService {
     if (request.headers.get("authorization") !== `Bearer ${this.token}`) {
       return Response.json({ error: "unauthorized" }, { status: 401 });
     }
-    if (request.method === "POST" && url.pathname === "/v1/prepare") {
-      return this.startJob(request);
+    const allowed = url.pathname === "/v1/prepare"
+      || url.pathname === "/v1/status"
+      || url.pathname === "/v1/jobs"
+      || /^\/v1\/jobs\/[0-9a-fA-F-]{36}(?:\/context)?$/.test(url.pathname);
+    if (!allowed) {
+      return Response.json({ error: "not found" }, { status: 404 });
     }
-    if (request.method === "GET" && url.pathname === "/v1/status") {
-      const runId = url.searchParams.get("runId") ?? "";
-      const job = this.jobs.get(runId);
-      return job
-        ? Response.json(job)
-        : Response.json({ error: "unknown cache preparation run" }, { status: 404 });
+    const upstream = new URL(url.pathname + url.search, this.apiEndpoint);
+    const headers = new Headers({ authorization: `Bearer ${this.apiToken}` });
+    for (const name of ["content-type", "content-length"]) {
+      const value = request.headers.get(name);
+      if (value) headers.set(name, value);
     }
-    return Response.json({ error: "not found" }, { status: 404 });
-  }
-
-  private async startJob(request: Request): Promise<Response> {
-    const body = await request.arrayBuffer();
-    if (body.byteLength > 4 * 1024 * 1024) {
-      return Response.json({ error: "Compose config exceeds 4 MiB" }, { status: 413 });
-    }
-    let input: ComposeCacheRequest;
-    try {
-      input = JSON.parse(new TextDecoder().decode(body)) as ComposeCacheRequest;
-    } catch {
-      return Response.json({ error: "request must contain JSON" }, { status: 400 });
-    }
-    if (typeof input.runId !== "string" || !/^[A-Za-z0-9.-]{1,80}$/.test(input.runId)
-        || typeof input.revision !== "string" || !/^[a-f0-9]{40,64}$/.test(input.revision)
-        || typeof input.arch !== "string" || !["aarch64", "x86_64"].includes(input.arch)
-        || input.arch !== (process.arch === "arm64" ? "aarch64" : process.arch === "x64" ? "x86_64" : "unsupported")) {
-      return Response.json({ error: "invalid run ID, revision, or host architecture" }, { status: 400 });
-    }
-    if (!input.composeConfig || typeof input.composeConfig !== "object" || Array.isArray(input.composeConfig)) {
-      return Response.json({ error: "composeConfig must be an object" }, { status: 400 });
-    }
-    const current = this.jobs.get(input.runId);
-    if (current) return Response.json(current, { status: 202 });
-    this.jobs.set(input.runId, { status: "queued" });
-    void this.prepare(input as Required<ComposeCacheRequest>).then(
-      (result) => this.jobs.set(input.runId as string, result),
-      (error: unknown) => this.jobs.set(input.runId as string, {
-        status: "failed",
-        error: error instanceof Error ? error.message : String(error),
-      }),
-    );
-    return Response.json({ status: "queued" }, { status: 202 });
-  }
-
-  private async prepare(input: Required<ComposeCacheRequest>): Promise<ComposeCacheJob> {
-    this.jobs.set(input.runId as string, { status: "running" });
-    const config = input.composeConfig as ComposeConfig;
-    const composeServices = config.services;
-    if (!composeServices || typeof composeServices !== "object" || Array.isArray(composeServices)) {
-      throw new Error("Compose configuration has no services map");
-    }
-    const serviceImages = new Map<string, { source: string; imageId: string; tag: string; key: string }>();
-    for (const [name, service] of Object.entries(composeServices)) {
-      if (!service || typeof service !== "object") throw new Error(`invalid Compose service: ${name}`);
-      if (service.build !== undefined) continue;
-      if (service.image === undefined) continue;
-      if (typeof service.image !== "string" || service.image.length > 512
-          || !/^[A-Za-z0-9][A-Za-z0-9._/:@-]*$/.test(service.image)) {
-        throw new Error(`invalid image reference for Compose service ${name}`);
-      }
-      if (serviceImages.size >= 128) throw new Error("Compose config has too many image services");
-      let imageId = await hostDockerImageId(service.image);
-      if (!imageId) {
-        await runHostCommand(hostDockerCommand(), ["pull", service.image]);
-        imageId = await hostDockerImageId(service.image);
-      }
-      if (!imageId) throw new Error(`host Docker could not resolve image ${service.image}`);
-      const key = sha256(`${service.image}\n${imageId}`).slice(0, 24);
-      serviceImages.set(name, { source: service.image, imageId, key, tag: `gondolin-preload:${key}` });
-    }
-    const images = new Map([...serviceImages.values()].map((image) => [image.tag, image]));
-    if (images.size === 0) throw new Error("Compose configuration has no images to cache");
-    const cacheEntries = [...images.entries()].sort(([left], [right]) => left.localeCompare(right))
-      .map(([tag, image]) => [tag, { source: image.source, imageId: image.imageId }]);
-    const cacheId = sha256(JSON.stringify(cacheEntries));
-    const staging = path.join(this.handoffDirectory, `${input.revision}-${input.arch}-${input.runId}.partial`);
-    const handoffRoot = path.join(this.handoffDirectory, `${input.revision}-${input.arch}-${input.runId}-${cacheId}`);
-    fs.rmSync(staging, { recursive: true, force: true });
-    fs.mkdirSync(path.join(staging, "agent", "images"), { recursive: true, mode: 0o700 });
-    try {
-      for (const image of images.values()) {
-        await runHostCommand(hostDockerCommand(), ["tag", image.imageId, image.tag]);
-        await runHostCommand(hostDockerCommand(), ["save", "--output", path.join(staging, "agent", "images", `${image.key}.tar`), image.tag]);
-      }
-      const services = Object.fromEntries([...serviceImages.entries()].map(([name, image]) => [name, {
-        image: image.tag,
-        pull_policy: "never",
-      }]));
-      const indexServices: Record<string, { image: string; archive: string; sha256: string }> = {};
-      for (const [name, image] of serviceImages) {
-        indexServices[name] = {
-          image: image.tag,
-          archive: `${image.key}.tar`,
-          sha256: await sha256File(path.join(staging, "agent", "images", `${image.key}.tar`)),
-        };
-      }
-      fs.writeFileSync(path.join(staging, "compose.override.json"), `${JSON.stringify({ services }, null, 2)}\n`);
-      fs.writeFileSync(path.join(staging, "index.json"), `${JSON.stringify({ services: indexServices }, null, 2)}\n`);
-      fs.writeFileSync(path.join(staging, "cache-id"), `${cacheId}\n`);
-      fs.renameSync(staging, handoffRoot);
-    } catch (error) {
-      fs.rmSync(staging, { recursive: true, force: true });
-      throw error;
-    }
-    return { status: "ready", handoff: handoffRoot, cacheId, images: images.size, services: serviceImages.size };
+    const hasBody = request.method === "POST" || request.method === "PUT";
+    return this.fetcher(upstream, {
+      method: request.method,
+      headers,
+      body: hasBody ? request.body : undefined,
+      ...(hasBody ? { duplex: "half" } : {}),
+    } as RequestInit & { duplex?: "half" });
   }
 }
 
@@ -228,7 +71,7 @@ function loopbackEndpoint(endpoint: string, name: string): URL {
 export function createBuilderServiceAccess(
   giteaEndpoint: string,
   otelEndpoint: string,
-  composeCacheService?: ComposeCacheHostService,
+  dockerJobService?: DockerJobHostService,
 ) {
   const giteaUpstream = loopbackEndpoint(giteaEndpoint, "Gitea");
   const otelUpstream = loopbackEndpoint(otelEndpoint, "OTel");
@@ -251,8 +94,8 @@ export function createBuilderServiceAccess(
     allowedInternalHosts: [giteaUpstream.hostname, otelUpstream.hostname, composeCacheGuest.hostname],
     onRequest: async (request) => {
       const requested = new URL(request.url);
-      const composeCacheResponse = await composeCacheService?.handle(request);
-      if (composeCacheResponse) return composeCacheResponse;
+      const dockerJobResponse = await dockerJobService?.handle(request);
+      if (dockerJobResponse) return dockerJobResponse;
       const upstream = route(requested);
       if (!upstream) {
         if (requested.hostname === "127.0.0.1" || requested.hostname === "localhost") {
@@ -309,24 +152,31 @@ type BuilderManagerOptions = {
 
 export class BuilderManager {
   private vm?: VM;
-  private daemon?: ExecProcess;
   private runner?: ExecProcess;
-  private readonly composeCacheToken = randomBytes(32).toString("hex");
+  private readonly dockerJobApiVmToken = randomBytes(32).toString("hex");
 
   constructor(private readonly options: BuilderManagerOptions) {}
 
   async start(): Promise<void> {
     const imageHandoffDirectory = path.join(path.dirname(this.options.runnerDirectory), "gondolin-image-handoff");
-    const composeCacheHandoffDirectory = path.join(
-      path.dirname(this.options.runnerDirectory), "gondolin-compose-cache-handoff",
-    );
     fs.mkdirSync(imageHandoffDirectory, { recursive: true, mode: 0o700 });
-    fs.mkdirSync(composeCacheHandoffDirectory, { recursive: true, mode: 0o700 });
-    const composeCacheService = new ComposeCacheHostService(composeCacheHandoffDirectory, this.composeCacheToken);
+    const dockerJobApiToken = process.env.GONDOLIN_DOCKER_JOB_API_TOKEN;
+    if (!dockerJobApiToken) throw new Error("GONDOLIN_DOCKER_JOB_API_TOKEN is required to bridge the host Docker job API");
+    const dockerJobApiEndpoint = loopbackEndpoint(
+      process.env.GONDOLIN_DOCKER_JOB_API_URL ?? "http://127.0.0.1:18081",
+      "Docker job API",
+    ).toString();
+    const health = await fetch(new URL("/healthz", dockerJobApiEndpoint));
+    if (!health.ok) throw new Error(`Host Docker job API health check failed: ${health.status}`);
+    const dockerJobService = new DockerJobHostService(
+      this.dockerJobApiVmToken,
+      dockerJobApiEndpoint,
+      dockerJobApiToken,
+    );
     const service = createBuilderServiceAccess(
       this.options.giteaEndpoint,
       this.options.otelEndpoint,
-      composeCacheService,
+      dockerJobService,
     );
     const vmOptions = {
       sandbox: { imagePath: this.options.imagePath, netEnabled: true },
@@ -360,20 +210,7 @@ export class BuilderManager {
     ]);
     if (!setup.ok) throw new Error(`Could not prepare builder VM: ${setup.stderr}`);
 
-    this.daemon = vm.exec([
-      "/bin/sh",
-      "-lc",
-      "exec dockerd --host=unix:///var/run/docker.sock --storage-driver=overlay2 "
-        + "--insecure-registry=gitea.local:3001 "
-        + "--iptables=false --bridge=none --ip-forward=false --ip-masq=false "
-        + ">/var/log/dockerd.log 2>&1",
-    ]);
-    for (let attempt = 0; attempt < 120; attempt += 1) {
-      const probe = await vm.exec(["docker", "info", "--format", "{{.Driver}}"]).catch(() => undefined);
-      if (probe?.ok && probe.stdout.trim() === "overlay2") break;
-      if (attempt === 119) throw new Error("Private Docker daemon did not become ready");
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    }
+    // Docker CLI/Compose render local config; builds and pulls use the host API.
 
     const registered = await vm.exec(["test", "-s", "/var/lib/gitea-runner/.runner"]);
     if (!registered.ok) {
@@ -388,7 +225,7 @@ export class BuilderManager {
       {
         cwd: "/var/lib/gitea-runner",
         env: {
-          COMPOSE_CACHE_HOST_TOKEN: this.composeCacheToken,
+          DOCKER_JOB_API_VM_TOKEN: this.dockerJobApiVmToken,
           OTEL_EXPORTER_OTLP_ENDPOINT: OTEL_GUEST_ORIGIN,
           OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf",
           OTEL_LOGS_EXPORTER: "none",
@@ -412,10 +249,10 @@ export class BuilderManager {
   async stop(): Promise<void> {
     const vm = this.vm;
     if (!vm) return;
-    await vm.exec(["/bin/sh", "-lc", "pkill -TERM gitea-runner || true; pkill -TERM dockerd || true"])
+    await vm.exec(["/bin/sh", "-lc", "pkill -TERM gitea-runner || true"])
       .catch(() => undefined);
     await Promise.race([
-      Promise.allSettled([this.runner?.result, this.daemon?.result]),
+      Promise.allSettled([this.runner?.result]),
       new Promise((resolve) => setTimeout(resolve, 10_000)),
     ]);
     const temporary = `${this.options.checkpointPath}.next`;

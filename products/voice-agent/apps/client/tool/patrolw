@@ -22,7 +22,7 @@ export PATROL_FLUTTER_COMMAND="$tool_dir/tool/flutterw"
 if [[ ! -f "$runner" ]]; then
   "$tool_dir/tool/flutterw" pub get
 fi
-node "$tool_dir/tool/patch-patrol-web-trace.mjs" "$runner"
+bb "$tool_dir/tool/patch-patrol-web-trace.clj" "$runner"
 if [[ -n "${FLUTTER_BIN:-}" ]]; then
   export PATH="$(dirname "$FLUTTER_BIN"):$PATH"
 elif command -v flutter >/dev/null 2>&1; then

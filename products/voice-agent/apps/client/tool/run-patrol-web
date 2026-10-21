@@ -24,24 +24,22 @@ run_target() {
   local name="$1"
   local target="$2"
   shift 2
-  local -a https_args=()
+  local -a patrol_args=(--target "$target" "$@")
   if [[ "${PATROL_WEB_IGNORE_HTTPS_ERRORS:-}" == "true" ]]; then
-    https_args+=(--web-ignore-https-errors)
+    patrol_args+=(--web-ignore-https-errors)
   fi
   "$tool_dir/tool/patrolw" test \
     --device chrome \
-    --target "$target" \
+    "${patrol_args[@]}" \
     --web-headless \
     --web-locale "${PATROL_WEB_LOCALE:-en-US}" \
-    "${https_args[@]}" \
     --web-workers 1 \
     --web-timeout 120000 \
     --web-global-timeout 180000 \
     --web-trace off \
     --web-screenshot only-on-failure \
     --web-results-dir "$results_dir/$name" \
-    --web-report-dir "$run_dir/report-$name" \
-    "$@"
+    --web-report-dir "$run_dir/report-$name"
 }
 
 set +e
@@ -51,7 +49,7 @@ voice_status=$?
 PATROL_FIXTURE_PORT=0 \
 PATROL_FIXTURE_NONCE="$fixture_nonce" \
 PATROL_FIXTURE_READY_FILE="$fixture_ready_file" \
-  node "$tool_dir/tool/patrol-fixture-server.mjs" >"$run_dir/fixture.log" 2>&1 &
+  bb -cp "$tool_dir/tool" "$tool_dir/tool/patrol_fixture_server.clj" >"$run_dir/fixture.log" 2>&1 &
 fixture_pid=$!
 fixture_ready=0
 fixture_port=""
@@ -91,7 +89,7 @@ fixture_pid=""
 set -e
 
 evidence_status=0
-node "$tool_dir/tool/inspect-patrol-trace.mjs" \
+bb "$tool_dir/tool/inspect-patrol-trace.clj" \
   "$results_dir" \
   "$run_dir/evidence.json" || evidence_status=$?
 if [[ -f "$run_dir/evidence.json" ]]; then

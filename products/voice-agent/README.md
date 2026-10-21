@@ -379,7 +379,7 @@ synthetic origin backed by Prometheus's loopback-only host port, so Pi can query
 receiving access to Grafana credentials or the Docker monitoring network.
 
 Gitea uses rootless mode, SQLite, and named Docker volumes. Registration and SSH are disabled.
-Actions schedule trusted image builds, while Packages store immutable project-image artifacts. `tools/ops/gitea_sync.py`
+Actions schedule trusted image builds; completed image archives stay in the host's local handoff folder. `tools/ops/gitea_sync.py`
 creates the publisher account and repository idempotently, then
 mirrors only committed refs from this repository. Gitea is reachable from macOS only on
 `http://127.0.0.1:3001`; Gondolin can reach only its synthetic read endpoint and S3Mock, with all
@@ -392,11 +392,8 @@ VM configures that token as Tea login `local`; it cannot publish code or mutate 
 requests. The deployment-only `source-publisher` credential never enters the VM.
 
 Project-specific task images are declared in `.pi/gondolin.json`. Before Pi starts, the task worker
-checks for the immutable image package and dispatches the repository's fixed Gitea workflow on a miss. One shared, capacity-one
-Gitea Runner executes trusted repository workflows inside a warm Gondolin builder VM. Its private
-Docker daemon keeps an `overlay2` layer cache; it never receives the macOS Docker socket. The VM
-publishes a checksummed archive and manifest to Gitea Generic Packages. The task worker verifies the
-manifest and digest before registering the requested Gondolin image reference. Pi then starts one
+checks the local versioned handoff folder and dispatches the repository's fixed Gitea workflow on a miss. One shared, capacity-one
+Gitea Runner executes trusted repository workflows inside a warm Gondolin builder VM. The build context is sent to the host Docker Job API, which builds through the host Docker Engine and writes the image tar to that handoff folder. The task worker imports the tar and registers the requested Gondolin image reference. Pi then starts one
 VM for the task's session using the repository's `.pi` policy. The builder VM is a
 shared trust domain, so only administrator-approved repositories may use its runner label.
 

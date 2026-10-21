@@ -19,6 +19,9 @@ const composeLoader = fs.readFileSync(new URL("./dev-compose", import.meta.url),
 const piExtension = fs.readFileSync(new URL("../pi-extension.ts", import.meta.url), "utf8");
 const builderDockerfile = fs.readFileSync(new URL("../image-builder/Dockerfile", import.meta.url), "utf8");
 const builderManager = fs.readFileSync(new URL("../image-builder/manager.ts", import.meta.url), "utf8");
+const builderWorkflow = fs.readFileSync(new URL("../image-builder/workflow.ts", import.meta.url), "utf8");
+const builderInstaller = fs.readFileSync(new URL("../image-builder/installer.ts", import.meta.url), "utf8");
+const dockerJobAPI = fs.readFileSync(new URL("../image-builder/docker_job_api.go", import.meta.url), "utf8");
 const cacheWorkflow = fs.readFileSync(new URL("../../../../.gitea/workflows/prepare-compose-image-cache.yml", import.meta.url), "utf8");
 
 test("dev image Playwright version matches the client lockfile", () => {
@@ -28,9 +31,9 @@ test("dev image Playwright version matches the client lockfile", () => {
   assert.equal(pinned, lock.packages[""].devDependencies.playwright);
 });
 
-test("Docker development VMs use krun and require OverlayFS before starting overlay2", () => {
+test("Docker development VMs use QEMU and require OverlayFS before starting overlay2", () => {
   assert.equal(projectConfig.development.docker, true);
-  assert.equal(projectConfig.development.vmm, "krun");
+  assert.equal(projectConfig.development.vmm, "qemu");
   assert.match(dockerStartup, /grep -qw overlay \/proc\/filesystems/);
   assert.match(dockerStartup, /--storage-driver=overlay2/);
   assert.doesNotMatch(dockerStartup, /--storage-driver=vfs/);
@@ -71,13 +74,26 @@ test("Gitea cache workflow writes a checksummed handoff for host promotion", () 
   assert.match(cacheWorkflow, /runs-on: gondolin-builder/);
   assert.match(cacheWorkflow, /http:\/\/compose-cache\.local:18080\/v1/);
   assert.match(cacheWorkflow, /\/prepare/);
-  assert.match(cacheWorkflow, /COMPOSE_CACHE_HOST_TOKEN/);
-  assert.match(builderManager, /gondolin-compose-cache-handoff/);
-  assert.match(builderManager, /class ComposeCacheHostService/);
-  assert.match(builderManager, /\["pull", service\.image\]/);
-  assert.match(builderManager, /\["save", "--output"/);
+  assert.match(cacheWorkflow, /DOCKER_JOB_API_VM_TOKEN/);
+  assert.match(builderManager, /class DockerJobHostService/);
+  assert.match(builderManager, /GONDOLIN_DOCKER_JOB_API_URL/);
+  assert.match(dockerJobAPI, /func \(h \*Handler\) pullImage/);
+  assert.match(dockerJobAPI, /func \(h \*Handler\) saveImage/);
+  assert.match(dockerJobAPI, /\/images\/create/);
+  assert.match(dockerJobAPI, /\/images\/get/);
   assert.match(builderDockerfile, /docker\/compose\/releases\/download/);
   assert.doesNotMatch(builderDockerfile, /babashka\/babashka\/releases\/download/);
   assert.match(preloadImporter, /sha256-file/);
   assert.match(preloadImporter, /Import.*shared image archives/);
+});
+
+test("Gitea image builds use the host Docker API and local tar handoff", () => {
+  assert.match(builderManager, /class DockerJobHostService/);
+  assert.doesNotMatch(builderManager, /dockerd|docker info/);
+  assert.doesNotMatch(builderDockerfile, /^\s*(?:containerd|docker)=/m);
+  assert.match(builderWorkflow, /hostImageBuild/);
+  assert.match(builderWorkflow, /IMAGE_BASE_PULL_TOKEN/);
+  assert.doesNotMatch(builderWorkflow, /docker push|api\/packages|registryRef/);
+  assert.doesNotMatch(builderInstaller, /GITEA_BUILDER_TOKEN|docker.*(?:login|pull)|registry-image/);
+  assert.match(dockerJobAPI, /GONDOLIN_IMAGE_BUILDER_HANDOFF/);
 });

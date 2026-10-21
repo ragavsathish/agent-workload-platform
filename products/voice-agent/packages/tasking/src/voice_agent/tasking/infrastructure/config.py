@@ -59,8 +59,6 @@ class Settings:
     gitea_source_owner: str = "source-publisher"
     gitea_image_workflow: str = "build-execution-image.yml"
     gitea_workflow_ref: str = "refs/heads/main"
-    gitea_package_owner: str = "image-builder"
-    gitea_builder_token: str = ""
     gitea_actions_token: str = ""
     node_binary: str = "/opt/homebrew/bin/node"
     digital_twin_runner: Path | None = None
@@ -134,8 +132,6 @@ class Settings:
                 "GITEA_IMAGE_WORKFLOW", "build-execution-image.yml"
             ),
             gitea_workflow_ref=_value("GITEA_WORKFLOW_REF", "refs/heads/main"),
-            gitea_package_owner=_value("GITEA_PACKAGE_OWNER", "image-builder"),
-            gitea_builder_token=_value("GITEA_BUILDER_TOKEN"),
             gitea_actions_token=_value("GITEA_ACTIONS_TOKEN"),
             node_binary=_value("NODE_BINARY", "/opt/homebrew/bin/node"),
             digital_twin_runner=(

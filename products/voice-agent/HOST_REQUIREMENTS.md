@@ -59,7 +59,7 @@ into an image. It installs eight LaunchAgents in `~/Library/LaunchAgents`:
 - digital-twin classifier and listener: local extraction/classification inference
   and journal capture;
 - host observability: macOS and registered Gondolin VM metrics on `127.0.0.1:2022` and `:9465`;
-- image builder: trusted Gitea workflow image builds in an isolated Gondolin VM;
+- image builder: trusted Gitea workflow supplies a build context from an isolated Gondolin VM to the host Docker API; image archives stay in a local host handoff folder;
 - Pi Voice Service: persistent owner conversation, Gondolin-isolated native tools, and deferred
   host-side Wassette MCP tools on `127.0.0.1:9446`;
 - Pi worker: consumes approved tasks from Postgres and invokes Gondolin/Wassette and the

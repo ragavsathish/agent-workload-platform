@@ -198,7 +198,7 @@ def publish_repository(password: str) -> None:
         )
 
 
-def configure_repositories(password: str, builder_token: str) -> None:
+def configure_repositories(password: str, base_image_pull_token: str) -> None:
     authorization = basic(OWNER, password)
     registration = request(
         "/api/v1/admin/actions/runners/registration-token",
@@ -228,20 +228,29 @@ def configure_repositories(password: str, builder_token: str) -> None:
         except urllib.error.HTTPError as error:
             if error.code != 404:
                 raise
+        try:
+            request(
+                f"{prefix}/actions/secrets/IMAGE_BUILDER_TOKEN",
+                authorization=authorization,
+                method="DELETE",
+            )
+        except urllib.error.HTTPError as error:
+            if error.code != 404:
+                raise
+        request(
+            f"{prefix}/actions/secrets/IMAGE_BASE_PULL_TOKEN",
+            authorization=authorization,
+            method="PUT",
+            data={
+                "data": base_image_pull_token,
+                "description": "Pulls private base images for host Docker builds",
+            },
+        )
         request(
             f"{prefix}/collaborators/workflow-dispatcher",
             authorization=authorization,
             method="PUT",
             data={"permission": "admin"},
-        )
-        request(
-            f"{prefix}/actions/secrets/IMAGE_BUILDER_TOKEN",
-            authorization=authorization,
-            method="PUT",
-            data={
-                "data": builder_token,
-                "description": "Publishes immutable Gondolin execution-image packages",
-            },
         )
 
 
@@ -250,7 +259,6 @@ def main() -> None:
     users = [
         (OWNER, publisher_password, True),
         ("workflow-dispatcher", secret("gitea-dispatcher-password"), False),
-        ("image-builder", secret("gitea-builder-password"), False),
         ("voice-agent", secret("gitea-agent-password"), False),
     ]
     for username, password, admin in users:
@@ -274,10 +282,10 @@ def main() -> None:
         "agent",
         "public-only,read:repository,read:issue,read:user,read:organization",
     )
-    builder_token = ensure_token("image-builder", "builder", "write:package,read:user")
+    base_image_pull_token = ensure_token("image-builder", "builder", "read:package,read:user")
     ensure_token("workflow-dispatcher", "dispatcher", "write:repository,read:user")
     publish_repository(publisher_password)
-    configure_repositories(publisher_password, builder_token)
+    configure_repositories(publisher_password, base_image_pull_token)
     print(f"Published committed Git state to {ENDPOINT}/{OWNER}/{REPOSITORY}.git")
 
 
