@@ -59,9 +59,10 @@
 (defn docker-image-id [image]
   (command "docker" "image" "inspect" image "--format" "{{.Id}}"))
 
-(defn preload-for-service [name service]
+(defn preload-for-service [name service skip-build-services?]
   (let [image (get service "image")]
-    (when (seq image)
+    (when (and (seq image)
+               (not (and skip-build-services? (get service "build"))))
       (let [image-id (try
                        (docker-image-id image)
                        (catch Exception _
@@ -106,7 +107,7 @@
             (Files/deleteIfExists temporary)))))
     archive))
 
-(defn prepare-preload! [compose-argument preload-root-argument shared-root-argument]
+(defn prepare-preload! [compose-argument preload-root-argument shared-root-argument skip-build-services?]
   (let [compose-path (.toString (.toAbsolutePath (.normalize (Paths/get compose-argument (make-array String 0)))))
         preload-root (.toAbsolutePath (.normalize (Paths/get preload-root-argument (make-array String 0))))
         shared-root (.toAbsolutePath (.normalize (Paths/get shared-root-argument (make-array String 0))))
@@ -117,7 +118,7 @@
       (throw (ex-info "Compose configuration has no services" {})))
     (let [service-images (->> compose-services
                               (keep (fn [[name service]]
-                                      (when-let [image (preload-for-service name service)]
+                                      (when-let [image (preload-for-service name service skip-build-services?)]
                                         [name image])))
                               (into (array-map)))
           images (->> (vals service-images)
@@ -158,9 +159,12 @@
                       " Compose services in " preload-root " (shared store " shared-directory ")")))))))
 
 (defn -main [& args]
-  (when-not (= 3 (count args))
-    (throw (ex-info "Usage: prepare-compose-cache.clj <compose.yml> <preload-root> <shared-store-root>" {})))
-  (apply prepare-preload! args))
+  (when-not (contains? #{3 4} (count args))
+    (throw (ex-info "Usage: prepare-compose-cache.clj <compose.yml> <preload-root> <shared-store-root> [skip-build-services]" {})))
+  (let [[compose preload-root shared-root skip-mode] args]
+    (when (and skip-mode (not= skip-mode "skip-build-services"))
+      (throw (ex-info "The optional mode must be skip-build-services" {})))
+    (prepare-preload! compose preload-root shared-root (boolean skip-mode))))
 
 (when (= *file* (System/getProperty "babashka.file"))
   (try

@@ -26,7 +26,8 @@ GONDOLIN_DEV_CONFIG := platform/agent-execution/gondolin-session/gondolin/dev.$(
 GONDOLIN_DEV_SERVICE := dev-runtime-$(GONDOLIN_PROFILE)
 GONDOLIN_DEV_IMAGE_CACHE := artifacts/gondolin-dev-images/$(GONDOLIN_ARCH)
 GONDOLIN_DEV_IMAGE_STORE ?= $(HOME)/.cache/gondolin/$(GONDOLIN_ARCH)
-.PHONY: help FORCE $(VOICE_AGENT_TARGETS) $(WASM_TARGETS) gondolin-session-build gondolin-builder-build gondolin-dev-build gondolin-dev-cache require-babashka
+GONDOLIN_DEV_CACHE_HANDOFF ?=
+.PHONY: help FORCE $(VOICE_AGENT_TARGETS) $(WASM_TARGETS) gondolin-session-build gondolin-builder-build gondolin-dev-build gondolin-dev-cache gondolin-dev-cache-import require-babashka
 
 help:
 	@printf '%s\n' \
@@ -45,7 +46,8 @@ help:
 		'  make wasm-install   Install every WASM component into Wassette' \
 		'  make voice-TARGET   Run any additional Voice Agent target' \
 		'  make gondolin-session-build | gondolin-builder-build | gondolin-dev-build' \
-		'  make gondolin-dev-cache  Cache Compose images for read-only VM mounts'
+		'  make gondolin-dev-cache  Prepare Compose image archives locally' \
+		'  make gondolin-dev-cache-import GONDOLIN_DEV_CACHE_HANDOFF=<path>  Import Gitea cache output'
 
 $(VOICE_AGENT_TARGETS) $(WASM_TARGETS):
 	$(MAKE) -C $(VOICE_AGENT_DIR) $@
@@ -72,6 +74,10 @@ gondolin-dev-build:
 
 gondolin-dev-cache: require-babashka
 	bb platform/agent-execution/gondolin-session/gondolin/prepare-compose-cache.clj products/voice-agent/deploy/compose.yml $(GONDOLIN_DEV_IMAGE_CACHE) $(GONDOLIN_DEV_IMAGE_STORE)
+
+gondolin-dev-cache-import: require-babashka
+	@test -n "$(GONDOLIN_DEV_CACHE_HANDOFF)" || { echo "Set GONDOLIN_DEV_CACHE_HANDOFF to the completed Gitea handoff directory." >&2; exit 1; }
+	bb platform/agent-execution/gondolin-session/gondolin/import-compose-cache.clj "$(GONDOLIN_DEV_CACHE_HANDOFF)" "$(GONDOLIN_DEV_IMAGE_CACHE)" "$(GONDOLIN_DEV_IMAGE_STORE)"
 
 require-babashka:
 	@command -v bb >/dev/null || { echo "Install Babashka (bb) to run the Clojure tooling." >&2; exit 1; }

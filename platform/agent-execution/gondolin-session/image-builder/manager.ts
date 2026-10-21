@@ -114,7 +114,11 @@ export class BuilderManager {
   async start(): Promise<void> {
     const service = createBuilderServiceAccess(this.options.giteaEndpoint, this.options.otelEndpoint);
     const imageHandoffDirectory = path.join(path.dirname(this.options.runnerDirectory), "gondolin-image-handoff");
+    const composeCacheHandoffDirectory = path.join(
+      path.dirname(this.options.runnerDirectory), "gondolin-compose-cache-handoff",
+    );
     fs.mkdirSync(imageHandoffDirectory, { recursive: true, mode: 0o700 });
+    fs.mkdirSync(composeCacheHandoffDirectory, { recursive: true, mode: 0o700 });
     const vmOptions = {
       sandbox: { imagePath: this.options.imagePath, netEnabled: true },
       dns: { mode: "synthetic" as const, syntheticHostMapping: "per-host" as const },
@@ -131,6 +135,7 @@ export class BuilderManager {
         mounts: {
           "/runner": new ReadonlyProvider(new RealFSProvider(this.options.runnerDirectory)),
           "/image-handoff": new RealFSProvider(imageHandoffDirectory),
+          "/compose-cache-handoff": new RealFSProvider(composeCacheHandoffDirectory),
         },
       },
       sessionLabel: "shared-image-builder",

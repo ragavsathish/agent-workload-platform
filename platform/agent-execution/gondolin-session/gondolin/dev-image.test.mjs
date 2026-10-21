@@ -14,8 +14,12 @@ const lock = JSON.parse(fs.readFileSync(
 ));
 const stackHook = fs.readFileSync(new URL("../../../../.pi/hooks/start-dev-stack.clj", import.meta.url), "utf8");
 const preloadBuilder = fs.readFileSync(new URL("./prepare-compose-cache.clj", import.meta.url), "utf8");
+const preloadImporter = fs.readFileSync(new URL("./import-compose-cache.clj", import.meta.url), "utf8");
 const composeLoader = fs.readFileSync(new URL("./dev-compose", import.meta.url), "utf8");
 const piExtension = fs.readFileSync(new URL("../pi-extension.ts", import.meta.url), "utf8");
+const builderDockerfile = fs.readFileSync(new URL("../image-builder/Dockerfile", import.meta.url), "utf8");
+const builderManager = fs.readFileSync(new URL("../image-builder/manager.ts", import.meta.url), "utf8");
+const cacheWorkflow = fs.readFileSync(new URL("../../../../.gitea/workflows/prepare-compose-image-cache.yml", import.meta.url), "utf8");
 
 test("dev image Playwright version matches the client lockfile", () => {
   const pinned = dockerfile.match(/^ARG CLIENT_PLAYWRIGHT_VERSION=(\S+)$/m)?.[1];
@@ -60,4 +64,17 @@ test("Compose image preloads use the K3s agent/images folder convention", () => 
   assert.match(piExtension, /"\/image-store"/);
   assert.doesNotMatch(dockerfile, /zstd/);
   assert.match(stackHook, /gondolin-preload:/);
+});
+
+test("Gitea cache workflow writes a checksummed handoff for host promotion", () => {
+  assert.match(cacheWorkflow, /workflow_dispatch:/);
+  assert.match(cacheWorkflow, /runs-on: gondolin-builder/);
+  assert.match(cacheWorkflow, /skip-build-services/);
+  assert.match(cacheWorkflow, /\/compose-cache-handoff/);
+  assert.match(builderManager, /gondolin-compose-cache-handoff/);
+  assert.match(builderManager, /"\/compose-cache-handoff"/);
+  assert.match(builderDockerfile, /docker\/compose\/releases\/download/);
+  assert.match(builderDockerfile, /babashka\/babashka\/releases\/download/);
+  assert.match(preloadImporter, /sha256-file/);
+  assert.match(preloadImporter, /Import.*shared image archives/);
 });

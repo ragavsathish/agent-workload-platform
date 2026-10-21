@@ -1,0 +1,58 @@
+name: Prepare Compose image cache
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_revision:
+        description: Immutable Git revision containing the Compose file
+        required: true
+        type: string
+      compose_file:
+        description: Repository-relative Compose file
+        required: false
+        default: products/voice-agent/deploy/compose.yml
+        type: string
+
+jobs:
+  prepare:
+    runs-on: gondolin-builder
+    timeout-minutes: 90
+    steps:
+      - name: Check out the requested revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ inputs.source_revision }}
+          submodules: recursive
+      - name: Export shareable Compose images to the host handoff
+        env:
+          COMPOSE_CACHE_COMPOSE_FILE: ${{ inputs.compose_file }}
+          COMPOSE_CACHE_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -eu
+          case "$COMPOSE_CACHE_COMPOSE_FILE" in
+            ""|/*|../*|*/../*|*/..) echo "Compose path must stay inside the checked-out repository" >&2; exit 1 ;;
+          esac
+          workspace=$(pwd -P)
+          compose_path=$(realpath "$workspace/$COMPOSE_CACHE_COMPOSE_FILE")
+          case "$compose_path" in
+            "$workspace"/*) ;;
+            *) echo "Compose path escapes the checked-out repository" >&2; exit 1 ;;
+          esac
+          test -f "$compose_path"
+          revision=$(git rev-parse HEAD)
+          case "$(uname -m)" in
+            aarch64|x86_64) arch=$(uname -m) ;;
+            *) echo "Unsupported builder architecture: $(uname -m)" >&2; exit 1 ;;
+          esac
+          handoff_root="/compose-cache-handoff/${revision}-${arch}-${COMPOSE_CACHE_RUN_ID}"
+          staging="${handoff_root}.partial"
+          test ! -e "$handoff_root"
+          rm -rf "$staging"
+          mkdir -p "$staging"
+          bb "$workspace/platform/agent-execution/gondolin-session/gondolin/prepare-compose-cache.clj" \
+            "$compose_path" "$staging" "$staging" skip-build-services
+          cache_id=$(cat "$staging/cache-id")
+          final="${handoff_root}-${cache_id}"
+          test ! -e "$final"
+          mv "$staging" "$final"
+          echo "Compose cache handoff ready: $final"

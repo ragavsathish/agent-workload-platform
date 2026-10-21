@@ -172,13 +172,19 @@
   (run-command (into ["dev-compose"] args) {:env environment}))
 
 (defn validate-preload! [services index]
-  (doseq [service services]
+  (let [configured (set services)
+        cached (->> (get index "services") keys sort vec)]
+    (when (empty? cached)
+      (throw (ex-info "image preload index has no cached services" {})))
+    (doseq [service cached]
+      (when-not (contains? configured service)
+        (throw (ex-info (str "image preload references unknown Compose service " service) {})))
     (let [{image "image" archive "archive" checksum "sha256"} (get-in index ["services" service])]
       (when-not (and (string? image) (re-matches #"gondolin-preload:[a-f0-9]{24}" image)
                      (string? archive) (re-matches #"[a-f0-9]{24}\.tar" archive)
                      (string? checksum) (re-matches #"[a-f0-9]{64}" checksum))
-        (throw (ex-info (str "image preload has no valid " service " entry") {})))))
-  services)
+        (throw (ex-info (str "image preload has no valid " service " entry") {}))))
+    cached))
 
 (defn wait-bootstrap! [environment]
   (let [deadline (+ (System/currentTimeMillis) 120000)]
@@ -210,9 +216,9 @@
                                       {:env environment})
                          (str/split-lines)
                          (->> (remove str/blank?) vec))]
-        (validate-preload! services index)
-        (let [compose-environment (assoc environment "COMPOSE_CACHE_SERVICES"
-                                         (str/join "," services))
+        (let [preload-services (validate-preload! services index)
+              compose-environment (assoc environment "COMPOSE_CACHE_SERVICES"
+                                         (str/join "," preload-services))
               base-services (filter (set services)
                                     ["postgres" "s3mock-init" "s3mock" "oxigraph-init" "oxigraph"
                                      "gitea" "habitat" "fluent-bit" "otel-lgtm"])]
