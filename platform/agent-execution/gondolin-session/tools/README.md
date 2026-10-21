@@ -1,5 +1,20 @@
 # Gondolin harness tools
 
+`check-pi-vm.sh` is the deterministic, non-LLM Pi VM check. From
+the repository root, run `make gondolin-check-pi-vm` with Bash and `jq` on
+the host. Override `GONDOLIN_ONBOARDING_IMAGE`, `GONDOLIN_DEV_IMAGE_CACHE`,
+or `GONDOLIN_DEV_IMAGE_STORE` when needed. The gate
+clones a private Git checkout, launches the real Pi CLI in RPC mode, and sends
+Pi `bash` commands through the Gondolin extension. The session-start hook
+starts and checks the default dev Compose stack. The gate checks that Pi Bash
+reaches Linux and writes through the workspace mount; it then closes Pi,
+reopens the same session, checks the workspace and guest disk, and explicitly
+disposes the checkpoint. Its private JSON result is under
+`artifacts/benchmarks/`. This proves Pi's user Bash routing, not a
+model-issued tool call or an autonomous agent task. Since RPC Bash alone does
+not create a Pi transcript, the gate writes Pi's standard session header
+before shutdown so the checkpoint can be saved and resumed.
+
 `oracle.clj` is the Patrol trace and OTEL oracle used by the Compose benchmark
 harness. It runs inside the VM, after Patrol has written `build/patrol-latest`.
 
