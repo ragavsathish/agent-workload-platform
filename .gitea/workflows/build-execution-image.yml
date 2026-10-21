@@ -32,4 +32,4 @@ jobs:
           ARTIFACT_VERSION: ${{ inputs.artifact_version }}
           IMAGE_CONFIG: ${{ inputs.image_config }}
           IMAGE_BASE_PULL_TOKEN: ${{ secrets.IMAGE_BASE_PULL_TOKEN }}
-        run: node /runner/dist/image-builder/workflow.js
+        run: /usr/local/bin/gondolin-oci image build --via-api

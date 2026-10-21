@@ -7,7 +7,6 @@ import { configureTelemetry } from "@agent-workload-platform/otel";
 
 import {
   createHttpHooks,
-  ReadonlyProvider,
   RealFSProvider,
   VM,
   VmCheckpoint,
@@ -147,7 +146,6 @@ type BuilderManagerOptions = {
   imagePath: string;
   otelEndpoint: string;
   registrationToken: string;
-  runnerDirectory: string;
 };
 
 export class BuilderManager {
@@ -158,7 +156,7 @@ export class BuilderManager {
   constructor(private readonly options: BuilderManagerOptions) {}
 
   async start(): Promise<void> {
-    const imageHandoffDirectory = path.join(path.dirname(this.options.runnerDirectory), "gondolin-image-handoff");
+    const imageHandoffDirectory = path.join(path.dirname(this.options.checkpointPath), "gondolin-image-handoff");
     fs.mkdirSync(imageHandoffDirectory, { recursive: true, mode: 0o700 });
     const dockerJobApiToken = process.env.GONDOLIN_DOCKER_JOB_API_TOKEN;
     if (!dockerJobApiToken) throw new Error("GONDOLIN_DOCKER_JOB_API_TOKEN is required to bridge the host Docker job API");
@@ -192,7 +190,6 @@ export class BuilderManager {
       },
       vfs: {
         mounts: {
-          "/runner": new ReadonlyProvider(new RealFSProvider(this.options.runnerDirectory)),
           "/image-handoff": new RealFSProvider(imageHandoffDirectory),
         },
       },
@@ -276,7 +273,6 @@ async function main() {
     imagePath: required("GONDOLIN_BUILDER_ASSETS"),
     otelEndpoint: required("OTEL_EXPORTER_OTLP_ENDPOINT"),
     registrationToken: required("GITEA_RUNNER_REGISTRATION_TOKEN"),
-    runnerDirectory: fs.realpathSync(required("GONDOLIN_RUNNER_DIR")),
   });
   const telemetry = configureTelemetry("pipecat-image-builder");
   let stopPromise: Promise<void> | undefined;

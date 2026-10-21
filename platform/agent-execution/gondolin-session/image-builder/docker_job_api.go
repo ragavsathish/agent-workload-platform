@@ -1029,7 +1029,11 @@ func main() {
 		var err error
 		switch args[1] {
 		case "build":
-			err = runImageBuild(args[2:], os.Stdout)
+			if len(args) > 2 && args[2] == "--via-api" {
+				err = runImageBuildViaAPI(args[3:], os.Stdout)
+			} else {
+				err = runImageBuild(args[2:], os.Stdout)
+			}
 		case "export":
 			err = runImageExport(args[2:], os.Stdout)
 		default:
@@ -1045,7 +1049,7 @@ func main() {
 		args = args[1:]
 	}
 	if len(args) != 0 {
-		fmt.Fprintln(os.Stderr, "usage: gondolin-oci [serve | image build <manifest.json> <context.tar> <revision> <arch> | image export <image-ref> <archive.tar> | compose pull <compose-config.json> <revision> <arch> <run-id> [<preload-root> <shared-store-root>] | compose pull --via-api <compose-config.json|-> <run-id> | compose import <handoff-root> <preload-root> <shared-store-root>]")
+		fmt.Fprintln(os.Stderr, "usage: gondolin-oci [serve | image build --via-api | image build <manifest.json> <context.tar> <revision> <arch> | image export <image-ref> <archive.tar> | compose pull <compose-config.json> <revision> <arch> <run-id> [<preload-root> <shared-store-root>] | compose pull --via-api <compose-config.json|-> <run-id> | compose import <handoff-root> <preload-root> <shared-store-root>]")
 		os.Exit(2)
 	}
 	serveDockerJobAPI()

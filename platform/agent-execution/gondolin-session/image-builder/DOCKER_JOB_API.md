@@ -97,8 +97,10 @@ defaults to `~/.cache/gondolin/compose-cache-handoff`; override it with
 `GONDOLIN_COMPOSE_CACHE_HANDOFF`. Import a workflow result with
 `make gondolin-dev-cache-import GONDOLIN_DEV_CACHE_HANDOFF=<reported-path>`.
 
-The image workflow packages only `build.context`, then submits it to the host
-API through the authenticated `compose-cache.local:18080` HTTP hook. The image
+The image workflow calls `gondolin-oci image build --via-api`. The CLI checks
+the requested artifact version against the checked-out Git inputs, packages
+only `build.context`, then submits it to the host API through the authenticated
+`compose-cache.local:18080` HTTP hook. The image
 tar is written to the shared image handoff folder as
 `/image-handoff/<artifact-version>.tar`; the build workflow does not push the
 image or upload a result package to Gitea. Set

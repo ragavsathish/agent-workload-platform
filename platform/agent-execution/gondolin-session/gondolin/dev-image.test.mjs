@@ -18,7 +18,8 @@ const composeLoader = fs.readFileSync(new URL("./dev-compose", import.meta.url),
 const piExtension = fs.readFileSync(new URL("../pi-extension.ts", import.meta.url), "utf8");
 const builderDockerfile = fs.readFileSync(new URL("../image-builder/Dockerfile", import.meta.url), "utf8");
 const builderManager = fs.readFileSync(new URL("../image-builder/manager.ts", import.meta.url), "utf8");
-const builderWorkflow = fs.readFileSync(new URL("../image-builder/workflow.ts", import.meta.url), "utf8");
+const builderWorkflow = fs.readFileSync(new URL("../image-builder/image_build_api.go", import.meta.url), "utf8");
+const imageBuildWorkflow = fs.readFileSync(new URL("../../../../.gitea/workflows/build-execution-image.yml", import.meta.url), "utf8");
 const builderInstaller = fs.readFileSync(new URL("../image-builder/installer.ts", import.meta.url), "utf8");
 const dockerJobAPI = fs.readFileSync(new URL("../image-builder/docker_job_api.go", import.meta.url), "utf8");
 const dockerJobAPIDockerfile = fs.readFileSync(new URL("../image-builder/Dockerfile.api", import.meta.url), "utf8");
@@ -95,9 +96,11 @@ test("Gitea image builds use the host Docker API and local tar handoff", () => {
   assert.match(builderManager, /class DockerJobHostService/);
   assert.doesNotMatch(builderManager, /dockerd|docker info/);
   assert.doesNotMatch(builderDockerfile, /^\s*(?:containerd|docker)=/m);
-  assert.match(builderWorkflow, /hostImageBuild/);
+  assert.match(builderWorkflow, /runImageBuildViaAPI/);
   assert.match(builderWorkflow, /IMAGE_BASE_PULL_TOKEN/);
   assert.doesNotMatch(builderWorkflow, /docker push|api\/packages|registryRef/);
+  assert.match(imageBuildWorkflow, /gondolin-oci image build --via-api/);
+  assert.doesNotMatch(imageBuildWorkflow, /workflow\.js/);
   assert.doesNotMatch(builderInstaller, /GITEA_BUILDER_TOKEN|docker.*(?:login|pull)|registry-image/);
   assert.match(dockerJobAPI, /GONDOLIN_IMAGE_BUILDER_HANDOFF/);
   assert.match(dockerJobAPI, /usage: gondolin-oci .*compose pull/);
