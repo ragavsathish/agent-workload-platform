@@ -16,7 +16,7 @@
     "docker": true,
     "vmm": "krun",
     "disk": "64G",
-    "sessionStartHook": ".pi/hooks/start-dev-stack.mjs"
+    "sessionStartHook": ".pi/hooks/start-dev-stack.clj"
   },
   "policy": ".pi/gondolin-policy.json"
 }

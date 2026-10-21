@@ -36,10 +36,17 @@ coding/Playwright operations to the guest, following [Pi's extension lifecycle](
 
 ## Shared image bytes
 
-The optional [Compose cache preparer](../../platform/agent-execution/gondolin-session/gondolin/prepare-compose-cache.mjs)
-exports per-image archives and a no-pull override without building source. A trusted path
-in `GONDOLIN_DEV_IMAGE_CACHE` is mounted read-only at `/image-cache`. `dev-compose`
-loads only images named in `COMPOSE_CACHE_SERVICES` into each VM's private
+The optional [Compose cache preparer](../../platform/agent-execution/gondolin-session/gondolin/prepare-compose-cache.clj)
+exports per-image archives and a no-pull override without building source. The
+path in `GONDOLIN_DEV_IMAGE_CACHE` is mounted read-only at `/image-cache` and
+contains the repository's Compose index and override. Set
+`GONDOLIN_DEV_IMAGE_STORE` to the shared store root, mounted read-only at
+`/image-store`. Compressed archives live at `agent/images` in that store,
+following K3s's preload directory convention. Each repository keeps its own
+index and override while all VMs mount the same archive bytes. Pruning one
+repository's index cannot remove archives used by another. Checksums in the
+index are verified before loading.
+`dev-compose` loads only images named in `COMPOSE_CACHE_SERVICES` into each VM's private
 Docker data root, then uses the worktree-selected `COMPOSE_FILE` plus the
 override. The image archives are shared;
 the loaded store and all mutable runtime state are not. Worktree `.env` files

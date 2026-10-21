@@ -71,7 +71,8 @@ tests caused pointer actions to miss MCP App controls.
 
 Optionally run `make gondolin-dev-cache` from the repository root to export its Compose
 images once. Set `GONDOLIN_DEV_IMAGE_CACHE` to the resulting
-`artifacts/gondolin-dev-images/<architecture>` directory before starting Pi.
+`artifacts/gondolin-dev-images/<architecture>` directory and
+`GONDOLIN_DEV_IMAGE_STORE` to `~/.cache/gondolin/<architecture>` before starting Pi.
 The image archives are shared read-only; Docker volumes, networks, ports, and
 runtime layers remain private to each VM. For another worktree or project,
 prepare its own cache from its Compose file. Inside the guest, set `COMPOSE_FILE`

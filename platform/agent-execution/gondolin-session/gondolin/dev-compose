@@ -1,13 +1,18 @@
 #!/bin/sh
 set -eu
 
-cache=/image-cache
+preload=/image-cache
+image_store=/image-store/agent/images
 if [ -z "${COMPOSE_FILE:-}" ]; then
   echo "Set COMPOSE_FILE to the worktree's Compose file(s) before using dev-compose." >&2
   exit 1
 fi
-if [ ! -r "$cache/index.json" ] || [ ! -r "$cache/compose.override.json" ]; then
+if [ ! -r "$preload/index.json" ] || [ ! -r "$preload/compose.override.json" ]; then
   echo "Shared Compose image cache is not mounted; set GONDOLIN_DEV_IMAGE_CACHE for this Pi session." >&2
+  exit 1
+fi
+if [ ! -d "$image_store" ]; then
+  echo "Shared image store is not mounted; set GONDOLIN_DEV_IMAGE_STORE for this Pi session." >&2
   exit 1
 fi
 
@@ -16,16 +21,21 @@ if [ "${1:-}" != config ]; then
     echo "Set COMPOSE_CACHE_SERVICES to the service images needed for this command." >&2
     exit 1
   fi
-  archives=$(node /usr/local/libexec/select-compose-images.mjs \
-    "$cache/index.json" "$COMPOSE_CACHE_SERVICES")
-  printf '%s\n' "$archives" | while IFS= read -r archive; do
-    marker="/var/lib/docker/.gondolin-cache-${archive%.tar}"
+  archives=$(bb /usr/local/libexec/select-compose-images.clj \
+    "$preload/index.json" "$COMPOSE_CACHE_SERVICES")
+  printf '%s\n' "$archives" | while IFS="$(printf '\t')" read -r archive checksum; do
+    archive_path="$image_store/$archive"
+    marker="/var/lib/docker/.gondolin-preload-${archive%.tar.zst}"
     if [ ! -e "$marker" ]; then
-      docker load --input "$cache/images/$archive"
+      printf '%s  %s\n' "$checksum" "$archive_path" | sha256sum --check --status || {
+        echo "Image preload checksum mismatch: $archive" >&2
+        exit 1
+      }
+      zstd --quiet --decompress --stdout "$archive_path" | docker load
       touch "$marker"
     fi
   done
 fi
 
-export COMPOSE_FILE="$COMPOSE_FILE:$cache/compose.override.json"
+export COMPOSE_FILE="$COMPOSE_FILE:$preload/compose.override.json"
 exec docker compose "$@"

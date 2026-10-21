@@ -25,7 +25,8 @@ GONDOLIN_DEV_ASSETS := artifacts/gondolin-dev/$(GONDOLIN_ARCH)
 GONDOLIN_DEV_CONFIG := platform/agent-execution/gondolin-session/gondolin/dev.$(GONDOLIN_ARCH).json
 GONDOLIN_DEV_SERVICE := dev-runtime-$(GONDOLIN_PROFILE)
 GONDOLIN_DEV_IMAGE_CACHE := artifacts/gondolin-dev-images/$(GONDOLIN_ARCH)
-.PHONY: help FORCE $(VOICE_AGENT_TARGETS) $(WASM_TARGETS) gondolin-session-build gondolin-builder-build gondolin-dev-build gondolin-dev-cache
+GONDOLIN_DEV_IMAGE_STORE ?= $(HOME)/.cache/gondolin/$(GONDOLIN_ARCH)
+.PHONY: help FORCE $(VOICE_AGENT_TARGETS) $(WASM_TARGETS) gondolin-session-build gondolin-builder-build gondolin-dev-build gondolin-dev-cache require-babashka
 
 help:
 	@printf '%s\n' \
@@ -69,5 +70,8 @@ gondolin-dev-build:
 	mkdir -p $(GONDOLIN_DEV_ASSETS)
 	$(GONDOLIN) build --config $(GONDOLIN_DEV_CONFIG) --output $(GONDOLIN_DEV_ASSETS)
 
-gondolin-dev-cache:
-	node platform/agent-execution/gondolin-session/gondolin/prepare-compose-cache.mjs products/voice-agent/deploy/compose.yml $(GONDOLIN_DEV_IMAGE_CACHE)
+gondolin-dev-cache: require-babashka
+	bb platform/agent-execution/gondolin-session/gondolin/prepare-compose-cache.clj products/voice-agent/deploy/compose.yml $(GONDOLIN_DEV_IMAGE_CACHE) $(GONDOLIN_DEV_IMAGE_STORE)
+
+require-babashka:
+	@command -v bb >/dev/null || { echo "Install Babashka (bb) to run the Clojure tooling." >&2; exit 1; }

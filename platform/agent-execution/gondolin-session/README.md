@@ -54,18 +54,25 @@ its browser tests and enables Playwright's HTTPS certificate bypass only in
 the isolated task VM, where Chromium does not trust the development egress
 certificate used for Flutter's fallback font CDN.
 
-`GONDOLIN_DEV_IMAGE_CACHE` optionally points to a trusted host directory of
-pre-exported Compose images. It is mounted read-only at `/image-cache` in each
-VM. The source repository's `make gondolin-dev-cache` prepares the Voice Agent
+`GONDOLIN_DEV_IMAGE_CACHE` optionally points to a trusted host directory with
+the per-repository Compose index and override. Set `GONDOLIN_DEV_IMAGE_STORE`
+to the shared host store; these mount read-only at `/image-cache` and
+`/image-store` in each VM. The source repository's `make gondolin-dev-cache` prepares the Voice Agent
 image set as one example; other repositories can use
-`gondolin/prepare-compose-cache.mjs <compose.yml> <cache-directory>`. In the
+`gondolin/prepare-compose-cache.clj <compose.yml> <cache-directory> <shared-store-root>`
+with Babashka, Docker, and zstd installed on the host. The per-repository index
+and override stay separate while archives share a content store; each index
+records a SHA-256 checksum. In the
 guest, set `COMPOSE_FILE` to that worktree's Compose path and
 `COMPOSE_CACHE_SERVICES` to the needed service names, then use `dev-compose`
 to load only those cached image tags and apply its no-pull override. The
-image bytes are shared; no Docker data root, named volume, or port is shared.
-For this repository, `.pi/gondolin.json` selects `.pi/hooks/start-dev-stack.mjs`
-as a Pi `session_start` hook. After the private Docker daemon starts, the hook
-uses `dev-compose` to load the cached images and layer `.pi/compose.dev.yml`
+compressed `.tar.zst` archives use the `agent/images` layout in the shared store
+and are preloaded on demand into each VM's private Docker store; image bytes are shared, but no Docker data root,
+named volume, or port is shared.
+For this repository, `.pi/gondolin.json` selects `.pi/hooks/start-dev-stack.clj`
+as a Pi `session_start` hook. The development image includes a checksum-pinned
+Babashka runtime for this Clojure hook. After the private Docker daemon starts,
+the hook uses `dev-compose` to load the cached images and layer `.pi/compose.dev.yml`
 over the existing `products/voice-agent/deploy/compose.yml`. The Pi override
 selects only task-VM dependencies, replaces host networking and secrets with
 guest-local settings, and retains the base image pins. It starts Grafana/OTel/Prometheus, S3Mock, Oxigraph,

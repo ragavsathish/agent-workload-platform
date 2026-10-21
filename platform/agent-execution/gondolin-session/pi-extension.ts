@@ -344,6 +344,12 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
               readonly: true,
             } }
             : {}),
+          ...(devSession && process.env.GONDOLIN_DEV_IMAGE_STORE
+            ? { "/image-store": {
+              hostPath: path.resolve(process.env.GONDOLIN_DEV_IMAGE_STORE),
+              readonly: true,
+            } }
+            : {}),
           ...(configured.skillsDirectory
             ? { "/skills": { hostPath: configured.skillsDirectory, readonly: true } }
             : {}),
@@ -368,7 +374,12 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
         startupCommands: devSession ? [
           ["/usr/local/bin/start-dev-docker"],
           ...(configured.development.sessionStartHook
-            ? [["/usr/local/bin/node", configured.development.sessionStartHook]]
+            ? [[
+                configured.development.sessionStartHook.endsWith(".clj")
+                  ? "/usr/local/bin/bb"
+                  : "/usr/local/bin/node",
+                configured.development.sessionStartHook,
+              ]]
             : []),
         ] : undefined,
         sessionLabel: devSession ? "pi-dev-worktree" : "pi-agent-workload",
