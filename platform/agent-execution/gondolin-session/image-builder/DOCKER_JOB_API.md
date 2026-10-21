@@ -70,7 +70,9 @@ removed.
 ### `GET /v1/jobs/{id}`
 
 Read job status and metadata. Status values are `awaiting-context`, `queued`,
-`running`, `succeeded`, and `failed`.
+`running`, `succeeded`, and `failed`. Image-build status includes a bounded
+`buildLog` tail and `buildLogOffset`; the VM CLI prints only new Buildx output
+into the Gitea workflow log while polling.
 
 ## Compose cache jobs
 

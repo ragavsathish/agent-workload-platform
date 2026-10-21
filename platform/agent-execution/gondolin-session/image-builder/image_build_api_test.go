@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +12,42 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestBuildLogStreamsNewOutputWithoutRepeatingIt(t *testing.T) {
+	h := newTestHandler(t)
+	const jobID = "123e4567-e89b-12d3-a456-426614174000"
+	h.jobs.byID[jobID] = Job{ID: jobID, Type: "image-build", Status: "running"}
+	writer := &buildLogWriter{owner: h, jobID: jobID}
+	var output bytes.Buffer
+	seen := int64(0)
+	for _, chunk := range []string{"#1 FROM base\n", "#2 RUN install\n"} {
+		if _, err := writer.Write([]byte(chunk)); err != nil {
+			t.Fatal(err)
+		}
+		response := callJSON(t, h, http.MethodGet, "/v1/jobs/"+jobID, nil, "Bearer "+testToken)
+		var job Job
+		if err := json.Unmarshal(response.Body.Bytes(), &job); err != nil {
+			t.Fatal(err)
+		}
+		seen = printNewBuildLog(job, seen, &output)
+	}
+	if got := output.String(); got != "#1 FROM base\n#2 RUN install\n" {
+		t.Fatalf("unexpected streamed output: %q", got)
+	}
+	if seen != int64(output.Len()) {
+		t.Fatalf("wrong log offset: %d", seen)
+	}
+	if _, err := writer.Write(bytes.Repeat([]byte("x"), maxBuildLogBytes+1)); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.jobs.byID[jobID].BuildLog) != maxBuildLogBytes {
+		t.Fatal("build log exceeded its bound")
+	}
+	var truncated bytes.Buffer
+	if got := printNewBuildLog(h.jobs.byID[jobID], 0, &truncated); got != h.jobs.byID[jobID].BuildLogOffset || !strings.HasPrefix(truncated.String(), "[Buildx output truncated") {
+		t.Fatal("truncated build output was not reported to the client")
+	}
+}
 
 func TestImageWorkflowPlanPreservesTypeScriptArtifactVersion(t *testing.T) {
 	root := t.TempDir()

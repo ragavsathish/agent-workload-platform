@@ -26,8 +26,9 @@ import (
 )
 
 const (
-	maxJSONBytes    = 4 << 20
-	maxContextBytes = 1 << 30
+	maxJSONBytes     = 4 << 20
+	maxContextBytes  = 1 << 30
+	maxBuildLogBytes = 128 << 10
 )
 
 var (
@@ -78,22 +79,52 @@ type ContextInfo struct {
 }
 
 type Job struct {
-	ID        string       `json:"id"`
-	Type      string       `json:"type"`
-	RunID     string       `json:"runId"`
-	Revision  string       `json:"revision"`
-	Arch      string       `json:"arch"`
-	Status    string       `json:"status"`
-	CreatedAt time.Time    `json:"createdAt"`
-	UpdatedAt *time.Time   `json:"updatedAt,omitempty"`
-	Context   *ContextInfo `json:"context,omitempty"`
-	Error     string       `json:"error,omitempty"`
-	Handoff   string       `json:"handoff,omitempty"`
-	CacheID   string       `json:"cacheId,omitempty"`
-	Images    int          `json:"images,omitempty"`
-	Services  int          `json:"services,omitempty"`
-	Result    *BuildResult `json:"result,omitempty"`
-	request   JobRequest
+	ID             string       `json:"id"`
+	Type           string       `json:"type"`
+	RunID          string       `json:"runId"`
+	Revision       string       `json:"revision"`
+	Arch           string       `json:"arch"`
+	Status         string       `json:"status"`
+	CreatedAt      time.Time    `json:"createdAt"`
+	UpdatedAt      *time.Time   `json:"updatedAt,omitempty"`
+	Context        *ContextInfo `json:"context,omitempty"`
+	Error          string       `json:"error,omitempty"`
+	Handoff        string       `json:"handoff,omitempty"`
+	CacheID        string       `json:"cacheId,omitempty"`
+	Images         int          `json:"images,omitempty"`
+	Services       int          `json:"services,omitempty"`
+	Result         *BuildResult `json:"result,omitempty"`
+	BuildLog       string       `json:"buildLog,omitempty"`
+	BuildLogOffset int64        `json:"buildLogOffset,omitempty"`
+	request        JobRequest
+}
+
+// Buildx writes from stdout and stderr on separate goroutines. Keep a bounded
+// tail in the job status so the VM client can show progress while the build runs.
+type buildLogWriter struct {
+	mu     sync.Mutex
+	owner  *Handler
+	jobID  string
+	tail   string
+	offset int64
+}
+
+func (w *buildLogWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.offset += int64(len(p))
+	w.tail += string(p)
+	if len(w.tail) > maxBuildLogBytes {
+		w.tail = w.tail[len(w.tail)-maxBuildLogBytes:]
+	}
+	if w.jobID != "" {
+		w.owner.jobs.mu.Lock()
+		job := w.owner.jobs.byID[w.jobID]
+		job.BuildLog, job.BuildLogOffset = w.tail, w.offset
+		w.owner.jobs.byID[w.jobID] = job
+		w.owner.jobs.mu.Unlock()
+	}
+	return len(p), nil
 }
 
 type jobStore struct {
@@ -707,9 +738,9 @@ func (h *Handler) buildImage(job Job) (*BuildResult, error) {
 	command := exec.CommandContext(context.Background(), "docker", args...)
 	command.Stdin = contextFile
 	command.Env = append(os.Environ(), "DOCKER_HOST=unix:///var/run/docker.sock")
-	var buildOutput strings.Builder
-	command.Stdout = &buildOutput
-	command.Stderr = &buildOutput
+	buildOutput := &buildLogWriter{owner: h, jobID: job.ID}
+	command.Stdout = buildOutput
+	command.Stderr = buildOutput
 	if manifest.BaseImagePullToken != "" {
 		registry := "127.0.0.1:3001"
 		configDir, err := os.MkdirTemp("", "gondolin-docker-config-")
@@ -730,7 +761,7 @@ func (h *Handler) buildImage(job Job) (*BuildResult, error) {
 	err = command.Run()
 	contextFile.Close()
 	if err != nil {
-		return nil, fmt.Errorf("Docker Buildx build failed: %w: %s", err, strings.TrimSpace(buildOutput.String()))
+		return nil, fmt.Errorf("Docker Buildx build failed: %w: %s", err, strings.TrimSpace(buildOutput.tail))
 	}
 	if err := h.tagImage(localTag, manifest.ImageRef); err != nil {
 		return nil, fmt.Errorf("tag built image: %w", err)
