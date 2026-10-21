@@ -27,6 +27,9 @@ jobs:
         env:
           COMPOSE_CACHE_COMPOSE_FILE: ${{ inputs.compose_file }}
           COMPOSE_CACHE_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          # Required only for `docker compose config`; this job never starts the stack.
+          ORCHESTRATOR_ALLOWED_WORKSPACES: /workspace
+          VOICE_DEFAULT_WORKSPACE: /workspace
         run: |
           set -eu
           export PATH="/usr/local/bin:/usr/local/sbin:$PATH"
