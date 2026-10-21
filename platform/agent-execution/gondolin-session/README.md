@@ -77,7 +77,11 @@ promotion does not require Babashka on the host. The Gitea builder VM creates
 the client and diagnostics web assets, then submits each Compose `build:`
 service to the Go host API for an image build against the committed source.
 The cache job verifies the resulting host image IDs before exporting those
-images alongside the pulled images. Repository indexes and overrides stay separate while
+images alongside the pulled images. This committed-revision cache supplies a
+baseline for full-stack startup and Patrol benchmarks. Pi development builds
+edited client source inside its own VM with the tools in the development image;
+the default Pi stack starts dependency services and does not run voice-edge.
+Repository indexes and overrides stay separate while
 archives share a content store. In the
 guest, set `COMPOSE_FILE` to that worktree's Compose path and
 `COMPOSE_CACHE_SERVICES` to the needed service names, then use `dev-compose`

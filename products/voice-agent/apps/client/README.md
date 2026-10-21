@@ -57,7 +57,9 @@ toolchain image only on a cache miss, then Pi starts one VM for that task
 session with its worktree mounted at `/workspace`. Run `npm ci`, `npm run build`,
 browser tests, and the mock server through Pi's Gondolin tools **inside that
 VM**. Later sessions reuse the image but get fresh VMs and private Docker
-state. Neither the host nor Gitea builds a per-commit app image.
+state. Build edited client code in the Pi VM. The separate Gitea Compose-cache
+job builds application images from a committed revision for full-stack
+benchmark baselines; those images do not replace a Pi session's source build.
 Use a clean worktree: macOS `node_modules` contains native binaries such as
 `esbuild` that fail in Linux. The durable task's materialized Git checkout is
 clean, and `npm ci` installs Linux dependencies there without touching the
