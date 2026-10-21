@@ -54,7 +54,7 @@ jobs:
           esac
           docker compose -f "$compose_path" config --format json > /tmp/compose-config.json
           npm --prefix "$workspace/products/voice-agent/apps/client" ci --prefer-offline --no-audit --no-fund
-          pnpm --dir "$workspace/vendor/excalidraw-mcp" install --frozen-lockfile --ignore-scripts --ignore-workspace --config.node-linker=isolated
+          pnpm --dir "$workspace/vendor/excalidraw-mcp" install --frozen-lockfile --ignore-scripts --ignore-workspace --config.node-linker=isolated --network-concurrency=4
           npm --prefix "$workspace/products/voice-agent/apps/client" run build
           npm --prefix "$workspace/products/voice-agent/apps/diagnostics" ci --prefer-offline --no-audit --no-fund
           npm --prefix "$workspace/products/voice-agent/apps/diagnostics" run build
