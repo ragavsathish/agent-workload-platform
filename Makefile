@@ -29,7 +29,7 @@ GONDOLIN_DEV_IMAGE_STORE ?= $(HOME)/.cache/gondolin/$(GONDOLIN_ARCH)
 GONDOLIN_DEV_CACHE_HANDOFF ?=
 GONDOLIN_COMPOSE_CACHE_HANDOFF ?= $(HOME)/.cache/gondolin/compose-cache-handoff
 GONDOLIN_IMAGE_BUILDER_HANDOFF ?= $(HOME)/Library/Application Support/PipecatEdge/gondolin-image-handoff
-.PHONY: help FORCE $(VOICE_AGENT_TARGETS) $(WASM_TARGETS) gondolin-session-build gondolin-builder-build gondolin-dev-build gondolin-dev-cache gondolin-dev-cache-import gondolin-docker-job-api-up gondolin-docker-job-api-down gondolin-docker-job-api-test require-babashka
+.PHONY: help FORCE $(VOICE_AGENT_TARGETS) $(WASM_TARGETS) gondolin-session-build gondolin-builder-build gondolin-dev-build gondolin-dev-cache gondolin-dev-cache-import gondolin-docker-job-api-up gondolin-docker-job-api-down gondolin-docker-job-api-test
 
 help:
 	@printf '%s\n' \
@@ -75,12 +75,31 @@ gondolin-dev-build:
 	mkdir -p $(GONDOLIN_DEV_ASSETS)
 	$(GONDOLIN) build --config $(GONDOLIN_DEV_CONFIG) --output $(GONDOLIN_DEV_ASSETS)
 
-gondolin-dev-cache: require-babashka
-	bb platform/agent-execution/gondolin-session/gondolin/prepare-compose-cache.clj products/voice-agent/deploy/compose.yml $(GONDOLIN_DEV_IMAGE_CACHE) $(GONDOLIN_DEV_IMAGE_STORE)
+gondolin-dev-cache:
+	@set -eu; \
+	config=$$(mktemp); \
+	trap 'rm -f "$$config"' EXIT; \
+	docker compose -f products/voice-agent/deploy/compose.yml config --format json > "$$config"; \
+	revision=$$(git rev-parse HEAD); \
+	run_id=local-$$(date +%s); \
+	docker run --rm \
+		-v "$(CURDIR):/workspace" \
+		-v "$(HOME):/hosthome" \
+		-v "$(GONDOLIN_COMPOSE_CACHE_HANDOFF):/handoff" \
+		-v "$(GONDOLIN_DEV_IMAGE_STORE):/image-store" \
+		-v /var/run/docker.sock:/var/run/docker.sock \
+		-v "$$config:/compose.json:ro" \
+		-w /workspace/platform/agent-execution/gondolin-session/image-builder \
+		-e HOME=/hosthome \
+		-e DOCKER_HOST_SOCKET=/var/run/docker.sock \
+		-e GONDOLIN_COMPOSE_CACHE_HANDOFF=/handoff \
+		-e GONDOLIN_COMPOSE_CACHE_HOST_HANDOFF="$(GONDOLIN_COMPOSE_CACHE_HANDOFF)" \
+		golang:1.25-alpine go run . compose pull /compose.json "$$revision" "$(GONDOLIN_ARCH)" "$$run_id" \
+			/workspace/$(GONDOLIN_DEV_IMAGE_CACHE) /image-store
 
-gondolin-dev-cache-import: require-babashka
+gondolin-dev-cache-import:
 	@test -n "$(GONDOLIN_DEV_CACHE_HANDOFF)" || { echo "Set GONDOLIN_DEV_CACHE_HANDOFF to the completed Gitea handoff directory." >&2; exit 1; }
-	bb platform/agent-execution/gondolin-session/gondolin/import-compose-cache.clj "$(GONDOLIN_DEV_CACHE_HANDOFF)" "$(GONDOLIN_DEV_IMAGE_CACHE)" "$(GONDOLIN_DEV_IMAGE_STORE)"
+	docker run --rm -v "$(CURDIR):$(CURDIR)" -v "$(HOME):$(HOME)" -w "$(CURDIR)/platform/agent-execution/gondolin-session/image-builder" golang:1.25-alpine go run . compose import "$(abspath $(GONDOLIN_DEV_CACHE_HANDOFF))" "$(abspath $(GONDOLIN_DEV_IMAGE_CACHE))" "$(abspath $(GONDOLIN_DEV_IMAGE_STORE))"
 
 gondolin-docker-job-api-test:
 	docker run --rm -v "$(CURDIR)/platform/agent-execution/gondolin-session/image-builder:/src" -w /src golang:1.25-alpine go test ./...
@@ -95,6 +114,3 @@ gondolin-docker-job-api-down:
 	@test -n "$(GONDOLIN_DOCKER_JOB_API_TOKEN)" || { echo "Set GONDOLIN_DOCKER_JOB_API_TOKEN to stop the host API." >&2; exit 1; }
 	@GONDOLIN_DOCKER_JOB_API_TOKEN="$(GONDOLIN_DOCKER_JOB_API_TOKEN)" GONDOLIN_COMPOSE_CACHE_HANDOFF="$(GONDOLIN_COMPOSE_CACHE_HANDOFF)" GONDOLIN_IMAGE_BUILDER_HANDOFF="$(GONDOLIN_IMAGE_BUILDER_HANDOFF)" docker compose --profile host-api -f platform/agent-execution/gondolin-session/image-builder/compose.yaml stop docker-job-api
 	@GONDOLIN_DOCKER_JOB_API_TOKEN="$(GONDOLIN_DOCKER_JOB_API_TOKEN)" GONDOLIN_COMPOSE_CACHE_HANDOFF="$(GONDOLIN_COMPOSE_CACHE_HANDOFF)" GONDOLIN_IMAGE_BUILDER_HANDOFF="$(GONDOLIN_IMAGE_BUILDER_HANDOFF)" docker compose --profile host-api -f platform/agent-execution/gondolin-session/image-builder/compose.yaml rm -f docker-job-api
-
-require-babashka:
-	@command -v bb >/dev/null || { echo "Install Babashka (bb) to run the Clojure tooling." >&2; exit 1; }

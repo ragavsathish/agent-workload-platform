@@ -13,8 +13,7 @@ const lock = JSON.parse(fs.readFileSync(
   "utf8",
 ));
 const stackHook = fs.readFileSync(new URL("../../../../.pi/hooks/start-dev-stack.clj", import.meta.url), "utf8");
-const preloadBuilder = fs.readFileSync(new URL("./prepare-compose-cache.clj", import.meta.url), "utf8");
-const preloadImporter = fs.readFileSync(new URL("./import-compose-cache.clj", import.meta.url), "utf8");
+const preloadImporter = fs.readFileSync(new URL("../image-builder/compose_cache_import.go", import.meta.url), "utf8");
 const composeLoader = fs.readFileSync(new URL("./dev-compose", import.meta.url), "utf8");
 const piExtension = fs.readFileSync(new URL("../pi-extension.ts", import.meta.url), "utf8");
 const builderDockerfile = fs.readFileSync(new URL("../image-builder/Dockerfile", import.meta.url), "utf8");
@@ -22,6 +21,7 @@ const builderManager = fs.readFileSync(new URL("../image-builder/manager.ts", im
 const builderWorkflow = fs.readFileSync(new URL("../image-builder/workflow.ts", import.meta.url), "utf8");
 const builderInstaller = fs.readFileSync(new URL("../image-builder/installer.ts", import.meta.url), "utf8");
 const dockerJobAPI = fs.readFileSync(new URL("../image-builder/docker_job_api.go", import.meta.url), "utf8");
+const dockerJobAPIDockerfile = fs.readFileSync(new URL("../image-builder/Dockerfile.api", import.meta.url), "utf8");
 const cacheWorkflow = fs.readFileSync(new URL("../../../../.gitea/workflows/prepare-compose-image-cache.yml", import.meta.url), "utf8");
 
 test("dev image Playwright version matches the client lockfile", () => {
@@ -54,10 +54,10 @@ test("development image pins Babashka for the Clojure session-start hook", () =>
 });
 
 test("Compose image preloads use the K3s agent/images folder convention", () => {
-  assert.match(preloadBuilder, /\.resolve \(\.resolve preload-root "agent"\) "images"/);
-  assert.match(preloadBuilder, /gondolin-preload:/);
-  assert.match(preloadBuilder, /\.tar"/);
-  assert.match(preloadBuilder, /"sha256"/);
+  assert.match(dockerJobAPI, /filepath\.Join\(staging, "agent", "images"\)/);
+  assert.match(dockerJobAPI, /gondolin-preload:/);
+  assert.match(dockerJobAPI, /\.tar"/);
+  assert.match(preloadImporter, /json:"sha256"/);
   assert.match(composeLoader, /image_store=\/image-store\/agent\/images/);
   assert.match(composeLoader, /\$image_store\/\$archive/);
   assert.match(composeLoader, /sha256sum --check/);
@@ -78,12 +78,12 @@ test("Gitea cache workflow writes a checksummed handoff for host promotion", () 
   assert.match(builderManager, /class DockerJobHostService/);
   assert.match(builderManager, /GONDOLIN_DOCKER_JOB_API_URL/);
   assert.match(dockerJobAPI, /func \(h \*Handler\) pullImage/);
-  assert.match(dockerJobAPI, /func \(h \*Handler\) saveImage/);
+  assert.match(dockerJobAPI, /func \(h \*Handler\) exportImage/);
   assert.match(dockerJobAPI, /\/images\/create/);
   assert.match(dockerJobAPI, /\/images\/get/);
   assert.match(builderDockerfile, /docker\/compose\/releases\/download/);
   assert.doesNotMatch(builderDockerfile, /babashka\/babashka\/releases\/download/);
-  assert.match(preloadImporter, /sha256-file/);
+  assert.match(preloadImporter, /verifyComposeArchive/);
   assert.match(preloadImporter, /Import.*shared image archives/);
 });
 
@@ -96,4 +96,13 @@ test("Gitea image builds use the host Docker API and local tar handoff", () => {
   assert.doesNotMatch(builderWorkflow, /docker push|api\/packages|registryRef/);
   assert.doesNotMatch(builderInstaller, /GITEA_BUILDER_TOKEN|docker.*(?:login|pull)|registry-image/);
   assert.match(dockerJobAPI, /GONDOLIN_IMAGE_BUILDER_HANDOFF/);
+  assert.match(dockerJobAPI, /usage: gondolin-oci .*compose pull/);
+  assert.match(dockerJobAPIDockerfile, /out\/gondolin-oci/);
+  assert.match(dockerJobAPIDockerfile, /ENTRYPOINT \["\/usr\/local\/bin\/gondolin-oci", "serve"\]/);
+  assert.match(fs.readFileSync(new URL("../image-builder/compose_cache_import.go", import.meta.url), "utf8"),
+    /gondolin-oci compose import/);
+  const goCLI = fs.readFileSync(new URL("../image-builder/compose_cli.go", import.meta.url), "utf8");
+  assert.match(goCLI, /gondolin-oci compose pull/);
+  assert.match(goCLI, /gondolin-oci image build/);
+  assert.match(goCLI, /gondolin-oci image export/);
 });

@@ -1,7 +1,10 @@
 # Host Docker job API
 
-The Go service handles host-side Docker jobs for Gitea workflows. Compose cache
-jobs inspect, pull, tag, and export images through the Docker Engine HTTP API
+The `gondolin-oci serve` command runs the Go service for host-side Docker jobs
+from Gitea workflows. `gondolin-oci compose pull` prepares a Compose image
+handoff; `gondolin-oci image build` builds the runtime image, and
+`gondolin-oci image export` names the VM handoff operation explicitly. Compose
+cache jobs inspect, pull, tag, and export images through the Docker Engine HTTP API
 over the host Unix socket. Image builds use the host Docker Buildx CLI over that
 same socket so BuildKit can establish the build session. No Docker socket is
 exposed to the VM. Its container publishes the API on host
@@ -96,6 +99,15 @@ image or upload a result package to Gitea. Set
 `GONDOLIN_IMAGE_BUILDER_HANDOFF` to the same host directory used by the
 builder manager's `/image-handoff` mount. The current worker rejects local
 named build contexts; `build.dockerfile` must be inside `build.context`.
+
+The local CLI accepts a JSON-rendered Compose configuration:
+`gondolin-oci compose pull <compose-config.json> <revision> <arch> <run-id>`.
+It pulls missing service images, exports them into the Compose handoff, and
+prints the cache metadata. Import a completed Gitea handoff into the shared VM
+store with `gondolin-oci compose import <handoff> <preload-root> <shared-store>`.
+`gondolin-oci image build <manifest.json> <context.tar> <revision> <arch>` and
+`gondolin-oci image export <image-ref> <archive.tar>` are the direct host
+operations; the VM loads its archives with `docker load`.
 
 The Docker daemon performs the build on the host. The workflow rewrites private
 registry `ARG` defaults from the VM-only `gitea.local` name to the host's

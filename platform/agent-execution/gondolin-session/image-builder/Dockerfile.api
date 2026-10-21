@@ -1,10 +1,10 @@
 FROM golang:1.25-alpine AS build
 WORKDIR /src
-COPY go.mod docker_job_api.go ./
-RUN CGO_ENABLED=0 go build -o /out/docker-job-api .
+COPY go.mod *.go ./
+RUN CGO_ENABLED=0 go build -o /out/gondolin-oci .
 
 FROM alpine:3.23
 RUN apk add --no-cache ca-certificates docker-cli docker-cli-buildx
-COPY --from=build /out/docker-job-api /usr/local/bin/docker-job-api
+COPY --from=build /out/gondolin-oci /usr/local/bin/gondolin-oci
 EXPOSE 18081
-ENTRYPOINT ["/usr/local/bin/docker-job-api"]
+ENTRYPOINT ["/usr/local/bin/gondolin-oci", "serve"]

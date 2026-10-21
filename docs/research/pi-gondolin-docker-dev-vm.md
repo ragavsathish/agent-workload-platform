@@ -36,8 +36,10 @@ coding/Playwright operations to the guest, following [Pi's extension lifecycle](
 
 ## Shared image bytes
 
-The optional [Compose cache preparer](../../platform/agent-execution/gondolin-session/gondolin/prepare-compose-cache.clj)
-exports per-image archives and a no-pull override without building source. The
+The optional `make gondolin-dev-cache` target calls
+`gondolin-oci compose pull` to export per-image archives and a no-pull override
+without building source. The Gitea Compose-cache workflow uses the same host
+Docker operations through the job API. The
 path in `GONDOLIN_DEV_IMAGE_CACHE` is mounted read-only at `/image-cache` and
 contains the repository's Compose index and override. Set
 `GONDOLIN_DEV_IMAGE_STORE` to the shared store root, mounted read-only at

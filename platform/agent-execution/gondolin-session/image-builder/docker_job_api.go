@@ -502,7 +502,7 @@ func (h *Handler) prepareComposeCache(job Job) (cacheResult, error) {
 			return cacheResult{}, fmt.Errorf("tag %s: %w", tag, err)
 		}
 		file := filepath.Join(imageDir, image.Archive)
-		if err := h.saveImage(image.Tag, file); err != nil {
+		if err := h.exportImage(image.Tag, file); err != nil {
 			return cacheResult{}, fmt.Errorf("export %s: %w", tag, err)
 		}
 		checksum, err := sha256File(file)
@@ -621,7 +621,10 @@ func (h *Handler) tagImage(imageID, tag string) error {
 	return nil
 }
 
-func (h *Handler) saveImage(tag, destination string) error {
+// exportImage writes an image archive for transfer into a Gondolin VM. Docker
+// exposes this operation as GET /images/get; the name here makes the VM
+// handoff purpose explicit.
+func (h *Handler) exportImage(tag, destination string) error {
 	resp, err := h.engineRequest(http.MethodGet, "/images/get?names="+url.QueryEscape(tag), nil)
 	if err != nil {
 		return err
@@ -721,8 +724,8 @@ func (h *Handler) buildImage(job Job) (*BuildResult, error) {
 	staging := archive + ".partial"
 	_ = os.Remove(staging)
 	defer os.Remove(staging)
-	if err := h.saveImage(localTag, staging); err != nil {
-		return nil, fmt.Errorf("save image handoff: %w", err)
+	if err := h.exportImage(localTag, staging); err != nil {
+		return nil, fmt.Errorf("export image handoff: %w", err)
 	}
 	if err := os.Rename(staging, archive); err != nil {
 		_ = os.Remove(staging)
@@ -953,6 +956,48 @@ func writeError(w http.ResponseWriter, status int, message string) {
 }
 
 func main() {
+	args := os.Args[1:]
+	if len(args) >= 2 && args[0] == "compose" && args[1] == "pull" {
+		if err := runComposePull(args[2:], os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(args) >= 2 && args[0] == "compose" && args[1] == "import" {
+		if err := importComposeCache(args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(args) >= 2 && args[0] == "image" {
+		var err error
+		switch args[1] {
+		case "build":
+			err = runImageBuild(args[2:], os.Stdout)
+		case "export":
+			err = runImageExport(args[2:], os.Stdout)
+		default:
+			err = errors.New("image command must be build or export")
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(args) > 0 && args[0] == "serve" {
+		args = args[1:]
+	}
+	if len(args) != 0 {
+		fmt.Fprintln(os.Stderr, "usage: gondolin-oci [serve | image build <manifest.json> <context.tar> <revision> <arch> | image export <image-ref> <archive.tar> | compose pull <compose-config.json> <revision> <arch> <run-id> [<preload-root> <shared-store-root>] | compose import <handoff-root> <preload-root> <shared-store-root>]")
+		os.Exit(2)
+	}
+	serveDockerJobAPI()
+}
+
+func serveDockerJobAPI() {
 	token := os.Getenv("GONDOLIN_DOCKER_JOB_API_TOKEN")
 	if token == "" {
 		fmt.Fprintln(os.Stderr, "GONDOLIN_DOCKER_JOB_API_TOKEN is required")
