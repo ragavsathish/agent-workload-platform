@@ -1,0 +1,597 @@
+---
+- name: Require a supported macOS host
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.system == 'Darwin'
+      - ansible_facts.architecture in ['arm64', 'aarch64', 'x86_64']
+    fail_msg: Host services require a supported macOS host.
+
+- name: Configure the dotenvx Homebrew tap
+  community.general.homebrew_tap:
+    name: dotenvx/brew
+    state: present
+
+- name: Inspect trusted Homebrew packages
+  ansible.builtin.command:
+    argv: [brew, trust, --json=v1]
+  register: host_services_homebrew_trust
+  changed_when: false
+
+- name: Trust the official dotenvx Homebrew tap
+  ansible.builtin.command:
+    argv: [brew, trust, --tap, dotenvx/brew]
+  changed_when: true
+  when: >-
+    'dotenvx/brew' not in
+    ((host_services_homebrew_trust.stdout | from_json).taps | default([]))
+
+- name: Install the dotenvx runtime
+  community.general.homebrew:
+    name: dotenvx
+    state: present
+    update_homebrew: false
+
+- name: Inspect stable skills source
+  ansible.builtin.stat:
+    path: "{{ host_services_stable_skills_dir }}"
+  register: host_services_stable_skills
+
+- name: Select skills source
+  ansible.builtin.set_fact:
+    host_services_skills_source: >-
+      {{ host_services_skills_override
+         if host_services_skills_override | length > 0
+         else (host_services_stable_skills_dir
+               if host_services_stable_skills.stat.isdir | default(false)
+               else host_services_legacy_skills_dir) }}
+
+- name: Locate Wassette
+  ansible.builtin.command:
+    argv:
+      - which
+      - wassette
+  register: host_services_wassette_lookup
+  changed_when: false
+  when: host_services_wassette_override | length == 0
+
+- name: Select Wassette executable
+  ansible.builtin.set_fact:
+    host_services_wassette_bin: >-
+      {{ host_services_wassette_override
+         if host_services_wassette_override | length > 0
+         else host_services_wassette_lookup.stdout }}
+
+- name: Inspect host-service prerequisites
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+  loop:
+    - { name: skills source, path: "{{ host_services_skills_source }}", kind: directory }
+    - { name: browser assets, path: "{{ host_services_gondolin_assets_source }}", kind: directory }
+    - { name: builder assets, path: "{{ host_services_builder_assets_source }}", kind: directory }
+    - { name: Fluent Bit, path: /opt/homebrew/bin/fluent-bit, kind: executable }
+    - { name: pnpm, path: /opt/homebrew/bin/pnpm, kind: executable }
+    - { name: uv, path: /opt/homebrew/bin/uv, kind: executable }
+    - { name: dotenvx, path: /opt/homebrew/bin/dotenvx, kind: executable }
+    - { name: Wassette, path: "{{ host_services_wassette_bin }}", kind: executable }
+    - { name: Pi RPC supervisor artifact, path: "{{ host_services_pi_rpc_artifact }}", kind: executable }
+  register: host_services_prerequisites
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Require host-service prerequisites
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.item.kind != 'directory' or item.stat.isdir
+      - item.item.kind != 'executable' or item.stat.executable
+    fail_msg: "Missing {{ item.item.name }}: {{ item.item.path }}"
+    quiet: true
+  loop: "{{ host_services_prerequisites.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+
+- name: Inspect prepared host-service environments
+  ansible.builtin.stat:
+    path: "{{ voice_agent_root }}/deploy/host-env/{{ item }}"
+  loop:
+    - broker.env
+    - pi-voice.env
+    - listener.env
+    - worker.env
+    - image-builder.env
+    - wassette-tasking.env
+  register: host_services_environment_files
+  no_log: true
+
+- name: Require prepared host-service environments
+  ansible.builtin.assert:
+    that:
+      - item.stat.isreg | default(false)
+      - item.stat.size | default(0) > 0
+      - item.stat.mode == '0600'
+    fail_msg: Host environments are missing; run make setup and configure deploy/host-env.
+    quiet: true
+  loop: "{{ host_services_environment_files.results }}"
+  no_log: true
+
+- name: Create host-service directories
+  ansible.builtin.file:
+    path: "{{ host_services_runtime_dir }}/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ host_services_runtime_directories }}"
+
+- name: Create private host-service directories
+  ansible.builtin.file:
+    path: "{{ host_services_runtime_dir }}/{{ item }}"
+    state: directory
+    mode: "0700"
+  loop: "{{ host_services_secure_directories }}"
+
+- name: Install the Pi RPC supervisor
+  ansible.builtin.copy:
+    src: "{{ host_services_pi_rpc_artifact }}"
+    dest: "{{ host_services_bin_dir }}/pi-task-rpc"
+    mode: "0755"
+  notify: Restart host services
+
+- name: Create private classifier cache
+  ansible.builtin.file:
+    path: "{{ ansible_facts.user_dir }}/.cache/huggingface"
+    state: directory
+    mode: "0700"
+
+- name: Install pinned ACE-Step source
+  ansible.builtin.git:
+    repo: https://github.com/ace-step/ACE-Step-1.5.git
+    dest: "{{ host_services_music_dir }}"
+    version: "{{ host_services_music_ref }}"
+    update: false
+  notify: Restart host services
+
+- name: Install ACE-Step dependencies
+  ansible.builtin.command:
+    argv: [uv, sync, --frozen, --python, '3.12']
+    chdir: "{{ host_services_music_dir }}"
+  register: host_services_music_sync
+  changed_when: >-
+    'Installed ' in (host_services_music_sync.stdout + host_services_music_sync.stderr)
+    or 'Uninstalled ' in (host_services_music_sync.stdout + host_services_music_sync.stderr)
+    or 'Updated ' in (host_services_music_sync.stdout + host_services_music_sync.stderr)
+  notify: Restart host services
+
+- name: Create LaunchAgent and log directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+  loop:
+    - "{{ host_services_agents_dir }}"
+    - "{{ host_services_logs_dir }}"
+
+- name: Create private service logs
+  ansible.builtin.file:
+    path: "{{ host_services_logs_dir }}/{{ item }}.log"
+    state: touch
+    mode: "0600"
+    access_time: preserve
+    modification_time: preserve
+  loop: "{{ host_services_log_names }}"
+
+- name: Install host observability source
+  ansible.builtin.copy:
+    src: "{{ voice_agent_root }}/apps/host-observability/gondolin-exporter.mjs"
+    dest: "{{ host_services_runtime_dir }}/apps/host-observability/gondolin-exporter.mjs"
+    mode: "0600"
+  notify: Restart host services
+
+- name: Install host observability configuration
+  ansible.builtin.copy:
+    src: "{{ voice_agent_root }}/deploy/observability/fluent-bit-host.yaml"
+    dest: "{{ host_services_runtime_dir }}/observability/fluent-bit-host.yaml"
+    mode: "0600"
+  notify: Restart host services
+
+- name: Remove superseded LaunchAgent wrapper directory
+  ansible.builtin.file:
+    path: "{{ host_services_runtime_dir }}/scripts"
+    state: absent
+  notify: Restart host services
+
+- name: Install Python project definitions
+  ansible.builtin.copy:
+    src: "{{ voice_agent_root }}/apps/{{ item.app }}/{{ item.file }}"
+    dest: "{{ host_services_runtime_dir }}/apps/{{ item.app }}/{{ item.file }}"
+    mode: "0600"
+  loop:
+    - { app: broker, file: pyproject.toml }
+    - { app: broker, file: uv.lock }
+    - { app: classifier, file: pyproject.toml }
+    - { app: classifier, file: uv.lock }
+    - { app: worker, file: pyproject.toml }
+    - { app: worker, file: uv.lock }
+  notify: Restart host services
+
+- name: Synchronize Python and shared sources
+  ansible.posix.synchronize:
+    src: "{{ item.src }}/"
+    dest: "{{ item.dest }}/"
+    archive: true
+    checksum: true
+    delete: true
+    times: false
+    rsync_opts:
+      - --exclude=__pycache__/
+      - --exclude=*.pyc
+  loop:
+    - src: "{{ voice_agent_root }}/apps/broker/src"
+      dest: "{{ host_services_runtime_dir }}/apps/broker/src"
+    - src: "{{ voice_agent_root }}/apps/worker/src"
+      dest: "{{ host_services_runtime_dir }}/apps/worker/src"
+    - src: "{{ voice_agent_root }}/packages/tasking/src"
+      dest: "{{ host_services_runtime_dir }}/packages/tasking/src"
+    - src: "{{ voice_agent_root }}/packages/telemetry/src"
+      dest: "{{ host_services_runtime_dir }}/packages/telemetry/src"
+  loop_control:
+    label: "{{ item.dest }}"
+  register: host_services_source_sync
+  changed_when: >-
+    host_services_source_sync.stdout_lines
+    | reject('match', '^\\.f\\.\\.T')
+    | list
+    | length > 0
+  notify: Restart host services
+
+- name: Install task database migrations
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ host_services_runtime_dir }}/packages/tasking/migrations/{{ item | basename }}"
+    mode: "0600"
+  with_fileglob:
+    - "{{ voice_agent_root }}/packages/tasking/migrations/*.sql"
+  notify: Restart host services
+
+- name: Build deployable JavaScript applications
+  ansible.builtin.command:
+    argv:
+      - /opt/homebrew/bin/pnpm
+      - --dir
+      - "{{ voice_agent_root }}/../.."
+      - --filter
+      - "{{ item }}"
+      - build
+  loop:
+    - "@agent-workload-platform/gondolin-session"
+    - "@agent-workload-platform/voice-pi-agent"
+  changed_when: false
+
+- name: Reset Gondolin staging directory
+  ansible.builtin.file:
+    path: "{{ host_services_gondolin_deploy_dir }}"
+    state: absent
+  changed_when: false
+
+- name: Create Gondolin staging directory
+  ansible.builtin.file:
+    path: "{{ host_services_gondolin_deploy_dir }}"
+    state: directory
+    mode: "0700"
+  changed_when: false
+
+- name: Assemble and install Gondolin runtime
+  block:
+    - name: Assemble standalone Gondolin runtime
+      ansible.builtin.command:
+        argv:
+          - /opt/homebrew/bin/pnpm
+          - --dir
+          - "{{ voice_agent_root }}/../.."
+          - --config.inject-workspace-packages=true
+          - --filter
+          - "@agent-workload-platform/gondolin-session"
+          - deploy
+          - --prod
+          - --ignore-scripts
+          - "{{ host_services_gondolin_deploy_dir }}"
+      changed_when: false
+
+    - name: Synchronize Gondolin runtime
+      ansible.posix.synchronize:
+        src: "{{ host_services_gondolin_deploy_dir }}/"
+        dest: "{{ host_services_gondolin_runtime }}/"
+        archive: true
+        checksum: true
+        delete: true
+        times: false
+        rsync_opts:
+          - --exclude=image-cache/
+          - --exclude=image-builder.env
+          - --exclude=/node_modules/.modules.yaml
+          - --exclude=/node_modules/.pnpm-workspace-state-v1.json
+      register: host_services_gondolin_sync
+      changed_when: >-
+        host_services_gondolin_sync.stdout_lines
+        | reject('match', '^\\.f\\.\\.T')
+        | list
+        | length > 0
+      notify: Restart host services
+  always:
+    - name: Remove temporary Gondolin deployment
+      ansible.builtin.file:
+        path: "{{ host_services_gondolin_deploy_dir }}"
+        state: absent
+      changed_when: false
+
+- name: Reset voice-agent staging directory
+  ansible.builtin.file:
+    path: "{{ host_services_voice_deploy_dir }}"
+    state: absent
+  changed_when: false
+
+- name: Create voice-agent staging directory
+  ansible.builtin.file:
+    path: "{{ host_services_voice_deploy_dir }}"
+    state: directory
+    mode: "0700"
+  changed_when: false
+
+- name: Assemble and install voice-agent runtime
+  block:
+    - name: Assemble standalone voice-agent runtime
+      ansible.builtin.command:
+        argv:
+          - /opt/homebrew/bin/pnpm
+          - --dir
+          - "{{ voice_agent_root }}/../.."
+          - --config.inject-workspace-packages=true
+          - --filter
+          - "@agent-workload-platform/voice-pi-agent"
+          - deploy
+          - --prod
+          - --ignore-scripts
+          - "{{ host_services_voice_deploy_dir }}"
+      changed_when: false
+
+    - name: Inspect forbidden production files
+      ansible.builtin.stat:
+        path: "{{ host_services_voice_deploy_dir }}/{{ item }}"
+      loop:
+        - digital-twin/eval
+        - node_modules/promptfoo
+      register: host_services_forbidden_production_files
+
+    - name: Reject evaluation code in production runtime
+      ansible.builtin.assert:
+        that:
+          - not item.stat.exists
+        fail_msg: The voice-agent production artifact contains evaluation-only code.
+        quiet: true
+      loop: "{{ host_services_forbidden_production_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Synchronize voice-agent runtime
+      ansible.posix.synchronize:
+        src: "{{ host_services_voice_deploy_dir }}/"
+        dest: "{{ host_services_voice_runtime }}/"
+        archive: true
+        checksum: true
+        delete: true
+        times: false
+        rsync_opts:
+          - --exclude=/node_modules/@agent-workload-platform/gondolin-session
+          - --exclude=/node_modules/.modules.yaml
+          - --exclude=/node_modules/.pnpm-workspace-state-v1.json
+      register: host_services_voice_sync
+      changed_when: >-
+        host_services_voice_sync.stdout_lines
+        | reject('match', '^\\.f\\.\\.T')
+        | list
+        | length > 0
+      notify: Restart host services
+  always:
+    - name: Remove temporary voice-agent deployment
+      ansible.builtin.file:
+        path: "{{ host_services_voice_deploy_dir }}"
+        state: absent
+      changed_when: false
+
+- name: Create local package scope
+  ansible.builtin.file:
+    path: "{{ host_services_voice_runtime }}/node_modules/@agent-workload-platform"
+    state: directory
+    mode: "0755"
+
+- name: Link voice-agent runtime to installed Gondolin runtime
+  ansible.builtin.file:
+    src: ../../../gondolin-agent
+    dest: "{{ host_services_voice_runtime }}/node_modules/@agent-workload-platform/gondolin-session"
+    state: link
+    force: true
+  notify: Restart host services
+
+- name: Synchronize immutable host assets
+  ansible.posix.synchronize:
+    src: "{{ item.src }}/"
+    dest: "{{ item.dest }}/"
+    archive: true
+    delete: true
+    rsync_opts: "{{ item.options | default([]) }}"
+  loop:
+    - src: "{{ host_services_gondolin_assets_source }}"
+      dest: "{{ host_services_gondolin_assets }}"
+    - src: "{{ host_services_builder_assets_source }}"
+      dest: "{{ host_services_builder_assets }}"
+    - src: "{{ host_services_skills_source }}"
+      dest: "{{ host_services_skills_runtime }}"
+      options:
+        - --exclude=.git/
+  loop_control:
+    label: "{{ item.dest }}"
+  notify: Restart host services
+
+- name: Install prepared host-service environments
+  ansible.builtin.copy:
+    src: "{{ voice_agent_root }}/deploy/host-env/{{ item.file }}"
+    dest: "{{ item.dest }}"
+    mode: "0600"
+  loop:
+    - file: broker.env
+      dest: "{{ host_services_runtime_dir }}/apps/broker/broker.env"
+    - file: pi-voice.env
+      dest: "{{ host_services_runtime_dir }}/apps/pi-voice/pi-voice.env"
+    - file: listener.env
+      dest: "{{ host_services_runtime_dir }}/apps/digital-twin/listener.env"
+    - file: wassette-tasking.env
+      dest: "{{ host_services_runtime_dir }}/wassette-tasking.env"
+    - file: worker.env
+      dest: "{{ host_services_runtime_dir }}/apps/worker/worker.env"
+    - file: image-builder.env
+      dest: "{{ host_services_gondolin_runtime }}/image-builder.env"
+  no_log: true
+  notify: Restart host services
+
+- name: Synchronize Python runtime environments
+  ansible.builtin.command:
+    argv: >-
+      {{ ['/opt/homebrew/bin/uv', 'sync', '--project', item.path,
+          '--frozen', '--no-dev'] + item.extra }}
+  loop:
+    - path: "{{ host_services_runtime_dir }}/apps/broker"
+      extra: []
+    - path: "{{ host_services_runtime_dir }}/apps/classifier"
+      extra: [--python, '3.12']
+    - path: "{{ host_services_runtime_dir }}/apps/worker"
+      extra: []
+  loop_control:
+    label: "{{ item.path }}"
+  register: host_services_uv_sync
+  changed_when: >-
+    'Installed ' in (host_services_uv_sync.stdout + host_services_uv_sync.stderr)
+    or 'Uninstalled ' in (host_services_uv_sync.stdout + host_services_uv_sync.stderr)
+    or 'Updated ' in (host_services_uv_sync.stdout + host_services_uv_sync.stderr)
+  notify: Restart host services
+
+- name: Unload superseded LaunchAgents
+  community.general.launchd:
+    name: "{{ item }}"
+    state: unloaded
+  loop: "{{ host_services_legacy_agents }}"
+  register: host_services_legacy_unload
+  failed_when: false
+
+- name: Remove superseded LaunchAgent definitions
+  ansible.builtin.file:
+    path: "{{ host_services_agents_dir }}/{{ item }}.plist"
+    state: absent
+  loop: "{{ host_services_legacy_agents }}"
+
+- name: Install LaunchAgent definitions
+  ansible.builtin.copy:
+    src: "{{ voice_agent_root }}/deploy/launchd/{{ item }}.plist"
+    dest: "{{ host_services_agents_dir }}/{{ item }}.plist"
+    mode: "0600"
+  loop: "{{ launch_agents }}"
+  notify: Restart host services
+
+- name: Rewrite LaunchAgent home paths for the current user
+  ansible.builtin.replace:
+    path: "{{ host_services_agents_dir }}/{{ item }}.plist"
+    regexp: /Users/sathish\.narayanan
+    replace: "{{ ansible_facts.user_dir }}"
+  loop: "{{ launch_agents }}"
+  notify: Restart host services
+
+- name: Validate installed LaunchAgent definitions
+  ansible.builtin.command:
+    argv:
+      - plutil
+      - -lint
+      - "{{ host_services_agents_dir }}/{{ item }}.plist"
+  loop: "{{ launch_agents }}"
+  changed_when: false
+
+- name: Ensure current LaunchAgents are loaded
+  community.general.launchd:
+    name: "{{ item }}"
+    state: started
+  loop: "{{ launch_agents }}"
+  register: host_services_launch_result
+  until: not host_services_launch_result.failed
+  retries: 15
+  delay: 1
+
+- name: Apply host-service restarts
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for protected native endpoints
+  ansible.builtin.uri:
+    url: "{{ item }}"
+    status_code: 401
+    use_netrc: false
+  loop:
+    - http://127.0.0.1:9443/health
+    - http://127.0.0.1:9446/health
+  register: host_services_native_endpoint
+  until: host_services_native_endpoint.status == 401
+  retries: 30
+  delay: 2
+
+- name: Wait for ACE-Step models to be ready
+  ansible.builtin.uri:
+    url: http://127.0.0.1:8001/health
+    status_code: 200
+    use_netrc: false
+  register: host_services_music_health
+  until: >-
+    host_services_music_health.json.data.models_initialized | default(false)
+    and host_services_music_health.json.data.llm_initialized | default(false)
+  retries: 240
+  delay: 5
+
+- name: Wait for native host metrics
+  ansible.builtin.uri:
+    url: http://127.0.0.1:2022/metrics
+    return_content: true
+    status_code: 200
+    use_netrc: false
+  register: host_services_native_metrics
+  until: "'node_uname_info{system=\"macos-host\"' in host_services_native_metrics.content"
+  retries: 30
+  delay: 2
+
+- name: Wait for Gondolin metrics
+  ansible.builtin.uri:
+    url: http://127.0.0.1:9465/metrics
+    return_content: true
+    status_code: 200
+    use_netrc: false
+  register: host_services_gondolin_metrics
+  until: "'gondolin_vm_count ' in host_services_gondolin_metrics.content"
+  retries: 30
+  delay: 2
+
+- name: Verify installed LaunchAgents
+  community.general.launchd:
+    name: "{{ item }}"
+    state: started
+  check_mode: true
+  loop: "{{ launch_agents }}"
+  register: host_services_launch_facts
+
+- name: Require every installed LaunchAgent to be active
+  ansible.builtin.assert:
+    that:
+      - not item.changed
+      - item.status.current_state == 'started'
+      - item.status.status_code == '0'
+    fail_msg: "LaunchAgent {{ item.item }} did not converge."
+    quiet: true
+  loop: "{{ host_services_launch_facts.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Remove superseded runtime tree
+  ansible.builtin.file:
+    path: "{{ host_services_runtime_dir }}/server"
+    state: absent

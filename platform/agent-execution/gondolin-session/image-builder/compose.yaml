@@ -1,4 +1,24 @@
 services:
+  docker-job-api:
+    profiles: [host-api]
+    image: agent-docker-job-api:local
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "127.0.0.1:18081:18081"
+    environment:
+      GONDOLIN_DOCKER_JOB_API_ADDR: 0.0.0.0:18081
+      GONDOLIN_DOCKER_JOB_API_TOKEN: ${GONDOLIN_DOCKER_JOB_API_TOKEN:?Set GONDOLIN_DOCKER_JOB_API_TOKEN}
+      GONDOLIN_DOCKER_JOB_CONTEXTS: /var/cache/gondolin/docker-job-contexts
+      GONDOLIN_COMPOSE_CACHE_HANDOFF: /handoff
+      GONDOLIN_COMPOSE_CACHE_HOST_HANDOFF: ${GONDOLIN_COMPOSE_CACHE_HANDOFF:?Set GONDOLIN_COMPOSE_CACHE_HANDOFF}
+      GONDOLIN_IMAGE_BUILDER_HANDOFF: /image-handoff
+      DOCKER_HOST_SOCKET: /var/run/docker.sock
+    volumes:
+      - ${DOCKER_HOST_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+      - ${GONDOLIN_COMPOSE_CACHE_HANDOFF:?Set GONDOLIN_COMPOSE_CACHE_HANDOFF}:/handoff
+      - ${GONDOLIN_IMAGE_BUILDER_HANDOFF:?Set GONDOLIN_IMAGE_BUILDER_HANDOFF}:/image-handoff
   image-builder-amd64:
     profiles: [amd64]
     image: agent-image-builder:29.5.2-amd64

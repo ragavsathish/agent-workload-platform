@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+project="${1:-}"
+case "$project" in
+  voice|diagnostics|readme-demo) ;;
+  *)
+    echo "Usage: $0 voice|diagnostics|readme-demo" >&2
+    exit 2
+    ;;
+esac
+
+voice_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+local_port="${VOICE_LOCAL_PORT:-8080}"
+run_id="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+trace_root="${PLAYWRIGHT_TRACE_ARTIFACT_ROOT:-${HOME}/Library/Application Support/PipecatEdge/playwright-traces}"
+output_dir="${PLAYWRIGHT_OUTPUT_DIR:-$trace_root/$run_id/results/$project}"
+fixture="$voice_root/deploy/secrets/voxlock-voice-sample.wav"
+temporary_audio=""
+
+cleanup() {
+  if [[ -n "$temporary_audio" && -f "$temporary_audio" ]]; then
+    rm -f "$temporary_audio"
+  fi
+}
+trap cleanup EXIT INT TERM
+
+if ! curl --fail --silent --max-time 5 "http://127.0.0.1:$local_port/" >/dev/null; then
+  echo "Local voice ingress is unavailable on http://127.0.0.1:$local_port; start the deployment first." >&2
+  exit 1
+fi
+
+mkdir -p "$output_dir"
+if [[ "$project" == voice ]]; then
+  if [[ ! -s "$fixture" ]]; then
+    echo "Missing recorded voice fixture: $fixture" >&2
+    exit 1
+  fi
+  temporary_audio="$(mktemp "${TMPDIR:-/tmp}/pipecat-playwright-audio.XXXXXX.wav")"
+  ffmpeg -hide_banner -loglevel error \
+    -f lavfi -t 10 -i anullsrc=r=16000:cl=mono \
+    -i "$fixture" \
+    -filter_complex '[1:a]volume=12dB[voice];[0:a][voice]concat=n=2:v=0:a=1[out]' \
+    -map '[out]' -c:a pcm_s16le -ar 16000 -ac 1 -y "$temporary_audio"
+else
+  temporary_audio="$(mktemp "${TMPDIR:-/tmp}/pipecat-playwright-audio.XXXXXX.wav")"
+  ffmpeg -hide_banner -loglevel error \
+    -f lavfi -t 1 -i anullsrc=r=16000:cl=mono \
+    -c:a pcm_s16le -ar 16000 -ac 1 -y "$temporary_audio"
+fi
+
+PLAYWRIGHT_AUDIO_FILE="$temporary_audio" \
+PLAYWRIGHT_OUTPUT_DIR="$output_dir" \
+  docker compose \
+    --env-file "$voice_root/deploy/.env" \
+    -f "$voice_root/deploy/compose.yml" \
+    -f "$voice_root/deploy/compose.playwright.yml" \
+    --profile e2e \
+    run --rm \
+    -e "PLAYWRIGHT_PROJECT=$project" \
+    playwright-local-e2e

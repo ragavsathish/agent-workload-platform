@@ -25,9 +25,9 @@ def test_health_requires_the_separate_gateway_capability(monkeypatch):
     client = TestClient(gateway.app)
 
     assert client.get("/health").status_code == 401
-    assert client.get(
-        "/health", headers={"Authorization": f"Bearer {'g' * 32}"}
-    ).json() == {"status": "ok"}
+    assert client.get("/health", headers={"Authorization": f"Bearer {'g' * 32}"}).json() == {
+        "status": "ok"
+    }
 
 
 def test_voice_view_never_returns_host_approval_token_or_raw_events(monkeypatch):
@@ -81,6 +81,139 @@ def test_gateway_capability_is_bound_to_one_configured_identity(monkeypatch):
         raise AssertionError("multi-user gateway should fail closed")
 
 
+def test_tasks_can_be_queried_by_exact_session_name(monkeypatch):
+    gateway = load_gateway(monkeypatch)
+    observed = {}
+
+    class Tasks:
+        def list(self, **kwargs):
+            observed.update(kwargs)
+            return [{"id": "proposal-1", "session_name": "Kind of Blue · Take 2"}]
+
+    monkeypatch.setattr(gateway, "service", lambda: Tasks())
+    client = TestClient(gateway.app)
+    response = client.get(
+        "/v1/tasks",
+        params={
+            "identity": "owner@example.com",
+            "session_name": "Kind of Blue · Take 2",
+        },
+        headers={"Authorization": f"Bearer {'g' * 32}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()[0]["session_name"] == "Kind of Blue · Take 2"
+    assert observed == {
+        "identity": "owner@example.com",
+        "limit": 50,
+        "session_name": "Kind of Blue · Take 2",
+    }
+
+
+def test_task_approval_passes_trace_context_to_the_durable_queue(monkeypatch):
+    gateway = load_gateway(monkeypatch)
+    observed = {}
+
+    class Tasks:
+        def get(self, **_kwargs):
+            return {"approval_token": "approved-token"}
+
+        def approve(self, **kwargs):
+            observed.update(kwargs)
+            return {"id": "proposal-1", "status": "approved", "task_id": "task-1"}
+
+    monkeypatch.setattr(gateway, "service", lambda: Tasks())
+    monkeypatch.setattr(
+        gateway,
+        "inject",
+        lambda carrier: carrier.update(
+            {
+                "traceparent": (
+                    "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01"
+                )
+            }
+        ),
+    )
+    client = TestClient(gateway.app)
+
+    response = client.post(
+        "/v1/tasks/proposal-1/approve",
+        json={"identity": "owner@example.com"},
+        headers={"Authorization": f"Bearer {'g' * 32}"},
+    )
+
+    assert response.status_code == 200
+    assert observed["trace_context"] == {
+        "traceparent": "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01"
+    }
+
+
+def test_song_creation_is_authenticated_and_enqueues_lyrics_before_render(monkeypatch):
+    gateway = load_gateway(monkeypatch)
+    observed = {}
+
+    class Songs:
+        def create(self, **kwargs):
+            observed.update(kwargs)
+            return {
+                "id": "generation-1",
+                "status": "writing_lyrics",
+                "lyrics_task_id": "task-1",
+            }
+
+    monkeypatch.setattr(gateway, "songs", lambda: Songs())
+    monkeypatch.setattr(
+        gateway,
+        "inject",
+        lambda carrier: carrier.update(
+            {"traceparent": "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01"}
+        ),
+    )
+    client = TestClient(gateway.app)
+    body = {
+        "identity": "owner@example.com",
+        "brief": "Turn the current pull request into a song.",
+        "workspace": "/tmp",
+        "style": "Warm R&B",
+        "durationSeconds": 120,
+    }
+
+    assert client.post("/v1/music/generations", json=body).status_code == 401
+    response = client.post(
+        "/v1/music/generations",
+        json=body,
+        headers={"Authorization": f"Bearer {'g' * 32}"},
+    )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "writing_lyrics"
+    assert observed["brief"] == body["brief"]
+    assert observed["duration_seconds"] == 120
+    assert "traceparent" in observed["trace_context"]
+
+
+def test_song_render_requires_a_separate_review_command(monkeypatch):
+    gateway = load_gateway(monkeypatch)
+    observed = {}
+
+    class Songs:
+        def render(self, **kwargs):
+            observed.update(kwargs)
+            return {"id": "generation-1", "status": "generating_music"}
+
+    monkeypatch.setattr(gateway, "songs", lambda: Songs())
+    client = TestClient(gateway.app)
+    response = client.post(
+        "/v1/music/generations/generation-1/render",
+        json={"identity": "owner@example.com"},
+        headers={"Authorization": f"Bearer {'g' * 32}"},
+    )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "generating_music"
+    assert observed["generation_id"] == "generation-1"
+
+
 def test_digital_twin_query_is_authenticated_identity_bound_and_read_only(monkeypatch):
     gateway = load_gateway(monkeypatch)
     observed_queries = []
@@ -105,9 +238,7 @@ def test_digital_twin_query_is_authenticated_identity_bound_and_read_only(monkey
     path = "/v1/digital-twin?identity=owner@example.com&scope=learning&query=event"
 
     assert client.get(path).status_code == 401
-    assert client.get(
-        path, headers={"Authorization": f"Bearer {'g' * 32}"}
-    ).status_code == 401
+    assert client.get(path, headers={"Authorization": f"Bearer {'g' * 32}"}).status_code == 401
     response = client.get(path, headers={"Authorization": f"Bearer {'r' * 32}"})
 
     assert response.status_code == 200
@@ -137,11 +268,13 @@ def test_digital_twin_query_exposes_lightweight_journal_scope(monkeypatch):
 
     def fixed_query(query):
         assert query == gateway.JOURNAL_FACTS_QUERY
-        return [{
-            "kind": "idea",
-            "label": "Keep memories separate from accepted facts.",
-            "source": "urn:awp:digital-twin:journal:capture-1:entry:1",
-        }]
+        return [
+            {
+                "kind": "idea",
+                "label": "Keep memories separate from accepted facts.",
+                "source": "urn:awp:digital-twin:journal:capture-1:entry:1",
+            }
+        ]
 
     monkeypatch.setattr(gateway, "_sparql_rows", fixed_query)
     client = TestClient(gateway.app)
@@ -161,21 +294,29 @@ def test_completed_turn_is_enqueued_as_an_idempotent_digital_twin_task(monkeypat
     class Tasks:
         def enqueue_digital_twin(self, **kwargs):
             observed.update(kwargs)
-            return {"task_id": "task-1", "idempotency_key": "digital-twin:session-7:user-3"}
+            return {
+                "tasks": {
+                    "journal": {"task_id": "task-1"},
+                    "classify": {"task_id": "task-2"},
+                }
+            }
 
     monkeypatch.setattr(gateway, "service", lambda: Tasks())
     client = TestClient(gateway.app)
-    assert client.post(
-        "/v1/digital-twin/ingestions",
-        headers={"Authorization": f"Bearer {'r' * 32}"},
-        json={
-            "identity": "owner@example.com",
-            "sessionId": "session-7",
-            "messageId": "user-3",
-            "transcript": "I want ingestion to be durable.",
-            "capturedAt": "2026-10-17T10:00:00Z",
-        },
-    ).status_code == 401
+    assert (
+        client.post(
+            "/v1/digital-twin/ingestions",
+            headers={"Authorization": f"Bearer {'r' * 32}"},
+            json={
+                "identity": "owner@example.com",
+                "sessionId": "session-7",
+                "messageId": "user-3",
+                "transcript": "I want ingestion to be durable.",
+                "capturedAt": "2026-10-17T10:00:00Z",
+            },
+        ).status_code
+        == 401
+    )
     response = client.post(
         "/v1/digital-twin/ingestions",
         headers={"Authorization": f"Bearer {'g' * 32}"},
@@ -189,7 +330,10 @@ def test_completed_turn_is_enqueued_as_an_idempotent_digital_twin_task(monkeypat
     )
 
     assert response.status_code == 202
-    assert response.json()["task_id"] == "task-1"
+    assert response.json()["tasks"] == {
+        "journal": {"task_id": "task-1"},
+        "classify": {"task_id": "task-2"},
+    }
     assert observed == {
         "identity": "owner@example.com",
         "session_id": "session-7",
@@ -210,24 +354,32 @@ def test_journal_writer_has_a_separate_capability_and_fixed_graph(monkeypatch):
         "sourceRef": "pi-session:session-7:user-3",
         "capturedAt": "2026-10-17T10:00:00Z",
         "transcript": "I prefer a narrow writer.",
-        "entries": [{
-            "id": f"{'a' * 32}:entry:1",
-            "type": "idea",
-            "text": "Use a narrow writer.",
-            "topics": ["capability security"],
-        }],
+        "entries": [
+            {
+                "id": f"{'a' * 32}:entry:1",
+                "type": "idea",
+                "text": "Use a narrow writer.",
+                "topics": ["capability security"],
+            }
+        ],
     }
 
-    assert client.post(
-        "/v1/digital-twin/journal",
-        headers={"Authorization": f"Bearer {'g' * 32}"},
-        json=capture,
-    ).status_code == 401
-    assert client.post(
-        "/v1/digital-twin/journal",
-        headers={"Authorization": f"Bearer {'r' * 32}"},
-        json=capture,
-    ).status_code == 401
+    assert (
+        client.post(
+            "/v1/digital-twin/journal",
+            headers={"Authorization": f"Bearer {'g' * 32}"},
+            json=capture,
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            "/v1/digital-twin/journal",
+            headers={"Authorization": f"Bearer {'r' * 32}"},
+            json=capture,
+        ).status_code
+        == 401
+    )
     response = client.post(
         "/v1/digital-twin/journal",
         headers={"Authorization": f"Bearer {'w' * 32}"},
@@ -239,3 +391,187 @@ def test_journal_writer_has_a_separate_capability_and_fixed_graph(monkeypatch):
     assert len(observed) == 1
     assert "GRAPH <urn:awp:digital-twin:graph:journal>" in observed[0]
     assert "capability security" in observed[0]
+
+
+def test_journal_feedback_updates_private_review_state(monkeypatch):
+    gateway = load_gateway(monkeypatch)
+    updates = []
+    monkeypatch.setattr(
+        gateway,
+        "_sparql_rows",
+        lambda _query: [{"kind": "idea", "label": "Original", "status": "unreviewed"}],
+    )
+    monkeypatch.setattr(gateway, "_sparql_update", updates.append)
+    client = TestClient(gateway.app)
+    entry_id = f"{'a' * 32}:entry:1"
+
+    response = client.post(
+        f"/v1/digital-twin/journal/{entry_id}/feedback",
+        headers={"Authorization": f"Bearer {'g' * 32}"},
+        json={
+            "identity": "owner@example.com",
+            "action": "wrong_type",
+            "correctedType": "thought",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["entryId"] == entry_id
+    assert response.json()["action"] == "wrong_type"
+    assert len(response.json()["feedbackId"]) == 32
+    assert len(updates) == 1
+    assert "GRAPH <urn:awp:digital-twin:graph:journal-feedback>" in updates[0]
+    assert 'awp:previousType "idea"' in updates[0]
+    assert 'awp:correctedType "thought"' in updates[0]
+
+
+def test_journal_feedback_validates_corrections_and_records_misses(monkeypatch):
+    gateway = load_gateway(monkeypatch)
+    updates = []
+    monkeypatch.setattr(gateway, "_sparql_update", updates.append)
+    client = TestClient(gateway.app)
+    entry_id = f"{'b' * 32}:entry:1"
+    headers = {"Authorization": f"Bearer {'g' * 32}"}
+
+    assert (
+        client.post(
+            f"/v1/digital-twin/journal/{entry_id}/feedback",
+            headers=headers,
+            json={"identity": "owner@example.com", "action": "edit"},
+        ).status_code
+        == 422
+    )
+
+    response = client.post(
+        "/v1/digital-twin/journal/misses",
+        headers=headers,
+        json={
+            "identity": "owner@example.com",
+            "captureId": "c" * 32,
+            "expectedType": "learning",
+            "expectedText": "Stable identifiers make retries idempotent.",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["action"] == "missed"
+    assert "journal-feedback" in updates[0]
+    assert 'schema:actionStatus "missed"' in updates[0]
+
+
+def test_journal_feedback_export_uses_reader_capability(monkeypatch):
+    gateway = load_gateway(monkeypatch)
+    monkeypatch.setattr(
+        gateway,
+        "_sparql_rows",
+        lambda query: (
+            [{"id": "feedback-1", "action": "keep"}]
+            if query == gateway.JOURNAL_FEEDBACK_QUERY
+            else []
+        ),
+    )
+    client = TestClient(gateway.app)
+    path = "/v1/digital-twin/journal/feedback?identity=owner@example.com"
+
+    assert client.get(path).status_code == 401
+    response = client.get(path, headers={"Authorization": f"Bearer {'r' * 32}"})
+    assert response.status_code == 200
+    assert response.json() == {"feedback": [{"id": "feedback-1", "action": "keep"}]}
+
+
+def test_classifier_candidates_are_written_only_to_the_review_graph(monkeypatch):
+    gateway = load_gateway(monkeypatch)
+    observed = []
+    monkeypatch.setattr(gateway, "_sparql_update", observed.append)
+    client = TestClient(gateway.app)
+    capture_id = "b" * 32
+    candidate_id = f"{capture_id}:candidate:1"
+    response = client.post(
+        "/v1/digital-twin/reviews",
+        headers={"Authorization": f"Bearer {'w' * 32}"},
+        json={
+            "id": capture_id,
+            "identity": "owner@example.com",
+            "sourceRef": "pi-session:session-8:user-4",
+            "capturedAt": "2026-10-17T10:00:00Z",
+            "classification": {
+                "kind": "skill_evidence",
+                "confidence": 0.91,
+                "probabilities": {
+                    "conversation_topic": 0.0,
+                    "skill_evidence": 0.91,
+                    "profile_update": 0.0,
+                    "none": 0.09,
+                },
+                "profileField": "none",
+                "profileFieldConfidence": 0.99,
+                "lowConfidence": False,
+                "model": "Cloudflare/clef-flash",
+            },
+            "candidates": [
+                {
+                    "id": candidate_id,
+                    "label": "Playwright",
+                    "evidenceQuote": "I use Playwright.",
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"captureId": capture_id, "candidates": 1}
+    assert len(observed) == 1
+    assert "GRAPH <urn:awp:digital-twin:graph:review>" in observed[0]
+    assert "graph:accepted" not in observed[0]
+    assert candidate_id in observed[0]
+
+
+def test_owner_can_accept_a_pending_candidate_into_the_accepted_graph(monkeypatch):
+    gateway = load_gateway(monkeypatch)
+    updates = []
+    candidate_id = f"{'c' * 32}:candidate:1"
+
+    def query(query):
+        assert candidate_id in query
+        return [
+            {
+                "kind": "skill_evidence",
+                "label": "Playwright",
+                "evidence": "I use Playwright.",
+                "status": "pending",
+            }
+        ]
+
+    monkeypatch.setattr(gateway, "_sparql_rows", query)
+    monkeypatch.setattr(gateway, "_sparql_update", updates.append)
+    client = TestClient(gateway.app)
+    response = client.post(
+        f"/v1/digital-twin/reviews/{candidate_id}",
+        headers={"Authorization": f"Bearer {'g' * 32}"},
+        json={"identity": "owner@example.com", "decision": "accept"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"candidateId": candidate_id, "status": "accepted"}
+    assert len(updates) == 1
+    assert "GRAPH <urn:awp:digital-twin:graph:accepted>" in updates[0]
+    assert 'awp:status "accepted"' in updates[0]
+
+
+def test_reader_can_list_pending_candidates_but_cannot_decide_them(monkeypatch):
+    gateway = load_gateway(monkeypatch)
+    monkeypatch.setattr(gateway, "_sparql_rows", lambda query: [{"id": "candidate-1"}])
+    client = TestClient(gateway.app)
+
+    listed = client.get(
+        "/v1/digital-twin/reviews?identity=owner@example.com",
+        headers={"Authorization": f"Bearer {'r' * 32}"},
+    )
+    assert listed.status_code == 200
+    assert listed.json() == {"reviews": [{"id": "candidate-1"}]}
+
+    denied = client.post(
+        f"/v1/digital-twin/reviews/{'d' * 32}:candidate:1",
+        headers={"Authorization": f"Bearer {'r' * 32}"},
+        json={"identity": "owner@example.com", "decision": "accept"},
+    )
+    assert denied.status_code == 401

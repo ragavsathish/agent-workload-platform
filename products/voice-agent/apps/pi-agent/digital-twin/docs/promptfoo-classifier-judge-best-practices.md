@@ -141,7 +141,7 @@ Still missing:
   summed convention differs by a factor of the class count);
 - a guard against reporting Brier `0` when probability coverage is zero.
 
-Tune the `0.82` review threshold only on the development split, then report coverage-versus-risk and
+Tune the review threshold only on the development split, then report coverage-versus-risk and
 final performance on holdout/test. Balanced accuracy and macro-F1 are useful for comparison, but a
 deployment-weighted test set is also needed because the checked-in corpus is artificially balanced.
 

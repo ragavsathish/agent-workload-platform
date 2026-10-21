@@ -1,0 +1,1386 @@
+{
+  "schemaVersion": 1,
+  "generatedAtUtc": "2026-10-21T13:41:06Z",
+  "host": {
+    "model": "Mac mini M4 Pro",
+    "cores": 14,
+    "memoryGiB": 64,
+    "macos": "26.6.2"
+  },
+  "benchmarks": [
+    {
+      "id": "mac-m4-pro-2026-10-19-flutter-web",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64,
+        "macos": "26.6.2"
+      },
+      "vm": {
+        "memoryGiB": 8,
+        "cpus": 4,
+        "image": "agent-workload-platform/dev:v1-v2-9210bbc97050e8689157e362d73a8d86"
+      },
+      "workload": "Pi session starts a Gondolin VM, verifies Git HEAD, creates a fresh Flutter web app inside the VM, and builds a release web bundle",
+      "tiers": [
+        {
+          "parallelism": 1,
+          "durationsSeconds": [
+            24.57
+          ],
+          "successes": 1,
+          "peakVmRssBytes": 3682582528,
+          "minHostFreeMemoryPercent": 51,
+          "swapGrowthMiB": 0,
+          "minFreeDiskGiB": 31
+        },
+        {
+          "parallelism": 2,
+          "durationsSeconds": [
+            25.29,
+            27.44
+          ],
+          "successes": 2,
+          "peakVmRssBytes": 7408435200,
+          "minHostFreeMemoryPercent": 51,
+          "swapGrowthMiB": 0,
+          "minFreeDiskGiB": 31
+        },
+        {
+          "parallelism": 3,
+          "durationsSeconds": [
+            29.38,
+            30,
+            28.05
+          ],
+          "successes": 3,
+          "peakVmRssBytes": 9754312704,
+          "minHostFreeMemoryPercent": 44,
+          "swapGrowthMiB": 0,
+          "minFreeDiskGiB": 31
+        },
+        {
+          "parallelism": 4,
+          "durationsSeconds": [
+            31.19,
+            31.68,
+            31.53,
+            32.4
+          ],
+          "successes": 4,
+          "peakVmRssBytes": 12570656768,
+          "minHostFreeMemoryPercent": 37,
+          "swapGrowthMiB": 0,
+          "minFreeDiskGiB": 30
+        },
+        {
+          "parallelism": 5,
+          "durationsSeconds": [
+            33.64,
+            38.94,
+            38.12,
+            34.61,
+            36.9
+          ],
+          "successes": 5,
+          "peakVmRssBytes": 10701144064,
+          "minHostFreeMemoryPercent": 35,
+          "swapGrowthMiB": 834.82,
+          "minFreeDiskGiB": 30
+        }
+      ]
+    },
+    {
+      "id": "mac-m4-pro-2026-10-20-patrol-web",
+      "measuredAtUtc": "2026-10-20",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64,
+        "macos": "26.6.2"
+      },
+      "vm": {
+        "memoryGiB": 8,
+        "cpus": 4,
+        "image": "agent-workload-platform/dev:v1-v2-1965d60792308dc9fc87017c99914c92"
+      },
+      "workload": "One npm ci, Playwright Chromium verification, and npm run test:patrol per independent Pi/Gondolin VM.",
+      "tiers": [
+        {
+          "parallelism": 3,
+          "successes": 3,
+          "durationsSeconds": [
+            176.71,
+            181.44,
+            181.11
+          ],
+          "peakVmRssBytes": 14137098240,
+          "minHostFreeMemoryPercent": 34,
+          "swapGrowthMiB": 2614.82,
+          "minFreeDiskGiB": 290.49
+        },
+        {
+          "parallelism": 4,
+          "successes": 3,
+          "durationsSeconds": [
+            192.88,
+            197.3,
+            332.71,
+            191.3
+          ],
+          "peakVmRssBytes": 16414965760,
+          "minHostFreeMemoryPercent": 34,
+          "swapGrowthMiB": 2648.06,
+          "minFreeDiskGiB": 282.46
+        },
+        {
+          "parallelism": 5,
+          "successes": 0,
+          "durationsSeconds": [],
+          "peakVmRssBytes": 16481452032,
+          "minHostFreeMemoryPercent": 34,
+          "swapGrowthMiB": 1508.68,
+          "minFreeDiskGiB": 296.38,
+          "stopReason": "swap growth exceeded 384 MiB before any Patrol command completed"
+        }
+      ],
+      "tierOutcomes": [
+        {
+          "parallelism": 3,
+          "commit": "b3b6cb67861415eeed909a1bcb2f3cd9185c2ff6",
+          "image": "agent-workload-platform/dev:v1-v2-1965d60792308dc9fc87017c99914c92",
+          "runs": [
+            {
+              "piExitCode": 0,
+              "patrolExitCode": 0,
+              "durationSeconds": 176.71
+            },
+            {
+              "piExitCode": 0,
+              "patrolExitCode": 0,
+              "durationSeconds": 181.44
+            },
+            {
+              "piExitCode": 0,
+              "patrolExitCode": 0,
+              "durationSeconds": 181.11
+            }
+          ],
+          "evidence": "3/3 voice and workspace journeys passed; six traces had no bad responses, unexpected network failures, or console errors."
+        },
+        {
+          "parallelism": 4,
+          "commit": "b3b6cb67861415eeed909a1bcb2f3cd9185c2ff6",
+          "image": "agent-workload-platform/dev:v1-v2-1965d60792308dc9fc87017c99914c92",
+          "runs": [
+            {
+              "piExitCode": 0,
+              "patrolExitCode": 0,
+              "durationSeconds": 192.88
+            },
+            {
+              "piExitCode": 0,
+              "patrolExitCode": 0,
+              "durationSeconds": 197.3
+            },
+            {
+              "piExitCode": -2,
+              "patrolExitCode": null,
+              "durationSeconds": 332.71
+            },
+            {
+              "piExitCode": 0,
+              "patrolExitCode": 0,
+              "durationSeconds": 191.3
+            }
+          ],
+          "evidence": "Three runs passed voice and workspace journeys with six clean traces. Run 3 stalled at Flutter dependency resolution, was interrupted after 332.71 s, and saved no checkpoint.",
+          "operatorIntervention": "Interrupted run 3 after more than five minutes stalled at Flutter dependency resolution; no guest disk checkpoint was saved."
+        },
+        {
+          "parallelism": 5,
+          "commit": "b3b6cb67861415eeed909a1bcb2f3cd9185c2ff6",
+          "image": "agent-workload-platform/dev:v1-v2-1965d60792308dc9fc87017c99914c92",
+          "runs": [
+            {
+              "piExitCode": -2,
+              "patrolExitCode": null,
+              "durationSeconds": 152.9
+            },
+            {
+              "piExitCode": -2,
+              "patrolExitCode": null,
+              "durationSeconds": 152.6
+            },
+            {
+              "piExitCode": -2,
+              "patrolExitCode": null,
+              "durationSeconds": 152.26
+            },
+            {
+              "piExitCode": -2,
+              "patrolExitCode": null,
+              "durationSeconds": 151.87
+            },
+            {
+              "piExitCode": -2,
+              "patrolExitCode": null,
+              "durationSeconds": 151.45
+            }
+          ],
+          "evidence": "The 5-VM tier was interrupted before any Patrol command completed. At the stop sample, swap growth was 1,481 MiB against a 384 MiB ceiling; final swap growth after shutdown was 1,508.68 MiB. Peak VM RSS was 16,481,452,032 bytes, minimum free memory was 34%, and minimum free disk was 296.38 GiB. The host began with 821 MiB free swap and other Gondolin VMs active. SIGINT left no guest checkpoints; stale locks and metric registrations were removed.",
+          "stopReason": "swap growth exceeded 384 MiB",
+          "baselineSwapFreeMiB": 821.06,
+          "sampledSwapGrowthMiB": 1481.18,
+          "swapGrowthMiB": 1508.68,
+          "peakVmRssBytes": 16481452032,
+          "minHostFreeMemoryPercent": 34,
+          "minFreeDiskGiB": 296.38,
+          "evidencePath": "artifacts/benchmarks/patrol-concurrent-5vm-2026-10-20T093556Z/result.json"
+        }
+      ],
+      "resumeVerification": {
+        "sessionsResumedConcurrently": true,
+        "processesPassed": 3,
+        "guestCommandsPassed": 3,
+        "perProcessDurationSeconds": [
+          13.13,
+          13.13,
+          13.13
+        ]
+      }
+    },
+    {
+      "id": "mac-m4-pro-2026-10-20-patrol-full-compose-mock-1vm",
+      "measuredAtUtc": "2026-10-20T14:06:39Z",
+      "commit": "b3b6cb67861415eeed909a1bcb2f3cd9185c2ff6",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64,
+        "macos": "26.6.2"
+      },
+      "vm": {
+        "memoryGiB": 8,
+        "cpus": 4,
+        "image": "agent-workload-platform/dev:v1-v2-1965d60792308dc9fc87017c99914c92",
+        "storageDriver": "vfs"
+      },
+      "workload": "One Patrol browser-test run alongside the full 15-service Compose stack and deterministic local inference mock.",
+      "testScope": {
+        "patrolJourneys": [
+          "voice",
+          "workspace"
+        ],
+        "backend": "The voice journey checks UI shell/navigation. The workspace HTTP journey uses the Patrol harness local fixture server. Neither journey sends requests through the Compose voice-edge service; the Compose stack is started and readiness-checked alongside the browser tests.",
+        "composeServicesStarted": [
+          "agent-gateway",
+          "fluent-bit",
+          "gitea",
+          "grafana-mcp",
+          "grafana-mcp-bootstrap",
+          "habitat",
+          "otel-lgtm",
+          "oxigraph",
+          "oxigraph-init",
+          "postgres",
+          "s3mock",
+          "s3mock-init",
+          "trace-render-worker",
+          "traefik",
+          "voice-edge"
+        ],
+        "excludedComposeServices": [
+          "tailscale"
+        ],
+        "substitutions": [
+          "local deterministic inference broker mock",
+          "local ingress identity in place of Tailscale tailnet identity"
+        ]
+      },
+      "tiers": [
+        {
+          "parallelism": 1,
+          "successes": 1,
+          "durationsSeconds": [
+            260.86
+          ],
+          "peakRegisteredProcessRssBytes": 16737386496,
+          "minHostFreeMemoryPercent": 60,
+          "baselineSwapUsedMiB": 32299.5,
+          "swapGrowthMiB": -8,
+          "baselineFreeDiskGiB": 213.15,
+          "minFreeDiskGiB": 153.94,
+          "retainedCheckpointDiskGiB": 59,
+          "runs": [
+            {
+              "piExitCode": 0,
+              "commandExitCode": 0,
+              "durationSeconds": 260.86
+            }
+          ],
+          "evidencePath": "artifacts/benchmarks/patrol-concurrent-1vm-2026-10-20T140639Z/result.json",
+          "retainedSessionPath": "artifacts/benchmarks/patrol-concurrent-1vm-2026-10-20T140639Z/run-1-pi-session",
+          "peakVmRssBytes": 16737386496,
+          "checkpointDisposed": true,
+          "checkpointDisposedAtUtc": "2026-10-20T17:20:00Z"
+        }
+      ],
+      "scaleDecision": "Five full-stack VM copies were not attempted. At the observed ~59 GiB retained footprint each, five would need ~295 GiB; post-run free disk was 153.94 GiB and free swap was 476.5 MiB. The retained VFS checkpoint was explicitly disposed after the Overlay2 migration.",
+      "diskAudit": {
+        "method": "Read-only inspection through a temporary resumed overlay; the saved checkpoint was not replaced.",
+        "guestRootFilesystemUsedGiB": 62,
+        "guestRootFilesystemAvailableGiB": 1.2,
+        "dockerStorageDriver": "vfs",
+        "dockerVfsDirectoryGiB": 58,
+        "dockerLogicalImageTotalsGiB": 6.4,
+        "dockerVolumesGiB": 0.11,
+        "playwrightBrowsersGiB": 2.5,
+        "cause": "VFS deep-copies parent directories for image layers and containers instead of using copy-on-write, multiplying the full-stack Docker image footprint.",
+        "overlay2Probe": {
+          "defaultQemuKernel": "6.18.52-0-virt",
+          "defaultQemuOverlayModule": "Could not load: module missing from a later resumed rootfs; earlier load returned Exec format error",
+          "installKmodAlone": "did not enable OverlayFS",
+          "result": "Default QEMU backend cannot provide usable OverlayFS in the current OCI guest rootfs."
+        },
+        "overlay2Resolution": {
+          "developmentVmm": "krun",
+          "libkrunKernel": "6.12.68",
+          "overlayFs": "built in and present in /proc/filesystems",
+          "temporaryDevImageBuildId": "6d065260-ce4e-5775-afa5-bd392995e2d7",
+          "dockerStartup": "passed with storage driver overlay2",
+          "directOverlayWriteReadRemove": "passed",
+          "fullComposePatrol": "The controlled driver comparison itself did not run Patrol. A follow-up run passed the voice shell/navigation and workspace HTTP Patrol journeys with full-mock Compose, QEMU, and overlay2; see mac-m4-pro-2026-10-20-patrol-overlay2-qemu-1vm.",
+          "retainedDiskMeasurement": null,
+          "defaultQemuOverlayModule": "overlay.ko.gz exists under /lib/modules/6.18.52-0-virt/kernel/fs/overlayfs; modprobe passed the compressed module to the kernel and got Exec format error. gzip -dc followed by insmod successfully loaded it.",
+          "installKmodAlone": "kmod alone did not load the compressed module; the startup fallback decompresses it before insmod.",
+          "result": "The QEMU kernel includes OverlayFS as a compressed module. The dev image startup now loads it through gzip + insmod; QEMU networking resolves npm registry DNS. A full-mock Compose Patrol run subsequently passed with docker storage driver overlay2."
+        },
+        "checkpointDisposed": true
+      }
+    },
+    {
+      "id": "mac-m4-pro-2026-10-20-patrol-overlay2-qemu-1vm",
+      "measuredAtUtc": "2026-10-20T16:46:56Z",
+      "commit": "b3b6cb67861415eeed909a1bcb2f3cd9185c2ff6",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64,
+        "macos": "26.6.2"
+      },
+      "vm": {
+        "vmm": "qemu",
+        "memoryGiB": 8,
+        "cpus": 4,
+        "diskLimitGiB": 64,
+        "image": "voice-agent-gondolin:dev-overlay2-qemu-test2",
+        "gondolinBuildId": "3cb3c5e4-fce3-5b31-a4ca-8ab9e314f9d9",
+        "storageDriver": "overlay2"
+      },
+      "workload": "One npm ci, Playwright Chromium install, and npm run test:patrol in one QEMU Gondolin VM with the full 15-service Compose mock stack and Docker overlay2 storage.",
+      "testScope": {
+        "patrolJourneys": [
+          "voice",
+          "workspace"
+        ],
+        "backend": "The voice journey checks the UI shell/navigation. The workspace HTTP journey uses the Patrol harness local fixture server. Neither sends requests through the Compose voice-edge service; the 15-service Compose stack starts and is readiness-checked alongside the browser journeys.",
+        "composeServicesStarted": [
+          "agent-gateway",
+          "fluent-bit",
+          "gitea",
+          "grafana-mcp",
+          "grafana-mcp-bootstrap",
+          "habitat",
+          "otel-lgtm",
+          "oxigraph",
+          "oxigraph-init",
+          "postgres",
+          "s3mock",
+          "s3mock-init",
+          "trace-render-worker",
+          "traefik",
+          "voice-edge"
+        ],
+        "excludedComposeServices": [
+          "tailscale"
+        ],
+        "substitutions": [
+          "local deterministic inference broker mock",
+          "local ingress identity in place of Tailscale tailnet identity"
+        ]
+      },
+      "tiers": [
+        {
+          "parallelism": 1,
+          "successes": 1,
+          "durationsSeconds": [
+            212.16
+          ],
+          "peakRegisteredProcessRssBytes": 16096149504,
+          "minHostFreeMemoryPercent": 60,
+          "baselineSwapUsedMiB": 32195.5,
+          "swapGrowthMiB": 0,
+          "baselineFreeDiskGiB": 89.4,
+          "minFreeDiskGiB": 80.18,
+          "retainedCheckpointDiskGiB": 0,
+          "runs": [
+            {
+              "piExitCode": 0,
+              "commandExitCode": 0,
+              "durationSeconds": 212.16
+            }
+          ],
+          "dockerStorageDriver": "overlay2",
+          "vmm": "qemu",
+          "checkpointDisposed": true,
+          "evidencePath": "artifacts/benchmarks/patrol-concurrent-1vm-2026-10-20T164656Z/result.json",
+          "transcriptPath": "artifacts/benchmarks/patrol-concurrent-1vm-2026-10-20T164656Z/run-1-pi-session/2026-10-20T16-46-56-830Z_patrol-2026-10-20T164656Z-1.jsonl",
+          "traceEvidencePath": "artifacts/benchmarks/patrol-concurrent-1vm-2026-10-20T164656Z/run-1-patrol/evidence.json",
+          "journeyResults": [
+            {
+              "name": "voice shell and navigation",
+              "passed": 1,
+              "failed": 0,
+              "networkRequests": 746,
+              "badResponses": 0,
+              "networkFailures": 0,
+              "consoleErrors": 0
+            },
+            {
+              "name": "typed conversation and durable work",
+              "passed": 1,
+              "failed": 0,
+              "networkRequests": 828,
+              "badResponses": 0,
+              "networkFailures": 0,
+              "consoleErrors": 0
+            }
+          ],
+          "peakVmRssBytes": 16096149504
+        }
+      ],
+      "scaleDecision": "One VM was run; this is a functional Overlay2 validation, not a concurrency-capacity result.",
+      "diskAudit": {
+        "storageDriver": "overlay2",
+        "hostDiskFreeGiBBeforeRun": 89.4,
+        "hostDiskFreeGiBMinimumDuringRun": 80.18,
+        "checkpointDisposed": true,
+        "method": "The run used QEMU to retain guest egress. QEMU and Docker storage-driver selection are independent. The guest startup loaded the compressed OverlayFS module before starting dockerd."
+      }
+    },
+    {
+      "id": "mac-m4-pro-2026-10-20-patrol-web-5vm-repeat",
+      "measuredAtUtc": "2026-10-20T12:06:31Z",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64,
+        "macos": "26.6.2"
+      },
+      "vm": {
+        "memoryGiB": 8,
+        "cpus": 4,
+        "vmm": "qemu",
+        "image": "agent-workload-platform/dev:v1-v2-1965d60792308dc9fc87017c99914c92"
+      },
+      "workload": "One standard Patrol test command per independent VM on the default dev Compose profile; five VMs started in parallel.",
+      "tiers": [
+        {
+          "parallelism": 5,
+          "durationsSeconds": [
+            220.85,
+            17354.32,
+            224.26,
+            223.88,
+            222.5
+          ],
+          "successes": 4,
+          "peakVmRssBytes": 24248320000,
+          "minHostFreeMemoryPercent": 35,
+          "swapGrowthMiB": -136,
+          "minFreeDiskGiB": 63.96,
+          "incompleteRunIndices": [
+            2
+          ],
+          "incompleteReason": "Run 2 remained in Flutter build without a command exit status and was manually interrupted after 17,354 seconds.",
+          "checkpointsDisposed": true,
+          "checkpointsDisposedAtUtc": "2026-10-20T17:20:00Z"
+        }
+      ],
+      "evidence": "artifacts/benchmarks/patrol-concurrent-5vm-2026-10-20T120631Z/result.json"
+    },
+    {
+      "id": "mac-m4-pro-2026-10-20-patrol-full-compose-qemu-6g-2c",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64,
+        "macos": "26.6.2"
+      },
+      "vm": {
+        "memoryGiB": 6,
+        "cpus": 2,
+        "image": "artifacts/gondolin-dev-overlay2-qemu-v2/aarch64",
+        "vmm": "qemu",
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2",
+        "guestSwapGiB": 0
+      },
+      "workload": "Full mock Compose readiness followed by one npm run test:patrol suite per independent Pi VM. The suite covers voice shell/navigation and workspace HTTP journeys.",
+      "guardrails": {
+        "minFreeMemoryPercent": 40,
+        "maxSwapGrowthMiB": 128,
+        "minFreeSwapMiB": 256,
+        "minFreeDiskGiB": 100
+      },
+      "tiers": [
+        {
+          "parallelism": 1,
+          "durationsSeconds": [
+            215.69
+          ],
+          "successes": 1,
+          "journeysPassed": 2,
+          "journeysTotal": 2,
+          "peakVmRssBytes": 12374720512,
+          "minHostFreeMemoryPercent": 71,
+          "swapGrowthMiB": -152.06,
+          "minFreeDiskGiB": 200.14,
+          "checkpointsSaved": false,
+          "evidencePath": "artifacts/benchmarks/patrol-concurrent-1vm-2026-10-20T175530Z/result.json",
+          "note": "Passed both Patrol journeys after all 15 full-mock Compose services passed readiness. QEMU/Overlay2, no guest swap. The saved benchmark checkpoint was explicitly disposed."
+        },
+        {
+          "parallelism": 3,
+          "durationsSeconds": [
+            259.04,
+            273.97,
+            271.52
+          ],
+          "successes": 2,
+          "journeysPassed": 5,
+          "journeysTotal": 6,
+          "peakVmRssBytes": 32820559872,
+          "minHostFreeMemoryPercent": 60,
+          "swapGrowthMiB": -8.0,
+          "minFreeDiskGiB": 179.99,
+          "checkpointsSaved": false,
+          "evidencePath": "artifacts/benchmarks/patrol-concurrent-3vm-2026-10-20T175914Z/result.json",
+          "failure": "One VM command exited 1: Node.js dependency installation in a Patrol journey failed with npm ETIMEDOUT; the other journey in that VM passed. The other two VMs passed both journeys. No host resource guard tripped.",
+          "nextTierAttempted": false,
+          "note": "First three-VM trial: partial pass (2/3 VM suites, 5/6 journeys) after an npm ETIMEDOUT during a Patrol dependency installation. The repeat three-VM trial passed all suites; the four-VM tier was then attempted and passed."
+        }
+      ]
+    },
+    {
+      "id": "mac-m4-pro-2026-10-20-patrol-full-compose-qemu-6g-2c-retry-and-4vm",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64,
+        "macos": "26.6.2"
+      },
+      "vm": {
+        "memoryGiB": 6,
+        "cpus": 2,
+        "image": "artifacts/gondolin-dev-overlay2-qemu-v2/aarch64",
+        "vmm": "qemu",
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2",
+        "guestSwapGiB": 0
+      },
+      "workload": "Full mock Compose readiness followed by one npm run test:patrol suite per independent Pi VM. The suite covers voice shell/navigation and workspace HTTP journeys.",
+      "guardrails": {
+        "minFreeMemoryPercent": 40,
+        "maxSwapGrowthMiB": 128,
+        "minFreeSwapMiB": 256,
+        "minFreeDiskGiB": 100
+      },
+      "tiers": [
+        {
+          "parallelism": 3,
+          "durationsSeconds": [
+            278.57,
+            282.27,
+            280.81
+          ],
+          "successes": 3,
+          "journeysPassed": 6,
+          "journeysTotal": 6,
+          "peakVmRssBytes": 31897354240,
+          "minHostFreeMemoryPercent": 57,
+          "swapGrowthMiB": 0.0,
+          "minFreeDiskGiB": 177.33,
+          "checkpointsSaved": false,
+          "evidencePath": "artifacts/benchmarks/patrol-concurrent-3vm-2026-10-20T180619Z/result.json",
+          "note": "Repeat of the first three-VM trial; all three suites and six journeys passed. All 15 full-mock Compose services reached readiness in each VM."
+        },
+        {
+          "parallelism": 4,
+          "durationsSeconds": [
+            331.36,
+            330.96,
+            326.43,
+            331.14
+          ],
+          "successes": 4,
+          "journeysPassed": 8,
+          "journeysTotal": 8,
+          "peakVmRssBytes": 25807372288,
+          "minHostFreeMemoryPercent": 42,
+          "swapGrowthMiB": -16.0,
+          "minFreeDiskGiB": 166.0,
+          "checkpointsSaved": false,
+          "evidencePath": "artifacts/benchmarks/patrol-concurrent-4vm-2026-10-20T181111Z/result.json",
+          "note": "All four suites and eight journeys passed. Host memory came within two percentage points of the 40% floor; swap growth and disk remained within guardrails. All 15 full-mock Compose services reached readiness in each VM."
+        }
+      ]
+    },
+    {
+      "id": "compose-dev-overlay2-3vm-2026-10-21T073553Z",
+      "measuredAtUtc": "2026-10-21T07:35:53Z",
+      "parallelism": 3,
+      "vm": {
+        "vmm": "qemu",
+        "memoryGiB": 6,
+        "cpus": 2,
+        "guestSwapGiB": 0,
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2",
+        "image": "agent-workload-platform/dev:v2-e9a8d96b089bf217d82c14f0181dbbdc"
+      },
+      "outcome": "passed",
+      "readinessMs": [
+        48902,
+        48719,
+        49111
+      ],
+      "wallClockMs": 49111,
+      "totalElapsedMs": 49727,
+      "composeServicesStarted": 6,
+      "uniqueImages": 6,
+      "minFreeMemoryPercent": 65,
+      "hostSwapGrowthMiB": 0,
+      "minFreeDiskGiB": 104.16,
+      "checkpointsSaved": false,
+      "evidencePath": "artifacts/benchmarks/compose-overlay2-3vm-2026-10-21T073643Z/result.json",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64
+      },
+      "note": "Manual Ansible benchmark using Gitea run 57 VM image and run 58 Compose cache. Six active dev Compose services include one-shot oxigraph-init. No Patrol journey. Not directly comparable with the 15-service full-mock runs."
+    },
+    {
+      "id": "compose-dev-patrol-overlay2-3vm-2026-10-21T081514Z",
+      "measuredAtUtc": "2026-10-21T08:15:14Z",
+      "parallelism": 3,
+      "vm": {
+        "vmm": "qemu",
+        "memoryGiB": 6,
+        "cpus": 2,
+        "guestSwapGiB": 0,
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2",
+        "image": "agent-workload-platform/dev:v2-e9a8d96b089bf217d82c14f0181dbbdc"
+      },
+      "outcome": "passed",
+      "composeReadinessMs": [
+        46493,
+        45986,
+        45781
+      ],
+      "composeWallClockMs": 46493,
+      "patrolDurationMs": [
+        168530,
+        161654,
+        161381
+      ],
+      "patrolExitCodes": [
+        0,
+        0,
+        0
+      ],
+      "patrolWallClockMs": 215685,
+      "totalElapsedMs": 222023,
+      "patrolJourneysPerVm": 2,
+      "capturedTraces": 6,
+      "traceNetworkFailures": 0,
+      "traceConsoleErrors": 0,
+      "composeServicesStarted": 6,
+      "uniqueImages": 6,
+      "minFreeMemoryPercent": 62,
+      "hostSwapGrowthMiB": 0,
+      "minFreeDiskGiB": 99.54,
+      "checkpointsSaved": false,
+      "evidencePath": "artifacts/benchmarks/compose-overlay2-3vm-2026-10-21T081514Z/result.json",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64
+      },
+      "note": "Manual Ansible benchmark with Gitea-built VM image and Gitea-prepared Compose cache. Three isolated VMs started six dev Compose services, then each ran both Patrol journeys. Patrol uses a local fixture server, not the Compose voice edge. Browser HTTPS-ignore mode handles the Gondolin MITM certificate for external font requests."
+    },
+    {
+      "id": "compose-dev-patrol-oracle-overlay2-3vm-2026-10-21T090717Z",
+      "measuredAtUtc": "2026-10-21T09:07:19.314717+00:00",
+      "parallelism": 3,
+      "vm": {
+        "vmm": "qemu",
+        "memoryGiB": 6,
+        "cpus": 2,
+        "guestSwapGiB": 0,
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2",
+        "image": "agent-workload-platform/dev:v2-e9a8d96b089bf217d82c14f0181dbbdc"
+      },
+      "outcome": "passed",
+      "composeReadinessMs": [
+        46556,
+        46852,
+        46767
+      ],
+      "composeWallClockMs": 46852,
+      "patrolDurationMs": [
+        161156,
+        174186,
+        162492
+      ],
+      "patrolExitCodes": [
+        0,
+        0,
+        0
+      ],
+      "patrolWallClockMs": 225177,
+      "totalElapsedMs": 231849,
+      "patrolJourneysPerVm": 2,
+      "capturedTraces": 6,
+      "browserTraceOraclePassedVms": 3,
+      "otelCanaryOraclePassedVms": 3,
+      "composeServicesStarted": 6,
+      "uniqueImages": 6,
+      "minFreeMemoryPercent": 61,
+      "hostSwapGrowthMiB": 0,
+      "minFreeDiskGiB": 99.22,
+      "checkpointsSaved": false,
+      "evidencePath": "artifacts/benchmarks/compose-overlay2-3vm-2026-10-21T090717Z/result.json",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64
+      },
+      "note": "Manual QEMU/Overlay2 benchmark using the Gitea-built VM and prepared Compose cache. Three isolated VMs ran six active dev Compose services, one Patrol suite and one trace/OTEL oracle each. OTEL canary checks collector-to-Tempo round trip, not application spans. Patrol uses local fixtures, not the Compose voice edge. npm ci used bounded fetching. All benchmark VMs were disposed."
+    },
+    {
+      "id": "compose-dev-patrol-clj-oracle-overlay2-3vm-2026-10-21T092953Z",
+      "measuredAtUtc": "2026-10-21T09:29:54.934780+00:00",
+      "parallelism": 3,
+      "vm": {
+        "vmm": "qemu",
+        "memoryGiB": 6,
+        "cpus": 2,
+        "guestSwapGiB": 0,
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2",
+        "image": "agent-workload-platform/dev:v2-e9a8d96b089bf217d82c14f0181dbbdc"
+      },
+      "outcome": "passed",
+      "composeReadinessMs": [
+        47866,
+        45695,
+        45998
+      ],
+      "composeWallClockMs": 47866,
+      "patrolDurationMs": [
+        157047,
+        161394,
+        160100
+      ],
+      "patrolExitCodes": [
+        0,
+        0,
+        0
+      ],
+      "patrolWallClockMs": 214333,
+      "totalElapsedMs": 219787,
+      "patrolJourneysPerVm": 2,
+      "capturedTraces": 6,
+      "browserTraceOraclePassedVms": 3,
+      "otelCanaryOraclePassedVms": 3,
+      "composeServicesStarted": 6,
+      "uniqueImages": 6,
+      "minFreeMemoryPercent": 63,
+      "hostSwapGrowthMiB": 0,
+      "minFreeDiskGiB": 99.13,
+      "checkpointsSaved": false,
+      "evidencePath": "artifacts/benchmarks/compose-overlay2-3vm-2026-10-21T092953Z/result.json",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64
+      },
+      "note": "Three isolated QEMU/Overlay2 VMs passed dev Compose readiness, two Patrol journeys each, and the in-guest Babashka trace/OTEL oracle. Three distinct canaries returned from Tempo. No benchmark checkpoints were retained."
+    },
+    {
+      "id": "compose-full-mock-patrol-edge-oracle-overlay2-1vm-2026-10-21T115521Z",
+      "measuredAtUtc": "2026-10-21T11:55:21.833606+00:00",
+      "parallelism": 1,
+      "vm": {
+        "vmm": "qemu",
+        "memoryGiB": 6,
+        "cpus": 2,
+        "guestSwapGiB": 0,
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2",
+        "image": "voice-agent-gondolin:dev-overlay2-qemu-test2"
+      },
+      "outcome": "passed",
+      "composeReadinessMs": [
+        78608
+      ],
+      "composeWallClockMs": 78608,
+      "patrolDurationMs": [
+        167890
+      ],
+      "patrolExitCodes": [
+        0
+      ],
+      "patrolWallClockMs": 249265,
+      "totalElapsedMs": 251133,
+      "patrolJourneysPerVm": 3,
+      "capturedTraces": 3,
+      "browserTraceOraclePassedVms": 1,
+      "otelCanaryOraclePassedVms": 1,
+      "edgeApplicationSpanOraclePassedVms": 1,
+      "minFreeMemoryPercent": 72,
+      "hostSwapGrowthMiB": 0,
+      "minFreeDiskGiB": 99.41,
+      "checkpointsSaved": false,
+      "evidencePath": "artifacts/benchmarks/compose-overlay2-1vm-2026-10-21T115521Z/result.json",
+      "allureReportPath": "artifacts/benchmarks/patrol-evidence/compose-overlay2-1vm-2026-10-21T115521Z/allure-report/index.html",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64
+      },
+      "note": "One full-mock QEMU/Overlay2 VM passed three Patrol journeys and the in-guest Oracle, including a voice-edge browser.pi.turn span correlated by trace ID. The older local VM image required temporary Babashka, dev-compose, and four host-built application images staged before Compose; its readiness time is not directly comparable with cache-ready runs. The staging files and benchmark VM were removed."
+    },
+    {
+      "id": "compose-full-mock-patrol-edge-oracle-overlay2-3vm-2026-10-21T121723Z",
+      "measuredAtUtc": "2026-10-21T12:17:25.011519+00:00",
+      "parallelism": 3,
+      "vm": {
+        "vmm": "qemu",
+        "memoryGiB": 6,
+        "cpus": 2,
+        "guestSwapGiB": 0,
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2",
+        "image": "voice-agent-gondolin:dev-arm64 (Gondolin build c62cd11c-e69d-5eb5-ac70-bbb1c9854131)"
+      },
+      "outcome": "passed",
+      "composeReadinessMs": [
+        95824,
+        96045,
+        95841
+      ],
+      "composeWallClockMs": 96045,
+      "patrolDurationMs": [
+        213185,
+        203833,
+        203404
+      ],
+      "patrolExitCodes": [
+        0,
+        0,
+        0
+      ],
+      "patrolWallClockMs": 315469,
+      "totalElapsedMs": 322528,
+      "patrolJourneysPerVm": 3,
+      "capturedTraces": 9,
+      "browserTraceOraclePassedVms": 3,
+      "otelCanaryOraclePassedVms": 3,
+      "edgeApplicationSpanOraclePassedVms": 3,
+      "minFreeMemoryPercent": 60,
+      "hostSwapGrowthMiB": 0,
+      "minFreeDiskGiB": 63.59,
+      "checkpointsSaved": false,
+      "evidencePath": "artifacts/benchmarks/compose-overlay2-3vm-2026-10-21T121723Z/result.json",
+      "allureReportPath": "artifacts/benchmarks/patrol-evidence/compose-overlay2-3vm-2026-10-21T121723Z/allure-report/index.html",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64
+      },
+      "note": "Three independent full-mock QEMU/Overlay2 VMs passed all three Patrol journeys and the in-guest Oracle, including distinct voice-edge browser.pi.turn spans correlated by trace ID. A freshly built VM image included Babashka and current dev-compose. Four host-built application images were imported per VM from a temporary archive. No benchmark VM or checkpoint was retained."
+    },
+    {
+      "id": "compose-full-mock-shared-cache-passed-compose-overlay2-1vm-2026-10-21T123400Z",
+      "measuredAtUtc": "2026-10-21T12:34:00.695209+00:00",
+      "parallelism": 1,
+      "vm": {
+        "vmm": "qemu",
+        "memoryGiB": 6,
+        "cpus": 2,
+        "guestSwapGiB": 0,
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2",
+        "image": "Gondolin build c62cd11c-e69d-5eb5-ac70-bbb1c9854131"
+      },
+      "outcome": "passed",
+      "composeReadinessMs": [
+        87544
+      ],
+      "composeWallClockMs": 87544,
+      "patrolDurationMs": [
+        180500
+      ],
+      "patrolExitCodes": [
+        0
+      ],
+      "patrolWallClockMs": 270808,
+      "totalElapsedMs": 272351,
+      "patrolJourneysPerVm": 3,
+      "minFreeMemoryPercent": 68,
+      "hostSwapGrowthMiB": 0,
+      "minFreeDiskGiB": 81.35,
+      "checkpointsSaved": false,
+      "evidencePath": "artifacts/benchmarks/compose-overlay2-1vm-2026-10-21T123400Z/result.json",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64
+      },
+      "capturedTraces": 3,
+      "browserTraceOraclePassedVms": 1,
+      "otelCanaryOraclePassedVms": 1,
+      "edgeApplicationSpanOraclePassedVms": 1,
+      "allureReportPath": "artifacts/benchmarks/patrol-evidence/compose-overlay2-1vm-2026-10-21T123400Z/allure-report/index.html",
+      "note": "One QEMU/Overlay2 VM used the 16-service shared Compose cache with the four host-built application images, then passed all three Patrol journeys and the in-guest Oracle. No separate staging archive was loaded; the VM was disposed."
+    },
+    {
+      "id": "compose-full-mock-shared-cache-timed_out-compose-overlay2-3vm-2026-10-21T123847Z",
+      "measuredAtUtc": "2026-10-21T12:38:49.251555+00:00",
+      "parallelism": 3,
+      "vm": {
+        "vmm": "qemu",
+        "memoryGiB": 6,
+        "cpus": 2,
+        "guestSwapGiB": 0,
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2",
+        "image": "Gondolin build c62cd11c-e69d-5eb5-ac70-bbb1c9854131"
+      },
+      "outcome": "timed_out",
+      "composeReadinessMs": [
+        103075,
+        104881,
+        106292
+      ],
+      "composeWallClockMs": 106292,
+      "patrolDurationMs": [
+        null,
+        null,
+        null
+      ],
+      "patrolExitCodes": [
+        null,
+        null,
+        null
+      ],
+      "patrolWallClockMs": null,
+      "totalElapsedMs": 714686,
+      "patrolJourneysPerVm": 3,
+      "minFreeMemoryPercent": 56,
+      "hostSwapGrowthMiB": 0,
+      "minFreeDiskGiB": 63.1,
+      "checkpointsSaved": false,
+      "evidencePath": "artifacts/benchmarks/compose-overlay2-3vm-2026-10-21T123847Z/result.json",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64
+      },
+      "error": "patrol exceeded 600 seconds",
+      "allReady": true,
+      "note": "All three QEMU/Overlay2 VMs reached full-mock Compose readiness from the shared image cache. One Patrol run stalled in its first target; the 600-second phase timeout stopped the trial. No per-VM Oracle verdict was retained. All benchmark VMs were disposed."
+    },
+    {
+      "id": "compose-full-mock-gitea-cache-passed-compose-overlay2-1vm-2026-10-21T133601Z",
+      "measuredAtUtc": "2026-10-21T13:36:01.892893+00:00",
+      "parallelism": 1,
+      "vm": {
+        "vmm": "qemu",
+        "memoryGiB": 6,
+        "cpus": 2,
+        "guestSwapGiB": 0,
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2",
+        "image": "Gondolin build c62cd11c-e69d-5eb5-ac70-bbb1c9854131"
+      },
+      "outcome": "passed",
+      "composeReadinessMs": [
+        84203
+      ],
+      "composeWallClockMs": 84203,
+      "patrolDurationMs": [
+        161030
+      ],
+      "patrolExitCodes": [
+        0
+      ],
+      "patrolWallClockMs": 248026,
+      "totalElapsedMs": 249506,
+      "patrolJourneysPerVm": 3,
+      "capturedTraces": 3,
+      "browserTraceOraclePassedVms": 1,
+      "otelCanaryOraclePassedVms": 1,
+      "edgeApplicationSpanOraclePassedVms": 1,
+      "minFreeMemoryPercent": 66,
+      "hostSwapGrowthMiB": 0,
+      "minFreeDiskGiB": 55.87,
+      "checkpointsSaved": false,
+      "evidencePath": "artifacts/benchmarks/compose-overlay2-1vm-2026-10-21T133601Z/result.json",
+      "allureReportPath": "artifacts/benchmarks/patrol-evidence/compose-overlay2-1vm-2026-10-21T133601Z/allure-report/index.html",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64
+      },
+      "note": "Gitea run 64 built four application images through the Go host API from committed revision 831a417, then prepared and imported a 16-service cache with 15 unique images. One full-mock QEMU/Overlay2 VM preloaded that cache, passed three Patrol journeys and browser/OTLP/voice-edge oracles, and was disposed. This is a benchmark baseline, not a Pi session source build."
+    }
+  ],
+  "lifecycle": {
+    "id": "mac-m4-pro-2026-10-20-task-vm-lifecycle",
+    "host": {
+      "model": "Mac mini M4 Pro",
+      "cores": 14,
+      "memoryGiB": 64,
+      "macos": "26.6.2"
+    },
+    "vm": {
+      "memoryGiB": 8,
+      "cpus": 4,
+      "image": "agent-workload-platform/dev:v1-v2-9210bbc97050e8689157e362d73a8d86",
+      "diskLimitGiB": 64
+    },
+    "measuredAtUtc": "2026-10-20T05:39:51.631Z",
+    "sourceImage": "agent-workload-platform/dev:v1-v2-9210bbc97050e8689157e362d73a8d86",
+    "coldStartMedianMs": 1456,
+    "coldStartTrialsMs": [
+      1560,
+      1456,
+      1437
+    ],
+    "freshCheckpointResumeMs": 1152,
+    "resumeMedianMs": 1144,
+    "patrolCheckpointResumeTrialsMs": [
+      1138,
+      1144,
+      1154
+    ],
+    "freshCheckpointMs": 49,
+    "freshCheckpointAllocatedBytes": 14024704,
+    "patrolCheckpointMs": 49,
+    "patrolCheckpointAllocatedBytes": 14024704,
+    "method": "Sequential GondolinSession.start with Docker and dev hook; first /bin/true; checkpoint excludes Pi and Patrol model/tool time",
+    "note": "Lifecycle timings used the preceding dev image; current Patrol concurrency tiers use the pinned Playwright image listed in the patrol benchmark."
+  },
+  "storageComparisons": [
+    {
+      "id": "mac-m4-pro-2026-10-20-compose-storage-vfs-overlay2",
+      "measuredAtUtc": "2026-10-20T16:05:11Z",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64,
+        "macos": "26.6.2"
+      },
+      "vm": {
+        "vmm": "krun",
+        "memoryGiB": 8,
+        "cpus": 4,
+        "diskLimitGiB": 64
+      },
+      "workload": "Start the full-mock 15-service Compose stack and pass all endpoint readiness checks; no Patrol command was run.",
+      "controlledVariables": "Same guest base, image-cache mount, network policy, CPU, memory, root disk, Compose files, and startup hook. The two local guest image variants differ only in start-dev-docker storage-driver selection.",
+      "drivers": {
+        "vfs": {
+          "image": "voice-agent-gondolin:dev-vfs-loopback-test",
+          "storageDriver": "vfs",
+          "startupMs": 106628,
+          "rootfsSizeBytes": 67586961408,
+          "rootfsUsedBytes": 65692882944,
+          "rootfsAvailableBytes": 1877301248,
+          "dockerApparentBytes": 58517338671,
+          "dockerVfsApparentBytes": 58458024299,
+          "dockerOverlay2ApparentBytes": null,
+          "imageCount": 14,
+          "passed": true
+        },
+        "overlay2": {
+          "image": "voice-agent-gondolin:dev-overlay2-loopback-test",
+          "storageDriver": "overlay2",
+          "startupMs": 61264,
+          "rootfsSizeBytes": 67586961408,
+          "rootfsUsedBytes": 11134357504,
+          "rootfsAvailableBytes": 56435826688,
+          "dockerApparentBytes": 13056547961,
+          "dockerVfsApparentBytes": null,
+          "dockerOverlay2ApparentBytes": 12997228632,
+          "imageCount": 14,
+          "passed": true
+        }
+      },
+      "comparison": {
+        "startupReductionPercent": 42.5,
+        "rootfsUsedReductionPercent": 83.1,
+        "dockerApparentReductionPercent": 77.7
+      },
+      "method": "Two sequential runs per driver. drivers.* contains the median values; replicates contains both raw measurements. startupMs spans GondolinSession.start through all Compose readiness checks. rootfs used/available are guest df measurements. Docker du -sb values are apparent bytes, not allocated blocks. All sessions closed without saving checkpoints.",
+      "replicates": {
+        "vfs": [
+          {
+            "image": "voice-agent-gondolin:dev-vfs-loopback-test",
+            "storageDriver": "vfs",
+            "startupMs": 103906,
+            "rootfsSizeBytes": 67586961408,
+            "rootfsUsedBytes": 65692835840,
+            "rootfsAvailableBytes": 1877348352,
+            "dockerApparentBytes": 58517338569,
+            "dockerVfsApparentBytes": 58458024299,
+            "dockerOverlay2ApparentBytes": null,
+            "imageCount": 14,
+            "passed": true
+          },
+          {
+            "image": "voice-agent-gondolin:dev-vfs-loopback-test",
+            "storageDriver": "vfs",
+            "startupMs": 109350,
+            "rootfsSizeBytes": 67586961408,
+            "rootfsUsedBytes": 65692930048,
+            "rootfsAvailableBytes": 1877254144,
+            "dockerApparentBytes": 58517338773,
+            "dockerVfsApparentBytes": 58458024299,
+            "dockerOverlay2ApparentBytes": null,
+            "imageCount": 14,
+            "passed": true
+          }
+        ],
+        "overlay2": [
+          {
+            "image": "voice-agent-gondolin:dev-overlay2-loopback-test",
+            "storageDriver": "overlay2",
+            "startupMs": 60946,
+            "rootfsSizeBytes": 67586961408,
+            "rootfsUsedBytes": 11134316544,
+            "rootfsAvailableBytes": 56435867648,
+            "dockerApparentBytes": 13056543760,
+            "dockerVfsApparentBytes": null,
+            "dockerOverlay2ApparentBytes": 12997228632,
+            "imageCount": 14,
+            "passed": true
+          },
+          {
+            "image": "voice-agent-gondolin:dev-overlay2-loopback-test",
+            "storageDriver": "overlay2",
+            "startupMs": 61582,
+            "rootfsSizeBytes": 67586961408,
+            "rootfsUsedBytes": 11134398464,
+            "rootfsAvailableBytes": 56435785728,
+            "dockerApparentBytes": 13056552161,
+            "dockerVfsApparentBytes": null,
+            "dockerOverlay2ApparentBytes": 12997228632,
+            "imageCount": 14,
+            "passed": true
+          }
+        ]
+      }
+    }
+  ],
+  "composeParallelBenchmarks": [
+    {
+      "id": "compose-full-mock-overlay2-2vm-2026-10-20T17-29-47-973Z",
+      "measuredAtUtc": "2026-10-20T17:29:47.973Z",
+      "parallelism": 2,
+      "vm": {
+        "vmm": "krun",
+        "memoryGiB": 8,
+        "cpus": 4,
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2"
+      },
+      "outcome": "passed",
+      "readinessMs": [
+        65510,
+        65443
+      ],
+      "medianReadinessMs": 65476.5,
+      "wallClockMs": 67085,
+      "composeServicesStarted": 15,
+      "uniqueImages": 14,
+      "minFreeMemoryPercent": 57,
+      "swapGrowthMiB": 0,
+      "minFreeDiskGiB": 201.41,
+      "checkpointsSaved": false,
+      "evidencePath": "artifacts/benchmarks/compose-full-mock-overlay2-2vm-2026-10-20T17-29-47-973Z/result.json",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64
+      }
+    },
+    {
+      "id": "compose-full-mock-overlay2-3vm-2026-10-20T17-28-11-798Z",
+      "measuredAtUtc": "2026-10-20T17:28:11.798Z",
+      "parallelism": 3,
+      "vm": {
+        "vmm": "krun",
+        "memoryGiB": 8,
+        "cpus": 4,
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2"
+      },
+      "outcome": "guard_tripped_measurement_inconsistent",
+      "readinessMs": [
+        72559,
+        72756,
+        72568
+      ],
+      "readyVms": 3,
+      "wallClockMs": 48494,
+      "minFreeMemoryPercent": 34,
+      "swapGrowthMiB": 442.44,
+      "swapGrowthLimitMiB": 256,
+      "minFreeDiskGiB": 199.76914978027344,
+      "checkpointsSaved": false,
+      "evidencePath": "artifacts/benchmarks/compose-full-mock-overlay2-3vm-2026-10-20T17-28-11-798Z/result.json",
+      "note": "The resource guard tripped, but the recorded readiness times exceed wallClockMs; exclude this run from startup-time comparisons pending a rerun.",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64
+      }
+    },
+    {
+      "id": "compose-full-mock-overlay2-4vm-2026-10-20T17-33-24-939Z",
+      "measuredAtUtc": "2026-10-20T17:33:24.939Z",
+      "parallelism": 4,
+      "vm": {
+        "vmm": "krun",
+        "memoryGiB": 8,
+        "cpus": 4,
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2"
+      },
+      "outcome": "all_started_but_memory_floor_breached",
+      "readinessMs": [
+        81929,
+        80741,
+        80689,
+        81847
+      ],
+      "medianReadinessMs": 81294,
+      "wallClockMs": 81930,
+      "composeServicesStarted": null,
+      "uniqueImages": null,
+      "minFreeMemoryPercent": 39,
+      "memoryFloorPercent": 40,
+      "swapGrowthMiB": 0,
+      "unmeasuredPostRunSwapGrowthMiB": 6884.13,
+      "postRunSwapUsedMiB": 39804.25,
+      "minFreeDiskGiB": 204.93,
+      "guardTrippedAtMs": 33273,
+      "checkpointsSaved": false,
+      "evidencePath": "artifacts/benchmarks/compose-full-mock-overlay2-4vm-2026-10-20T17-33-24-939Z/result.json",
+      "note": "All four session.start calls completed (about 80.7–81.9 s), but free memory fell below the 40% floor at 33.3 s. The old runner then waited for start promises, leaving a sampling gap. Host swap was later observed at 39,804.25 MiB versus 32,920.12 MiB at baseline (+6,884.13 MiB); because there were no samples after 33.3 s, this increase cannot be attributed solely to this run. Service-count probes were skipped.",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64
+      }
+    },
+    {
+      "id": "compose-full-mock-overlay2-4vm-2026-10-20T17-41-46-951Z",
+      "measuredAtUtc": "2026-10-20T17:41:46.951Z",
+      "parallelism": 4,
+      "vm": {
+        "vmm": "qemu",
+        "memoryGiB": 6,
+        "cpus": 2,
+        "guestSwapGiB": 1,
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2"
+      },
+      "outcome": "passed",
+      "readinessMs": [
+        88647,
+        88618,
+        87952,
+        87561
+      ],
+      "medianReadinessMs": 88285,
+      "wallClockMs": 90005,
+      "totalElapsedMs": 90272,
+      "composeServicesStarted": 15,
+      "uniqueImages": 14,
+      "minFreeMemoryPercent": 59,
+      "swapGrowthMiB": 0,
+      "hostSwapGrowthMiB": 0,
+      "guestSwapUsedMaxKiB": 892,
+      "minFreeDiskGiB": 172.72,
+      "postCloseFreeMemoryPercent": 63,
+      "postCloseHostSwapGrowthMiB": 0,
+      "checkpointsSaved": false,
+      "evidencePath": "artifacts/benchmarks/compose-full-mock-overlay2-4vm-2026-10-20T17-41-46-951Z/result.json",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64
+      },
+      "note": "QEMU was explicitly selected. Each guest had 6 GiB RAM, 2 vCPUs, and a 1 GiB disk-backed swapfile. All four Compose stacks passed startup readiness. The guest swapfile peaked at 892 KiB used; host swap stayed unchanged through cleanup."
+    },
+    {
+      "id": "compose-full-mock-overlay2-4vm-2026-10-20T17-44-24-716Z",
+      "measuredAtUtc": "2026-10-20T17:44:24.716Z",
+      "parallelism": 4,
+      "vm": {
+        "vmm": "qemu",
+        "memoryGiB": 6,
+        "cpus": 2,
+        "guestSwapGiB": 0,
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2"
+      },
+      "outcome": "passed",
+      "readinessMs": [
+        86097,
+        86758,
+        86430,
+        86498
+      ],
+      "medianReadinessMs": 86263.5,
+      "wallClockMs": 88907,
+      "totalElapsedMs": 89167,
+      "composeServicesStarted": 15,
+      "uniqueImages": 14,
+      "minFreeMemoryPercent": 58,
+      "swapGrowthMiB": 0,
+      "hostSwapGrowthMiB": 0,
+      "guestSwapUsedMaxKiB": 0,
+      "minFreeDiskGiB": 176.49,
+      "postCloseFreeMemoryPercent": 62,
+      "postCloseHostSwapGrowthMiB": 0,
+      "checkpointsSaved": false,
+      "evidencePath": "artifacts/benchmarks/compose-full-mock-overlay2-4vm-2026-10-20T17-44-24-716Z/result.json",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64
+      },
+      "note": "Matched QEMU run with the same 6 GiB RAM and 2 vCPUs per guest as the 1 GiB guest-swap run. All four Compose stacks passed; host swap was unchanged, and guest swap was absent. This shows the guest swapfile was unnecessary for this workload in this trial."
+    }
+  ]
+}

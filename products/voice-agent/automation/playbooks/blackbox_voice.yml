@@ -1,0 +1,275 @@
+---
+- name: Exercise the deployed voice path
+  hosts: localhost
+  gather_facts: false
+  vars:
+    blackbox_full_e2e: true
+    blackbox_default_utterance: >-
+      Propose a task in the default workspace to report voice black box complete
+      without changing files
+    telemetry_operations:
+      - { service: pipecat-voice-edge, operation: voice.session }
+      - { service: pipecat-mlx-inference, operation: inference.pi }
+      - { service: pipecat-pi-voice, operation: pi.turn }
+      - { service: pipecat-agent-gateway, operation: task.propose }
+    telemetry_lifecycle_services:
+      - pipecat-voice-edge
+      - pipecat-mlx-inference
+      - pipecat-pi-voice
+      - pipecat-agent-gateway
+      - pipecat-task-worker
+      - pipecat-image-builder
+      - pipecat-gitea-runner
+    remote_session_operations:
+      - client.attached
+      - command
+  tasks:
+    - name: Read deployment configuration
+      ansible.builtin.set_fact:
+        blackbox_env: "{{ lookup('ansible.builtin.file', voice_agent_root + '/deploy/.env') }}"
+      no_log: true
+
+    - name: Select the test identity and utterances
+      ansible.builtin.set_fact:
+        blackbox_identity: >-
+          {{ lookup('ansible.builtin.env', 'BLACKBOX_IDENTITY')
+             | default((blackbox_env.splitlines()
+               | select('match', '^ORCHESTRATOR_ALLOWED_USERS=')
+               | first
+               | regex_replace('^ORCHESTRATOR_ALLOWED_USERS=', '')
+               | split(','))[0], true) }}
+        blackbox_utterances: >-
+          {{ (lookup('ansible.builtin.env', 'BLACKBOX_UTTERANCES_JSON') | from_json)
+             if lookup('ansible.builtin.env', 'BLACKBOX_UTTERANCES_JSON')
+             else [lookup('ansible.builtin.env', 'BLACKBOX_UTTERANCE')
+                   | default(blackbox_default_utterance, true)] }}
+        blackbox_expected_workspace: >-
+          {{ blackbox_env.splitlines()
+             | select('match', '^VOICE_DEFAULT_WORKSPACE=')
+             | first
+             | regex_replace('^VOICE_DEFAULT_WORKSPACE=', '') }}
+      no_log: true
+
+    - name: Detect an authenticated Tailscale sidecar
+      community.docker.docker_compose_v2_exec:
+        project_src: "{{ compose_project_src }}"
+        project_name: "{{ compose_project_name }}"
+        files: "{{ compose_files }}"
+        env_files:
+          - .env
+        service: tailscale
+        argv:
+          - tailscale
+          - --socket=/tmp/tailscaled.sock
+          - status
+      register: blackbox_tailscale_status
+      failed_when: false
+      changed_when: false
+
+    - name: Select the black-box network configuration
+      ansible.builtin.set_fact:
+        blackbox_compose_files: >-
+          {{ compose_files
+             if blackbox_tailscale_status.rc == 0
+             else compose_files + ['compose.local-test.yml'] }}
+
+    - name: Start the black-box dependencies
+      community.docker.docker_compose_v2:
+        project_src: "{{ compose_project_src }}"
+        project_name: "{{ compose_project_name }}"
+        files: "{{ blackbox_compose_files }}"
+        env_files:
+          - .env
+        services:
+          - tailscale
+          - s3mock
+          - postgres
+          - agent-gateway
+          - voice-edge
+        state: present
+        build: always
+        wait: true
+      environment:
+        ORCHESTRATOR_ALLOWED_USERS: "{{ blackbox_identity }}"
+      no_log: true
+
+    - name: Count proposals before the full test
+      community.postgresql.postgresql_query:
+        login_host: 127.0.0.1
+        login_port: 54329
+        login_user: voice_agents
+        login_password: "{{ lookup('ansible.builtin.file', voice_agent_root + '/deploy/secrets/postgres-password') }}"
+        login_db: voice_agents
+        query: SELECT count(*)::integer AS proposal_count FROM voice_task_proposals
+      register: blackbox_proposals_before
+      when: blackbox_full_e2e | bool
+      no_log: true
+
+    - name: Snapshot exercised-path metrics
+      ansible.builtin.uri:
+        url: >-
+          http://127.0.0.1:3300/api/datasources/proxy/uid/prometheus/api/v1/query?query={{
+          ('pipecat_operation_total{service_namespace="pipecat-mlx-voice",service_name="'
+           + item.service + '",app_operation="' + item.operation + '"}') | urlencode }}
+        method: GET
+        user: admin
+        password: "{{ lookup('ansible.builtin.file', voice_agent_root + '/deploy/secrets/grafana-admin-password') }}"
+        force_basic_auth: true
+        return_content: true
+        status_code: 200
+      loop: "{{ telemetry_operations }}"
+      register: blackbox_metrics_before
+      when: blackbox_full_e2e | bool
+      no_log: true
+
+    - name: Snapshot remote-session metrics
+      ansible.builtin.uri:
+        url: >-
+          http://127.0.0.1:3300/api/datasources/proxy/uid/prometheus/api/v1/query?query={{
+          ('sum(pipecat_operation_total{service_namespace="pipecat-mlx-voice",service_name="pi-task-rpc",app_operation="'
+           + item + '",app_outcome="ok"}) or vector(0)') | urlencode }}
+        method: GET
+        user: admin
+        password: "{{ lookup('ansible.builtin.file', voice_agent_root + '/deploy/secrets/grafana-admin-password') }}"
+        force_basic_auth: true
+        return_content: true
+        status_code: 200
+      loop: "{{ remote_session_operations }}"
+      register: blackbox_remote_metrics_before
+      when: lookup('ansible.builtin.env', 'BLACKBOX_REQUIRE_REMOTE_ATTACH') | default('false', true) | bool
+      no_log: true
+
+    - name: Stream synthetic speech through the deployed edge
+      community.docker.docker_compose_v2_exec:
+        project_src: "{{ compose_project_src }}"
+        project_name: "{{ compose_project_name }}"
+        files: "{{ blackbox_compose_files }}"
+        env_files:
+          - .env
+        service: voice-edge
+        tty: false
+        stdin_add_newline: false
+        argv: >-
+          {{ ['/app/.venv/bin/python', '-']
+             + blackbox_utterances
+             + ['--identity', blackbox_identity] }}
+        stdin: "{{ lookup('ansible.builtin.file', voice_agent_root + '/tests/e2e/smallwebrtc_voice.py') }}"
+      register: blackbox_voice_result
+      changed_when: false
+      no_log: true
+
+    - name: Report the payload-free voice probe result
+      ansible.builtin.debug:
+        msg: "{{ blackbox_voice_result.stdout_lines }}"
+
+    - name: Read the newest proposal
+      community.postgresql.postgresql_query:
+        login_host: 127.0.0.1
+        login_port: 54329
+        login_user: voice_agents
+        login_password: "{{ lookup('ansible.builtin.file', voice_agent_root + '/deploy/secrets/postgres-password') }}"
+        login_db: voice_agents
+        query: >-
+          SELECT identity, status, workspace,
+          (SELECT count(*)::integer FROM voice_task_proposals) AS proposal_count
+          FROM voice_task_proposals ORDER BY created_at DESC LIMIT 1
+      register: blackbox_latest_proposal
+      when: blackbox_full_e2e | bool
+      no_log: true
+
+    - name: Verify proposal persistence
+      ansible.builtin.assert:
+        that:
+          - blackbox_latest_proposal.query_result | length == 1
+          - blackbox_latest_proposal.query_result[0].proposal_count == blackbox_proposals_before.query_result[0].proposal_count + 1
+          - blackbox_latest_proposal.query_result[0].identity == blackbox_identity
+          - blackbox_latest_proposal.query_result[0].status == 'pending'
+          - >-
+            blackbox_latest_proposal.query_result[0].workspace is match(
+              '^s3://agent-artifacts/workspaces/'
+              + blackbox_expected_workspace
+              + '/sources/.+\\.bundle$'
+            )
+        fail_msg: The synthetic voice turn did not create exactly one valid pending proposal.
+      when: blackbox_full_e2e | bool
+
+    - name: Wait for fresh exercised-path metrics
+      ansible.builtin.uri:
+        url: >-
+          http://127.0.0.1:3300/api/datasources/proxy/uid/prometheus/api/v1/query?query={{
+          ('pipecat_operation_total{service_namespace="pipecat-mlx-voice",service_name="'
+           + item.service + '",app_operation="' + item.operation + '"}') | urlencode }}
+        method: GET
+        user: admin
+        password: "{{ lookup('ansible.builtin.file', voice_agent_root + '/deploy/secrets/grafana-admin-password') }}"
+        force_basic_auth: true
+        return_content: true
+        status_code: 200
+      loop: "{{ telemetry_operations }}"
+      loop_control:
+        index_var: metric_index
+      register: blackbox_metrics_after
+      until:
+        - blackbox_metrics_after.json.data.result | length == 1
+        - >-
+          blackbox_metrics_after.json.data.result[0].value[1] | float
+          > (
+            (blackbox_metrics_before.results[metric_index]
+              .json.data.result[0].value[1] | float)
+            if (blackbox_metrics_before.results[metric_index]
+              .json.data.result | length > 0)
+            else 0
+          )
+      retries: 15
+      delay: 2
+      when: blackbox_full_e2e | bool
+      no_log: true
+
+    - name: Verify fresh remote-session attachment and conversation metrics
+      ansible.builtin.uri:
+        url: >-
+          http://127.0.0.1:3300/api/datasources/proxy/uid/prometheus/api/v1/query?query={{
+          ('sum(pipecat_operation_total{service_namespace="pipecat-mlx-voice",service_name="pi-task-rpc",app_operation="'
+           + item + '",app_outcome="ok"}) or vector(0)') | urlencode }}
+        method: GET
+        user: admin
+        password: "{{ lookup('ansible.builtin.file', voice_agent_root + '/deploy/secrets/grafana-admin-password') }}"
+        force_basic_auth: true
+        return_content: true
+        status_code: 200
+      loop: "{{ remote_session_operations }}"
+      loop_control:
+        index_var: remote_metric_index
+      register: blackbox_remote_metrics_after
+      until:
+        - blackbox_remote_metrics_after.json.data.result | length == 1
+        - >-
+          blackbox_remote_metrics_after.json.data.result[0].value[1] | float
+          > blackbox_remote_metrics_before.results[remote_metric_index]
+              .json.data.result[0].value[1] | float
+      retries: 15
+      delay: 2
+      when: lookup('ansible.builtin.env', 'BLACKBOX_REQUIRE_REMOTE_ATTACH') | default('false', true) | bool
+      no_log: true
+
+    - name: Verify component lifecycle metrics
+      ansible.builtin.uri:
+        url: >-
+          http://127.0.0.1:3300/api/datasources/proxy/uid/prometheus/api/v1/query?query={{
+          ('pipecat_operation_total{service_namespace="pipecat-mlx-voice",service_name="'
+           + item + '",app_operation="component.started"}') | urlencode }}
+        method: GET
+        user: admin
+        password: "{{ lookup('ansible.builtin.file', voice_agent_root + '/deploy/secrets/grafana-admin-password') }}"
+        force_basic_auth: true
+        return_content: true
+        status_code: 200
+      loop: "{{ telemetry_lifecycle_services }}"
+      register: blackbox_lifecycle_metrics
+      until:
+        - blackbox_lifecycle_metrics.json.data.result | length == 1
+        - blackbox_lifecycle_metrics.json.data.result[0].value[1] | float > 0
+      retries: 15
+      delay: 2
+      when: blackbox_full_e2e | bool
+      no_log: true

@@ -1,0 +1,25 @@
+---
+- name: Exercise repeated Compose lifecycle convergence
+  hosts: localhost
+  gather_facts: true
+  any_errors_fatal: true
+  tasks:
+    - name: Run three stop and recreate cycles
+      ansible.builtin.include_tasks: ../tasks/lifecycle_cycle.yml
+      loop: "{{ range(1, 4) | list }}"
+      loop_control:
+        loop_var: lifecycle_cycle
+        label: "cycle {{ lifecycle_cycle }}"
+
+    - name: Leave the Compose deployment running
+      community.docker.docker_compose_v2:
+        project_src: "{{ compose_project_src }}"
+        files: "{{ compose_files }}"
+        env_files: "{{ compose_env_files }}"
+        project_name: "{{ compose_project_name }}"
+        state: present
+        wait: true
+
+    - name: Verify final convergence
+      ansible.builtin.include_role:
+        name: verify_infrastructure

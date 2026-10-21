@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -6,7 +7,6 @@ import { configureTelemetry } from "@agent-workload-platform/otel";
 
 import {
   createHttpHooks,
-  ReadonlyProvider,
   RealFSProvider,
   VM,
   VmCheckpoint,
@@ -15,8 +15,49 @@ import {
 
 export const BUILDER_LABEL = "gondolin-builder:host";
 export const DEFAULT_BUILDER_DISK = "128G";
+// Trusted builder VM Docker builds may fetch large OCI layers. Keep the larger
+// response cap on this VM rather than widening ordinary task egress.
+const BUILDER_MAX_HTTP_RESPONSE_BYTES = 1024 * 1024 * 1024;
 const GITEA_GUEST_ORIGIN = "http://gitea.local:3001";
 const OTEL_GUEST_ORIGIN = "http://otel.local:4318";
+const COMPOSE_CACHE_GUEST_ORIGIN = "http://compose-cache.local:18080";
+
+export class DockerJobHostService {
+  constructor(
+    private readonly token: string,
+    private readonly apiEndpoint: string,
+    private readonly apiToken: string,
+    private readonly fetcher: typeof fetch = fetch,
+  ) {}
+
+  async handle(request: Request): Promise<Response | undefined> {
+    const url = new URL(request.url);
+    if (url.hostname !== "compose-cache.local" || url.port !== "18080") return undefined;
+    if (request.headers.get("authorization") !== `Bearer ${this.token}`) {
+      return Response.json({ error: "unauthorized" }, { status: 401 });
+    }
+    const allowed = url.pathname === "/v1/prepare"
+      || url.pathname === "/v1/status"
+      || url.pathname === "/v1/jobs"
+      || /^\/v1\/jobs\/[0-9a-fA-F-]{36}(?:\/context)?$/.test(url.pathname);
+    if (!allowed) {
+      return Response.json({ error: "not found" }, { status: 404 });
+    }
+    const upstream = new URL(url.pathname + url.search, this.apiEndpoint);
+    const headers = new Headers({ authorization: `Bearer ${this.apiToken}` });
+    for (const name of ["content-type", "content-length", "content-encoding"]) {
+      const value = request.headers.get(name);
+      if (value) headers.set(name, value);
+    }
+    const hasBody = request.method === "POST" || request.method === "PUT";
+    return this.fetcher(upstream, {
+      method: request.method,
+      headers,
+      body: hasBody ? request.body : undefined,
+      ...(hasBody ? { duplex: "half" } : {}),
+    } as RequestInit & { duplex?: "half" });
+  }
+}
 
 function loopbackEndpoint(endpoint: string, name: string): URL {
   const url = new URL(endpoint);
@@ -26,13 +67,18 @@ function loopbackEndpoint(endpoint: string, name: string): URL {
   return url;
 }
 
-export function createBuilderServiceAccess(giteaEndpoint: string, otelEndpoint: string) {
+export function createBuilderServiceAccess(
+  giteaEndpoint: string,
+  otelEndpoint: string,
+  dockerJobService?: DockerJobHostService,
+) {
   const giteaUpstream = loopbackEndpoint(giteaEndpoint, "Gitea");
   const otelUpstream = loopbackEndpoint(otelEndpoint, "OTel");
   const giteaGuest = new URL(GITEA_GUEST_ORIGIN);
   giteaGuest.port = giteaUpstream.port;
   const otelGuest = new URL(OTEL_GUEST_ORIGIN);
   otelGuest.port = otelUpstream.port;
+  const composeCacheGuest = new URL(COMPOSE_CACHE_GUEST_ORIGIN);
   const route = (requested: URL) => {
     if (requested.hostname === giteaGuest.hostname && requested.port === giteaGuest.port) {
       return giteaUpstream;
@@ -44,9 +90,11 @@ export function createBuilderServiceAccess(giteaEndpoint: string, otelEndpoint: 
   };
   return createHttpHooks({
     allowedHosts: ["*"],
-    allowedInternalHosts: [giteaUpstream.hostname, otelUpstream.hostname],
-    onRequest: (request) => {
+    allowedInternalHosts: [giteaUpstream.hostname, otelUpstream.hostname, composeCacheGuest.hostname],
+    onRequest: async (request) => {
       const requested = new URL(request.url);
+      const dockerJobResponse = await dockerJobService?.handle(request);
+      if (dockerJobResponse) return dockerJobResponse;
       const upstream = route(requested);
       if (!upstream) {
         if (requested.hostname === "127.0.0.1" || requested.hostname === "localhost") {
@@ -98,22 +146,41 @@ type BuilderManagerOptions = {
   imagePath: string;
   otelEndpoint: string;
   registrationToken: string;
-  runnerDirectory: string;
 };
 
 export class BuilderManager {
   private vm?: VM;
-  private daemon?: ExecProcess;
   private runner?: ExecProcess;
+  private readonly dockerJobApiVmToken = randomBytes(32).toString("hex");
 
   constructor(private readonly options: BuilderManagerOptions) {}
 
   async start(): Promise<void> {
-    const service = createBuilderServiceAccess(this.options.giteaEndpoint, this.options.otelEndpoint);
+    const imageHandoffDirectory = path.join(path.dirname(this.options.checkpointPath), "gondolin-image-handoff");
+    fs.mkdirSync(imageHandoffDirectory, { recursive: true, mode: 0o700 });
+    const dockerJobApiToken = process.env.GONDOLIN_DOCKER_JOB_API_TOKEN;
+    if (!dockerJobApiToken) throw new Error("GONDOLIN_DOCKER_JOB_API_TOKEN is required to bridge the host Docker job API");
+    const dockerJobApiEndpoint = loopbackEndpoint(
+      process.env.GONDOLIN_DOCKER_JOB_API_URL ?? "http://127.0.0.1:18081",
+      "Docker job API",
+    ).toString();
+    const health = await fetch(new URL("/healthz", dockerJobApiEndpoint));
+    if (!health.ok) throw new Error(`Host Docker job API health check failed: ${health.status}`);
+    const dockerJobService = new DockerJobHostService(
+      this.dockerJobApiVmToken,
+      dockerJobApiEndpoint,
+      dockerJobApiToken,
+    );
+    const service = createBuilderServiceAccess(
+      this.options.giteaEndpoint,
+      this.options.otelEndpoint,
+      dockerJobService,
+    );
     const vmOptions = {
       sandbox: { imagePath: this.options.imagePath, netEnabled: true },
       dns: { mode: "synthetic" as const, syntheticHostMapping: "per-host" as const },
       httpHooks: service.httpHooks,
+      maxHttpResponseBodyBytes: BUILDER_MAX_HTTP_RESPONSE_BYTES,
       env: service.env,
       memory: process.env.GONDOLIN_BUILDER_MEMORY ?? "8G",
       cpus: Number(process.env.GONDOLIN_BUILDER_CPUS ?? "4"),
@@ -123,7 +190,7 @@ export class BuilderManager {
       },
       vfs: {
         mounts: {
-          "/runner": new ReadonlyProvider(new RealFSProvider(this.options.runnerDirectory)),
+          "/image-handoff": new RealFSProvider(imageHandoffDirectory),
         },
       },
       sessionLabel: "shared-image-builder",
@@ -140,20 +207,7 @@ export class BuilderManager {
     ]);
     if (!setup.ok) throw new Error(`Could not prepare builder VM: ${setup.stderr}`);
 
-    this.daemon = vm.exec([
-      "/bin/sh",
-      "-lc",
-      "exec dockerd --host=unix:///var/run/docker.sock --storage-driver=overlay2 "
-        + "--insecure-registry=gitea.local:3001 "
-        + "--iptables=false --bridge=none --ip-forward=false --ip-masq=false "
-        + ">/var/log/dockerd.log 2>&1",
-    ]);
-    for (let attempt = 0; attempt < 120; attempt += 1) {
-      const probe = await vm.exec(["docker", "info", "--format", "{{.Driver}}"]).catch(() => undefined);
-      if (probe?.ok && probe.stdout.trim() === "overlay2") break;
-      if (attempt === 119) throw new Error("Private Docker daemon did not become ready");
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    }
+    // Docker CLI/Compose render local config; builds and pulls use the host API.
 
     const registered = await vm.exec(["test", "-s", "/var/lib/gitea-runner/.runner"]);
     if (!registered.ok) {
@@ -168,6 +222,7 @@ export class BuilderManager {
       {
         cwd: "/var/lib/gitea-runner",
         env: {
+          DOCKER_JOB_API_VM_TOKEN: this.dockerJobApiVmToken,
           OTEL_EXPORTER_OTLP_ENDPOINT: OTEL_GUEST_ORIGIN,
           OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf",
           OTEL_LOGS_EXPORTER: "none",
@@ -191,10 +246,10 @@ export class BuilderManager {
   async stop(): Promise<void> {
     const vm = this.vm;
     if (!vm) return;
-    await vm.exec(["/bin/sh", "-lc", "pkill -TERM gitea-runner || true; pkill -TERM dockerd || true"])
+    await vm.exec(["/bin/sh", "-lc", "pkill -TERM gitea-runner || true"])
       .catch(() => undefined);
     await Promise.race([
-      Promise.allSettled([this.runner?.result, this.daemon?.result]),
+      Promise.allSettled([this.runner?.result]),
       new Promise((resolve) => setTimeout(resolve, 10_000)),
     ]);
     const temporary = `${this.options.checkpointPath}.next`;
@@ -218,7 +273,6 @@ async function main() {
     imagePath: required("GONDOLIN_BUILDER_ASSETS"),
     otelEndpoint: required("OTEL_EXPORTER_OTLP_ENDPOINT"),
     registrationToken: required("GITEA_RUNNER_REGISTRATION_TOKEN"),
-    runnerDirectory: fs.realpathSync(required("GONDOLIN_RUNNER_DIR")),
   });
   const telemetry = configureTelemetry("pipecat-image-builder");
   let stopPromise: Promise<void> | undefined;

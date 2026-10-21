@@ -19,13 +19,13 @@ fn required(name: &str) -> Result<String, String> {
         .ok_or_else(|| format!("{name} is required"))
 }
 
-fn gateway_url(path: &str, identity: Option<&str>) -> Result<String, String> {
+fn service_url(base_name: &str, path: &str, identity: Option<&str>) -> Result<String, String> {
     if !path.starts_with('/') || path.starts_with("//") {
         return Err("gateway request path must be absolute and host-relative".to_string());
     }
-    let base = required("TASK_GATEWAY_BASE_URL")?;
+    let base = required(base_name)?;
     if !(base.starts_with("http://") || base.starts_with("https://")) {
-        return Err("TASK_GATEWAY_BASE_URL must use HTTP or HTTPS".to_string());
+        return Err(format!("{base_name} must use HTTP or HTTPS"));
     }
     let mut url = format!("{}{}", base.trim_end_matches('/'), path);
     if let Some(value) = identity {
@@ -62,21 +62,41 @@ fn error_detail(body: &[u8]) -> String {
 impl Guest for GatewayHttp {
     fn request(method: Method, path: String, body: Option<String>) -> Result<String, String> {
         spin_executor::run(async move {
-            let identity = required("TASK_IDENTITY")?;
-            let token = required("TASK_GATEWAY_TOKEN")?;
-            let (http_method, url, encoded_body) = match method {
-                Method::Get => (HttpMethod::Get, gateway_url(&path, Some(&identity))?, None),
-                Method::Post => (
-                    HttpMethod::Post,
-                    gateway_url(&path, None)?,
-                    Some(identity_body(body, &identity)?),
-                ),
+            let trace_render =
+                path == "/api/trace-explainers" || path.starts_with("/api/trace-explainers/");
+            let (http_method, url, encoded_body, token) = if trace_render {
+                (
+                    match method {
+                        Method::Get => HttpMethod::Get,
+                        Method::Post => HttpMethod::Post,
+                    },
+                    service_url("TRACE_RENDER_BASE_URL", &path, None)?,
+                    body.map(String::into_bytes),
+                    None,
+                )
+            } else {
+                let identity = required("TASK_IDENTITY")?;
+                let token = required("TASK_GATEWAY_TOKEN")?;
+                match method {
+                    Method::Get => (
+                        HttpMethod::Get,
+                        service_url("TASK_GATEWAY_BASE_URL", &path, Some(&identity))?,
+                        None,
+                        Some(token),
+                    ),
+                    Method::Post => (
+                        HttpMethod::Post,
+                        service_url("TASK_GATEWAY_BASE_URL", &path, None)?,
+                        Some(identity_body(body, &identity)?),
+                        Some(token),
+                    ),
+                }
             };
             let mut request = Request::builder();
-            request
-                .method(http_method)
-                .uri(&url)
-                .header("authorization", format!("Bearer {token}"));
+            request.method(http_method).uri(&url);
+            if let Some(value) = token {
+                request.header("authorization", format!("Bearer {value}"));
+            }
             if encoded_body.is_some() {
                 request.header("content-type", "application/json");
             }

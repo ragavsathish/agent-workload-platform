@@ -22,6 +22,9 @@ const inspectMcpFrame = async ({ frame }, options) => {
   const mathCount = options.mathSelector
     ? await appFrame.locator(options.mathSelector).count()
     : 0;
+  const attribute = options.attribute
+    ? await content.getAttribute(options.attribute)
+    : undefined;
   let fit;
   if (options.measureDeck) {
     fit = await content.evaluate((slide) => {
@@ -35,12 +38,20 @@ const inspectMcpFrame = async ({ frame }, options) => {
       };
     });
   }
-  return { text, mathCount, fit };
+  return { text, mathCount, fit, attribute };
 };
 
 const clickMcpFrame = async ({ frame }, options) => {
   const appFrame = await mcpFrame(frame, options.title);
   await appFrame.locator(options.selector).click();
+};
+
+const screenshotMcpFrame = async ({ frame }, options) => {
+  const testFrame = await frame();
+  const iframe = testFrame.locator(`iframe[title="${options.title}"]`);
+  await iframe.waitFor({ state: 'visible' });
+  await iframe.screenshot({ path: options.path });
+  return options.path;
 };
 
 export default defineConfig({
@@ -69,7 +80,7 @@ export default defineConfig({
       },
       screenshotFailures: true,
       screenshotDirectory: 'build/vitest-screenshots',
-      commands: { inspectMcpFrame, clickMcpFrame },
+      commands: { inspectMcpFrame, clickMcpFrame, screenshotMcpFrame },
     },
   },
 });

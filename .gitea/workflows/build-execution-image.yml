@@ -26,9 +26,10 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: ${{ inputs.source_revision }}
-      - name: Build and publish the voice runtime image
+          submodules: recursive
+      - name: Build the voice runtime image
         env:
           ARTIFACT_VERSION: ${{ inputs.artifact_version }}
           IMAGE_CONFIG: ${{ inputs.image_config }}
-          IMAGE_BUILDER_TOKEN: ${{ secrets.IMAGE_BUILDER_TOKEN }}
-        run: node /runner/dist/image-builder/workflow.js
+          IMAGE_BASE_PULL_TOKEN: ${{ secrets.IMAGE_BASE_PULL_TOKEN }}
+        run: /usr/local/bin/gondolin-oci image build --via-api

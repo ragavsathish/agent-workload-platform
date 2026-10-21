@@ -1,0 +1,50 @@
+services:
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.17.1-full@sha256:190306b1739b9646d6d39333594334b69ba14ab843db927712c790b50892f262
+    restart: unless-stopped
+    depends_on:
+      s3mock:
+        condition: service_healthy
+    command:
+      - mlflow
+      - server
+      - --backend-store-uri
+      - sqlite:////var/lib/mlflow/mlflow.db
+      - --artifacts-destination
+      - s3://agent-artifacts/mlflow
+      - --serve-artifacts
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5000"
+      - --workers
+      - "1"
+    environment:
+      AWS_ACCESS_KEY_ID: ${ARTIFACT_ACCESS_KEY:-local-test}
+      AWS_SECRET_ACCESS_KEY: ${ARTIFACT_SECRET_KEY:-local-test}
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_S3_ADDRESSING_STYLE: path
+      MLFLOW_S3_ENDPOINT_URL: http://s3mock:9090
+    ports: ["127.0.0.1:${MLFLOW_PORT:-5001}:5000"]
+    volumes: [mlflow-data:/var/lib/mlflow]
+    networks: [data, host-access]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=128m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
+    mem_limit: 2g
+    cpus: 2
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=2)
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 15s
+
+volumes:
+  mlflow-data:

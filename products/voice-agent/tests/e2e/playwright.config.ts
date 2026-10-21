@@ -18,7 +18,7 @@ module.exports = defineConfig({
     ['json', { outputFile: path.join(outputDir, 'results.json') }],
   ],
   use: {
-    baseURL: process.env.VOICE_E2E_URL,
+    baseURL: process.env.VOICE_E2E_URL || 'http://127.0.0.1:8080',
     headless: true,
     ignoreHTTPSErrors: false,
     trace: 'on',
@@ -67,6 +67,11 @@ module.exports = defineConfig({
       name: 'task-diagram',
       testMatch: /task-diagram\.spec\.ts/,
       use: { viewport: { width: 390, height: 844 } },
+    },
+    {
+      name: 'readme-demo',
+      testMatch: /readme-demo\.spec\.ts/,
+      use: { viewport: { width: 1920, height: 1080 } },
     },
     {
       name: 'ux-profile',

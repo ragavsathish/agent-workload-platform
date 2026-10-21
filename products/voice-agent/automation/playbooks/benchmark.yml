@@ -1,0 +1,123 @@
+---
+- name: Run one local benchmark category
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Require a benchmark category
+      ansible.builtin.assert:
+        that:
+          - benchmark_kind is defined
+          - benchmark_kind in ['mlx', 'smoke_test', 'compose_parallel', 'compose_storage', 'lifecycle']
+        fail_msg: Set benchmark_kind to mlx, smoke_test, compose_parallel, compose_storage, or lifecycle.
+
+    - name: Measure native host inference
+      benchmark_mlx:
+        repo_root: "{{ playbook_dir }}/../../../.."
+        iterations: "{{ benchmark_iterations | default(3) }}"
+        skip_stt: "{{ benchmark_skip_stt | default(false) }}"
+        stt_wav: "{{ benchmark_stt_wav | default(omit) }}"
+        timeout_seconds: "{{ benchmark_timeout_seconds | default(7200) }}"
+        report_root: "{{ benchmark_report_root | default(omit) }}"
+      register: benchmark_mlx_run
+      failed_when: false
+      when: benchmark_kind == 'mlx'
+
+    - name: Measure concurrent Pi VM smoke tests
+      benchmark_smoke_test:
+        repo_root: "{{ playbook_dir }}/../../../.."
+        image: "{{ benchmark_image }}"
+        workspace: "{{ benchmark_workspace }}"
+        prompt_file: "{{ benchmark_prompt_file | default(omit) }}"
+        config_path: "{{ benchmark_config_path | default('.pi/gondolin.json') }}"
+        extension: "{{ benchmark_extension | default(omit) }}"
+        assets: "{{ benchmark_assets | default(omit) }}"
+        image_cache: "{{ benchmark_image_cache | default(omit) }}"
+        metrics_dir: "{{ benchmark_metrics_dir | default(omit) }}"
+        session_label: "{{ benchmark_session_label | default('pi-dev-worktree') }}"
+        capture_path: "{{ benchmark_capture_path | default(omit) }}"
+        guest_environment: "{{ benchmark_guest_environment | default({}) }}"
+        parallelism: "{{ benchmark_parallelism | default(2) }}"
+        vm_memory_gib: "{{ benchmark_vm_memory_gib | default(6) }}"
+        vm_cpus: "{{ benchmark_vm_cpus | default(2) }}"
+        vmm: "{{ benchmark_vmm | default('qemu') }}"
+        retain_checkpoints: "{{ benchmark_retain_checkpoints | default(false) }}"
+        overlays: "{{ benchmark_overlays | default([]) }}"
+        min_free_memory_percent: "{{ benchmark_min_free_memory_percent | default(25) }}"
+        max_swap_growth_mib: "{{ benchmark_max_swap_growth_mib | default(256) }}"
+        min_free_disk_gib: "{{ benchmark_min_free_disk_gib | default(30) }}"
+        min_free_swap_mib: "{{ benchmark_min_free_swap_mib | default(256) }}"
+        timeout_seconds: "{{ benchmark_timeout_seconds | default(7200) }}"
+        report_root: "{{ benchmark_report_root | default(omit) }}"
+      register: benchmark_smoke_test_run
+      failed_when: false
+      when: benchmark_kind == 'smoke_test'
+
+    - name: Measure parallel Compose VM startup
+      benchmark_compose_parallel:
+        repo_root: "{{ playbook_dir }}/../../../.."
+        image: "{{ benchmark_image }}"
+        workspace: "{{ benchmark_workspace }}"
+        compose_file: "{{ benchmark_compose_file | default(omit) }}"
+        workload_command: "{{ benchmark_workload_command | default(omit) }}"
+        bootstrap_command: "{{ benchmark_bootstrap_command | default(['/usr/local/bin/start-dev-docker']) }}"
+        compose_wait: "{{ benchmark_compose_wait | default(true) }}"
+        image_cache: "{{ benchmark_image_cache | default(omit) }}"
+        image_store: "{{ benchmark_image_store | default(omit) }}"
+        patrol_command: "{{ benchmark_patrol_command | default([]) }}"
+        patrol_oracle: "{{ benchmark_patrol_oracle | default(false) }}"
+        patrol_timeout_seconds: "{{ benchmark_patrol_timeout_seconds | default(360) }}"
+        workspace_overlays: "{{ benchmark_workspace_overlays | default([]) }}"
+        guest_environment: "{{ benchmark_guest_environment | default({}) }}"
+        expected_driver: "{{ benchmark_storage_driver | default('overlay2') }}"
+        parallelism: "{{ benchmark_parallelism | default(2) }}"
+        vm_memory_gib: "{{ benchmark_vm_memory_gib | default(6) }}"
+        vm_cpus: "{{ benchmark_vm_cpus | default(2) }}"
+        guest_swap_gib: "{{ benchmark_guest_swap_gib | default(0) }}"
+        vmm: "{{ benchmark_vmm | default('qemu') }}"
+        min_free_memory_percent: "{{ benchmark_min_free_memory_percent | default(25) }}"
+        max_swap_growth_mib: "{{ benchmark_max_swap_growth_mib | default(256) }}"
+        min_free_disk_gib: "{{ benchmark_min_free_disk_gib | default(30) }}"
+        timeout_seconds: "{{ benchmark_timeout_seconds | default(7200) }}"
+        report_root: "{{ benchmark_report_root | default(omit) }}"
+      register: benchmark_compose_parallel_run
+      failed_when: false
+      when: benchmark_kind == 'compose_parallel'
+
+    - name: Measure VM Docker storage
+      benchmark_compose_storage:
+        repo_root: "{{ playbook_dir }}/../../../.."
+        image: "{{ benchmark_image }}"
+        workspace: "{{ benchmark_workspace }}"
+        compose_file: "{{ benchmark_compose_file | default(omit) }}"
+        workload_command: "{{ benchmark_workload_command | default(omit) }}"
+        bootstrap_command: "{{ benchmark_bootstrap_command | default(['/usr/local/bin/start-dev-docker']) }}"
+        compose_wait: "{{ benchmark_compose_wait | default(true) }}"
+        image_cache: "{{ benchmark_image_cache | default(omit) }}"
+        image_store: "{{ benchmark_image_store | default(omit) }}"
+        guest_environment: "{{ benchmark_guest_environment | default({}) }}"
+        storage_driver: "{{ benchmark_storage_driver }}"
+        vm_memory_gib: "{{ benchmark_vm_memory_gib | default(8) }}"
+        vm_cpus: "{{ benchmark_vm_cpus | default(4) }}"
+        vmm: "{{ benchmark_vmm | default('qemu') }}"
+        timeout_seconds: "{{ benchmark_timeout_seconds | default(7200) }}"
+        report_root: "{{ benchmark_report_root | default(omit) }}"
+      register: benchmark_compose_storage_run
+      failed_when: false
+      when: benchmark_kind == 'compose_storage'
+
+    - name: Measure VM lifecycle
+      benchmark_lifecycle:
+        repo_root: "{{ playbook_dir }}/../../../.."
+        smoke_test_result: "{{ benchmark_smoke_test_result }}"
+        timeout_seconds: "{{ benchmark_timeout_seconds | default(7200) }}"
+        report_root: "{{ benchmark_report_root | default(omit) }}"
+      register: benchmark_lifecycle_run
+      failed_when: false
+      when: benchmark_kind == 'lifecycle'
+
+    - name: Select the benchmark result
+      ansible.builtin.set_fact:
+        benchmark_run: "{{ lookup('vars', 'benchmark_' ~ benchmark_kind ~ '_run') }}"
+
+    - name: Render and show the benchmark report
+      ansible.builtin.import_tasks: ../tasks/report_benchmark.yml

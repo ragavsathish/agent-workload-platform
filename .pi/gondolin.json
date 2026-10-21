@@ -1,5 +1,21 @@
 {
-  "memory": "2G",
-  "cpus": 2,
+  "image": "agent-workload-platform/dev:v1",
+  "build": {
+    "context": "platform/agent-execution/gondolin-session/gondolin",
+    "dockerfile": "platform/agent-execution/gondolin-session/gondolin/Dockerfile.dev",
+    "assetConfig": "platform/agent-execution/gondolin-session/gondolin/dev.aarch64.json"
+  },
+  "memory": "8G",
+  "cpus": 4,
+  "environment": {
+    "PATROL_WEB_LOCALE": "en-US",
+    "PATROL_WEB_IGNORE_HTTPS_ERRORS": "true"
+  },
+  "development": {
+    "docker": true,
+    "vmm": "qemu",
+    "disk": "64G",
+    "sessionStartHook": ".pi/hooks/start-dev-stack.clj"
+  },
   "policy": ".pi/gondolin-policy.json"
 }

@@ -1,0 +1,1 @@
+- HTTP and HTTPS egress follows the project policy. Private, loopback, link-local, and metadata destinations remain blocked.

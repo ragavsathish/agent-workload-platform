@@ -20,8 +20,29 @@ world tasking-core {
     /// Read the public status and bounded result of one durable task.
     export get-agent-task: func(task-id: string) -> result<string, string>;
 
+    /// Find one durable task by its exact displayed jazz session name.
+    export find-agent-task: func(session-name: string) -> result<string, string>;
+
     /// Cancel one pending or running durable task.
     export cancel-agent-task: func(task-id: string) -> result<string, string>;
+
+    /// Submit a durable narrated-video render for the active Playwright trace and conversational intent.
+    export submit-trace-render: func(trace-id: string, narration-brief: string) -> result<string, string>;
+
+    /// Read the durable state and completed video URL for one trace render.
+    export get-trace-render: func(render-id: string) -> result<string, string>;
+
+    /// Start a durable Pi session that writes a reviewable song manifest.
+    export submit-song: func(brief: string, workspace: string, style: string, duration-seconds: u32) -> result<string, string>;
+
+    /// Read lyric, render, and artifact status for one song generation.
+    export get-song: func(generation-id: string) -> result<string, string>;
+
+    /// Approve reviewed lyrics and start durable ACE-Step rendering.
+    export render-song: func(generation-id: string) -> result<string, string>;
+
+    /// Cancel the active lyric or render stage for one song generation.
+    export cancel-song: func(generation-id: string) -> result<string, string>;
 }
 
 world gateway-http {

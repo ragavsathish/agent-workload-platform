@@ -1,5 +1,6 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := build
+.DELETE_ON_ERROR:
 
 TARGET := wasm32-wasip2
 WASM := dist/arxiv_rs.wasm
@@ -9,9 +10,18 @@ COMPONENT_DIR ?= $(HOME)/Library/Application Support/PipecatEdge/wassette-compon
 COMPONENT_ID := arxiv_rs
 UPSTREAM_COMPONENT_ID := microsoft_arxiv-rs
 
-.PHONY: install
+.PHONY: setup build check install clean
+
+setup:
+	@command -v docker >/dev/null || { echo "Docker is required" >&2; exit 1; }
 
 build: $(WASM)
+
+check: build
+	@test -s "$(WASM)"
+
+clean:
+	rm -rf dist target
 
 $(WASM): Makefile Cargo.toml Cargo.lock rust-toolchain.toml src/lib.rs src/bindings.rs wit/world.wit
 	@set -euo pipefail; \

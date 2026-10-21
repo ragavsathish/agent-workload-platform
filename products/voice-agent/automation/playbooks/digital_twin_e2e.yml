@@ -1,0 +1,91 @@
+---
+- name: Verify the digital-twin RDF deployment
+  hosts: localhost
+  gather_facts: true
+  any_errors_fatal: true
+  vars:
+    digital_twin_fixture_dir: "{{ voice_agent_root }}/apps/pi-agent/digital-twin/runtime/rdf/example"
+    digital_twin_graph_base: "urn:awp:digital-twin:test:{{ ansible_facts.date_time.epoch }}:graph:"
+    digital_twin_graphs:
+      - { file: cv.ttl, suffix: cv }
+      - { file: conversation.ttl, suffix: conversation }
+      - { file: learning.ttl, suffix: learning }
+      - { file: provenance.ttl, suffix: provenance }
+  tasks:
+    - name: Validate the complete RDF fixture
+      ansible.builtin.command:
+        argv:
+          - uv
+          - run
+          - --with
+          - pyshacl>=0.30,<1
+          - python
+          - "{{ voice_agent_root }}/apps/pi-agent/digital-twin/runtime/scripts/validate.py"
+          - --shapes
+          - "{{ voice_agent_root }}/apps/pi-agent/digital-twin/runtime/rdf/shapes/profile.shacl.ttl"
+          - "{{ digital_twin_fixture_dir }}"
+      changed_when: false
+
+    - name: Load and verify isolated RDF graphs
+      block:
+        - name: Clear isolated RDF graphs before loading
+          ansible.builtin.uri:
+            url: http://127.0.0.1:7878/update
+            method: POST
+            body: "CLEAR SILENT GRAPH <{{ digital_twin_graph_base }}{{ item.suffix }}>"
+            headers:
+              Content-Type: application/sparql-update
+            status_code: 204
+            use_netrc: false
+          loop: "{{ digital_twin_graphs }}"
+          loop_control:
+            label: "{{ item.suffix }}"
+
+        - name: Load RDF fixture graphs
+          ansible.builtin.uri:
+            url: "http://127.0.0.1:7878/store?graph={{ (digital_twin_graph_base + item.suffix) | urlencode }}"
+            method: POST
+            body: "{{ lookup('ansible.builtin.file', digital_twin_fixture_dir + '/' + item.file) }}"
+            headers:
+              Content-Type: text/turtle
+            status_code: 201
+            use_netrc: false
+          loop: "{{ digital_twin_graphs }}"
+          loop_control:
+            label: "{{ item.file }}"
+
+        - name: Count the isolated RDF triples
+          ansible.builtin.uri:
+            url: http://127.0.0.1:7878/query
+            method: POST
+            body: >-
+              SELECT (COUNT(*) AS ?triples) WHERE {
+                GRAPH ?graph { ?subject ?predicate ?object }
+                FILTER(STRSTARTS(STR(?graph), "{{ digital_twin_graph_base }}"))
+              }
+            headers:
+              Content-Type: application/sparql-query
+              Accept: application/sparql-results+json
+            return_content: true
+            status_code: 200
+            use_netrc: false
+          register: digital_twin_e2e_count
+
+        - name: Require the isolated RDF fixture to contain triples
+          ansible.builtin.assert:
+            that:
+              - (digital_twin_e2e_count.content | from_json).results.bindings[0].triples.value | int > 0
+            quiet: true
+      always:
+        - name: Remove isolated RDF graphs
+          ansible.builtin.uri:
+            url: http://127.0.0.1:7878/update
+            method: POST
+            body: "CLEAR SILENT GRAPH <{{ digital_twin_graph_base }}{{ item.suffix }}>"
+            headers:
+              Content-Type: application/sparql-update
+            status_code: 204
+            use_netrc: false
+          loop: "{{ digital_twin_graphs }}"
+          loop_control:
+            label: "{{ item.suffix }}"

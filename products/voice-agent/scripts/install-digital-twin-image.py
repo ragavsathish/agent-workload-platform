@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the digital-twin guest through Gitea Actions and install its verified image."""
+"""Build the digital-twin guest through Gitea Actions and install its local handoff."""
 
 from __future__ import annotations
 
@@ -14,7 +14,6 @@ from voice_agent.tasking.domain.execution_images import (
     load_execution_image_plan,
 )
 from voice_agent.tasking.infrastructure.gitea_actions import GiteaActions
-from voice_agent.tasking.infrastructure.image_packages import GiteaImagePackages
 
 CONFIG_PATH = Path(
     "products/voice-agent/apps/pi-agent/digital-twin/runtime/image/gondolin.json"
@@ -47,10 +46,25 @@ def main() -> None:
     repository_name = repository.name
     secrets_dir = product / "deploy" / "secrets"
     dispatcher_token = required_file(secrets_dir / "gitea-dispatcher-token")
-    builder_token = required_file(secrets_dir / "gitea-builder-token")
-    packages = GiteaImagePackages(endpoint, "image-builder", builder_token)
-    manifest = packages.try_manifest(package="execution-images", version=plan.artifact_version)
-    if manifest is None:
+    installer = repository / "platform/agent-execution/gondolin-session/dist/image-builder/installer.js"
+    if not installer.is_file():
+        raise RuntimeError("build @agent-workload-platform/gondolin-session before installing the image")
+    node = os.getenv("NODE_BINARY", "/opt/homebrew/bin/node")
+    inspected = subprocess.run(
+        [node, str(installer), "inspect", str(repository / plan.asset_config), plan.image_ref],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    if json.loads(inspected.stdout).get("present") is True:
+        print(json.dumps({"artifactVersion": plan.artifact_version, "imageRef": plan.image_ref, "cached": True}))
+        return
+    archive_dir = Path(os.getenv(
+        "GONDOLIN_IMAGE_HANDOFF_DIR",
+        str(installer.parents[3] / "gondolin-image-handoff"),
+    )).expanduser()
+    archive = archive_dir / f"{plan.artifact_version}.tar"
+    if not archive.exists():
         actions = GiteaActions(endpoint, owner, dispatcher_token)
         run = actions.dispatch(
             repository=repository_name,
@@ -73,44 +87,27 @@ def main() -> None:
             raise RuntimeError(
                 f"digital twin image workflow {run.id} concluded {run.conclusion or 'without a result'}"
             )
-        manifest = packages.try_manifest(package="execution-images", version=plan.artifact_version)
-    if manifest is None:
-        raise RuntimeError("Gitea workflow completed without an image manifest")
-
-    digest = manifest.get("digest")
-    image_ref = manifest.get("imageRef")
-    repository_path = manifest.get("registryRepository")
-    if (
-        not isinstance(digest, str)
-        or not digest.startswith("sha256:")
-        or image_ref != plan.image_ref
-        or repository_path != "image-builder/execution-images"
-    ):
-        raise RuntimeError("Gitea image manifest does not match the requested digital twin image")
-    installer = repository / "platform/agent-execution/gondolin-session/dist/image-builder/installer.js"
-    if not installer.is_file():
-        raise RuntimeError("build @agent-workload-platform/gondolin-session before installing the image")
-    environment = {**os.environ, "GITEA_BUILDER_TOKEN": builder_token}
+    if archive.is_symlink() or not archive.is_file():
+        raise RuntimeError("Gitea workflow completed without a regular local image handoff")
     completed = subprocess.run(
         [
-            os.getenv("NODE_BINARY", "/opt/homebrew/bin/node"),
+            node,
             str(installer),
+            "local-install",
             str(repository / plan.asset_config),
-            f"127.0.0.1:3001/{repository_path}@{digest}",
+            str(archive),
             plan.image_ref,
-            digest,
+            plan.artifact_version,
         ],
         check=True,
         text=True,
         capture_output=True,
-        env=environment,
     )
     installed = json.loads(completed.stdout)
     print(
         json.dumps(
             {
                 "artifactVersion": plan.artifact_version,
-                "digest": digest,
                 "imageRef": plan.image_ref,
                 "installed": installed,
             },

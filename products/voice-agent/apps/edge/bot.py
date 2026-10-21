@@ -3,7 +3,6 @@
 import asyncio
 import os
 import re
-import tomllib
 import wave
 from functools import lru_cache
 from io import BytesIO
@@ -13,6 +12,8 @@ import httpx
 from dotenv import load_dotenv
 from fastapi import HTTPException, Request
 from loguru import logger
+from opentelemetry.context import attach, detach
+from opentelemetry.propagate import extract, inject
 from pipecat.adapters.schemas.direct_function import DirectFunction
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
@@ -59,18 +60,6 @@ logger.remove()
 
 load_dotenv(override=True)
 telemetry = configure_telemetry("pipecat-voice-edge")
-
-PROMPT_LAYER_ORDER = (
-    "identity",
-    "response_contract",
-    "standard_presentation",
-    "slides_presentation",
-    "excalidraw_presentation",
-    "grafana_presentation",
-    "execution",
-    "environment",
-    "delegation",
-)
 
 class VoicePresentationResponseProcessor(FrameProcessor):
     """Split one model response into an MCP App presentation and TTS-safe speech."""
@@ -170,6 +159,23 @@ def validate_identity(identity: str) -> str:
     return identity
 
 
+def local_ingress_identity(request: Request) -> str | None:
+    """Resolve the single configured owner for loopback-only local ingress.
+
+    Traefik adds the marker only on its dedicated local entry point, which Docker
+    publishes on host loopback. The tailnet routers remove any client-supplied
+    copy before proxying, so the marker cannot bypass tailnet authentication.
+    """
+    enabled = os.getenv("EDGE_ALLOW_LOCAL_INGRESS", "").strip().lower()
+    marker = request.headers.get("x-voice-local-ingress", "").strip()
+    if enabled not in {"1", "true", "yes"} or marker != "1":
+        return None
+    allowed = allowed_identities()
+    if len(allowed) != 1:
+        raise PermissionError("local ingress requires exactly one configured edge user")
+    return next(iter(allowed))
+
+
 def validate_http_identity(request: Request) -> str:
     try:
         allowed_origins = {
@@ -177,6 +183,19 @@ def validate_http_identity(request: Request) -> str:
             for value in required_env("PIPECAT_ALLOWED_ORIGINS").split(",")
             if value.strip()
         }
+        if os.getenv("EDGE_ALLOW_LOCAL_INGRESS", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }:
+            allowed_origins.update(
+                value.strip()
+                for value in os.getenv(
+                    "EDGE_LOCAL_ORIGINS",
+                    "http://127.0.0.1:8080,http://localhost:8080",
+                ).split(",")
+                if value.strip()
+            )
         origin = request.headers.get("origin", "")
         safe_method = request.method.upper() in {"GET", "HEAD", "OPTIONS"}
         # Browsers commonly omit Origin on same-origin GET/HEAD requests. Keep
@@ -184,9 +203,10 @@ def validate_http_identity(request: Request) -> str:
         # state-changing request. Tailnet identity is required in both cases.
         if (origin and origin not in allowed_origins) or (not safe_method and not origin):
             raise PermissionError("browser origin is not allowed")
-        return validate_identity(
-            request.headers.get("tailscale-user-login", "").strip().lower()
-        )
+        local_identity = local_ingress_identity(request)
+        if local_identity is not None:
+            return local_identity
+        return validate_identity(request.headers.get("tailscale-user-login", "").strip().lower())
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
@@ -194,9 +214,7 @@ def validate_http_identity(request: Request) -> str:
 def validate_ingress_identity(request: Request) -> str:
     """Authorize Traefik's owner-only forward-auth request."""
     try:
-        return validate_identity(
-            request.headers.get("tailscale-user-login", "").strip().lower()
-        )
+        return validate_identity(request.headers.get("tailscale-user-login", "").strip().lower())
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
@@ -214,6 +232,74 @@ async def broker_transcript_request() -> dict[str, object]:
     if not isinstance(payload, dict):
         raise HTTPException(status_code=502, detail="invalid Pi transcript")
     return payload
+
+
+def playwright_trace_upstream(path: str) -> str:
+    """Resolve a narrowly scoped Trace Viewer request to the host-side MCP service."""
+
+    if (
+        not path
+        or len(path) > 512
+        or "\\" in path
+        or any(segment in {"", ".", ".."} for segment in path.split("/"))
+    ):
+        raise HTTPException(status_code=400, detail="invalid Playwright trace path")
+    base_url = required_env("PLAYWRIGHT_TRACE_VIEWER_INTERNAL_BASE_URL").rstrip("/")
+    return f"{base_url}/{path}"
+
+
+async def proxy_playwright_trace(request: Request, upstream_path: str):
+    """Stream immutable viewer assets or a selected trace through the owner-only edge."""
+
+    from starlette.background import BackgroundTask
+    from starlette.responses import StreamingResponse
+
+    validate_http_identity(request)
+    client = httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=5.0))
+    forwarded_headers = {
+        name: value
+        for name in ("range", "if-none-match", "if-modified-since")
+        if (value := request.headers.get(name)) is not None
+    }
+    try:
+        upstream = await client.send(
+            client.build_request(
+                "GET",
+                playwright_trace_upstream(upstream_path),
+                headers=forwarded_headers,
+            ),
+            stream=True,
+        )
+    except httpx.HTTPError as exc:
+        await client.aclose()
+        raise HTTPException(
+            status_code=502, detail="Playwright Trace Viewer is unavailable"
+        ) from exc
+
+    async def close_upstream() -> None:
+        await upstream.aclose()
+        await client.aclose()
+
+    response_headers = {
+        name: value
+        for name in (
+            "accept-ranges",
+            "cache-control",
+            "content-length",
+            "content-range",
+            "content-type",
+            "etag",
+            "last-modified",
+        )
+        if (value := upstream.headers.get(name)) is not None
+    }
+    response_headers["X-Content-Type-Options"] = "nosniff"
+    return StreamingResponse(
+        upstream.aiter_raw(),
+        status_code=upstream.status_code,
+        headers=response_headers,
+        background=BackgroundTask(close_upstream),
+    )
 
 
 async def broker_sessions_request(
@@ -247,29 +333,14 @@ async def broker_sessions_request(
 
 
 @lru_cache(maxsize=1)
-def voice_prompt_layers() -> dict[str, str]:
-    """Load and validate the ordered model-instruction layers."""
-    prompt_path = Path(__file__).with_name("prompt.toml")
-    with prompt_path.open("rb") as source:
-        layers = tomllib.load(source).get("layers")
-    if not isinstance(layers, dict) or set(layers) != set(PROMPT_LAYER_ORDER):
-        raise RuntimeError("prompt.toml must define the expected prompt layers")
-    normalized: dict[str, str] = {}
-    for name in PROMPT_LAYER_ORDER:
-        value = layers.get(name)
-        if not isinstance(value, str) or not value.strip():
-            raise RuntimeError(f"prompt.toml layer {name} must be non-empty")
-        normalized[name] = value.strip()
-    return normalized
-
-
-@lru_cache(maxsize=1)
 def voice_prompt_template() -> str:
-    """Compose the stable Pi instruction shared by voice and typed turns."""
-    prompt = "\n\n".join(voice_prompt_layers().values())
+    """Load the stable system prompt shared by voice and typed turns."""
+    prompt = Path(__file__).with_name("SYSTEM.md").read_text(encoding="utf-8").strip()
+    if not prompt:
+        raise RuntimeError("SYSTEM.md must not be empty")
     marker = "{{DEFAULT_WORKSPACE}}"
     if prompt.count(marker) != 1:
-        raise RuntimeError("prompt.toml must define one default-workspace placeholder")
+        raise RuntimeError("SYSTEM.md must define one default-workspace placeholder")
     return prompt
 
 
@@ -353,26 +424,43 @@ async def broker_abort_pi_turn() -> dict[str, object]:
     return payload
 
 
+async def broker_detach_pi_task() -> None:
+    headers = {"Authorization": f"Bearer {required_env('INFERENCE_BROKER_TOKEN')}"}
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
+        response = await client.post(
+            f"{required_env('INFERENCE_BROKER_BASE_URL').rstrip('/')}/pi/tasks/detach",
+            headers=headers,
+        )
+    if response.is_error:
+        raise RuntimeError("Pi task could not be detached")
+
+
 async def owner_gateway_request(
     request: Request,
     method: str,
     path: str,
     *,
     body: dict[str, object] | None = None,
+    query: dict[str, str | int] | None = None,
 ) -> object:
     """Proxy one owner-scoped task operation through the narrow gateway."""
     identity = validate_http_identity(request)
     headers = {"Authorization": f"Bearer {required_env('AGENT_GATEWAY_TOKEN')}"}
     url = f"{required_env('AGENT_GATEWAY_BASE_URL').rstrip('/')}{path}"
-    async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0)) as client:
-        if method == "GET":
-            response = await client.request(
-                method, url, headers=headers, params={"identity": identity}
-            )
-        else:
-            response = await client.request(
-                method, url, headers=headers, json={"identity": identity, **(body or {})}
-            )
+    with telemetry.observe("task.gateway"):
+        inject(headers)
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0)) as client:
+            if method == "GET":
+                response = await client.request(
+                    method,
+                    url,
+                    headers=headers,
+                    params={"identity": identity, **(query or {})},
+                )
+            else:
+                response = await client.request(
+                    method, url, headers=headers, json={"identity": identity, **(body or {})}
+                )
     if response.is_error:
         try:
             detail = response.json().get("detail", "task request failed")
@@ -380,6 +468,32 @@ async def owner_gateway_request(
             detail = "task request failed"
         raise HTTPException(status_code=response.status_code, detail=str(detail))
     return response.json()
+
+
+async def owner_gateway_audio(request: Request, generation_id: str) -> bytes:
+    """Retrieve one completed song without exposing the gateway bearer to the browser."""
+    if re.fullmatch(
+        r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+        generation_id,
+    ) is None:
+        raise HTTPException(status_code=400, detail="invalid song generation ID")
+    identity = validate_http_identity(request)
+    headers = {"Authorization": f"Bearer {required_env('AGENT_GATEWAY_TOKEN')}"}
+    url = (
+        f"{required_env('AGENT_GATEWAY_BASE_URL').rstrip('/')}"
+        f"/music/generations/{generation_id}/audio"
+    )
+    with telemetry.observe("song.audio.proxy"):
+        inject(headers)
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0)) as client:
+            response = await client.get(url, headers=headers, params={"identity": identity})
+    if response.is_error:
+        raise HTTPException(status_code=response.status_code, detail="song audio is unavailable")
+    if response.headers.get("content-type", "").split(";", 1)[0] != "audio/mp4":
+        raise HTTPException(status_code=502, detail="gateway returned invalid song audio")
+    if not response.content or len(response.content) > 32 * 1024 * 1024:
+        raise HTTPException(status_code=502, detail="gateway returned invalid song audio")
+    return response.content
 
 
 def task_spoken_text(view: object) -> str:
@@ -465,7 +579,11 @@ async def run_bot(transport: BaseTransport, identity: str):
     async def gateway_request(method: str, path: str, **kwargs) -> dict[str, object]:
         operation = f"gateway.{method.lower()}"
         with telemetry.observe(operation):
-            response = await http_client.request(method, path, **kwargs)
+            request_headers = dict(kwargs.pop("headers", {}))
+            inject(request_headers)
+            response = await http_client.request(
+                method, path, headers=request_headers, **kwargs
+            )
             if response.is_error:
                 try:
                     detail = response.json().get("detail", "request failed")
@@ -475,6 +593,22 @@ async def run_bot(transport: BaseTransport, identity: str):
             payload = response.json()
             if not isinstance(payload, dict):
                 raise RuntimeError("agent gateway returned an invalid response")
+            return payload
+
+    async def gateway_list_request(path: str, **kwargs) -> list[dict[str, object]]:
+        with telemetry.observe("gateway.get"):
+            request_headers = dict(kwargs.pop("headers", {}))
+            inject(request_headers)
+            response = await http_client.get(path, headers=request_headers, **kwargs)
+            if response.is_error:
+                try:
+                    detail = response.json().get("detail", "request failed")
+                except ValueError:
+                    detail = "request failed"
+                raise RuntimeError(f"agent gateway rejected the request: {detail}")
+            payload = response.json()
+            if not isinstance(payload, list) or not all(isinstance(item, dict) for item in payload):
+                raise RuntimeError("agent gateway returned an invalid task list")
             return payload
 
     async def propose_agent_task(params: FunctionCallParams) -> None:
@@ -502,6 +636,22 @@ async def run_bot(transport: BaseTransport, identity: str):
             await params.result_callback(result)
         except Exception as exc:
             logger.exception("Unable to inspect agent task")
+            await params.result_callback({"error": str(exc)})
+
+    async def find_agent_task(params: FunctionCallParams) -> None:
+        try:
+            session_name = str(params.arguments["session_name"]).strip()
+            matches = await gateway_list_request(
+                "/tasks",
+                params={"identity": identity, "session_name": session_name, "limit": 2},
+            )
+            if not matches:
+                raise RuntimeError(f"No task named {session_name!r}")
+            if len(matches) != 1:
+                raise RuntimeError(f"Task name {session_name!r} is not unique")
+            await params.result_callback(matches[0])
+        except Exception as exc:
+            logger.exception("Unable to find agent task by session name")
             await params.result_callback({"error": str(exc)})
 
     async def submit_agent_task(params: FunctionCallParams) -> None:
@@ -569,7 +719,7 @@ async def run_bot(transport: BaseTransport, identity: str):
                 },
                 "workspace": {
                     "type": "string",
-                    "description": "Allowlisted logical name of the intended project workspace.",
+                    "description": "Allowlisted project name, or 'scratch' when no repository is selected. A missing named project never falls back automatically.",
                 },
             },
             required=["instruction", "workspace"],
@@ -583,6 +733,18 @@ async def run_bot(transport: BaseTransport, identity: str):
             handler=get_agent_task,
         ),
         FunctionSchema(
+            name="find_agent_task",
+            description="Find one owned Pi task by its exact displayed jazz session name.",
+            properties={
+                "session_name": {
+                    "type": "string",
+                    "description": "Exact session name, including the Take number when shown.",
+                }
+            },
+            required=["session_name"],
+            handler=find_agent_task,
+        ),
+        FunctionSchema(
             name="submit_agent_task",
             description=(
                 "Create and immediately approve durable project work for another Pi worker."
@@ -594,7 +756,7 @@ async def run_bot(transport: BaseTransport, identity: str):
                 },
                 "workspace": {
                     "type": "string",
-                    "description": "Allowlisted logical name of the project workspace.",
+                    "description": "Allowlisted project name, or 'scratch' when no repository is selected. A missing named project never falls back automatically.",
                 },
             },
             required=["instruction", "workspace"],
@@ -699,6 +861,10 @@ async def run_bot(transport: BaseTransport, identity: str):
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
+        try:
+            await broker_detach_pi_task()
+        except Exception:
+            logger.exception("Unable to detach remote Pi task")
         await http_client.aclose()
         await worker.cancel()
 
@@ -707,7 +873,11 @@ async def run_bot(transport: BaseTransport, identity: str):
     await runner.run()
 
 
+_voice_session_active = False
+
+
 async def bot(runner_args: RunnerArguments):
+    global _voice_session_active
     with telemetry.observe("voice.session"):
         match runner_args:
             case SmallWebRTCRunnerArguments():
@@ -715,6 +885,10 @@ async def bot(runner_args: RunnerArguments):
                     identity = resolve_webrtc_identity()
                 except PermissionError as exc:
                     logger.warning("Rejected WebRTC edge connection: {}", exc)
+                    await runner_args.webrtc_connection.disconnect()
+                    return
+                if _voice_session_active:
+                    logger.warning("Rejected concurrent WebRTC voice session")
                     await runner_args.webrtc_connection.disconnect()
                     return
                 transport = SmallWebRTCTransport(
@@ -725,10 +899,18 @@ async def bot(runner_args: RunnerArguments):
                         audio_out_enabled=True,
                     ),
                 )
+                # There is no await between the admission check and this
+                # assignment, so asyncio tasks cannot interleave here. Set the
+                # guard only after construction succeeds to avoid wedging the
+                # service in a permanently-busy state on constructor failure.
+                _voice_session_active = True
             case _:
                 logger.error("Unsupported runner arguments: {}", type(runner_args))
                 return
-        await run_bot(transport, identity)
+        try:
+            await run_bot(transport, identity)
+        finally:
+            _voice_session_active = False
 
 
 if __name__ == "__main__":
@@ -744,8 +926,14 @@ if __name__ == "__main__":
                 validate_http_identity(request)
             except HTTPException as exc:
                 return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
-        response = await call_next(request)
-        if path.startswith(("/mermaid/", "/marp/", "/excalidraw/")):
+        # Preserve an inbound W3C trace context across the browser turn and its
+        # broker operation. The context contains identifiers, never payloads.
+        token = attach(extract(request.headers))
+        try:
+            response = await call_next(request)
+        finally:
+            detach(token)
+        if path.startswith(("/mermaid/", "/marp/", "/excalidraw/", "/journal-review/")):
             # The MCP App runs in an opaque-origin sandbox. Permit only its
             # immutable static assets to load across that sandbox boundary.
             response.headers["Access-Control-Allow-Origin"] = "*"
@@ -779,6 +967,18 @@ if __name__ == "__main__":
             StaticFiles(directory=client_dist / "marp", html=True),
             name="marp",
         )
+    if (client_dist / "trace-explainer").is_dir():
+        app.mount(
+            "/trace-explainer",
+            StaticFiles(directory=client_dist / "trace-explainer", html=True),
+            name="trace-explainer",
+        )
+    if (client_dist / "journal-review").is_dir():
+        app.mount(
+            "/journal-review",
+            StaticFiles(directory=client_dist / "journal-review", html=True),
+            name="journal-review",
+        )
     if (client_dist / "excalidraw").is_dir():
         app.mount(
             "/excalidraw",
@@ -791,6 +991,7 @@ if __name__ == "__main__":
             StaticFiles(directory=client_dist / "diagnostics", html=True),
             name="diagnostics",
         )
+
     def register_browser_asset(asset_name: str, media_type: str | None = None) -> None:
         """Expose one generated Flutter root asset without shadowing Pipecat routes."""
 
@@ -906,6 +1107,46 @@ if __name__ == "__main__":
             raise HTTPException(status_code=502, detail="Grafana trace is unavailable") from exc
         return JSONResponse(structured, headers={"Cache-Control": "no-store"})
 
+    @app.get("/trace-viewer/{asset_path:path}", include_in_schema=False)
+    async def playwright_trace_viewer_asset(asset_path: str, request: Request):
+        return await proxy_playwright_trace(request, f"trace-viewer/{asset_path}")
+
+    @app.get(
+        "/api/playwright-traces/{trace_id}/trace.zip",
+        include_in_schema=False,
+    )
+    async def playwright_trace_data(trace_id: str, request: Request):
+        if re.fullmatch(r"[0-9a-f]{32}", trace_id) is None:
+            raise HTTPException(status_code=400, detail="invalid Playwright trace ID")
+        return await proxy_playwright_trace(
+            request,
+            f"api/playwright-traces/{trace_id}/trace.zip",
+        )
+
+    @app.get(
+        "/api/playwright-traces/{trace_id}/preview",
+        include_in_schema=False,
+    )
+    async def playwright_trace_preview(trace_id: str, request: Request):
+        if re.fullmatch(r"[0-9a-f]{32}", trace_id) is None:
+            raise HTTPException(status_code=400, detail="invalid Playwright trace ID")
+        return await proxy_playwright_trace(
+            request,
+            f"api/playwright-traces/{trace_id}/preview",
+        )
+
+    @app.get(
+        "/api/trace-explainers/{render_id}/video",
+        include_in_schema=False,
+    )
+    async def playwright_trace_narrated_video(render_id: str, request: Request):
+        if re.fullmatch(r"[0-9a-f]{32}", render_id) is None:
+            raise HTTPException(status_code=400, detail="invalid trace explainer render ID")
+        return await proxy_playwright_trace(
+            request,
+            f"api/trace-explainers/{render_id}/video",
+        )
+
     @app.get("/api/ingress-auth", include_in_schema=False)
     async def ingress_auth(request: Request):
         validate_ingress_identity(request)
@@ -913,8 +1154,13 @@ if __name__ == "__main__":
 
     @app.get("/api/tasks")
     async def list_browser_tasks(request: Request):
+        query = {}
+        if session_name := request.query_params.get("session_name"):
+            query["session_name"] = session_name
+        if limit := request.query_params.get("limit"):
+            query["limit"] = limit
         return JSONResponse(
-            await owner_gateway_request(request, "GET", "/tasks"),
+            await owner_gateway_request(request, "GET", "/tasks", query=query),
             headers={"Cache-Control": "no-store"},
         )
 
@@ -962,6 +1208,74 @@ if __name__ == "__main__":
             headers={"Cache-Control": "no-store"},
         )
 
+    @app.post("/api/music/generations", status_code=202)
+    async def create_browser_song(request: Request):
+        try:
+            payload = await request.json()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="invalid song request") from exc
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=400, detail="invalid song request")
+        brief = payload.get("brief")
+        style = payload.get("style")
+        workspace = payload.get("workspace") or required_env("VOICE_DEFAULT_WORKSPACE")
+        duration = payload.get("durationSeconds", 120)
+        if (
+            not isinstance(brief, str)
+            or not isinstance(style, str)
+            or not isinstance(workspace, str)
+            or not isinstance(duration, int)
+        ):
+            raise HTTPException(status_code=400, detail="invalid song request")
+        result = await owner_gateway_request(
+            request,
+            "POST",
+            "/music/generations",
+            body={
+                "brief": brief,
+                "style": style,
+                "workspace": workspace,
+                "durationSeconds": duration,
+            },
+        )
+        return JSONResponse(result, status_code=202, headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/music/generations/{generation_id}")
+    async def get_browser_song(generation_id: str, request: Request):
+        return JSONResponse(
+            await owner_gateway_request(
+                request, "GET", f"/music/generations/{generation_id}"
+            ),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/music/generations/{generation_id}/render", status_code=202)
+    async def render_browser_song(generation_id: str, request: Request):
+        return JSONResponse(
+            await owner_gateway_request(
+                request, "POST", f"/music/generations/{generation_id}/render"
+            ),
+            status_code=202,
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/music/generations/{generation_id}/cancel")
+    async def cancel_browser_song(generation_id: str, request: Request):
+        return JSONResponse(
+            await owner_gateway_request(
+                request, "POST", f"/music/generations/{generation_id}/cancel"
+            ),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/api/music/generations/{generation_id}/audio")
+    async def get_browser_song_audio(generation_id: str, request: Request):
+        return Response(
+            content=await owner_gateway_audio(request, generation_id),
+            media_type="audio/mp4",
+            headers={"Cache-Control": "private, max-age=300"},
+        )
+
     @app.get("/api/pi-transcript")
     async def get_pi_transcript(request: Request):
         validate_http_identity(request)
@@ -988,9 +1302,7 @@ if __name__ == "__main__":
         ):
             raise HTTPException(status_code=400, detail="invalid Pi session ID")
         return JSONResponse(
-            await broker_sessions_request(
-                f"/{session_id}", operation="browser.pi.sessions.read"
-            ),
+            await broker_sessions_request(f"/{session_id}", operation="browser.pi.sessions.read"),
             headers={"Cache-Control": "no-store"},
         )
 
@@ -998,9 +1310,7 @@ if __name__ == "__main__":
     async def start_new_pi_session(request: Request):
         validate_http_identity(request)
         return JSONResponse(
-            await broker_sessions_request(
-                "/new", "POST", operation="browser.pi.sessions.new"
-            ),
+            await broker_sessions_request("/new", "POST", operation="browser.pi.sessions.new"),
             status_code=201,
             headers={"Cache-Control": "no-store"},
         )

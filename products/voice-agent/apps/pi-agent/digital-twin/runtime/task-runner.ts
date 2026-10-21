@@ -3,6 +3,7 @@ import process from "node:process";
 import { GondolinSession, type GondolinSessionOptions } from "@agent-workload-platform/gondolin-session";
 
 const GUEST_MODEL_ORIGIN = "http://model.local:11434";
+const GUEST_CLASSIFIER_ORIGIN = "http://classifier.local:8010";
 const GUEST_WRITER_ORIGIN = "http://writer.local:9444";
 
 function required(environment: NodeJS.ProcessEnv, name: string): string {
@@ -28,10 +29,16 @@ export function digitalTwinVmConfig(environment: NodeJS.ProcessEnv): GondolinSes
     environment.DIGITAL_TWIN_WRITER_BASE_URL ?? "http://127.0.0.1:9444",
     "digital twin writer endpoint",
   );
+  const classifierUpstream = loopbackOrigin(
+    environment.DIGITAL_TWIN_CLASSIFIER_BASE_URL ?? "http://127.0.0.1:8010",
+    "digital twin classifier endpoint",
+  );
   const modelGuest = new URL(GUEST_MODEL_ORIGIN);
   modelGuest.port = modelUpstream.port;
   const writerGuest = new URL(GUEST_WRITER_ORIGIN);
   writerGuest.port = writerUpstream.port;
+  const classifierGuest = new URL(GUEST_CLASSIFIER_ORIGIN);
+  classifierGuest.port = classifierUpstream.port;
   return {
     imagePath: environment.DIGITAL_TWIN_IMAGE_REF?.trim() || "digital-twin-ingest:v1",
     network: {
@@ -41,6 +48,9 @@ export function digitalTwinVmConfig(environment: NodeJS.ProcessEnv): GondolinSes
         const requested = new URL(request.url);
         const route = requested.hostname === modelGuest.hostname && requested.port === modelGuest.port
           ? modelUpstream
+          : requested.hostname === classifierGuest.hostname
+              && requested.port === classifierGuest.port
+            ? classifierUpstream
           : requested.hostname === writerGuest.hostname && requested.port === writerGuest.port
             ? writerUpstream
             : undefined;
@@ -54,7 +64,13 @@ export function digitalTwinVmConfig(environment: NodeJS.ProcessEnv): GondolinSes
     environment: {
       DIGITAL_TWIN_MODEL_BASE_URL: modelGuest.origin,
       DIGITAL_TWIN_MODEL: environment.DIGITAL_TWIN_MODEL?.trim() || "qwen3.5:9b-mlx",
+      DIGITAL_TWIN_CLASSIFIER_BASE_URL: classifierGuest.origin,
+      DIGITAL_TWIN_CLASSIFIER_MODEL:
+        environment.DIGITAL_TWIN_CLASSIFIER_MODEL?.trim() || "von-1.3.0",
+      DIGITAL_TWIN_REVIEW_THRESHOLD:
+        environment.DIGITAL_TWIN_REVIEW_THRESHOLD?.trim() || "0.60",
       DIGITAL_TWIN_WRITER_URL: `${writerGuest.origin}/v1/digital-twin/journal`,
+      DIGITAL_TWIN_REVIEW_WRITER_URL: `${writerGuest.origin}/v1/digital-twin/reviews`,
       DIGITAL_TWIN_WRITER_TOKEN: required(environment, "DIGITAL_TWIN_WRITER_TOKEN"),
     },
     dns: { mode: "synthetic", syntheticHostMapping: "per-host" },

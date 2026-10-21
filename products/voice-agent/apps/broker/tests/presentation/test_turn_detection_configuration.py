@@ -26,8 +26,16 @@ def test_deployment_has_no_speaker_verification_configuration() -> None:
         VOICE_AGENT / "Makefile",
         VOICE_AGENT / "README.md",
         VOICE_AGENT / "deploy/.env.example",
-        VOICE_AGENT / "scripts/install-launch-agents.sh",
+        VOICE_AGENT / "automation/roles/host_services",
     ]
 
     for path in deployment_files:
-        assert "SPEAKER_" not in path.read_text(encoding="utf-8"), path
+        if path.is_dir():
+            deployment = "\n".join(
+                child.read_text(encoding="utf-8")
+                for child in path.rglob("*")
+                if child.is_file()
+            )
+        else:
+            deployment = path.read_text(encoding="utf-8")
+        assert "SPEAKER_" not in deployment, path

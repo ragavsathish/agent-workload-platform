@@ -53,6 +53,9 @@ class VisualResponse {
     final inferredResourceUri = switch (presentation['kind']) {
       'excalidraw' => 'ui://excalidraw/mcp-app.html',
       'slides' => 'ui://slides/marp.html',
+      'playwright-trace-viewer' => 'ui://playwright-trace-viewer/main.html',
+      'journal-review' => 'ui://journal-review/main.html',
+      'grafana-trace' => 'ui://grafana/trace.html',
       _ => 'ui://mermaid/main',
     };
     return spoken is String && presentation.isNotEmpty
@@ -121,6 +124,15 @@ class TranscriptSnapshot {
   final int revision;
   final List<TranscriptEntry> entries;
 
+  VisualResponse? get latestVisualResponse {
+    for (final entry in entries.reversed) {
+      if (entry.role != 'assistant' || entry.status == 'streaming') continue;
+      final response = VisualResponse.fromValue(entry.text);
+      if (response != null) return response;
+    }
+    return null;
+  }
+
   factory TranscriptSnapshot.fromJson(JsonMap json) => TranscriptSnapshot(
     revision: (json['revision'] as num?)?.toInt() ?? 0,
     entries: (json['entries'] as List? ?? const [])
@@ -164,6 +176,9 @@ class AgentTask {
     required this.status,
     required this.createdAt,
     required this.state,
+    this.sessionName,
+    this.sessionArtist,
+    this.sessionSpotifyUrl,
     this.response,
     this.artifacts = const [],
     this.failure,
@@ -176,6 +191,9 @@ class AgentTask {
   final String status;
   final DateTime createdAt;
   final String state;
+  final String? sessionName;
+  final String? sessionArtist;
+  final String? sessionSpotifyUrl;
   final VisualResponse? response;
   final List<String> artifacts;
   final Object? failure;
@@ -188,6 +206,7 @@ class AgentTask {
   factory AgentTask.fromJson(JsonMap json) {
     final result = asMap(json['result']);
     final output = asMap(result['result']);
+    final sessionReference = asMap(json['session_reference']);
     return AgentTask(
       id: '${json['id'] ?? ''}',
       instruction: '${json['instruction'] ?? ''}',
@@ -200,6 +219,9 @@ class AgentTask {
       state: result.isEmpty
           ? '${json['status'] ?? 'pending'}'
           : '${result['state'] ?? 'pending'}',
+      sessionName: json['session_name'] as String?,
+      sessionArtist: sessionReference['artist'] as String?,
+      sessionSpotifyUrl: sessionReference['spotify_url'] as String?,
       response: VisualResponse.fromValue(output['response']),
       artifacts: (output['artifacts'] as List? ?? const [])
           .map((v) => '$v')

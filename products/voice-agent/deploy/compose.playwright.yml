@@ -47,10 +47,46 @@ services:
     environment:
       NODE_PATH: /app/node_modules
       PLAYWRIGHT_PROJECT: voice
+      VOICE_E2E_INGRESS: tailscale
       VOICE_E2E_URL: https://pipecat-edge.tailf6d713.ts.net
       VOICE_E2E_AUDIO: /fixtures/voice.wav
       VOICE_E2E_OUTPUT: /output
       GRAFANA_TRACE_ID: ${GRAFANA_TRACE_ID:-}
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        exec node /app/node_modules/playwright/cli.js test
+        --config=/tests/playwright.config.ts
+        --project="$${PLAYWRIGHT_PROJECT:-voice}"
+    volumes:
+      - ../tests/e2e:/tests:ro
+      - ${PLAYWRIGHT_AUDIO_FILE:?set PLAYWRIGHT_AUDIO_FILE}:/fixtures/voice.wav:ro
+      - ${PLAYWRIGHT_OUTPUT_DIR:?set PLAYWRIGHT_OUTPUT_DIR}:/output
+    read_only: true
+    tmpfs:
+      - "/tmp:rw,nosuid,nodev,size=512m"
+      - "/home/node:rw,nosuid,nodev,size=128m,uid=1000,gid=1000"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 512
+    mem_limit: 2g
+    cpus: 2
+    restart: "no"
+
+  playwright-local-e2e:
+    image: mcr.microsoft.com/playwright/mcp:v0.0.79@sha256:18c0a9c934004fe9580cc79f1e8e6e6cde7c667348b215335e8a23fd3e509804
+    profiles: [e2e]
+    network_mode: service:tailscale
+    depends_on:
+      tailscale:
+        condition: service_started
+    environment:
+      NODE_PATH: /app/node_modules
+      PLAYWRIGHT_PROJECT: voice
+      VOICE_E2E_INGRESS: local
+      VOICE_E2E_URL: http://127.0.0.1:8081
+      VOICE_E2E_AUDIO: /fixtures/voice.wav
+      VOICE_E2E_OUTPUT: /output
     entrypoint: ["sh", "-c"]
     command:
       - >-

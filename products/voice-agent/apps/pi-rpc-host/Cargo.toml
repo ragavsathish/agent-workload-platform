@@ -1,0 +1,22 @@
+[package]
+name = "pi-task-rpc"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+libc = "0.2"
+opentelemetry = { version = "0.33.1", default-features = false, features = ["metrics", "trace"] }
+opentelemetry-otlp = { version = "0.33.1", default-features = false, features = ["http-proto", "metrics", "reqwest-blocking-client", "trace"] }
+opentelemetry_sdk = { version = "0.33.1", default-features = false, features = ["metrics", "trace"] }
+serde_json = "1.0"
+
+[dev-dependencies]
+opentelemetry_sdk = { version = "0.33.1", features = ["testing"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true
+
+[workspace]

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Digital Twin Clef Training"
+  short_description: "Train and qualify Clef safely"
+  default_prompt: "Use $digital-twin-clef-training to run an evidence-gated Clef training, qualification, and model-versioning workflow."

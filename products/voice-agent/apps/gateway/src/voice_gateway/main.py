@@ -13,17 +13,22 @@ import os
 import re
 import secrets
 import urllib.request
-from datetime import datetime
+from datetime import UTC, datetime
 from io import StringIO
 from pathlib import Path
 from typing import Annotated, Literal
+from uuid import uuid4
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Path as ApiPath
+from fastapi.responses import Response
+from opentelemetry.propagate import inject
 from pydantic import BaseModel, Field
 from voice_agent.shared.telemetry import configure_telemetry
 from voice_agent.tasking.application.pi_response import parse_pi_event_stream, response_from_text
 from voice_agent.tasking.application.service import ProposalError, TaskService
+from voice_agent.tasking.application.song_service import SongGenerationError, SongService
 from voice_agent.tasking.infrastructure.config import Settings
 
 load_dotenv(os.getenv("AGENT_GATEWAY_ENV_FILE", ".env"), override=True)
@@ -65,10 +70,29 @@ DIGITAL_TWIN_WRITER_TOKEN = (
 if len(DIGITAL_TWIN_WRITER_TOKEN) < 32:
     raise RuntimeError("DIGITAL_TWIN_WRITER_TOKEN must contain at least 32 characters")
 MAX_DIGITAL_TWIN_FACTS = 100
-SEARCH_STOP_WORDS = frozenset({
-    "a", "an", "and", "are", "for", "from", "how", "in", "is", "of", "on",
-    "or", "the", "to", "what", "where", "who", "why", "with",
-})
+SEARCH_STOP_WORDS = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "are",
+        "for",
+        "from",
+        "how",
+        "in",
+        "is",
+        "of",
+        "on",
+        "or",
+        "the",
+        "to",
+        "what",
+        "where",
+        "who",
+        "why",
+        "with",
+    }
+)
 
 PROFILE_FACTS_QUERY = """
 PREFIX schema: <https://schema.org/>
@@ -126,15 +150,78 @@ LIMIT 200
 
 JOURNAL_FACTS_QUERY = """
 PREFIX schema: <https://schema.org/>
+PREFIX awp: <urn:awp:digital-twin:predicate:>
 
-SELECT ?kind ?label ?source WHERE {
+SELECT ?id ?kind ?label ?source ?status WHERE {
   GRAPH <urn:awp:digital-twin:graph:journal> {
     ?source a schema:CreativeWork ;
       schema:additionalType ?kind ;
       schema:text ?label .
+    BIND(STRAFTER(STR(?source), "urn:awp:digital-twin:journal:") AS ?id)
+    OPTIONAL { ?source awp:status ?status }
+    FILTER(!BOUND(?status) || ?status != "deleted")
   }
 }
 ORDER BY DESC(?source)
+LIMIT 200
+"""
+
+JOURNAL_FEEDBACK_QUERY = """
+PREFIX schema: <https://schema.org/>
+PREFIX awp: <urn:awp:digital-twin:predicate:>
+
+SELECT ?id ?action ?previousType ?correctedType ?correctedText ?source ?createdAt WHERE {
+  GRAPH <urn:awp:digital-twin:graph:journal-feedback> {
+    ?feedback a schema:ReviewAction ;
+      schema:identifier ?id ;
+      schema:actionStatus ?action ;
+      schema:isBasedOn ?source ;
+      schema:dateCreated ?createdAt .
+    OPTIONAL { ?feedback awp:previousType ?previousType }
+    OPTIONAL { ?feedback awp:correctedType ?correctedType }
+    OPTIONAL { ?feedback schema:text ?correctedText }
+  }
+}
+ORDER BY DESC(?createdAt)
+LIMIT 500
+"""
+
+ACCEPTED_FACTS_QUERY = """
+PREFIX schema: <https://schema.org/>
+
+SELECT ?kind ?label ?source WHERE {
+  GRAPH <urn:awp:digital-twin:graph:accepted> {
+    ?source a schema:Claim ;
+      schema:additionalType ?kind ;
+      schema:name ?label .
+  }
+}
+ORDER BY ?kind ?label ?source
+LIMIT 200
+"""
+
+PENDING_REVIEWS_QUERY = """
+PREFIX schema: <https://schema.org/>
+PREFIX awp: <urn:awp:digital-twin:predicate:>
+
+SELECT ?id ?kind ?profileField ?label ?evidence ?confidence ?lowConfidence ?model ?sourceRef ?capturedAt ?status WHERE {
+  GRAPH <urn:awp:digital-twin:graph:review> {
+    ?candidate a schema:Claim ;
+      schema:identifier ?id ;
+      schema:additionalType ?kind ;
+      schema:disambiguatingDescription ?profileField ;
+      schema:name ?label ;
+      schema:text ?evidence ;
+      awp:confidence ?confidence ;
+      awp:status ?status ;
+      schema:isBasedOn ?source ;
+      schema:dateCreated ?capturedAt .
+    ?source schema:identifier ?sourceRef ; awp:model ?model .
+    OPTIONAL { ?candidate awp:lowConfidence ?lowConfidence }
+    FILTER(?status = "pending")
+  }
+}
+ORDER BY DESC(?capturedAt) ?id
 LIMIT 200
 """
 
@@ -148,6 +235,13 @@ class ProposalRequest(IdentityRequest):
     workspace: str = Field(min_length=1, max_length=4_096)
 
 
+class SongGenerationRequest(IdentityRequest):
+    brief: str = Field(min_length=1, max_length=20_000)
+    workspace: str = Field(min_length=1, max_length=4_096)
+    style: str = Field(min_length=1, max_length=1_000)
+    duration_seconds: int = Field(default=120, alias="durationSeconds", ge=30, le=300)
+
+
 class DigitalTwinIngestionRequest(IdentityRequest):
     session_id: str = Field(alias="sessionId", min_length=1, max_length=128)
     message_id: str = Field(alias="messageId", min_length=1, max_length=128)
@@ -157,9 +251,7 @@ class DigitalTwinIngestionRequest(IdentityRequest):
 
 class JournalEntry(BaseModel):
     id: str = Field(pattern=r"^[a-f0-9]{32}:entry:[1-9][0-9]*$")
-    type: Literal[
-        "thought", "idea", "question", "decision", "goal", "learning", "unclassified"
-    ]
+    type: Literal["thought", "idea", "question", "decision", "goal", "learning", "unclassified"]
     text: str = Field(min_length=1, max_length=1_000)
     topics: list[str] = Field(max_length=8)
 
@@ -170,6 +262,62 @@ class JournalCapture(IdentityRequest):
     captured_at: datetime = Field(alias="capturedAt")
     transcript: str = Field(min_length=1, max_length=20_000)
     entries: list[JournalEntry] = Field(max_length=12)
+
+
+class JournalFeedback(IdentityRequest):
+    action: Literal["keep", "delete", "edit", "wrong_type"]
+    corrected_type: (
+        Literal["thought", "idea", "question", "decision", "goal", "learning", "unclassified"]
+        | None
+    ) = Field(default=None, alias="correctedType")
+    corrected_text: str | None = Field(
+        default=None, alias="correctedText", min_length=1, max_length=1_000
+    )
+
+
+class JournalMissFeedback(IdentityRequest):
+    capture_id: str = Field(alias="captureId", pattern=r"^[a-f0-9]{32}$")
+    expected_type: Literal[
+        "thought", "idea", "question", "decision", "goal", "learning", "unclassified"
+    ] = Field(alias="expectedType")
+    expected_text: str = Field(alias="expectedText", min_length=1, max_length=1_000)
+
+
+class ReviewCandidate(BaseModel):
+    id: str = Field(pattern=r"^[a-f0-9]{32}:candidate:[1-9][0-9]*$")
+    label: str = Field(min_length=1, max_length=200)
+    evidence_quote: str = Field(alias="evidenceQuote", min_length=1, max_length=1_000)
+
+
+class AssertionProbabilities(BaseModel):
+    conversation_topic: float = Field(ge=0, le=1)
+    skill_evidence: float = Field(ge=0, le=1)
+    profile_update: float = Field(ge=0, le=1)
+    none: float = Field(ge=0, le=1)
+
+
+class ReviewClassification(BaseModel):
+    kind: Literal["conversation_topic", "skill_evidence", "profile_update"]
+    confidence: float = Field(ge=0, le=1)
+    probabilities: AssertionProbabilities
+    profile_field: Literal["job_title", "home_location", "credential", "employment", "none"] = (
+        Field(alias="profileField")
+    )
+    profile_field_confidence: float = Field(alias="profileFieldConfidence", ge=0, le=1)
+    low_confidence: bool = Field(alias="lowConfidence")
+    model: str = Field(min_length=1, max_length=200)
+
+
+class ReviewCapture(IdentityRequest):
+    id: str = Field(pattern=r"^[a-f0-9]{32}$")
+    source_ref: str = Field(alias="sourceRef", min_length=1, max_length=300)
+    captured_at: datetime = Field(alias="capturedAt")
+    classification: ReviewClassification
+    candidates: list[ReviewCandidate] = Field(min_length=1, max_length=8)
+
+
+class ReviewDecision(IdentityRequest):
+    decision: Literal["accept", "reject"]
 
 
 async def authenticate(authorization: Annotated[str | None, Header()] = None) -> None:
@@ -231,7 +379,9 @@ def _public_task_result(task_result: object) -> object:
         try:
             normalized = parse_pi_event_stream(StringIO(execution["stdout"]))
         except RuntimeError:
-            normalized = response_from_text("Legacy task completed; its final response is unavailable.")
+            normalized = response_from_text(
+                "Legacy task completed; its final response is unavailable."
+            )
         response_text = normalized.text
     else:
         normalized = response_from_text("Task completed.")
@@ -265,6 +415,10 @@ def voice_view(result: dict[str, object]) -> dict[str, object]:
 
 def service() -> TaskService:
     return TaskService(settings)
+
+
+def songs() -> SongService:
+    return SongService(settings)
 
 
 def _sparql_rows(query: str) -> list[dict[str, str]]:
@@ -316,6 +470,7 @@ def _journal_update(capture: JournalCapture) -> str:
     for entry in capture.entries:
         entry_iri = f"urn:awp:digital-twin:journal:{entry.id}"
         properties = [
+            f"  schema:identifier {_rdf_literal(entry.id)}",
             f"  schema:additionalType {_rdf_literal(entry.type)}",
             f"  schema:text {_rdf_literal(entry.text)}",
             f"  schema:dateCreated {_rdf_literal(captured_at)}^^xsd:dateTime",
@@ -329,6 +484,186 @@ def _journal_update(capture: JournalCapture) -> str:
             "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>",
             "INSERT DATA { GRAPH <urn:awp:digital-twin:graph:journal> {",
             *(f"  {triple.replace(chr(10), chr(10) + '  ')}" for triple in triples),
+            "} }",
+            "",
+        ]
+    )
+
+
+def _journal_entry_query(entry_id: str) -> str:
+    entry = f"urn:awp:digital-twin:journal:{entry_id}"
+    return "\n".join(
+        [
+            "PREFIX schema: <https://schema.org/>",
+            "PREFIX awp: <urn:awp:digital-twin:predicate:>",
+            "SELECT ?kind ?label ?status WHERE {",
+            "  GRAPH <urn:awp:digital-twin:graph:journal> {",
+            f"    <{entry}> a schema:CreativeWork ; schema:additionalType ?kind ; schema:text ?label .",
+            f"    OPTIONAL {{ <{entry}> awp:status ?status }}",
+            "  }",
+            "}",
+            "LIMIT 1",
+        ]
+    )
+
+
+def _journal_feedback_update(
+    entry_id: str,
+    feedback: JournalFeedback,
+    previous_type: str,
+    event_id: str,
+    created_at: datetime,
+) -> str:
+    entry = f"urn:awp:digital-twin:journal:{entry_id}"
+    event = f"urn:awp:digital-twin:journal-feedback:{event_id}"
+    status = "deleted" if feedback.action == "delete" else "reviewed"
+    replacement_type = feedback.corrected_type or previous_type
+    delete_text = "schema:text ?oldText ;" if feedback.corrected_text else ""
+    insert_text = (
+        f"schema:text {_rdf_literal(feedback.corrected_text)} ;" if feedback.corrected_text else ""
+    )
+    feedback_properties = [
+        f"  schema:identifier {_rdf_literal(event_id)}",
+        f"  schema:actionStatus {_rdf_literal(feedback.action)}",
+        f"  schema:isBasedOn <{entry}>",
+        f"  schema:dateCreated {_rdf_literal(created_at.isoformat())}^^xsd:dateTime",
+        f"  awp:previousType {_rdf_literal(previous_type)}",
+        f"  awp:correctedType {_rdf_literal(replacement_type)}",
+    ]
+    if feedback.corrected_text:
+        feedback_properties.append(f"  schema:text {_rdf_literal(feedback.corrected_text)}")
+    return "\n".join(
+        [
+            "PREFIX schema: <https://schema.org/>",
+            "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>",
+            "PREFIX awp: <urn:awp:digital-twin:predicate:>",
+            "DELETE { GRAPH <urn:awp:digital-twin:graph:journal> {",
+            f"  <{entry}> schema:additionalType ?oldType ; {delete_text} awp:status ?oldStatus .",
+            "} }",
+            "INSERT {",
+            "  GRAPH <urn:awp:digital-twin:graph:journal> {",
+            f"    <{entry}> schema:additionalType {_rdf_literal(replacement_type)} ; {insert_text} awp:status {_rdf_literal(status)} .",
+            "  }",
+            "  GRAPH <urn:awp:digital-twin:graph:journal-feedback> {",
+            f"    <{event}> a schema:ReviewAction ;",
+            "    " + " ;\n    ".join(feedback_properties) + " .",
+            "  }",
+            "}",
+            "WHERE { GRAPH <urn:awp:digital-twin:graph:journal> {",
+            f"  <{entry}> schema:additionalType ?oldType .",
+            f"  OPTIONAL {{ <{entry}> schema:text ?oldText }}",
+            f"  OPTIONAL {{ <{entry}> awp:status ?oldStatus }}",
+            "} }",
+            "",
+        ]
+    )
+
+
+def _journal_miss_update(feedback: JournalMissFeedback, event_id: str, created_at: datetime) -> str:
+    source = f"urn:awp:digital-twin:journal:{feedback.capture_id}"
+    event = f"urn:awp:digital-twin:journal-feedback:{event_id}"
+    return "\n".join(
+        [
+            "PREFIX schema: <https://schema.org/>",
+            "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>",
+            "PREFIX awp: <urn:awp:digital-twin:predicate:>",
+            "INSERT DATA { GRAPH <urn:awp:digital-twin:graph:journal-feedback> {",
+            f"  <{event}> a schema:ReviewAction ;",
+            f"    schema:identifier {_rdf_literal(event_id)} ;",
+            '    schema:actionStatus "missed" ;',
+            f"    schema:isBasedOn <{source}> ;",
+            f"    schema:dateCreated {_rdf_literal(created_at.isoformat())}^^xsd:dateTime ;",
+            f"    awp:correctedType {_rdf_literal(feedback.expected_type)} ;",
+            f"    schema:text {_rdf_literal(feedback.expected_text)} .",
+            "} }",
+            "",
+        ]
+    )
+
+
+def _review_update(capture: ReviewCapture) -> str:
+    source = f"urn:awp:digital-twin:review-source:{capture.id}"
+    classification = capture.classification
+    triples = [
+        f"<{source}> a schema:Message ;",
+        f"  schema:identifier {_rdf_literal(capture.source_ref)} ;",
+        f"  schema:dateSent {_rdf_literal(capture.captured_at.isoformat())}^^xsd:dateTime ;",
+        f"  awp:model {_rdf_literal(classification.model)} ;",
+        f"  awp:profileFieldConfidence {classification.profile_field_confidence} .",
+    ]
+    for candidate in capture.candidates:
+        candidate_iri = f"urn:awp:digital-twin:review:{candidate.id}"
+        properties = [
+            f"  schema:identifier {_rdf_literal(candidate.id)}",
+            f"  schema:additionalType {_rdf_literal(classification.kind)}",
+            f"  schema:disambiguatingDescription {_rdf_literal(classification.profile_field)}",
+            f"  schema:name {_rdf_literal(candidate.label)}",
+            f"  schema:text {_rdf_literal(candidate.evidence_quote)}",
+            f"  schema:isBasedOn <{source}>",
+            f"  schema:dateCreated {_rdf_literal(capture.captured_at.isoformat())}^^xsd:dateTime",
+            f"  awp:confidence {classification.confidence}",
+            f"  awp:lowConfidence {str(classification.low_confidence).lower()}",
+            '  awp:status "pending"',
+        ]
+        triples.append(f"<{candidate_iri}> a schema:Claim ;\n" + " ;\n".join(properties) + " .")
+    return "\n".join(
+        [
+            "PREFIX schema: <https://schema.org/>",
+            "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>",
+            "PREFIX awp: <urn:awp:digital-twin:predicate:>",
+            "INSERT DATA { GRAPH <urn:awp:digital-twin:graph:review> {",
+            *(f"  {triple.replace(chr(10), chr(10) + '  ')}" for triple in triples),
+            "} }",
+            "",
+        ]
+    )
+
+
+def _review_candidate_query(candidate_id: str) -> str:
+    candidate = f"urn:awp:digital-twin:review:{candidate_id}"
+    return "\n".join(
+        [
+            "PREFIX schema: <https://schema.org/>",
+            "PREFIX awp: <urn:awp:digital-twin:predicate:>",
+            "SELECT ?kind ?label ?evidence ?status WHERE {",
+            "  GRAPH <urn:awp:digital-twin:graph:review> {",
+            f"    <{candidate}> schema:additionalType ?kind ;",
+            "      schema:name ?label ; schema:text ?evidence ; awp:status ?status .",
+            "  }",
+            "}",
+            "LIMIT 1",
+        ]
+    )
+
+
+def _review_decision_update(candidate_id: str, decision: Literal["accept", "reject"]) -> str:
+    candidate = f"urn:awp:digital-twin:review:{candidate_id}"
+    status = "accepted" if decision == "accept" else "rejected"
+    accepted_insert = (
+        "GRAPH <urn:awp:digital-twin:graph:accepted> {\n"
+        f"  <{candidate}> a schema:Claim ; schema:identifier {_rdf_literal(candidate_id)} ;\n"
+        "    schema:additionalType ?kind ; schema:name ?label ; schema:text ?evidence ;\n"
+        "    schema:isBasedOn ?source .\n"
+        "}"
+        if decision == "accept"
+        else ""
+    )
+    return "\n".join(
+        [
+            "PREFIX schema: <https://schema.org/>",
+            "PREFIX awp: <urn:awp:digital-twin:predicate:>",
+            "DELETE { GRAPH <urn:awp:digital-twin:graph:review> {",
+            f"  <{candidate}> awp:status ?oldStatus .",
+            "} }",
+            "INSERT {",
+            "  GRAPH <urn:awp:digital-twin:graph:review> {",
+            f"    <{candidate}> awp:status {_rdf_literal(status)} .",
+            "  }",
+            f"  {accepted_insert}",
+            "}",
+            "WHERE { GRAPH <urn:awp:digital-twin:graph:review> {",
+            f"  <{candidate}> awp:status ?oldStatus ; schema:additionalType ?kind ;",
+            "    schema:name ?label ; schema:text ?evidence ; schema:isBasedOn ?source .",
             "} }",
             "",
         ]
@@ -351,11 +686,13 @@ def _sparql_update(update: str) -> None:
 
 
 def _filter_facts(rows: list[dict[str, str]], search: str) -> list[dict[str, str]]:
-    terms = tuple(dict.fromkeys(
-        term
-        for term in re.findall(r"[a-z0-9]+", search.casefold())
-        if len(term) > 1 and term not in SEARCH_STOP_WORDS
-    ))
+    terms = tuple(
+        dict.fromkeys(
+            term
+            for term in re.findall(r"[a-z0-9]+", search.casefold())
+            if len(term) > 1 and term not in SEARCH_STOP_WORDS
+        )
+    )
     if not terms:
         return rows[:MAX_DIGITAL_TWIN_FACTS]
     ranked = []
@@ -386,6 +723,7 @@ async def query_digital_twin(
             rows: list[dict[str, str]] = []
             if scope in {"profile", "all"}:
                 rows.extend(await asyncio.to_thread(_sparql_rows, PROFILE_FACTS_QUERY))
+                rows.extend(await asyncio.to_thread(_sparql_rows, ACCEPTED_FACTS_QUERY))
             if scope in {"learning", "all"}:
                 rows.extend(await asyncio.to_thread(_sparql_rows, LEARNING_FACTS_QUERY))
             if scope in {"journal", "all"}:
@@ -428,6 +766,136 @@ async def write_digital_twin_journal(
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
+@app.post("/v1/digital-twin/journal/{entry_id}/feedback")
+async def record_journal_feedback(
+    entry_id: Annotated[str, ApiPath(pattern=r"^[a-f0-9]{32}:entry:[1-9][0-9]*$")],
+    body: JournalFeedback,
+    _: None = Depends(authenticate),
+):
+    normalized_identity(body.identity)
+    if body.action == "edit" and body.corrected_text is None:
+        raise HTTPException(status_code=422, detail="edit feedback requires correctedText")
+    if body.action == "wrong_type" and body.corrected_type is None:
+        raise HTTPException(status_code=422, detail="wrong_type feedback requires correctedType")
+    if body.action in {"keep", "delete"} and (
+        body.corrected_type is not None or body.corrected_text is not None
+    ):
+        raise HTTPException(status_code=422, detail="keep and delete do not accept corrections")
+    with telemetry.observe("digital_twin.journal.feedback"):
+        try:
+            rows = await asyncio.to_thread(_sparql_rows, _journal_entry_query(entry_id))
+            if not rows:
+                raise HTTPException(status_code=404, detail="journal entry not found")
+            previous_type = rows[0].get("kind")
+            if previous_type not in {
+                "thought",
+                "idea",
+                "question",
+                "decision",
+                "goal",
+                "learning",
+                "unclassified",
+            }:
+                raise HTTPException(status_code=409, detail="journal entry has an invalid type")
+            event_id = uuid4().hex
+            await asyncio.to_thread(
+                _sparql_update,
+                _journal_feedback_update(
+                    entry_id, body, previous_type, event_id, datetime.now(UTC)
+                ),
+            )
+            telemetry.record("digital_twin.journal.feedback.action", outcome=body.action)
+            return {"entryId": entry_id, "action": body.action, "feedbackId": event_id}
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/v1/digital-twin/journal/misses")
+async def record_journal_miss(
+    body: JournalMissFeedback,
+    _: None = Depends(authenticate),
+):
+    normalized_identity(body.identity)
+    with telemetry.observe("digital_twin.journal.feedback"):
+        try:
+            event_id = uuid4().hex
+            await asyncio.to_thread(
+                _sparql_update,
+                _journal_miss_update(body, event_id, datetime.now(UTC)),
+            )
+            telemetry.record("digital_twin.journal.feedback.action", outcome="missed")
+            return {"captureId": body.capture_id, "action": "missed", "feedbackId": event_id}
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/v1/digital-twin/journal/feedback")
+async def list_journal_feedback(
+    identity: str = Query(min_length=3, max_length=320),
+    _: None = Depends(authenticate_digital_twin_reader),
+):
+    normalized_identity(identity)
+    with telemetry.observe("digital_twin.journal.feedback.list"):
+        try:
+            rows = await asyncio.to_thread(_sparql_rows, JOURNAL_FEEDBACK_QUERY)
+            return {"feedback": rows[:500]}
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/v1/digital-twin/reviews")
+async def write_digital_twin_reviews(
+    body: ReviewCapture,
+    _: None = Depends(authenticate_digital_twin_writer),
+):
+    normalized_identity(body.identity)
+    with telemetry.observe("digital_twin.review.write"):
+        try:
+            await asyncio.to_thread(_sparql_update, _review_update(body))
+            return {"captureId": body.id, "candidates": len(body.candidates)}
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/v1/digital-twin/reviews")
+async def list_digital_twin_reviews(
+    identity: str = Query(min_length=3, max_length=320),
+    _: None = Depends(authenticate_digital_twin_reader),
+):
+    normalized_identity(identity)
+    with telemetry.observe("digital_twin.review.list"):
+        try:
+            rows = await asyncio.to_thread(_sparql_rows, PENDING_REVIEWS_QUERY)
+            return {"reviews": rows[:MAX_DIGITAL_TWIN_FACTS]}
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/v1/digital-twin/reviews/{candidate_id}")
+async def decide_digital_twin_review(
+    candidate_id: Annotated[str, ApiPath(pattern=r"^[a-f0-9]{32}:candidate:[1-9][0-9]*$")],
+    body: ReviewDecision,
+    _: None = Depends(authenticate),
+):
+    normalized_identity(body.identity)
+    with telemetry.observe("digital_twin.review.decide"):
+        try:
+            rows = await asyncio.to_thread(_sparql_rows, _review_candidate_query(candidate_id))
+            if not rows:
+                raise HTTPException(status_code=404, detail="review candidate not found")
+            current = rows[0].get("status")
+            requested = "accepted" if body.decision == "accept" else "rejected"
+            if current not in {"pending", requested}:
+                raise HTTPException(status_code=409, detail="review candidate was already decided")
+            if current == "pending":
+                await asyncio.to_thread(
+                    _sparql_update, _review_decision_update(candidate_id, body.decision)
+                )
+            return {"candidateId": candidate_id, "status": requested}
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
 @app.post("/v1/tasks", status_code=201)
 async def propose(body: ProposalRequest, _: None = Depends(authenticate)):
     with telemetry.observe("task.propose"):
@@ -447,6 +915,7 @@ async def propose(body: ProposalRequest, _: None = Depends(authenticate)):
 async def list_tasks(
     identity: str = Query(min_length=3, max_length=320),
     limit: int = Query(default=50, ge=1, le=100),
+    session_name: str | None = Query(default=None, min_length=1, max_length=200),
     _: None = Depends(authenticate),
 ):
     with telemetry.observe("task.list"):
@@ -454,6 +923,7 @@ async def list_tasks(
             service().list,
             identity=normalized_identity(identity),
             limit=limit,
+            session_name=session_name,
         )
         return [voice_view(result) for result in results]
 
@@ -486,17 +956,18 @@ async def approve(
         identity = normalized_identity(body.identity)
         try:
             tasks = service()
-            pending = await asyncio.to_thread(
-                tasks.get, identity=identity, proposal_id=proposal_id
-            )
+            pending = await asyncio.to_thread(tasks.get, identity=identity, proposal_id=proposal_id)
             token = pending.get("approval_token")
             if not isinstance(token, str):
                 raise ProposalError("proposal is not available for approval")
+            trace_context: dict[str, str] = {}
+            inject(trace_context)
             result = await asyncio.to_thread(
                 tasks.approve,
                 identity=identity,
                 proposal_id=proposal_id,
                 token=token,
+                trace_context=trace_context,
             )
             return voice_view(result)
         except ProposalError as exc:
@@ -519,6 +990,104 @@ async def cancel(
             return voice_view(result)
         except ProposalError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/v1/music/generations", status_code=202)
+async def create_song_generation(
+    body: SongGenerationRequest,
+    _: None = Depends(authenticate),
+):
+    with telemetry.observe("song.create"):
+        trace_context: dict[str, str] = {}
+        inject(trace_context)
+        try:
+            return await asyncio.to_thread(
+                songs().create,
+                identity=normalized_identity(body.identity),
+                brief=body.brief,
+                workspace=body.workspace,
+                style=body.style,
+                duration_seconds=body.duration_seconds,
+                trace_context=trace_context,
+            )
+        except (SongGenerationError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/v1/music/generations/{generation_id}")
+async def get_song_generation(
+    generation_id: str,
+    identity: str = Query(min_length=3, max_length=320),
+    _: None = Depends(authenticate),
+):
+    with telemetry.observe("song.get"):
+        try:
+            return await asyncio.to_thread(
+                songs().get,
+                identity=normalized_identity(identity),
+                generation_id=generation_id,
+            )
+        except SongGenerationError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/v1/music/generations/{generation_id}/render", status_code=202)
+async def render_song_generation(
+    generation_id: str,
+    body: IdentityRequest,
+    _: None = Depends(authenticate),
+):
+    with telemetry.observe("song.render.submit"):
+        trace_context: dict[str, str] = {}
+        inject(trace_context)
+        try:
+            return await asyncio.to_thread(
+                songs().render,
+                identity=normalized_identity(body.identity),
+                generation_id=generation_id,
+                trace_context=trace_context,
+            )
+        except SongGenerationError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/v1/music/generations/{generation_id}/cancel")
+async def cancel_song_generation(
+    generation_id: str,
+    body: IdentityRequest,
+    _: None = Depends(authenticate),
+):
+    with telemetry.observe("song.cancel"):
+        try:
+            return await asyncio.to_thread(
+                songs().cancel,
+                identity=normalized_identity(body.identity),
+                generation_id=generation_id,
+            )
+        except SongGenerationError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/v1/music/generations/{generation_id}/audio")
+async def get_song_audio(
+    generation_id: str,
+    identity: str = Query(min_length=3, max_length=320),
+    _: None = Depends(authenticate),
+):
+    with telemetry.observe("song.audio"):
+        try:
+            audio = await asyncio.to_thread(
+                songs().audio,
+                identity=normalized_identity(identity),
+                generation_id=generation_id,
+            )
+        except SongGenerationError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(
+        content=audio,
+        media_type="audio/mp4",
+        headers={"Cache-Control": "private, max-age=300"},
+    )
 
 
 if __name__ == "__main__":

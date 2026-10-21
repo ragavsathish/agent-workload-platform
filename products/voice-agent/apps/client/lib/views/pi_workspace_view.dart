@@ -155,6 +155,7 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
       setState(() {
         _selectedSession = session;
         _historicalSnapshot = snapshot;
+        _expanded.clear();
       });
       _scrollToEnd();
     } on Object catch (error) {
@@ -166,6 +167,7 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
     _selectedSession = null;
     _historicalSnapshot = null;
     _section = WorkspaceSection.conversation;
+    _expanded.clear();
   });
 
   Future<void> _resumeSelectedSession() async {
@@ -732,7 +734,7 @@ class _WorkspaceSidebar extends StatelessWidget {
                       const SizedBox(width: 9),
                       Expanded(
                         child: Text(
-                          task.instruction,
+                          task.sessionName ?? task.instruction,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.bodySmall,
@@ -908,7 +910,11 @@ class _ConversationPane extends StatelessWidget {
                 key: const Key('return-live-session'),
                 onPressed: onReturnLive,
                 icon: const Icon(Icons.graphic_eq_rounded, size: 16),
-                label: const Text('Back to live'),
+                label: Text(
+                  MediaQuery.sizeOf(context).width < 480
+                      ? 'Live'
+                      : 'Back to live',
+                ),
               ),
               const SizedBox(width: 6),
               FilledButton.icon(
@@ -1468,9 +1474,16 @@ class _TaskCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          task.instruction,
+                          task.sessionName ?? task.instruction,
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
+                        if (task.sessionName != null) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            task.instruction,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ],
                         const SizedBox(height: 5),
                         Text(
                           '${_stateLabel(task)} · ${_relativeTime(task.createdAt)}',
@@ -1485,6 +1498,31 @@ class _TaskCard extends StatelessWidget {
                   ),
                 ],
               ),
+              if (task.sessionArtist != null ||
+                  task.sessionSpotifyUrl != null) ...[
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    if (task.sessionArtist case final artist?)
+                      Text(
+                        artist,
+                        key: Key('task-session-artist-${task.id}'),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    if (task.sessionSpotifyUrl case final spotifyUrl?)
+                      OutlinedButton.icon(
+                        key: Key('task-spotify-${task.id}'),
+                        onPressed: () =>
+                            ClientActions.openExternalUrl(spotifyUrl),
+                        icon: const Icon(Icons.open_in_new_rounded, size: 15),
+                        label: const Text('Listen on Spotify'),
+                      ),
+                  ],
+                ),
+              ],
               if (task.response != null) ...[
                 const SizedBox(height: 15),
                 const Divider(),
@@ -1533,7 +1571,9 @@ class _TaskCard extends StatelessWidget {
           expandedCrossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SelectableText(
-              'Workspace: ${task.workspace}',
+              task.workspace == 'scratch'
+                  ? 'Workspace: Scratch VM (no repository)'
+                  : 'Workspace: ${task.workspace}',
               style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
             ),
             const SizedBox(height: 7),

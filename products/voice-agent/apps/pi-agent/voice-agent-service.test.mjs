@@ -1,12 +1,20 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { canManuallyCompact } from "./dist/voice-agent/voice-agent.js";
+import {
+  canManuallyCompact,
+  VOICE_INITIAL_TOOLS,
+} from "./dist/voice-agent/voice-agent.js";
 import {
   createGrafanaMcpRegistration,
+  createJournalReviewMcpRegistration,
+  createPlaywrightTraceMcpRegistration,
+  createRemoteTaskSessionRegistration,
   createWassetteMcpRegistration,
   isolatedVoiceMcpConfig,
   skillResourceLoader,
@@ -17,7 +25,6 @@ import {
   restorePublicTranscript,
 } from "./dist/voice-agent/public-transcript.js";
 import { parseVoiceTurn } from "./dist/voice-agent/conversation.js";
-import { parseEnvFile } from "./dist/voice-agent/voice-config.js";
 import { matchVoiceRoute } from "./dist/voice-agent/voice-http-server.js";
 import {
   createVoiceGondolinConfig,
@@ -34,8 +41,11 @@ import {
   readVoiceSession,
 } from "./dist/voice-agent/voice-sessions.js";
 
+const promptEvent = () => ({ systemPromptOptions: { sections: {} } });
+
 test("orchestrator Pi registers Wassette through native deferred MCP", async () => {
   const registrations = [];
+  const handlers = new Map();
   await createWassetteMcpRegistration({
     cwd: "/host/voice-workspace",
     wassetteBin: "/host/bin/wassette",
@@ -44,6 +54,9 @@ test("orchestrator Pi registers Wassette through native deferred MCP", async () 
   })({
     registerMcpServer(name, config) {
       registrations.push({ name, config });
+    },
+    on(event, handler) {
+      handlers.set(event, handler);
     },
   });
 
@@ -63,20 +76,50 @@ test("orchestrator Pi registers Wassette through native deferred MCP", async () 
   assert.equal(registrations[0].config.env.TASK_GATEWAY_TOKEN, "");
   assert.equal(registrations[0].config.env.KNOWLEDGE_GATEWAY_TOKEN, "");
   assert.equal(registrations[0].config.env.DIGITAL_TWIN_READER_TOKEN, "");
+  const event = promptEvent();
+  handlers.get("before_agent_start")(event);
+  assert.match(event.systemPromptOptions.sections.wassette, /capability-controlled WebAssembly/u);
+  assert.match(event.systemPromptOptions.sections.music, /review-gated/u);
+});
+
+test("voice initial tools do not turn MCP selection into an allowlist", () => {
+  assert.ok(VOICE_INITIAL_TOOLS.length > 0);
+  assert.ok(
+    VOICE_INITIAL_TOOLS.every((name) => name.startsWith("+")),
+    "plain tool names would hide deferred Wassette MCP tools",
+  );
 });
 
 test("voice MCP ignores shared host and project MCP configuration", () => {
   assert.deepEqual(isolatedVoiceMcpConfig(), { servers: [], errors: [] });
 });
 
-test("orchestrator Pi registers authenticated Grafana MCP as deferred and read-only", async () => {
+test("orchestrator Pi keeps authenticated Grafana trace tools directly available", async () => {
   const registrations = [];
+  const handlers = new Map();
+  let activeTools = ["read"];
   await createGrafanaMcpRegistration({
     grafanaMcpToken: "caller-secret",
     grafanaMcpUrl: "http://127.0.0.1:8000/mcp",
   })({
     registerMcpServer(name, config) {
       registrations.push({ name, config });
+    },
+    on(event, handler) {
+      handlers.set(event, handler);
+    },
+    getAllTools() {
+      return [
+        { name: "read" },
+        { name: "mcp__grafana__search_tempo_traces" },
+        { name: "mcp__grafana__get_tempo_trace" },
+      ];
+    },
+    getActiveTools() {
+      return activeTools;
+    },
+    setActiveTools(tools) {
+      activeTools = tools;
     },
   });
 
@@ -85,11 +128,113 @@ test("orchestrator Pi registers authenticated Grafana MCP as deferred and read-o
     config: {
       url: "http://127.0.0.1:8000/mcp",
       headers: { Authorization: "Bearer caller-secret" },
-      exposure: "deferred",
+      exposure: "direct",
       description: "Read Grafana dashboards, Prometheus metrics, and Tempo traces.",
       timeout: 30,
     },
   }]);
+  const event = promptEvent();
+  handlers.get("before_agent_start")(event);
+  assert.match(event.systemPromptOptions.sections.grafana_trace, /Grafana MCP/u);
+  assert.deepEqual(activeTools, [
+    "read",
+    "mcp__grafana__search_tempo_traces",
+    "mcp__grafana__get_tempo_trace",
+  ]);
+});
+
+test("orchestrator Pi keeps Playwright trace reads direct while narrated export stays deferred to Wassette", async () => {
+  const registrations = [];
+  const handlers = new Map();
+  let activeTools = ["read"];
+  await createPlaywrightTraceMcpRegistration({
+    playwrightTraceViewerBaseUrl: "http://127.0.0.1:9450",
+  })({
+    registerMcpServer(name, config) {
+      registrations.push({ name, config });
+    },
+    on(event, handler) {
+      handlers.set(event, handler);
+    },
+    getAllTools() {
+      return [
+        { name: "read" },
+        { name: "mcp__playwright_traces__search_playwright_traces" },
+        { name: "mcp__playwright_traces__render_playwright_trace" },
+      ];
+    },
+    getActiveTools() {
+      return activeTools;
+    },
+    setActiveTools(names) {
+      activeTools = names;
+    },
+  });
+
+  assert.equal(registrations.length, 1);
+  assert.equal(registrations[0].name, "playwright-traces");
+  assert.equal(registrations[0].config.url, "http://127.0.0.1:9450/mcp");
+  assert.equal(registrations[0].config.timeout, 600);
+  assert.equal(registrations[0].config.exposure, "direct");
+  const event = promptEvent();
+  handlers.get("before_agent_start")(event);
+  assert.match(event.systemPromptOptions.sections.playwright_trace, /selectedPlaywrightTrace/u);
+  assert.deepEqual(activeTools, [
+    "read",
+    "mcp__playwright_traces__search_playwright_traces",
+    "mcp__playwright_traces__render_playwright_trace",
+  ]);
+});
+
+test("orchestrator Pi keeps the journal review app directly available", async () => {
+  const registrations = [];
+  const handlers = new Map();
+  let activeTools = ["read"];
+  await createJournalReviewMcpRegistration()({
+    registerMcpServer(name, config) {
+      registrations.push({ name, config });
+    },
+    on(event, handler) {
+      handlers.set(event, handler);
+    },
+    getAllTools() {
+      return [
+        { name: "read" },
+        { name: "mcp__journal_review__render_journal_review" },
+        { name: "mcp__journal_review__review_active" },
+        { name: "mcp__journal_review__get_review_status" },
+      ];
+    },
+    getActiveTools() {
+      return activeTools;
+    },
+    setActiveTools(tools) {
+      activeTools = tools;
+    },
+  });
+
+  assert.equal(registrations.length, 1);
+  assert.equal(registrations[0].name, "journal-review");
+  assert.equal(registrations[0].config.command, process.execPath);
+  assert.match(
+    registrations[0].config.args[0],
+    /dist\/vendor\/journal-review-mcp\/stdio-bundle\.mjs$/u,
+  );
+  assert.equal(registrations[0].config.args[1], "--stdio");
+  assert.match(
+    registrations[0].config.env.JOURNAL_REVIEW_APP_HTML,
+    /dist\/vendor\/journal-review-mcp\/app\/main\.html$/u,
+  );
+  assert.equal(registrations[0].config.exposure, "direct");
+  const event = promptEvent();
+  handlers.get("before_agent_start")(event);
+  assert.match(event.systemPromptOptions.sections.journal_review, /Recogito/u);
+  assert.deepEqual(activeTools, [
+    "read",
+    "mcp__journal_review__render_journal_review",
+    "mcp__journal_review__review_active",
+    "mcp__journal_review__get_review_status",
+  ]);
 });
 
 test("voice HTTP routes parse into typed commands", () => {
@@ -101,7 +246,36 @@ test("voice HTTP routes parse into typed commands", () => {
     matchVoiceRoute("POST", "/v1/turn/stream"),
     { kind: "turn", stream: true },
   );
+  assert.deepEqual(
+    matchVoiceRoute("POST", "/v1/tasks/detach"),
+    { kind: "detach-task" },
+  );
   assert.deepEqual(matchVoiceRoute("DELETE", "/v1/turn"), { kind: "not-found" });
+});
+
+test("voice Pi exposes one task-session attachment tool", async () => {
+  const tools = [];
+  const attached = [];
+  const handlers = new Map();
+  await createRemoteTaskSessionRegistration({
+    async attach(taskId) {
+      attached.push(taskId);
+      return { taskId, isStreaming: true };
+    },
+  })({
+    registerTool(tool) { tools.push(tool); },
+    on(event, handler) { handlers.set(event, handler); },
+  });
+
+  assert.equal(tools.length, 1);
+  assert.equal(tools[0].name, "attach_task_session");
+  const event = promptEvent();
+  handlers.get("before_agent_start")(event);
+  assert.match(event.systemPromptOptions.sections.remote_task, /active conversational session/u);
+  const taskId = "00000000-0000-0000-0000-000000000001";
+  const result = await tools[0].execute("call-1", { task_id: taskId });
+  assert.deepEqual(attached, [taskId]);
+  assert.match(result.content[0].text, /next owner turn goes directly/u);
 });
 
 test("persisted session history exposes text and tool status without private payloads", () => {
@@ -250,16 +424,21 @@ test("reusable skills have a dedicated guest mount", () => {
   assert.equal(GUEST_SKILLS, "/skills");
 });
 
-test("Pi natively discovers mounted skills and exposes guest-readable paths", async () => {
+test("Pi discovers only mounted Voice skills and exposes guest-readable paths", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi-voice-skills-test-"));
   const skills = join(root, "skills");
   const skill = join(skills, "engineering", "diagnosing-bugs");
+  const autoSkill = join(root, "home", ".agents", "skills", "unexpected-global-skill");
   const agentDir = join(root, "agent");
   const cwd = join(root, "workspace");
+  const previousHome = process.env.HOME;
+  const originalReaddirSync = fs.readdirSync;
+  let scannedGlobalSkills = false;
   let explicitExtensionLoaded = false;
   try {
     await Promise.all([
       mkdir(skill, { recursive: true }),
+      mkdir(autoSkill, { recursive: true }),
       mkdir(agentDir),
       mkdir(cwd),
     ]);
@@ -267,6 +446,18 @@ test("Pi natively discovers mounted skills and exposes guest-readable paths", as
       join(skill, "SKILL.md"),
       "---\nname: diagnosing-bugs\ndescription: Diagnose difficult bugs.\n---\n\n# Diagnose\n",
     );
+    await writeFile(
+      join(autoSkill, "SKILL.md"),
+      "---\nname: unexpected-global-skill\ndescription: Must not enter the Voice session.\n---\n",
+    );
+    process.env.HOME = join(root, "home");
+    fs.readdirSync = function guardedReaddirSync(directory, options) {
+      if (String(directory).startsWith(join(root, "home", ".agents", "skills"))) {
+        scannedGlobalSkills = true;
+      }
+      return originalReaddirSync.call(this, directory, options);
+    };
+    syncBuiltinESMExports();
 
     const loader = await skillResourceLoader(
       "Voice system prompt",
@@ -276,6 +467,8 @@ test("Pi natively discovers mounted skills and exposes guest-readable paths", as
     const result = loader.getSkills();
 
     assert.deepEqual(result.diagnostics, []);
+    assert.equal(scannedGlobalSkills, false);
+    assert.equal(process.env.HOME, join(root, "home"));
     assert.equal(result.skills.length, 1);
     assert.equal(explicitExtensionLoaded, true);
     assert.equal(result.skills[0].name, "diagnosing-bugs");
@@ -285,6 +478,10 @@ test("Pi natively discovers mounted skills and exposes guest-readable paths", as
     );
     assert.equal(result.skills[0].baseDir, "/skills/engineering/diagnosing-bugs");
   } finally {
+    fs.readdirSync = originalReaddirSync;
+    syncBuiltinESMExports();
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
     await rm(root, { recursive: true, force: true });
   }
 });
@@ -391,13 +588,6 @@ test("voice Gondolin exposes allowlisted loopback services including raw Oxigrap
   );
 });
 
-test("parseEnvFile accepts the installed quoted environment format", () => {
-  assert.deepEqual(parseEnvFile('A=one\nB="two words"\n# ignored\n'), {
-    A: "one",
-    B: "two words",
-  });
-});
-
 test("public transcript exposes text and tool status without tool payloads", () => {
   const transcript = new PublicTranscript();
   transcript.addUser("Inspect the repository.");
@@ -471,6 +661,7 @@ test("voice messages keep the system prompt separate from the turn prompt", () =
   ]), {
     systemPrompt: "Be exact.",
     prompt: "Check p-1.",
+    origin: "user",
   });
 });
 
@@ -488,6 +679,7 @@ test("a Pipecat developer bootstrap becomes the first agent turn", () => {
   ]), {
     systemPrompt: "Be exact.",
     prompt: "Say ready.",
+    origin: "developer",
   });
 });
 

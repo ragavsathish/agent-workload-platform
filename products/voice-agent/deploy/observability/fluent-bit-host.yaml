@@ -7,7 +7,9 @@ pipeline:
     - name: node_exporter_metrics
       tag: host_metrics
       scrape_interval: 5
-      metrics: cpu,meminfo,loadavg,diskstats,netdev,uname
+      # Fluent Bit's diskstats collector repeatedly fails macOS IORegistry
+      # traversal while the remaining host collectors continue to work.
+      metrics: cpu,meminfo,loadavg,netdev,uname
 
   outputs:
     - name: prometheus_exporter

@@ -8,7 +8,10 @@ type VoiceMessage = {
 export type VoiceTurnRequest = {
   systemPrompt: string;
   prompt: string;
+  origin: "user" | "developer";
 };
+
+export const VOICE_TURN_ORIGIN_CUSTOM_TYPE = "voice.turn-origin";
 
 const MAX_MESSAGES = 64;
 const MAX_CHARS = 64_000;
@@ -49,5 +52,6 @@ export function parseVoiceTurn(input: unknown): VoiceTurnRequest {
       .map((message) => message.content)
       .join("\n\n"),
     prompt: finalMessage.content,
+    origin: finalMessage.role,
   };
 }

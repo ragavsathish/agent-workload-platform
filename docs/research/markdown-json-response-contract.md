@@ -210,7 +210,7 @@ The current implementation duplicates a private response model across:
 - `products/voice-agent/apps/edge/presentation_response.py`
 - `products/voice-agent/packages/tasking/src/voice_agent/tasking/application/pi_response.py`
 - `products/voice-agent/apps/client/lib/models.dart`
-- `products/voice-agent/apps/edge/prompt.toml`
+- `products/voice-agent/apps/edge/SYSTEM.md`
 
 It also selects `resourceUri` from `presentation.kind` after model generation.
 That works inside this custom host, but it is not how MCP Apps discovers a UI.

@@ -1,0 +1,15 @@
+{
+  "objective": "increase macro_f1 by at least 0.02",
+  "baseline": "sha256:baseline",
+  "mutable_scope": ["prompt"],
+  "immutable_scope": ["evaluator", "development_dataset", "safety_gates", "locked_holdout"],
+  "safety_gates": {"false_durable_rate_max": 0.01},
+  "operational_limits": {"p95_latency_ms_max": 2000},
+  "budget": {
+    "max_experiments": 10,
+    "max_wall_time": "2h",
+    "max_consecutive_non_improvements": 3
+  },
+  "repetitions": 3,
+  "stop_conditions": ["objective_met", "budget_exhausted", "safety_gate_failed"]
+}

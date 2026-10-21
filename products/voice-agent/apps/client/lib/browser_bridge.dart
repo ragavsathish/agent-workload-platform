@@ -25,6 +25,9 @@ external JSPromise<JSString> _mountMcpApp(
 @JS('voiceBridge.openView')
 external void _openView(JSString view);
 
+@JS('voiceBridge.openExternalUrl')
+external void _openExternalUrl(JSString url);
+
 @JS('voiceBridge.playSpeech')
 external JSPromise<JSAny?> _playSpeech(JSString spoken, JSString endpoint);
 
@@ -51,6 +54,8 @@ abstract final class BrowserBridge {
   ).toDart).toDart;
 
   static void openView(String view) => _openView(view.toJS);
+
+  static void openExternalUrl(String url) => _openExternalUrl(url.toJS);
 
   static Future<void> playSpeech(
     String spoken, {

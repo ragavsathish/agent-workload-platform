@@ -30,6 +30,7 @@ export default class ClefProvider {
             choice: decision.profileField,
             confidence: decision.profileFieldConfidence,
           },
+          review: decision.review,
         }),
         metadata: { model: process.env.CLEF_MODEL || "Cloudflare/clef-flash" },
       };

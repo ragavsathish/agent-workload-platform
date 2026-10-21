@@ -1,0 +1,377 @@
+---
+- name: Require the supported macOS host
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.system == "Darwin"
+      - ansible_facts.architecture in ["arm64", "aarch64"]
+    fail_msg: Voice-agent infrastructure requires Apple Silicon macOS.
+  tags: [always, host]
+
+- name: Inspect Compose containers
+  community.docker.docker_container_info:
+    name: "{{ compose_project_name }}-{{ item.name }}-1"
+  loop: "{{ compose_services }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: verify_infrastructure_compose_container_facts
+  tags: [containers]
+
+- name: Verify each Compose container contract
+  ansible.builtin.include_tasks:
+    file: verify_container.yml
+    apply:
+      tags: [containers]
+  loop: "{{ verify_infrastructure_compose_container_facts.results }}"
+  loop_control:
+    loop_var: inspected_service
+    label: "{{ inspected_service.item.name }}"
+  tags: [containers]
+
+- name: Inspect one-shot Compose containers
+  community.docker.docker_container_info:
+    name: "{{ compose_project_name }}-{{ item }}-1"
+  loop: "{{ compose_one_shot_services }}"
+  register: verify_infrastructure_one_shot_facts
+  tags: [containers]
+
+- name: Verify one-shot Compose containers completed successfully
+  ansible.builtin.assert:
+    that:
+      - item.exists
+      - item.container.State.Status == "exited"
+      - item.container.State.ExitCode == 0
+    fail_msg: "One-shot Compose service {{ item.item }} did not complete successfully."
+    quiet: true
+  loop: "{{ verify_infrastructure_one_shot_facts.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  tags: [containers]
+
+- name: Verify capability-protected endpoints
+  ansible.builtin.uri:
+    url: "{{ item.url }}"
+    method: GET
+    status_code: "{{ item.status }}"
+    return_content: false
+    use_netrc: false
+  loop: "{{ capability_protected_endpoints }}"
+  loop_control:
+    label: "{{ item.name }}"
+  tags: [http, security]
+
+- name: Verify ACE-Step is ready for music generation
+  ansible.builtin.uri:
+    url: http://127.0.0.1:8001/health
+    status_code: 200
+    use_netrc: false
+  register: verify_infrastructure_music_health
+  failed_when: >-
+    verify_infrastructure_music_health.status != 200
+    or not (verify_infrastructure_music_health.json.data.models_initialized | default(false))
+    or not (verify_infrastructure_music_health.json.data.llm_initialized | default(false))
+  tags: [http, application_probe]
+
+- name: Read the voice-edge feature contract inside its network namespace
+  community.docker.docker_compose_v2_exec:
+    project_src: "{{ compose_project_src }}"
+    files: "{{ compose_files }}"
+    env_files: "{{ compose_env_files }}"
+    project_name: "{{ compose_project_name }}"
+    service: voice-edge
+    argv:
+      - /app/.venv/bin/python
+      - -c
+      - >-
+        import urllib.request;
+        print(urllib.request.urlopen('http://127.0.0.1:7860/api/features', timeout=5).read().decode())
+    tty: false
+  changed_when: false
+  register: verify_infrastructure_voice_features
+  tags: [http, application_probe]
+
+- name: Verify the configured voice input filter is ready
+  ansible.builtin.assert:
+    that:
+      - (verify_infrastructure_voice_features.stdout | from_json).audioFilter.ready
+      - (verify_infrastructure_voice_features.stdout | from_json).audioFilter.name | length > 0
+    quiet: true
+  tags: [http, application_probe]
+
+- name: Read Tailscale status
+  community.docker.docker_compose_v2_exec:
+    project_src: "{{ compose_project_src }}"
+    files: "{{ compose_files }}"
+    env_files: "{{ compose_env_files }}"
+    project_name: "{{ compose_project_name }}"
+    service: tailscale
+    argv: [tailscale, --socket=/tmp/tailscaled.sock, status, --json]
+    tty: false
+  changed_when: false
+  failed_when: false
+  register: verify_infrastructure_tailscale_status
+  tags: [ingress]
+
+- name: Parse Tailscale status
+  ansible.builtin.set_fact:
+    verify_infrastructure_tailscale_document: >-
+      {{ (verify_infrastructure_tailscale_status.stdout | from_json)
+         if verify_infrastructure_tailscale_status.rc == 0 else {} }}
+  tags: [ingress]
+
+- name: Record Tailscale readiness
+  ansible.builtin.set_fact:
+    verify_infrastructure_tailscale_running: >-
+      {{ verify_infrastructure_tailscale_document.BackendState | default('') == 'Running' }}
+    verify_infrastructure_tailscale_login: >-
+      {{ verify_infrastructure_tailscale_document.User[
+           verify_infrastructure_tailscale_document.Self.UserID | string
+         ].LoginName
+         if verify_infrastructure_tailscale_document.BackendState | default('') == 'Running' else '' }}
+  tags: [ingress]
+
+- name: Report unauthenticated Tailscale state
+  ansible.builtin.debug:
+    msg: Tailscale is not authenticated; authenticated ingress checks are skipped.
+  when: not verify_infrastructure_tailscale_running
+  tags: [ingress]
+
+- name: Verify owner-authenticated ingress routes
+  community.docker.docker_compose_v2_exec:
+    project_src: "{{ compose_project_src }}"
+    files: "{{ compose_files }}"
+    env_files: "{{ compose_env_files }}"
+    project_name: "{{ compose_project_name }}"
+    service: tailscale
+    argv:
+      - wget
+      - -q
+      - -O
+      - /dev/null
+      - "--header=Tailscale-User-Login: {{ verify_infrastructure_tailscale_login }}"
+      - "{{ item }}"
+    tty: false
+  changed_when: false
+  loop:
+    - http://127.0.0.1:8080/api/features
+    - http://127.0.0.1:8080/metrics/api/user
+    - http://127.0.0.1:8080/git/api/v1/version
+    - http://127.0.0.1:8080/queue/api/queues
+  loop_control:
+    label: "{{ item }}"
+  when: verify_infrastructure_tailscale_running
+  tags: [ingress]
+
+- name: Read Tailscale Serve configuration
+  community.docker.docker_compose_v2_exec:
+    project_src: "{{ compose_project_src }}"
+    files: "{{ compose_files }}"
+    env_files: "{{ compose_env_files }}"
+    project_name: "{{ compose_project_name }}"
+    service: tailscale
+    argv: [tailscale, --socket=/tmp/tailscaled.sock, serve, status]
+    tty: false
+  changed_when: false
+  register: verify_infrastructure_tailscale_serve
+  when: verify_infrastructure_tailscale_running
+  tags: [ingress]
+
+- name: Verify Tailscale Serve points exclusively to Traefik
+  ansible.builtin.assert:
+    that:
+      - "'https://' in verify_infrastructure_tailscale_serve.stdout"
+      - "'http://127.0.0.1:8080' in verify_infrastructure_tailscale_serve.stdout"
+      - "':8443' not in verify_infrastructure_tailscale_serve.stdout"
+    quiet: true
+  when: verify_infrastructure_tailscale_running
+  tags: [ingress]
+
+- name: Inspect LaunchAgents without changing their state
+  community.general.launchd:
+    name: "{{ item }}"
+    state: started
+  check_mode: true
+  loop: "{{ launch_agents }}"
+  register: verify_infrastructure_launch_agent_facts
+  loop_control:
+    label: "{{ item }}"
+  tags: [launchd]
+
+- name: Verify every declared LaunchAgent is running
+  ansible.builtin.assert:
+    that:
+      - not item.changed
+      - item.status.current_state == "started"
+      - item.status.status_code == "0"
+    fail_msg: "LaunchAgent {{ item.item }} is not running."
+    quiet: true
+  loop: "{{ verify_infrastructure_launch_agent_facts.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  tags: [launchd]
+
+- name: Read native host metrics
+  ansible.builtin.uri:
+    url: http://127.0.0.1:2022/metrics
+    return_content: true
+    status_code: 200
+    use_netrc: false
+  register: verify_infrastructure_native_metrics
+  tags: [observability]
+
+- name: Read Gondolin metrics
+  ansible.builtin.uri:
+    url: http://127.0.0.1:9465/metrics
+    return_content: true
+    status_code: 200
+    use_netrc: false
+  register: verify_infrastructure_gondolin_metrics
+  tags: [observability]
+
+- name: Verify native metric identities
+  ansible.builtin.assert:
+    that:
+      - "'node_uname_info{system=\"macos-host\"' in verify_infrastructure_native_metrics.content"
+      - "'gondolin_vm_count ' in verify_infrastructure_gondolin_metrics.content"
+    quiet: true
+  tags: [observability]
+
+- name: Verify the Grafana MCP application contract
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "{{ voice_agent_root }}/tests/e2e/grafana-mcp.py"
+  changed_when: false
+  register: verify_infrastructure_grafana_mcp_contract
+  tags: [observability, application_probe]
+
+- name: Verify Oxigraph answers SPARQL
+  ansible.builtin.uri:
+    url: http://127.0.0.1:7878/query
+    method: POST
+    body: "ASK { }"
+    headers:
+      Content-Type: application/sparql-query
+      Accept: application/sparql-results+json
+    return_content: true
+    status_code: 200
+    use_netrc: false
+  register: verify_infrastructure_oxigraph_ask
+  tags: [data]
+
+- name: Verify the Oxigraph response
+  ansible.builtin.assert:
+    that:
+      - (verify_infrastructure_oxigraph_ask.content | from_json).boolean
+    quiet: true
+  tags: [data]
+
+- name: Verify Habitat database privileges
+  community.postgresql.postgresql_query:
+    login_host: 127.0.0.1
+    login_port: 54329
+    login_db: voice_agents
+    login_user: habitat_operator
+    login_password: "{{ lookup('ansible.builtin.file', voice_agent_root + '/deploy/secrets/habitat-database-password') | trim }}"
+    query: >-
+      SELECT
+        has_schema_privilege(current_user, 'absurd', 'USAGE') AS schema_usage,
+        has_table_privilege(current_user, 'absurd.queues', 'SELECT') AS queue_read,
+        has_table_privilege(current_user, 'voice_task_proposals', 'SELECT') AS proposal_read
+  register: verify_infrastructure_habitat_privileges
+  no_log: true
+  tags: [data, security]
+
+- name: Assert Habitat has only its intended database scope
+  ansible.builtin.assert:
+    that:
+      - verify_infrastructure_habitat_privileges.query_result[0].schema_usage
+      - verify_infrastructure_habitat_privileges.query_result[0].queue_read
+      - not verify_infrastructure_habitat_privileges.query_result[0].proposal_read
+    quiet: true
+  tags: [data, security]
+
+- name: Verify the public source mirror
+  ansible.builtin.command:
+    argv:
+      - git
+      - ls-remote
+      - "{{ gitea_endpoint }}/{{ gitea_repository_owner }}/{{ gitea_repository_name }}.git"
+      - HEAD
+  changed_when: false
+  tags: [gitea]
+
+- name: Verify Gitea token identities
+  ansible.builtin.uri:
+    url: "{{ gitea_endpoint }}/api/v1/user"
+    headers:
+      Authorization: "token {{ lookup('ansible.builtin.file', voice_agent_root + '/deploy/secrets/' + item.secret) | trim }}"
+    return_content: true
+    status_code: 200
+    use_netrc: false
+  loop:
+    - { secret: gitea-agent-token, login: voice-agent }
+    - { secret: gitea-builder-token, login: image-builder }
+    - { secret: gitea-dispatcher-token, login: workflow-dispatcher }
+  loop_control:
+    label: "{{ item.login }}"
+  register: verify_infrastructure_gitea_identities
+  no_log: true
+  tags: [gitea, security]
+
+- name: Assert Gitea token identities
+  ansible.builtin.assert:
+    that:
+      - (item.content | from_json).login == item.item.login
+    quiet: true
+  loop: "{{ verify_infrastructure_gitea_identities.results }}"
+  loop_control:
+    label: "{{ item.item.login }}"
+  no_log: true
+  tags: [gitea, security]
+
+- name: Verify the voice-agent Gitea token cannot create issues
+  ansible.builtin.uri:
+    url: "{{ gitea_endpoint }}/api/v1/repos/{{ gitea_repository_owner }}/{{ gitea_repository_name }}/issues"
+    method: POST
+    headers:
+      Authorization: "token {{ lookup('ansible.builtin.file', voice_agent_root + '/deploy/secrets/gitea-agent-token') | trim }}"
+    body_format: json
+    body: {}
+    status_code: 403
+    use_netrc: false
+  no_log: true
+  tags: [gitea, security]
+
+- name: Query Prometheus for host metric ingestion
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:9091/api/v1/query?query={{ item.query | urlencode }}"
+    method: GET
+    return_content: true
+    status_code: 200
+    use_netrc: false
+  loop:
+    - { name: Docker VM metrics, query: 'node_memory_MemTotal_bytes{system="docker-desktop-vm"}' }
+    - { name: macOS metrics, query: 'node_uname_info{system="macos-host"}' }
+    - { name: Gondolin metrics, query: gondolin_vm_count }
+  loop_control:
+    label: "{{ item.name }}"
+  register: verify_infrastructure_prometheus_queries
+  tags: [observability]
+
+- name: Assert Prometheus has ingested every metric source
+  ansible.builtin.assert:
+    that:
+      - (item.content | from_json).data.result | length > 0
+    fail_msg: "Prometheus has not ingested {{ item.item.name }}."
+    quiet: true
+  loop: "{{ verify_infrastructure_prometheus_queries.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  tags: [observability]
+
+- name: Verify the Grafana MCP probe returned a trace
+  ansible.builtin.assert:
+    that:
+      - (verify_infrastructure_grafana_mcp_contract.stdout | from_json).traceId | length > 0
+    quiet: true
+  tags: [observability, application_probe]

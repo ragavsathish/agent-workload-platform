@@ -57,6 +57,9 @@ void main() {
 
     expect(find.byKey(const Key('task-board')), findsOneWidget);
     expect(find.byKey(const Key('task-pending-1')), findsOneWidget);
+    expect(find.text('Kind of Blue'), findsWidgets);
+    expect(find.text('Miles Davis'), findsOneWidget);
+    expect(find.byKey(const Key('task-spotify-pending-1')), findsOneWidget);
     expect(find.text('Waiting for approval · now'), findsOneWidget);
   });
 
@@ -168,4 +171,7 @@ final _pendingTask = AgentTask(
   status: 'pending',
   createdAt: DateTime.now(),
   state: 'pending',
+  sessionName: 'Kind of Blue',
+  sessionArtist: 'Miles Davis',
+  sessionSpotifyUrl: 'https://open.spotify.com/album/1weenld61qoidwYuZ1GESA',
 );

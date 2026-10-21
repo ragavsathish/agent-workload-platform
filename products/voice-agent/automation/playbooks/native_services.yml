@@ -1,0 +1,103 @@
+---
+- name: Manage voice-agent native services
+  hosts: localhost
+  gather_facts: true
+  any_errors_fatal: true
+  tasks:
+    - name: Require a supported native-service action
+      ansible.builtin.assert:
+        that:
+          - native_action | default('status') in ['start', 'stop', 'restart', 'status']
+        fail_msg: Set native_action to start, stop, restart, or status.
+        quiet: true
+
+    - name: Inspect native services before stopping
+      community.general.launchd:
+        name: "{{ item }}"
+        state: started
+      check_mode: true
+      failed_when: false
+      loop: "{{ launch_agents }}"
+      loop_control:
+        label: "{{ item }}"
+      register: native_service_before
+      when: native_action | default('status') == 'stop'
+
+    - name: Stop native services in reverse order
+      community.general.launchd:
+        name: "{{ item.item }}"
+        state: unloaded
+      loop: "{{ native_service_before.results | reverse | list }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when:
+        - native_action | default('status') == 'stop'
+        - item.status.current_state | default('unloaded') != 'unloaded'
+
+    - name: Start or restart native services
+      community.general.launchd:
+        name: "{{ item }}"
+        state: "{{ 'restarted' if native_action == 'restart' else 'started' }}"
+      loop: "{{ launch_agents }}"
+      loop_control:
+        label: "{{ item }}"
+      when: native_action | default('status') in ['start', 'restart']
+
+    - name: Wait for protected native endpoints
+      ansible.builtin.uri:
+        url: "{{ item }}"
+        status_code: 401
+        use_netrc: false
+      loop:
+        - http://127.0.0.1:9443/health
+        - http://127.0.0.1:9446/health
+      register: native_endpoint
+      until: native_endpoint.status == 401
+      retries: 30
+      delay: 2
+      when: native_action | default('status') in ['start', 'restart']
+
+    - name: Wait for ACE-Step models
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8001/health
+        status_code: 200
+        use_netrc: false
+      register: native_music_health
+      until: >-
+        native_music_health.json.data.models_initialized | default(false)
+        and native_music_health.json.data.llm_initialized | default(false)
+      retries: 240
+      delay: 5
+      when: native_action | default('status') in ['start', 'restart']
+
+    - name: Inspect all native services without changing them
+      community.general.launchd:
+        name: "{{ item }}"
+        state: started
+      check_mode: true
+      failed_when: false
+      loop: "{{ launch_agents }}"
+      loop_control:
+        label: "{{ item }}"
+      register: native_service_status
+
+    - name: Show native-service status
+      ansible.builtin.debug:
+        msg: >-
+          {{ item.item }}: {{ item.status.current_state | default('unavailable') }}
+      loop: "{{ native_service_status.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Require requested services to converge
+      ansible.builtin.assert:
+        that:
+          - item.status.current_state == ('unloaded' if native_action == 'stop' else 'started')
+        fail_msg: "Native service {{ item.item }} did not reach the requested state."
+        quiet: true
+      loop: "{{ native_service_status.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when:
+        - native_action | default('status') != 'status'
+        - not ansible_check_mode

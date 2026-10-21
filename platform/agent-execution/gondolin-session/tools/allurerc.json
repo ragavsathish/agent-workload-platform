@@ -1,0 +1,5 @@
+{
+  "name": "Gondolin Patrol Oracle",
+  "historyPath": "./artifacts/benchmarks/oracle-allure-history.jsonl",
+  "appendHistory": true
+}

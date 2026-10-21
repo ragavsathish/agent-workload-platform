@@ -1,1274 +1,1085 @@
 {
-  "annotations": {
-    "list": [
-      {
-        "builtIn": 0,
-        "datasource": {
-          "type": "grafana",
-          "uid": "-- Grafana --"
-        },
-        "enable": true,
-        "hide": false,
-        "iconColor": "#f59e0b",
-        "name": "Deployments and E2E runs",
-        "target": {
-          "limit": 100,
-          "matchAny": true,
-          "tags": [
-            "deployment",
-            "e2e"
-          ]
-        },
-        "type": "dashboard"
-      }
-    ]
+  "description" : "Generated from the authoritative Voice Agent Mermaid C4 sources. The C2 container view carries live Prometheus activity overlays; detail views stay neutral gray.",
+  "templating" : {
+    "list" : [ ]
   },
-  "description": "Generated from the authoritative Voice Agent Mermaid C4 sources. The C2 container view carries live Prometheus activity overlays; detail views stay neutral gray.",
-  "editable": false,
-  "fiscalYearStartMonth": 0,
-  "graphTooltip": 1,
-  "links": [
-    {
-      "asDropdown": false,
-      "icon": "dashboard",
-      "includeVars": true,
-      "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
-      "title": "Voice Product Health",
-      "tooltip": "RED signals and voice-flow outcomes",
-      "type": "link",
-      "url": "/metrics/d/pipecat-voice-overview/voice-product-health"
-    },
-    {
-      "asDropdown": false,
-      "icon": "dashboard",
-      "includeVars": true,
-      "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
-      "title": "Platform Resources",
-      "tooltip": "Host, Docker, and Gondolin resource utilization",
-      "type": "link",
-      "url": "/metrics/d/voice-system-resources/platform-resources"
-    }
-  ],
-  "panels": [
-    {
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 0
-      },
-      "id": 1,
-      "options": {
-        "content": "## Engineering evidence\n\n| Executable surface | Line coverage |\n|---|---:|\n| Flutter client | **63.9%** |\n| Pi Voice Service | **36.4%** |\n| Gondolin workspace adapter | **53.4%** |\n| Combined Pi agent JavaScript | **40.3%** |\n\nBuild evidence snapshot · 2026-10-16. Other surfaces have test evidence but no consolidated executable-line report.\n\n## How to read this dashboard\n\n**C2 fill = telemetry activity:** 🔴 missing or stale for 2 minutes · ⚪ idle · 🔵 low · 🟦 medium · 🟢 high. Activity is volume, not health.\n\n**C2 border = evidence:** 🟢 strong · 🟠 partial · 🔵 observed · 🔴 weak. All other views use neutral gray backgrounds so the live container trace remains the sole highlight.\n\nArchitecture and evidence remain source-controlled; operations remain live in Grafana. Use the dashboard links for RED product signals and USE resource signals.",
-        "mode": "markdown"
-      },
-      "title": "Source-backed code evidence",
-      "type": "text"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "No live activity overlay is applied to this architecture detail view.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#ff778a",
-                "value": null
-              },
-              {
-                "color": "#94a3b8",
-                "value": 0
-              },
-              {
-                "color": "#38bdf8",
-                "value": 1
-              },
-              {
-                "color": "#22d3ee",
-                "value": 10
-              },
-              {
-                "color": "#2dd4bf",
-                "value": 100
-              },
-              {
-                "color": "#56e39f",
-                "value": 1000
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 14,
-        "w": 24,
-        "x": 0,
-        "y": 8
-      },
-      "id": 2,
-      "options": {
-        "content": "C4Context\ntitle Voice Agent - System Context\n\nPerson(user, \"Tailnet User\", \"Uses a private browser voice interface for interactive coding and durable delegated work\")\n\nSystem(voice_agent, \"Voice Agent\", \"Turns browser speech into a persistent Pi conversation, visual and spoken responses, and optional durable agent tasks\")\n\nSystem_Ext(tailscale, \"Tailscale Control Plane\", \"Authenticates devices and distributes private network configuration\")\nSystem_Ext(models, \"Model Providers\", \"Serve the models selected by the native Pi runtimes using host credentials\")\nSystem_Ext(integrations, \"External Integrations\", \"Optional APIs, such as GitHub, exposed through permission-scoped Wassette components\")\n\nRel_D(user, voice_agent, \"Talks, sees diagrams and transcripts, and delegates work\", \"Tailnet HTTPS, WebRTC\")\nRel_R(voice_agent, tailscale, \"Obtains device identity and private network configuration from\", \"Tailscale control protocol\")\nRel_R(voice_agent, models, \"Requests conversational and task-agent completions from\", \"Provider APIs\")\nRel_R(voice_agent, integrations, \"Uses explicitly configured integration capabilities from\", \"Permission-scoped HTTPS\")\n\n%% Grafana node backgrounds are intentionally neutral.\nUpdateElementStyle(user, \"#3f3f46\", \"#f4f4f5\")\nUpdateElementStyle(voice_agent, \"#3f3f46\", \"#f4f4f5\")\nUpdateElementStyle(tailscale, \"#3f3f46\", \"#f4f4f5\")\nUpdateElementStyle(models, \"#3f3f46\", \"#f4f4f5\")\nUpdateElementStyle(integrations, \"#3f3f46\", \"#f4f4f5\")\n\n%% Evidence colors generated by the C4 dashboard adapter.\nUpdateElementStyle(voice_agent, \"#3f3f46\", \"#f4f4f5\", \"#ffbd76\")\n\n",
-        "escapeSpecialChars": true,
-        "maxDataRows": 100,
-        "showSeriesCount": false,
-        "seriesCountSize": "sm"
-      },
-      "pluginVersion": "1.0.6",
-      "links": [
-        {
-          "title": "Open Voice Product Health",
-          "url": "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
-        },
-        {
-          "title": "Open Platform Resources",
-          "url": "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
-        }
-      ],
-      "targets": [],
-      "title": "C1 · System context",
-      "type": "neildengg-grafmaid-panel"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "Fill shows live PromQL activity: red is missing or stale, gray is idle, and brighter cyan means more activity in the selected range. Border shows static evidence strength.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#ff778a",
-                "value": null
-              },
-              {
-                "color": "#94a3b8",
-                "value": 0
-              },
-              {
-                "color": "#38bdf8",
-                "value": 1
-              },
-              {
-                "color": "#22d3ee",
-                "value": 10
-              },
-              {
-                "color": "#2dd4bf",
-                "value": 100
-              },
-              {
-                "color": "#56e39f",
-                "value": 1000
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 22,
-        "w": 24,
-        "x": 0,
-        "y": 22
-      },
-      "id": 3,
-      "options": {
-        "content": "flowchart TB\n    %% C4 container view. Each blue node is an independently running application or data store.\n    USER([\"Person<br/><b>Tailnet User</b><br/>talks, listens, reviews, delegates\"])\n    TSC[\"External system<br/><b>Tailscale Control Plane</b><br/>device and network authority\"]\n    MODELS[\"External system<br/><b>Model Providers</b><br/>Pi conversational and task models\"]\n    INTEGRATIONS[\"External system<br/><b>External Integrations</b><br/>optional permission-scoped APIs\"]\n\n    subgraph SYSTEM[\"Voice Agent · system boundary\"]\n        direction TB\n\n        subgraph VOICE[\"Interactive voice path\"]\n            direction LR\n            BROWSER[\"Container<br/><b>Browser Voice Client</b><br/>Flutter Web · Pipecat JS transport adapter\"]\n            DIAGNOSTICS[\"Container<br/><b>Input Diagnostics</b><br/>React · Recharts · WaveSurfer\"]\n            INGRESS[\"Container<br/><b>Tailnet Ingress</b><br/>Tailscale Serve\"]\n            ROUTER[\"Container<br/><b>Path Router</b><br/>Traefik · exact-owner forward-auth\"]\n            EDGE[\"Container<br/><b>Voice Edge</b><br/>Python · Pipecat · RNNoise/VoxLock · FastAPI\"]\n            BROKER[\"Container<br/><b>Inference Broker</b><br/>Python · FastAPI · MLX\"]\n            PI[\"Container<br/><b>Pi Voice Service</b><br/>TypeScript · Pi coding agent\"]\n            VOICE_VM[\"Container<br/><b>Voice Tool Sandbox</b><br/>Gondolin · Git/Tea/AWS CLI · workspace RW · skills RO\"]\n            BROWSER -->|\"signaling · audio · UI\"| INGRESS\n            DIAGNOSTICS -->|\"diagnostic APIs · replay audio\"| INGRESS\n            INGRESS -->|\"localhost HTTP<br/>authenticated identity\"| ROUTER\n            ROUTER -->|\"/ · WebSocket\"| EDGE\n            EDGE -->|\"STT · Pi stream · TTS · context\"| BROKER\n            BROKER -->|\"turns · transcript · context\"| PI\n            PI -->|\"read · write · edit · shell\"| VOICE_VM\n        end\n\n        subgraph TASK[\"Durable delegated-work path\"]\n            direction LR\n            GATEWAY[\"Container<br/><b>Agent Gateway</b><br/>Python · FastAPI\"]\n            TASKS[(\"Container database<br/><b>Task Database and Queue</b><br/>PostgreSQL · Absurd schema\")]\n            HABITAT[\"Container<br/><b>Durable Queue Dashboard</b><br/>Go · Absurd Habitat\"]\n            WORKER[\"Container<br/><b>Pi Task Worker</b><br/>Python · Pi coding agent\"]\n            TASK_PI[\"Container<br/><b>Pi Task Session</b><br/>Pi CLI · one process per claimed task\"]\n            BUILDER_MANAGER[\"Container<br/><b>Builder VM Manager</b><br/>Node.js · launchd\"]\n            BUILDER_VM[\"Container<br/><b>Shared Image Builder</b><br/>Gondolin · Gitea Runner · private Docker\"]\n            TASK_VM[\"Container<br/><b>Task Tool Sandbox</b><br/>Gondolin · one isolated workspace\"]\n            GATEWAY -->|\"persist · enqueue\"| TASKS\n            HABITAT -->|\"inspect · retry<br/>scoped SQL\"| TASKS\n            TASKS -->|\"claim · checkpoint\"| WORKER\n            WORKER -->|\"dispatch · observe · cancel image workflow\"| GITEA\n            GITEA -->|\"assign trusted workflow job\"| BUILDER_VM\n            BUILDER_MANAGER -->|\"resume · checkpoint\"| BUILDER_VM\n            WORKER -->|\"starts one bounded run\"| TASK_PI\n            TASK_PI -->|\"read · write · edit · shell · browser\"| TASK_VM\n        end\n\n        subgraph DATA[\"Runtime data and operations\"]\n            direction LR\n            VOICE_DATA[(\"Container data store<br/><b>Voice Runtime Data</b><br/>sessions · workspace · skills\")]\n            GITEA[(\"Container data store<br/><b>Git and Image Packages</b><br/>rootless Gitea · refs · immutable assets\")]\n            ARTIFACTS[(\"Container data store<br/><b>Workspace and Result Store</b><br/>S3-compatible object storage\")]\n            OXIGRAPH[(\"Container data store<br/><b>Knowledge Graph Store</b><br/>Oxigraph · private SPARQL 1.1 · persistent RDF\")]\n            DOCKER_METRICS[\"Container<br/><b>Docker VM Metrics</b><br/>Fluent Bit · Linux VM aggregate\"]\n            HOST_METRICS[\"Container<br/><b>Host and Gondolin Metrics</b><br/>Fluent Bit · QEMU process exporter\"]\n            WASSETTE[\"Container<br/><b>Wassette Integration Runtime</b><br/>native per-session MCP subprocesses · WebAssembly\"]\n            OTEL[\"Container<br/><b>Metrics and Traces</b><br/>OpenTelemetry LGTM\"]\n            GRAFANA_MCP[\"Container<br/><b>Grafana MCP</b><br/>read-only dashboards · PromQL · Tempo App\"]\n        end\n\n        EDGE -->|\"browser task API\"| GATEWAY\n        EDGE -->|\"identity-checked App resource<br/>and trace-data proxy\"| GRAFANA_MCP\n        PI -->|\"deferred MCP over stdio<br/>credential-scrubbed environment\"| WASSETTE\n        WASSETTE -->|\"composed task lifecycle tools<br/>read-only personal knowledge\"| GATEWAY\n        TASK_PI -->|\"MCP over stdio<br/>allowlisted task tools\"| WASSETTE\n        PI -->|\"authenticated streamable HTTP<br/>deferred observability tools\"| GRAFANA_MCP\n        EDGE -->|\"official trace MCP App\"| BROWSER\n        PI -->|\"session · workspace · skills\"| VOICE_DATA\n        VOICE_VM -->|\"clone · restricted read API · synthetic allowlist\"| GITEA\n        VOICE_VM -->|\"AWS CLI · S3Mock-only HTTP\"| ARTIFACTS\n        GATEWAY -->|\"resolve workspace\"| ARTIFACTS\n        GATEWAY -->|\"fixed read-only SPARQL<br/>profile and learning facts\"| OXIGRAPH\n        ARTIFACTS -->|\"materialize · capture result\"| WORKER\n        BUILDER_VM -->|\"upload checksummed assets<br/>restricted workflow secret\"| GITEA\n        GITEA -->|\"download image assets\"| WORKER\n        EDGE -.->|\"metrics · traces\"| OTEL\n        BROKER -.->|\"metrics · traces\"| OTEL\n        PI -.->|\"metrics · traces\"| OTEL\n        GATEWAY -.->|\"metrics · traces\"| OTEL\n        WORKER -.->|\"metrics · traces\"| OTEL\n        BUILDER_MANAGER -.->|\"metrics · traces\"| OTEL\n        BUILDER_VM -.->|\"Gitea Runner OTLP<br/>job traces · runner metrics\"| OTEL\n        PI -.->|\"register voice VM PID\"| HOST_METRICS\n        WORKER -.->|\"register task VM PID\"| HOST_METRICS\n        DOCKER_METRICS -->|\"private scrape<br/>Docker VM resources\"| OTEL\n        HOST_METRICS -->|\"loopback scrape<br/>Mac · each Gondolin VM\"| OTEL\n        GRAFANA_MCP -->|\"service account<br/>dashboards · Prometheus · Tempo\"| OTEL\n        GRAFANA_MCP -.->|\"MCP metrics · OTLP traces\"| OTEL\n        ROUTER -->|\"/metrics/\"| OTEL\n        ROUTER -->|\"/git/\"| GITEA\n        ROUTER -->|\"/queue/\"| HABITAT\n    end\n\n    USER -->|\"tailnet HTTPS · WebRTC\"| BROWSER\n    USER -->|\"tailnet HTTPS\"| DIAGNOSTICS\n    INGRESS -.->|\"control protocol\"| TSC\n    PI -->|\"provider API\"| MODELS\n    WORKER -->|\"provider API\"| MODELS\n    WASSETTE -->|\"declared component capabilities\"| INTEGRATIONS\n\n    classDef person fill:#3f3f46,color:#fff,stroke:#05345f,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    classDef container fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef data fill:#d4d4d8,color:#78350f,stroke:#d97706,stroke-width:2px;\n    class USER person;\n    class TSC,MODELS,INTEGRATIONS external;\n    class BROWSER,DIAGNOSTICS,INGRESS,ROUTER,EDGE,BROKER,PI,VOICE_VM,GATEWAY,HABITAT,WORKER,TASK_PI,BUILDER_MANAGER,BUILDER_VM,TASK_VM,DOCKER_METRICS,HOST_METRICS,WASSETTE,OTEL,GRAFANA_MCP container;\n    class TASKS,VOICE_DATA,GITEA,ARTIFACTS,OXIGRAPH data;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle BROWSER fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle DIAGNOSTICS fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle INGRESS fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle ROUTER fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle EDGE fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle BROKER fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle PI fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle VOICE_VM fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle GATEWAY fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle TASKS fill:#3f3f46,color:#f4f4f5,stroke:#72b7ef,stroke-width:3px\nstyle HABITAT fill:#3f3f46,color:#f4f4f5,stroke:#72b7ef,stroke-width:3px\nstyle WORKER fill:#3f3f46,color:#f4f4f5,stroke:#ff778a,stroke-width:3px\nstyle TASK_PI fill:#3f3f46,color:#f4f4f5,stroke:#ff778a,stroke-width:3px\nstyle TASK_VM fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle WASSETTE fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle BUILDER_MANAGER fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle BUILDER_VM fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle VOICE_DATA fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle GITEA fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle ARTIFACTS fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle OXIGRAPH fill:#3f3f46,color:#f4f4f5,stroke:#72b7ef,stroke-width:3px\nstyle DOCKER_METRICS fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle HOST_METRICS fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle OTEL fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle GRAFANA_MCP fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle EDGE fill:${__data.A:color},color:#07130d,stroke:#56e39f,stroke-width:5px\nstyle BROKER fill:${__data.B:color},color:#07130d,stroke:#ffbd76,stroke-width:5px\nstyle GATEWAY fill:${__data.C:color},color:#07130d,stroke:#ffbd76,stroke-width:5px\nstyle PI fill:${__data.D:color},color:#07130d,stroke:#ffbd76,stroke-width:5px\nstyle WORKER fill:${__data.E:color},color:#07130d,stroke:#ff778a,stroke-width:5px\nstyle BUILDER_MANAGER fill:${__data.F:color},color:#07130d,stroke:#56e39f,stroke-width:5px\nstyle BUILDER_VM fill:${__data.G:color},color:#07130d,stroke:#56e39f,stroke-width:5px\n",
-        "escapeSpecialChars": true,
-        "maxDataRows": 100,
-        "showSeriesCount": true,
-        "seriesCountSize": "sm"
-      },
-      "pluginVersion": "1.0.6",
-      "links": [
-        {
-          "title": "Open Voice Product Health",
-          "url": "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
-        },
-        {
-          "title": "Open Platform Resources",
-          "url": "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
-        }
-      ],
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "(sum(increase(pipecat_operation_total{service_name=\"pipecat-voice-edge\"}[$__range])) and on() (max(timestamp(pipecat_operation_total{service_name=\"pipecat-voice-edge\"})) > time() - 120)) or vector(-1)",
-          "instant": true,
-          "legendFormat": "A",
-          "range": false,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "(sum(increase(pipecat_operation_total{service_name=\"pipecat-mlx-inference\"}[$__range])) and on() (max(timestamp(pipecat_operation_total{service_name=\"pipecat-mlx-inference\"})) > time() - 120)) or vector(-1)",
-          "instant": true,
-          "legendFormat": "B",
-          "range": false,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "(sum(increase(pipecat_operation_total{service_name=\"pipecat-agent-gateway\"}[$__range])) and on() (max(timestamp(pipecat_operation_total{service_name=\"pipecat-agent-gateway\"})) > time() - 120)) or vector(-1)",
-          "instant": true,
-          "legendFormat": "C",
-          "range": false,
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "(sum(increase(pipecat_operation_total{service_name=\"pipecat-pi-voice\"}[$__range])) and on() (max(timestamp(pipecat_operation_total{service_name=\"pipecat-pi-voice\"})) > time() - 120)) or vector(-1)",
-          "instant": true,
-          "legendFormat": "D",
-          "range": false,
-          "refId": "D"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "(sum(increase(pipecat_operation_total{service_name=\"pipecat-task-worker\"}[$__range])) and on() (max(timestamp(pipecat_operation_total{service_name=\"pipecat-task-worker\"})) > time() - 120)) or vector(-1)",
-          "instant": true,
-          "legendFormat": "E",
-          "range": false,
-          "refId": "E"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "(sum(increase(pipecat_operation_total{service_name=\"pipecat-image-builder\"}[$__range])) and on() (max(timestamp(pipecat_operation_total{service_name=\"pipecat-image-builder\"})) > time() - 120)) or vector(-1)",
-          "instant": true,
-          "legendFormat": "F",
-          "range": false,
-          "refId": "F"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "(sum(gitea_runner_info{service_name=\"pipecat-gitea-runner\"}) and on() (max(timestamp(gitea_runner_info{service_name=\"pipecat-gitea-runner\"})) > time() - 120)) or vector(-1)",
-          "instant": true,
-          "legendFormat": "G",
-          "range": false,
-          "refId": "G"
-        }
-      ],
-      "title": "C2 · Containers",
-      "type": "neildengg-grafmaid-panel"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "No live activity overlay is applied to this architecture detail view.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#ff778a",
-                "value": null
-              },
-              {
-                "color": "#94a3b8",
-                "value": 0
-              },
-              {
-                "color": "#38bdf8",
-                "value": 1
-              },
-              {
-                "color": "#22d3ee",
-                "value": 10
-              },
-              {
-                "color": "#2dd4bf",
-                "value": 100
-              },
-              {
-                "color": "#56e39f",
-                "value": 1000
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 14,
-        "w": 12,
-        "x": 0,
-        "y": 44
-      },
-      "id": 4,
-      "options": {
-        "content": "flowchart LR\n    USER([Person<br/><b>Tailnet User</b>])\n    EDGE[External container<br/><b>Voice Edge</b><br/>WebRTC and owner-scoped HTTP APIs]\n\n    subgraph BROWSER[\"Container: Browser Voice Client · Flutter Web\"]\n        direction TB\n        ROUTER[\"Component<br/><b>View Router</b><br/>selects voice or chat/task view\"]\n        VOICE[\"Component<br/><b>Voice Experience</b><br/>conversation, activity, context, and responsive layout\"]\n        TIMELINE[\"Component<br/><b>Chat and Task Timeline</b><br/>polls transcript/tasks and submits messages or task decisions\"]\n        API[\"Component<br/><b>Owner API Client</b><br/>typed same-origin HTTP requests\"]\n        DIAGRAM[\"Component<br/><b>Mermaid Platform View</b><br/>embeds validated SVG inside Flutter\"]\n        ADAPTER[\"Component<br/><b>Browser Integration Adapter</b><br/>official Pipecat JS transport, Mermaid, and audio\"]\n\n        ROUTER -->|\"opens\"| VOICE\n        ROUTER -->|\"opens\"| TIMELINE\n        VOICE -->|\"starts, mutes, stops; consumes activity\"| ADAPTER\n        VOICE -->|\"renders live response\"| DIAGRAM\n        TIMELINE -->|\"renders completed response\"| DIAGRAM\n        DIAGRAM -->|\"requests strict SVG render\"| ADAPTER\n        VOICE -->|\"polls usage; compacts\"| API\n        TIMELINE -->|\"polls and commands\"| API\n    end\n\n    USER -->|\"navigates and operates\"| ROUTER\n    ADAPTER -->|\"WebRTC signaling and media\"| EDGE\n    API -->|\"owner-scoped HTTP APIs\"| EDGE\n\n    classDef person fill:#3f3f46,color:#fff,stroke:#05345f,stroke-width:2px;\n    classDef component fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    class USER person;\n    class ROUTER,VOICE,TIMELINE,API,DIAGRAM,ADAPTER component;\n    class EDGE external;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle BROWSER fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\n\n",
-        "escapeSpecialChars": true,
-        "maxDataRows": 100,
-        "showSeriesCount": false,
-        "seriesCountSize": "sm"
-      },
-      "pluginVersion": "1.0.6",
-      "links": [
-        {
-          "title": "Open Voice Product Health",
-          "url": "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
-        },
-        {
-          "title": "Open Platform Resources",
-          "url": "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
-        }
-      ],
-      "targets": [],
-      "title": "C3 · Browser Voice Client",
-      "type": "neildengg-grafmaid-panel"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "No live activity overlay is applied to this architecture detail view.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#ff778a",
-                "value": null
-              },
-              {
-                "color": "#94a3b8",
-                "value": 0
-              },
-              {
-                "color": "#38bdf8",
-                "value": 1
-              },
-              {
-                "color": "#22d3ee",
-                "value": 10
-              },
-              {
-                "color": "#2dd4bf",
-                "value": 100
-              },
-              {
-                "color": "#56e39f",
-                "value": 1000
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 14,
-        "w": 12,
-        "x": 12,
-        "y": 44
-      },
-      "id": 5,
-      "options": {
-        "content": "flowchart LR\n    USER([Person<br/><b>Tailnet User</b>])\n    EDGE[External container<br/><b>Voice Edge</b><br/>owner-scoped diagnostics and replay APIs]\n\n    subgraph DIAGNOSTICS[\"Container: Input Diagnostics · React\"]\n        direction TB\n        PAGE[\"Component<br/><b>Diagnostics Page</b><br/>loads the latest five completed voice sessions\"]\n        LIVE[\"Component<br/><b>Live Input Monitor</b><br/>polls and plots the active microphone envelope\"]\n        REPLAY[\"Component<br/><b>Session Replay</b><br/>plays raw and selected-filter audio\"]\n        CHARTS[\"Component<br/><b>Model Charts</b><br/>plots energy, suppression, latency, LSTM state, and masks\"]\n        API[\"Component<br/><b>Diagnostics API Adapter</b><br/>same-origin fetch with runtime validation\"]\n\n        PAGE -->|\"refreshes sessions\"| API\n        PAGE -->|\"shows\"| LIVE\n        PAGE -->|\"selects a session\"| REPLAY\n        PAGE -->|\"selects a session\"| CHARTS\n        LIVE -->|\"polls live envelope\"| API\n        REPLAY -->|\"streams raw and selected WAV\"| API\n        CHARTS -->|\"loads metric series\"| API\n    end\n\n    USER -->|\"inspects and replays\"| PAGE\n    API -->|\"HTTPS JSON and WAV\"| EDGE\n\n    classDef person fill:#3f3f46,color:#fff,stroke:#05345f,stroke-width:2px;\n    classDef component fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    class USER person;\n    class PAGE,LIVE,REPLAY,CHARTS,API component;\n    class EDGE external;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle DIAGNOSTICS fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\n\n",
-        "escapeSpecialChars": true,
-        "maxDataRows": 100,
-        "showSeriesCount": false,
-        "seriesCountSize": "sm"
-      },
-      "pluginVersion": "1.0.6",
-      "links": [
-        {
-          "title": "Open Voice Product Health",
-          "url": "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
-        },
-        {
-          "title": "Open Platform Resources",
-          "url": "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
-        }
-      ],
-      "targets": [],
-      "title": "C3 · Input Diagnostics",
-      "type": "neildengg-grafmaid-panel"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "No live activity overlay is applied to this architecture detail view.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#ff778a",
-                "value": null
-              },
-              {
-                "color": "#94a3b8",
-                "value": 0
-              },
-              {
-                "color": "#38bdf8",
-                "value": 1
-              },
-              {
-                "color": "#22d3ee",
-                "value": 10
-              },
-              {
-                "color": "#2dd4bf",
-                "value": 100
-              },
-              {
-                "color": "#56e39f",
-                "value": 1000
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 14,
-        "w": 12,
-        "x": 0,
-        "y": 58
-      },
-      "id": 6,
-      "options": {
-        "content": "flowchart TB\n    BROWSER[External container<br/><b>Browser Client</b><br/>RTVI and owner HTTP requests]\n    BROKER[External container<br/><b>Inference Broker</b><br/>STT · Pi stream · TTS · context]\n    GATEWAY[External container<br/><b>Agent Gateway</b><br/>task lifecycle]\n    STORE[(External data store<br/><b>Diagnostic Volume</b><br/>last five sessions)]\n    OTEL[External container<br/><b>OTel LGTM</b><br/>metrics and traces]\n\n    subgraph EDGE[\"Container: Voice Edge · Python + Pipecat + FastAPI\"]\n        direction TB\n        HTTP[\"Component<br/><b>Owner HTTP Boundary</b><br/>origin and exact tailnet-identity checks\"]\n        API[\"Component<br/><b>Browser API</b><br/>features, tasks, transcript, context, diagnostics\"]\n        TRANSPORT[\"Component<br/><b>SmallWebRTC Transport</b><br/>bidirectional 16/24 kHz audio\"]\n        FILTER[\"Component<br/><b>Input Filter and Recorder</b><br/>one selected filter plus bounded replay\"]\n        TURN[\"Component<br/><b>Turn Detector</b><br/>Silero VAD and Smart Turn v3\"]\n        STT[\"Component<br/><b>STT Adapter</b><br/>OpenAI-compatible audio request\"]\n        CONTEXT[\"Component<br/><b>Conversation Aggregators</b><br/>user and assistant context frames\"]\n        LLM[\"Component<br/><b>Pi LLM Adapter</b><br/>streaming OpenAI-compatible completion\"]\n        VISUAL[\"Component<br/><b>Visual Response Processor</b><br/>stream speech and publish final Mermaid\"]\n        TTS[\"Component<br/><b>TTS Adapter</b><br/>OpenAI-compatible PCM request\"]\n        TELEMETRY[\"Component<br/><b>Pipecat Telemetry Bridge</b><br/>turn, speaking, latency, service, and error signals\"]\n\n        HTTP --> API\n        TRANSPORT --> FILTER --> TURN --> STT --> CONTEXT --> LLM --> VISUAL --> TTS --> TRANSPORT\n        TURN -.->|\"lifecycle events\"| TELEMETRY\n        STT -.->|\"service metrics\"| TELEMETRY\n        LLM -.->|\"service metrics\"| TELEMETRY\n        TTS -.->|\"service metrics\"| TELEMETRY\n    end\n\n    BROWSER -->|\"signaling, microphone audio, owner APIs\"| HTTP\n    HTTP -->|\"authorized signaling\"| TRANSPORT\n    API -->|\"task commands and queries\"| GATEWAY\n    API -->|\"context, transcript, speech\"| BROKER\n    FILTER -->|\"bounded session audio and metrics\"| STORE\n    STT -->|\"WAV\"| BROKER\n    LLM -->|\"messages · SSE response\"| BROKER\n    TTS -->|\"text · PCM\"| BROKER\n    TRANSPORT -->|\"audio and server Mermaid message\"| BROWSER\n    TELEMETRY -.->|\"OTLP\"| OTEL\n\n    classDef component fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    classDef data fill:#d4d4d8,color:#78350f,stroke:#d97706,stroke-width:2px;\n    class HTTP,API,TRANSPORT,FILTER,TURN,STT,CONTEXT,LLM,VISUAL,TTS,TELEMETRY component;\n    class BROWSER,BROKER,GATEWAY,OTEL external;\n    class STORE data;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle EDGE fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\n\n",
-        "escapeSpecialChars": true,
-        "maxDataRows": 100,
-        "showSeriesCount": false,
-        "seriesCountSize": "sm"
-      },
-      "pluginVersion": "1.0.6",
-      "links": [
-        {
-          "title": "Open Voice Product Health",
-          "url": "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
-        },
-        {
-          "title": "Open Platform Resources",
-          "url": "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
-        }
-      ],
-      "targets": [],
-      "title": "C3 · Voice Edge",
-      "type": "neildengg-grafmaid-panel"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "No live activity overlay is applied to this architecture detail view.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#ff778a",
-                "value": null
-              },
-              {
-                "color": "#94a3b8",
-                "value": 0
-              },
-              {
-                "color": "#38bdf8",
-                "value": 1
-              },
-              {
-                "color": "#22d3ee",
-                "value": 10
-              },
-              {
-                "color": "#2dd4bf",
-                "value": 100
-              },
-              {
-                "color": "#56e39f",
-                "value": 1000
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 14,
-        "w": 12,
-        "x": 12,
-        "y": 58
-      },
-      "id": 7,
-      "options": {
-        "content": "flowchart LR\n    EDGE[External container<br/><b>Voice Edge</b><br/>bounded bearer-authenticated requests]\n    PI[External container<br/><b>Pi Voice Service</b><br/>persistent streamed turns]\n    OLLAMA[External system<br/><b>Ollama</b><br/>configured fallback LLM]\n    MODELS[(External data<br/><b>Local MLX Models</b><br/>Parakeet v3 and Kokoro)]\n    OTEL[External container<br/><b>OTel LGTM</b>]\n\n    subgraph BROKER[\"Container: Inference Broker · native Python + FastAPI + MLX\"]\n        direction TB\n        GUARD[\"Component<br/><b>Capability Guard</b><br/>constant-time bearer auth and request limits\"]\n        SLOT[\"Component<br/><b>Inference Slot</b><br/>serializes local STT and TTS work\"]\n        STT_API[\"Component<br/><b>Transcription Endpoint</b><br/>validates mono 16-bit 16 kHz WAV\"]\n        STT[\"Component<br/><b>Parakeet STT Adapter</b><br/>cached MLX model and log-mel inference\"]\n        NORMALIZE[\"Component<br/><b>Transcript Normalizer</b><br/>extracts bounded text and outcomes\"]\n        TTS_API[\"Component<br/><b>Speech Endpoint</b><br/>validates text, voice, speed, and PCM format\"]\n        TTS[\"Component<br/><b>Kokoro TTS Adapter</b><br/>cached MLX synthesis and 24 kHz PCM\"]\n        PI_ADAPTER[\"Component<br/><b>Pi Protocol Adapter</b><br/>OpenAI stream to native Pi SSE\"]\n        CONTEXT[\"Component<br/><b>Pi Projection Proxy</b><br/>transcript, context, and compaction only\"]\n        FALLBACK[\"Component<br/><b>Fallback LLM Proxy</b><br/>fixed model and allowlisted tool schema\"]\n        TELEMETRY[\"Component<br/><b>Inference Telemetry</b><br/>content-free latency and outcome signals\"]\n\n        GUARD --> STT_API --> SLOT --> STT --> NORMALIZE\n        GUARD --> TTS_API --> SLOT --> TTS\n        GUARD --> PI_ADAPTER\n        GUARD --> CONTEXT\n        GUARD --> FALLBACK\n        STT_API -.-> TELEMETRY\n        TTS_API -.-> TELEMETRY\n        PI_ADAPTER -.-> TELEMETRY\n    end\n\n    EDGE -->|\"STT, TTS, Pi, and context HTTP\"| GUARD\n    STT -->|\"loads\"| MODELS\n    TTS -->|\"loads\"| MODELS\n    PI_ADAPTER -->|\"SSE turn stream\"| PI\n    CONTEXT -->|\"bounded owner projections\"| PI\n    FALLBACK -->|\"streamed fixed-model completion\"| OLLAMA\n    NORMALIZE -->|\"transcript text\"| EDGE\n    TTS -->|\"PCM\"| EDGE\n    TELEMETRY -.->|\"OTLP\"| OTEL\n\n    classDef component fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    classDef data fill:#d4d4d8,color:#78350f,stroke:#d97706,stroke-width:2px;\n    class GUARD,SLOT,STT_API,STT,NORMALIZE,TTS_API,TTS,PI_ADAPTER,CONTEXT,FALLBACK,TELEMETRY component;\n    class EDGE,PI,OLLAMA,OTEL external;\n    class MODELS data;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle BROKER fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\n\n",
-        "escapeSpecialChars": true,
-        "maxDataRows": 100,
-        "showSeriesCount": false,
-        "seriesCountSize": "sm"
-      },
-      "pluginVersion": "1.0.6",
-      "links": [
-        {
-          "title": "Open Voice Product Health",
-          "url": "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
-        },
-        {
-          "title": "Open Platform Resources",
-          "url": "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
-        }
-      ],
-      "targets": [],
-      "title": "C3 · Inference Broker",
-      "type": "neildengg-grafmaid-panel"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "No live activity overlay is applied to this architecture detail view.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#ff778a",
-                "value": null
-              },
-              {
-                "color": "#94a3b8",
-                "value": 0
-              },
-              {
-                "color": "#38bdf8",
-                "value": 1
-              },
-              {
-                "color": "#22d3ee",
-                "value": 10
-              },
-              {
-                "color": "#2dd4bf",
-                "value": 100
-              },
-              {
-                "color": "#56e39f",
-                "value": 1000
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 14,
-        "w": 12,
-        "x": 0,
-        "y": 72
-      },
-      "id": 8,
-      "options": {
-        "content": "flowchart LR\n    BROKER[External container<br/><b>Inference Broker</b><br/>turn, transcript, and context API caller]\n    PROVIDER[External system<br/><b>Model Provider</b>]\n    GATEWAY[External container<br/><b>Agent Gateway</b><br/>task lifecycle and personal knowledge]\n    VM[External container<br/><b>Voice Tool Sandbox</b><br/>Gondolin VM]\n    WASSETTE[External container<br/><b>Wassette Integration Runtime</b><br/>tasking and personal-knowledge WASM components]\n    GRAFANA[External container<br/><b>Grafana MCP</b><br/>read-only dashboards, PromQL, and Tempo App data]\n    STATE[(External data store<br/><b>Voice Runtime Data</b><br/>sessions, workspace, skills)]\n\n    subgraph PI[\"Container: Pi Voice Service · TypeScript + Pi coding-agent SDK\"]\n        direction TB\n        HTTP[\"Component<br/><b>Private HTTP API</b><br/>bearer auth, bounded body, JSON and SSE\"]\n        QUEUE[\"Component<br/><b>Turn Coordinator</b><br/>serializes turns and compaction; aborts on timeout\"]\n        SESSION[\"Component<br/><b>Agent Session</b><br/>persistent Pi context and streamed model events\"]\n        MODEL[\"Component<br/><b>Model Runtime</b><br/>host credentials with model network disabled\"]\n        SKILLS[\"Component<br/><b>Skill Resource Loader</b><br/>discovers trusted read-only SKILL.md resources\"]\n        WORKSPACE[\"Component<br/><b>Gondolin Workspace Adapter</b><br/>creates VM-backed read, write, edit, and bash tools\"]\n        SEARCH[\"Component<br/><b>Deferred Tool Search</b><br/>reveals MCP tools only when the model searches for them\"]\n        MCP[\"Component<br/><b>Wassette MCP Registration</b><br/>stdio child with a dedicated mode-0600 capability env file\"]\n        GRAFANA_MCP[\"Component<br/><b>Grafana MCP Registration</b><br/>authenticated deferred streamable HTTP\"]\n        TRANSCRIPT[\"Component<br/><b>Public Transcript Projection</b><br/>bounded user, assistant, and tool-status entries\"]\n        USAGE[\"Component<br/><b>Context Usage Projection</b><br/>tokens, window, percentage, and compactability\"]\n        PERSIST[\"Component<br/><b>Session Manager</b><br/>loads and persists the voice session branch\"]\n\n        HTTP --> QUEUE --> SESSION\n        MODEL --> SESSION\n        SKILLS --> SESSION\n        WORKSPACE --> SESSION\n        SESSION --> SEARCH --> MCP\n        SEARCH --> GRAFANA_MCP\n        SESSION --> TRANSCRIPT\n        SESSION --> USAGE\n        SESSION <--> PERSIST\n    end\n\n    BROKER -->|\"private turn and projection HTTP\"| HTTP\n    SESSION -->|\"model requests\"| PROVIDER\n    WORKSPACE -->|\"VM lifecycle and tools\"| VM\n    MCP -->|\"MCP over stdio<br/>configured component directory\"| WASSETTE\n    GRAFANA_MCP -->|\"read-only MCP calls\"| GRAFANA\n    WASSETTE -->|\"task commands · reader-token<br/>personal-knowledge queries\"| GATEWAY\n    SKILLS -->|\"read only\"| STATE\n    PERSIST -->|\"session files\"| STATE\n    TRANSCRIPT -->|\"bounded display projection\"| HTTP\n    USAGE -->|\"context status\"| HTTP\n\n    classDef component fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    classDef data fill:#d4d4d8,color:#78350f,stroke:#d97706,stroke-width:2px;\n    class HTTP,QUEUE,SESSION,MODEL,SKILLS,WORKSPACE,SEARCH,MCP,GRAFANA_MCP,TRANSCRIPT,USAGE,PERSIST component;\n    class BROKER,PROVIDER,GATEWAY,VM,WASSETTE,GRAFANA external;\n    class STATE data;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle PI fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\n\n",
-        "escapeSpecialChars": true,
-        "maxDataRows": 100,
-        "showSeriesCount": false,
-        "seriesCountSize": "sm"
-      },
-      "pluginVersion": "1.0.6",
-      "links": [
-        {
-          "title": "Open Voice Product Health",
-          "url": "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
-        },
-        {
-          "title": "Open Platform Resources",
-          "url": "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
-        }
-      ],
-      "targets": [],
-      "title": "C3 · Pi Voice Service",
-      "type": "neildengg-grafmaid-panel"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "No live activity overlay is applied to this architecture detail view.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#ff778a",
-                "value": null
-              },
-              {
-                "color": "#94a3b8",
-                "value": 0
-              },
-              {
-                "color": "#38bdf8",
-                "value": 1
-              },
-              {
-                "color": "#22d3ee",
-                "value": 10
-              },
-              {
-                "color": "#2dd4bf",
-                "value": 100
-              },
-              {
-                "color": "#56e39f",
-                "value": 1000
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 14,
-        "w": 12,
-        "x": 12,
-        "y": 72
-      },
-      "id": 9,
-      "options": {
-        "content": "flowchart LR\n    PI[External container<br/><b>Pi Voice Service</b><br/>owns VM lifecycle and invokes tools]\n    S3[(External data store<br/><b>S3Mock</b><br/>scoped artifacts)]\n    GITEA[(External data store<br/><b>Gitea</b><br/>scoped repository access)]\n    REGISTRY[(External data<br/><b>VM Metrics Registry</b><br/>host PID registration files)]\n    DATA[(External data<br/><b>Voice Runtime Data</b><br/>workspace RW · skills RO)]\n\n    subgraph VM[\"Container: Voice Tool Sandbox · Gondolin micro-VM boundary\"]\n        direction TB\n        LIFECYCLE[\"Component<br/><b>VM Lifecycle</b><br/>fixed image, 2 CPU, 2 GiB, synthetic DNS\"]\n        PATHS[\"Component<br/><b>Workspace Path Guard</b><br/>maps host paths under /workspace only\"]\n        FILES[\"Component<br/><b>File Tool Adapters</b><br/>read, write, and edit through VM filesystem\"]\n        SHELL[\"Component<br/><b>Bash Tool Adapter</b><br/>streamed output, timeout, and abort\"]\n        MOUNTS[\"Component<br/><b>Mount Policy</b><br/>workspace read-write and skills read-only\"]\n        EGRESS[\"Component<br/><b>Service Egress Gate</b><br/>deny-by-default URL rewrite to two loopback services\"]\n        TEA[\"Component<br/><b>Scoped Tea Provisioner</b><br/>configures one Gitea login inside the guest\"]\n        METRICS[\"Component<br/><b>VM Registration</b><br/>publishes runner PID and resource allocation\"]\n\n        LIFECYCLE --> MOUNTS\n        LIFECYCLE --> EGRESS\n        LIFECYCLE --> METRICS\n        PATHS --> FILES\n        PATHS --> SHELL\n        MOUNTS --> FILES\n        MOUNTS --> SHELL\n        EGRESS --> TEA\n    end\n\n    PI -->|\"create, execute, close\"| LIFECYCLE\n    PI -->|\"tool calls\"| FILES\n    PI -->|\"commands\"| SHELL\n    MOUNTS -->|\"VFS providers\"| DATA\n    EGRESS -->|\"synthetic s3mock.local only\"| S3\n    EGRESS -->|\"synthetic gitea.local only\"| GITEA\n    METRICS -->|\"0600 registration\"| REGISTRY\n\n    classDef component fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    classDef data fill:#d4d4d8,color:#78350f,stroke:#d97706,stroke-width:2px;\n    class LIFECYCLE,PATHS,FILES,SHELL,MOUNTS,EGRESS,TEA,METRICS component;\n    class PI external;\n    class S3,GITEA,REGISTRY,DATA data;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle VM fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\n\n",
-        "escapeSpecialChars": true,
-        "maxDataRows": 100,
-        "showSeriesCount": false,
-        "seriesCountSize": "sm"
-      },
-      "pluginVersion": "1.0.6",
-      "links": [
-        {
-          "title": "Open Voice Product Health",
-          "url": "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
-        },
-        {
-          "title": "Open Platform Resources",
-          "url": "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
-        }
-      ],
-      "targets": [],
-      "title": "C3 · Voice Tool Sandbox",
-      "type": "neildengg-grafmaid-panel"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "No live activity overlay is applied to this architecture detail view.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#ff778a",
-                "value": null
-              },
-              {
-                "color": "#94a3b8",
-                "value": 0
-              },
-              {
-                "color": "#38bdf8",
-                "value": 1
-              },
-              {
-                "color": "#22d3ee",
-                "value": 10
-              },
-              {
-                "color": "#2dd4bf",
-                "value": 100
-              },
-              {
-                "color": "#56e39f",
-                "value": 1000
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 14,
-        "w": 12,
-        "x": 0,
-        "y": 86
-      },
-      "id": 10,
-      "options": {
-        "content": "flowchart LR\n    CALLERS[External containers<br/><b>Voice Edge and Wassette</b><br/>owner task and knowledge requests]\n    DB[(External data store<br/><b>PostgreSQL</b><br/>proposals and Absurd queue)]\n    S3[(External data store<br/><b>S3Mock</b><br/>immutable workspace pointers)]\n    OXIGRAPH[(External data store<br/><b>Oxigraph</b><br/>private profile and learning RDF)]\n    OTEL[External container<br/><b>OTel LGTM</b>]\n\n    subgraph GATEWAY[\"Container: Agent Gateway · Python + FastAPI\"]\n        direction TB\n        AUTH[\"Component<br/><b>Capability Authenticator</b><br/>constant-time bearer-token validation\"]\n        IDENTITY[\"Component<br/><b>Identity Policy</b><br/>normalizes and requires the single configured owner\"]\n        API[\"Component<br/><b>Task API</b><br/>propose, list, inspect, approve, and cancel\"]\n        KNOWLEDGE[\"Component<br/><b>Personal Knowledge API</b><br/>bounded profile and learning queries\"]\n        SPARQL[\"Component<br/><b>Knowledge Store Adapter</b><br/>fixed SELECT queries and plain-text filtering\"]\n        SERVICE[\"Component<br/><b>Task Service</b><br/>owns proposal and durable-task lifecycle\"]\n        APPROVAL[\"Component<br/><b>Approval Authority</b><br/>plan hash, signed claims, expiry, and binding\"]\n        WORKSPACE[\"Component<br/><b>Workspace Resolver</b><br/>allowlisted logical name to immutable S3 URI\"]\n        QUEUE[\"Component<br/><b>Absurd Queue Adapter</b><br/>spawn, cancel, and fetch result\"]\n        VIEW[\"Component<br/><b>Public View Projector</b><br/>removes approval token and raw Pi events\"]\n        TELEMETRY[\"Component<br/><b>Gateway Telemetry</b><br/>content-free operation spans\"]\n\n        AUTH --> IDENTITY --> API --> SERVICE\n        IDENTITY --> KNOWLEDGE --> SPARQL\n        SERVICE --> APPROVAL\n        SERVICE --> WORKSPACE\n        SERVICE --> QUEUE\n        SERVICE --> VIEW\n        API -.-> TELEMETRY\n        KNOWLEDGE -.-> TELEMETRY\n    end\n\n    CALLERS -->|\"bearer-authenticated owner request\"| AUTH\n    SERVICE -->|\"proposal transactions\"| DB\n    QUEUE -->|\"durable task operations\"| DB\n    WORKSPACE -->|\"read current immutable pointer\"| S3\n    SPARQL -->|\"fixed read-only SPARQL\"| OXIGRAPH\n    VIEW -->|\"bounded response\"| CALLERS\n    KNOWLEDGE -->|\"bounded facts\"| CALLERS\n    TELEMETRY -.->|\"OTLP\"| OTEL\n\n    classDef component fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    classDef data fill:#d4d4d8,color:#78350f,stroke:#d97706,stroke-width:2px;\n    class AUTH,IDENTITY,API,KNOWLEDGE,SPARQL,SERVICE,APPROVAL,WORKSPACE,QUEUE,VIEW,TELEMETRY component;\n    class CALLERS,OTEL external;\n    class DB,S3,OXIGRAPH data;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle GATEWAY fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\n\n",
-        "escapeSpecialChars": true,
-        "maxDataRows": 100,
-        "showSeriesCount": false,
-        "seriesCountSize": "sm"
-      },
-      "pluginVersion": "1.0.6",
-      "links": [
-        {
-          "title": "Open Voice Product Health",
-          "url": "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
-        },
-        {
-          "title": "Open Platform Resources",
-          "url": "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
-        }
-      ],
-      "targets": [],
-      "title": "C3 · Agent Gateway",
-      "type": "neildengg-grafmaid-panel"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "No live activity overlay is applied to this architecture detail view.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#ff778a",
-                "value": null
-              },
-              {
-                "color": "#94a3b8",
-                "value": 0
-              },
-              {
-                "color": "#38bdf8",
-                "value": 1
-              },
-              {
-                "color": "#22d3ee",
-                "value": 10
-              },
-              {
-                "color": "#2dd4bf",
-                "value": 100
-              },
-              {
-                "color": "#56e39f",
-                "value": 1000
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 14,
-        "w": 12,
-        "x": 12,
-        "y": 86
-      },
-      "id": 11,
-      "options": {
-        "content": "flowchart TB\n    DB[(External data store<br/><b>PostgreSQL</b><br/>agent-run and image-build queues)]\n    S3[(External data store<br/><b>S3Mock</b><br/>immutable source and bounded results)]\n    GITEA[(External data store<br/><b>Gitea Packages</b><br/>verified execution-image assets)]\n    PI[External container<br/><b>Pi Task Session</b><br/>Pi CLI with in-process Gondolin extension]\n\n    subgraph WORKER[\"Container: Pi Task Worker · native Python + Absurd\"]\n        direction TB\n        CLAIM[\"Component<br/><b>Agent-Run Handler</b><br/>claims one task with concurrency one\"]\n        MATERIALIZE[\"Component<br/><b>Workspace Materializer</b><br/>download, digest-check, and detached checkout\"]\n        PLAN[\"Component<br/><b>Execution Image Planner</b><br/>reads versioned .pi/gondolin configuration\"]\n        BUILD[\"Component<br/><b>Image Build Coordinator</b><br/>spawn child task, durably await, verify, and install\"]\n        INTENT[\"Component<br/><b>Irreversible Intent Checkpoint</b><br/>prevents unsafe Pi replay after a crash\"]\n        COMMAND[\"Component<br/><b>Pi Command Builder</b><br/>fixed flags, model, skill, and extension selection\"]\n        EXECUTE[\"Component<br/><b>Pi Process Runner</b><br/>bounded stdout/stderr and timeout\"]\n        NORMALIZE[\"Component<br/><b>Response Normalizer</b><br/>extracts text, spoken response, and Mermaid\"]\n        CAPTURE[\"Component<br/><b>Result Capturer</b><br/>bounded binary patch, status, and execution JSON\"]\n\n        CLAIM --> MATERIALIZE --> PLAN --> BUILD --> INTENT --> COMMAND --> EXECUTE --> NORMALIZE --> CAPTURE\n    end\n\n    DB -->|\"claim agent-run\"| CLAIM\n    CLAIM -->|\"steps and final checkpoint\"| DB\n    MATERIALIZE -->|\"source bundle\"| S3\n    BUILD -->|\"spawn and await image-build\"| DB\n    BUILD -->|\"download package\"| GITEA\n    EXECUTE -->|\"one no-session invocation\"| PI\n    CAPTURE -->|\"write task artifacts\"| S3\n    CAPTURE -->|\"completed result\"| DB\n\n    classDef component fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    classDef data fill:#d4d4d8,color:#78350f,stroke:#d97706,stroke-width:2px;\n    class CLAIM,MATERIALIZE,PLAN,BUILD,INTENT,COMMAND,EXECUTE,NORMALIZE,CAPTURE component;\n    class PI,RUNTIME external;\n    class DB,S3,GITEA data;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle WORKER fill:#3f3f46,color:#f4f4f5,stroke:#ff778a,stroke-width:3px\n\n",
-        "escapeSpecialChars": true,
-        "maxDataRows": 100,
-        "showSeriesCount": false,
-        "seriesCountSize": "sm"
-      },
-      "pluginVersion": "1.0.6",
-      "links": [
-        {
-          "title": "Open Voice Product Health",
-          "url": "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
-        },
-        {
-          "title": "Open Platform Resources",
-          "url": "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
-        }
-      ],
-      "targets": [],
-      "title": "C3 · Pi Task Worker",
-      "type": "neildengg-grafmaid-panel"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "No live activity overlay is applied to this architecture detail view.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#ff778a",
-                "value": null
-              },
-              {
-                "color": "#94a3b8",
-                "value": 0
-              },
-              {
-                "color": "#38bdf8",
-                "value": 1
-              },
-              {
-                "color": "#22d3ee",
-                "value": 10
-              },
-              {
-                "color": "#2dd4bf",
-                "value": 100
-              },
-              {
-                "color": "#56e39f",
-                "value": 1000
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 14,
-        "w": 12,
-        "x": 0,
-        "y": 100
-      },
-      "id": 12,
-      "options": {
-        "content": "flowchart LR\n    TASK[(External data store<br/><b>PostgreSQL</b><br/>agent task and durable checkpoints)]\n    GITEA[External system<br/><b>Gitea Actions</b><br/>workflow scheduling and run state]\n    PACKAGES[(External data store<br/><b>Gitea Generic Packages</b><br/>immutable image archive and manifest)]\n\n    subgraph WORKER[\"Container: Pi Task Worker · Python\"]\n        direction TB\n        PLAN[\"Component<br/><b>Execution Image Planner</b><br/>validates config and computes content key\"]\n        CACHE[\"Component<br/><b>Package Cache Client</b><br/>checks and downloads immutable artifacts\"]\n        ACTIONS[\"Component<br/><b>Gitea Actions Client</b><br/>dispatches, observes, and cancels workflow runs\"]\n        INSTALL[\"Component<br/><b>Verified Image Installer</b><br/>checks digest and registers image ref\"]\n        PLAN --> CACHE\n        CACHE -->|\"cache miss\"| ACTIONS\n        CACHE -->|\"cache hit\"| INSTALL\n        ACTIONS -->|\"successful run\"| CACHE\n    end\n\n    TASK -->|\"claims agent-run and stores workflow run ID\"| WORKER\n    ACTIONS -->|\"workflow dispatch, status, cancel\"| GITEA\n    CACHE -->|\"manifest and archive\"| PACKAGES\n\n    classDef component fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    classDef data fill:#d4d4d8,color:#78350f,stroke:#d97706,stroke-width:2px;\n    class PLAN,CACHE,ACTIONS,INSTALL component;\n    class GITEA external;\n    class TASK,PACKAGES data;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle WORKER fill:#3f3f46,color:#f4f4f5,stroke:#ff778a,stroke-width:3px\n\n",
-        "escapeSpecialChars": true,
-        "maxDataRows": 100,
-        "showSeriesCount": false,
-        "seriesCountSize": "sm"
-      },
-      "pluginVersion": "1.0.6",
-      "links": [
-        {
-          "title": "Open Voice Product Health",
-          "url": "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
-        },
-        {
-          "title": "Open Platform Resources",
-          "url": "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
-        }
-      ],
-      "targets": [],
-      "title": "C3 · Image Build Orchestration",
-      "type": "neildengg-grafmaid-panel"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "No live activity overlay is applied to this architecture detail view.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#ff778a",
-                "value": null
-              },
-              {
-                "color": "#94a3b8",
-                "value": 0
-              },
-              {
-                "color": "#38bdf8",
-                "value": 1
-              },
-              {
-                "color": "#22d3ee",
-                "value": 10
-              },
-              {
-                "color": "#2dd4bf",
-                "value": 100
-              },
-              {
-                "color": "#56e39f",
-                "value": 1000
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 14,
-        "w": 12,
-        "x": 12,
-        "y": 100
-      },
-      "id": 13,
-      "options": {
-        "content": "flowchart TB\n    GITEA[External system<br/><b>Gitea Actions</b><br/>assigns trusted repository jobs]\n    SOURCE[(External data<br/><b>Gitea Repository</b><br/>workflow and immutable revision)]\n    PACKAGES[(External data store<br/><b>Gitea Generic Packages</b><br/>archive and manifest)]\n    INTERNET[External system<br/><b>Public Package Sources</b><br/>build dependencies]\n    OTEL[External system<br/><b>OTel LGTM</b><br/>runner metrics and job traces]\n\n    subgraph HOST[\"Deployment node: macOS host\"]\n        MANAGER[\"Container<br/><b>Builder VM Manager</b><br/>starts, monitors, and checkpoints one warm VM\"]\n        CHECKPOINT[(\"Builder disk checkpoint<br/>Docker layers and runner registration\")]\n        subgraph VM[\"Deployment node: Shared Gondolin Builder VM · trusted repositories only\"]\n            RUNNER[\"Component<br/><b>Gitea Runner</b><br/>host-mode label, capacity one\"]\n            DOCKER[\"Component<br/><b>Private Docker Daemon</b><br/>overlay2 cache; no macOS socket\"]\n            BUILD[\"Component<br/><b>Fixed Image Build Helper</b><br/>revalidates content key and builds OCI image\"]\n            ASSETS[\"Component<br/><b>Gondolin Asset Generator</b><br/>converts OCI image and hashes archive\"]\n            RUNNER --> BUILD --> DOCKER\n            BUILD --> ASSETS\n        end\n        MANAGER -->|\"creates or resumes\"| VM\n        MANAGER -->|\"writes on graceful stop\"| CHECKPOINT\n    end\n\n    GITEA -->|\"one labeled job at a time\"| RUNNER\n    RUNNER -->|\"checks out requested revision\"| SOURCE\n    DOCKER -->|\"pulls build dependencies\"| INTERNET\n    ASSETS -->|\"uploads checksummed package\"| PACKAGES\n    MANAGER -.->|\"lifecycle metrics and traces\"| OTEL\n    RUNNER -.->|\"native OTLP job traces and metrics\"| OTEL\n\n    classDef component fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef container fill:#d4d4d8,color:#14532d,stroke:#16a34a,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    classDef data fill:#d4d4d8,color:#78350f,stroke:#d97706,stroke-width:2px;\n    class RUNNER,DOCKER,BUILD,ASSETS component;\n    class MANAGER container;\n    class GITEA,INTERNET,OTEL external;\n    class SOURCE,PACKAGES,CHECKPOINT data;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle MANAGER fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle RUNNER fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle OTEL fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\n\n",
-        "escapeSpecialChars": true,
-        "maxDataRows": 100,
-        "showSeriesCount": false,
-        "seriesCountSize": "sm"
-      },
-      "pluginVersion": "1.0.6",
-      "links": [
-        {
-          "title": "Open Voice Product Health",
-          "url": "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
-        },
-        {
-          "title": "Open Platform Resources",
-          "url": "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
-        }
-      ],
-      "targets": [],
-      "title": "C3 · Shared Image Builder",
-      "type": "neildengg-grafmaid-panel"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "No live activity overlay is applied to this architecture detail view.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#ff778a",
-                "value": null
-              },
-              {
-                "color": "#94a3b8",
-                "value": 0
-              },
-              {
-                "color": "#38bdf8",
-                "value": 1
-              },
-              {
-                "color": "#22d3ee",
-                "value": 10
-              },
-              {
-                "color": "#2dd4bf",
-                "value": 100
-              },
-              {
-                "color": "#56e39f",
-                "value": 1000
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 14,
-        "w": 12,
-        "x": 0,
-        "y": 114
-      },
-      "id": 14,
-      "options": {
-        "content": "flowchart LR\n    WORKER[External container<br/><b>Pi Task Worker</b><br/>starts one bounded Pi CLI process]\n    WORKSPACE[(External data<br/><b>Task Workspace</b><br/>mounted at /workspace)]\n    SKILLS[(External data<br/><b>Trusted Skills</b><br/>optional read-only /skills)]\n    MEMORY[(External data store<br/><b>Browser Memory</b><br/>local JSONL MCP storage)]\n    GITHUB[External system<br/><b>GitHub API</b><br/>optional scoped integration]\n    WASSETTE_RUNTIME[External container<br/><b>Wassette Integration Runtime</b><br/>native per-session MCP subprocess]\n\n    subgraph RUNTIME[\"Container: Pi Task Session · Pi CLI + in-process Gondolin extension\"]\n        direction TB\n        CONFIG[\"Component<br/><b>Project Runtime Resolver</b><br/>reads .pi/gondolin.json and in-repo network policy\"]\n        LIFECYCLE[\"Component<br/><b>Extension Lifecycle</b><br/>start, prompt augmentation, and shutdown\"]\n        VM[\"Component<br/><b>Gondolin Tool Client</b><br/>isolated bash and optional Playwright MCP\"]\n        MEM[\"Component<br/><b>Memory MCP Client</b><br/>optional durable browser knowledge\"]\n        WASSETTE[\"Component<br/><b>Wassette MCP Client</b><br/>loads configured component and grants explicit capabilities\"]\n        POLICY[\"Component<br/><b>GitHub Tool Policy</b><br/>read allowlist; writes require explicit enablement\"]\n        REGISTRY[\"Component<br/><b>Tool Registrar</b><br/>normalizes schemas and bounds returned output\"]\n\n        CONFIG --> LIFECYCLE --> VM\n        LIFECYCLE --> MEM\n        LIFECYCLE --> WASSETTE --> POLICY\n        VM --> REGISTRY\n        MEM --> REGISTRY\n        POLICY --> REGISTRY\n    end\n\n    WORKER -->|\"start one process\"| LIFECYCLE\n    CONFIG -->|\"select image, CPU, memory, egress\"| VM\n    VM -->|\"read-write mount\"| WORKSPACE\n    VM -->|\"read-only mount\"| SKILLS\n    MEM -->|\"MCP operations\"| MEMORY\n    WASSETTE -->|\"MCP over stdio\"| WASSETTE_RUNTIME\n    WASSETTE_RUNTIME -->|\"network and environment capabilities\"| GITHUB\n\n    classDef component fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    classDef data fill:#d4d4d8,color:#78350f,stroke:#d97706,stroke-width:2px;\n    class CONFIG,LIFECYCLE,VM,MEM,WASSETTE,POLICY,REGISTRY component;\n    class WORKER,GITHUB,WASSETTE_RUNTIME external;\n    class WORKSPACE,SKILLS,MEMORY data;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle RUNTIME fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\n\n",
-        "escapeSpecialChars": true,
-        "maxDataRows": 100,
-        "showSeriesCount": false,
-        "seriesCountSize": "sm"
-      },
-      "pluginVersion": "1.0.6",
-      "links": [
-        {
-          "title": "Open Voice Product Health",
-          "url": "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
-        },
-        {
-          "title": "Open Platform Resources",
-          "url": "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
-        }
-      ],
-      "targets": [],
-      "title": "C3 · Pi Task Session",
-      "type": "neildengg-grafmaid-panel"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "No live activity overlay is applied to this architecture detail view.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#ff778a",
-                "value": null
-              },
-              {
-                "color": "#94a3b8",
-                "value": 0
-              },
-              {
-                "color": "#38bdf8",
-                "value": 1
-              },
-              {
-                "color": "#22d3ee",
-                "value": 10
-              },
-              {
-                "color": "#2dd4bf",
-                "value": 100
-              },
-              {
-                "color": "#56e39f",
-                "value": 1000
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 14,
-        "w": 12,
-        "x": 12,
-        "y": 114
-      },
-      "id": 15,
-      "options": {
-        "content": "flowchart LR\n    MAC[External system<br/><b>macOS</b><br/>host CPU, memory, disk, and process table]\n    REGISTRY[(External data<br/><b>VM Metrics Registry</b><br/>0600 lifecycle records)]\n    OTEL[External container<br/><b>OTel LGTM</b><br/>Prometheus-compatible ingestion]\n\n    subgraph OBS[\"Container: Host and Gondolin Metrics · native Node.js + Fluent Bit\"]\n        direction TB\n        SUPERVISOR[\"Component<br/><b>Collector Supervisor</b><br/>starts Fluent Bit and coordinates shutdown\"]\n        HOSTCOLLECTOR[\"Component<br/><b>Host Metrics Collector</b><br/>Fluent Bit host metrics configuration\"]\n        REGREAD[\"Component<br/><b>Registration Reader</b><br/>ignores partial and malformed VM records\"]\n        PROCESSES[\"Component<br/><b>Process Sampler</b><br/>parses ps CPU, RSS, and elapsed time\"]\n        RENDER[\"Component<br/><b>VM Metric Renderer</b><br/>safe labels, liveness, allocation ratios\"]\n        ENDPOINT[\"Component<br/><b>Loopback Metrics Endpoint</b><br/>serves Prometheus text at /metrics\"]\n\n        SUPERVISOR --> HOSTCOLLECTOR\n        REGREAD --> RENDER\n        PROCESSES --> RENDER --> ENDPOINT\n    end\n\n    MAC -->|\"host metrics\"| HOSTCOLLECTOR\n    MAC -->|\"ps process table\"| PROCESSES\n    REGISTRY -->|\"VM IDs, labels, PIDs, allocations\"| REGREAD\n    HOSTCOLLECTOR -->|\"OTLP metrics\"| OTEL\n    OTEL -->|\"loopback scrape\"| ENDPOINT\n\n    classDef component fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    classDef data fill:#d4d4d8,color:#78350f,stroke:#d97706,stroke-width:2px;\n    class SUPERVISOR,HOSTCOLLECTOR,REGREAD,PROCESSES,RENDER,ENDPOINT component;\n    class MAC,OTEL external;\n    class REGISTRY data;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle OBS fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\n\n",
-        "escapeSpecialChars": true,
-        "maxDataRows": 100,
-        "showSeriesCount": false,
-        "seriesCountSize": "sm"
-      },
-      "pluginVersion": "1.0.6",
-      "links": [
-        {
-          "title": "Open Voice Product Health",
-          "url": "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
-        },
-        {
-          "title": "Open Platform Resources",
-          "url": "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
-        }
-      ],
-      "targets": [],
-      "title": "C3 · Host Observability",
-      "type": "neildengg-grafmaid-panel"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "No live activity overlay is applied to this architecture detail view.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#ff778a",
-                "value": null
-              },
-              {
-                "color": "#94a3b8",
-                "value": 0
-              },
-              {
-                "color": "#38bdf8",
-                "value": 1
-              },
-              {
-                "color": "#22d3ee",
-                "value": 10
-              },
-              {
-                "color": "#2dd4bf",
-                "value": 100
-              },
-              {
-                "color": "#56e39f",
-                "value": 1000
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 22,
-        "w": 24,
-        "x": 0,
-        "y": 128
-      },
-      "id": 16,
-      "options": {
-        "content": "flowchart LR\n    %% C4 deployment view. Only boundary crossings and primary runtime relationships are shown.\n    USER([\"Person<br/><b>Tailnet User</b>\"])\n\n    subgraph DEVICE[\"User device\"]\n        BROWSER[\"Browser Client<br/>Flutter Web · Pipecat transport\"]\n    end\n\n    subgraph MAC[\"Apple Silicon Mac · one macOS user boundary\"]\n        direction LR\n\n        subgraph DOCKER[\"Docker Desktop Linux VM\"]\n            direction TB\n            subgraph TRUST_NS[\"Shared namespace · 172.30.90.2 · trusted proxy source IP\"]\n                direction TB\n                INGRESS[\"Tailscale Serve<br/>tailnet HTTPS\"]\n                ROUTER[\"Traefik<br/>owner forward-auth\"]\n                EDGE[\"Voice Edge<br/>Pipecat · read-only · non-root\"]\n                TRUST_RISK[\"Risk<br/>Edge shares Grafana's trusted proxy source IP\"]\n                INGRESS -->|\"identity header\"| ROUTER\n                ROUTER -->|\"/ · WebRTC\"| EDGE\n                EDGE -.-> TRUST_RISK\n            end\n\n            subgraph CONTROL_NET[\"control · non-internal\"]\n                GATEWAY[\"Agent Gateway<br/>identity · commands\"]\n                HABITAT[\"Absurd Habitat<br/>queue operations\"]\n            end\n\n            subgraph DATA_NET[\"data · internal\"]\n                POSTGRES[(\"PostgreSQL<br/>proposals · queue · checkpoints\")]\n                S3[(\"S3Mock<br/>workspaces · results\")]\n                GITEA[(\"Gitea<br/>Git · Actions · packages\")]\n                OXIGRAPH[(\"Oxigraph<br/>private SPARQL · persistent RDF\")]\n            end\n\n            subgraph MONITOR_NET[\"monitoring · internal\"]\n                DOCKER_METRICS[\"Docker VM Metrics<br/>Fluent Bit\"]\n                OTEL[\"OTel LGTM<br/>Prometheus · Tempo · Grafana\"]\n                GRAFANA_MCP[\"Grafana MCP<br/>read-only · caller bearer · MCP Apps\"]\n                DOCKER_METRICS --> OTEL\n                GRAFANA_MCP -->|\"service-account API<br/>PromQL · TraceQL\"| OTEL\n                GRAFANA_MCP -.->|\"metrics · OTLP traces\"| OTEL\n            end\n\n            EDGE -->|\"task API\"| GATEWAY\n            EDGE -->|\"identity-checked App and trace proxy\"| GRAFANA_MCP\n            GATEWAY --> POSTGRES\n            GATEWAY --> S3\n            GATEWAY -->|\"fixed read-only SPARQL\"| OXIGRAPH\n            HABITAT -->|\"scoped queue SQL\"| POSTGRES\n            ROUTER -->|\"/queue/\"| HABITAT\n            ROUTER -->|\"/git/\"| GITEA\n            ROUTER -->|\"/metrics/\"| OTEL\n            EDGE -.->|\"OTLP\"| OTEL\n        end\n\n        subgraph NATIVE[\"Native macOS · launchd and child processes\"]\n            direction TB\n            BROKER[\"Inference Broker<br/>FastAPI · MLX STT/TTS\"]\n            PI[\"Pi Voice Service<br/>persistent Pi session\"]\n            WORKER[\"Pi Task Worker<br/>claim · execute · checkpoint\"]\n            TASK_PI[\"Pi Task Session<br/>bounded child process\"]\n            BUILDER_MANAGER[\"Builder VM Manager<br/>warm VM lifecycle\"]\n            VOICE_WASSETTE[\"Voice Wassette MCP<br/>per-session child\"]\n            TASK_WASSETTE[\"Task Wassette MCP<br/>per-task child\"]\n            HOST_METRICS[\"Host Observability<br/>Mac + QEMU metrics\"]\n            RUNTIME[(\"Host-private data<br/>sessions · skills · scratch · secrets\")]\n\n            BROKER --> PI\n            PI --> RUNTIME\n            WORKER --> RUNTIME\n            WORKER --> TASK_PI\n            PI --> VOICE_WASSETTE\n            TASK_PI --> TASK_WASSETTE\n            PI -->|\"bearer · loopback streamable HTTP\"| GRAFANA_MCP\n        end\n\n        subgraph VMS[\"Gondolin micro-VM isolation\"]\n            direction TB\n            subgraph VOICE_VM[\"Persistent voice VM · no public egress\"]\n                VOICE_TOOLS[\"Voice tools<br/>workspace RW · Git · Tea · AWS CLI\"]\n            end\n            subgraph TASK_VM[\"Per-task VM · public egress enabled by current default\"]\n                TASK_TOOLS[\"Task tools<br/>isolated workspace · project policy\"]\n            end\n            subgraph BUILDER_VM[\"Shared builder VM · public package egress\"]\n                RUNNER[\"Gitea Runner\"]\n                DOCKERD[\"Private Docker daemon and cache\"]\n                RUNNER --> DOCKERD\n            end\n        end\n\n        EDGE -->|\"bearer · host-access\"| BROKER\n        VOICE_WASSETTE -->|\"component-scoped bearers<br/>task and read-only knowledge tools\"| GATEWAY\n        PI -->|\"native tools\"| VOICE_TOOLS\n        TASK_PI -->|\"isolated tools\"| TASK_TOOLS\n        BUILDER_MANAGER -->|\"resume · checkpoint\"| RUNNER\n        VOICE_TOOLS -->|\"synthetic allowlist\"| GITEA\n        VOICE_TOOLS -->|\"synthetic allowlist\"| S3\n        RUNNER -->|\"Actions · packages\"| GITEA\n        RUNNER -.->|\"OTLP job traces · runner metrics\"| OTEL\n        WORKER -->|\"verified package\"| GITEA\n        HOST_METRICS -.->|\"host-access scrape\"| OTEL\n    end\n\n    subgraph EXTERNAL[\"External systems\"]\n        direction TB\n        CONTROL[\"Tailscale Control Plane\"]\n        MODELS[\"Model Providers\"]\n        INTERNET[\"Public Internet and Integrations\"]\n    end\n\n    USER --> BROWSER -->|\"tailnet HTTPS · WebRTC\"| INGRESS\n    INGRESS -.-> CONTROL\n    PI -->|\"host-held credential\"| MODELS\n    TASK_PI -->|\"host-held credential\"| MODELS\n    VOICE_WASSETTE -->|\"granted capability\"| INTERNET\n    TASK_WASSETTE -->|\"granted capability\"| INTERNET\n    TASK_TOOLS -->|\"current default\"| INTERNET\n    DOCKERD -->|\"packages\"| INTERNET\n\n    classDef person fill:#3f3f46,color:#fff,stroke:#05345f,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    classDef runtime fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef security fill:#d4d4d8,color:#14532d,stroke:#16a34a,stroke-width:2px;\n    classDef warning fill:#3f3f46,color:#ffd7de,stroke:#ff778a,stroke-width:3px;\n    classDef data fill:#d4d4d8,color:#78350f,stroke:#d97706,stroke-width:2px;\n    class USER person;\n    class CONTROL,MODELS,INTERNET external;\n    class BROWSER,BROKER,PI,WORKER,TASK_PI,BUILDER_MANAGER,VOICE_WASSETTE,TASK_WASSETTE,HOST_METRICS,VOICE_TOOLS,TASK_TOOLS,RUNNER,DOCKERD,HABITAT,DOCKER_METRICS,OTEL,GRAFANA_MCP runtime;\n    class INGRESS,ROUTER,EDGE,GATEWAY security;\n    class TRUST_RISK warning;\n    class POSTGRES,S3,GITEA,OXIGRAPH,RUNTIME data;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle EDGE fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle GATEWAY fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle BROKER fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle PI fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle VOICE_TOOLS fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle WORKER fill:#3f3f46,color:#f4f4f5,stroke:#ff778a,stroke-width:3px\nstyle TASK_PI fill:#3f3f46,color:#f4f4f5,stroke:#ff778a,stroke-width:3px\nstyle TASK_TOOLS fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle VOICE_WASSETTE fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle TASK_WASSETTE fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle BUILDER_MANAGER fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle RUNNER fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle DOCKERD fill:#3f3f46,color:#f4f4f5,stroke:#ff778a,stroke-width:3px\nstyle POSTGRES fill:#3f3f46,color:#f4f4f5,stroke:#72b7ef,stroke-width:3px\nstyle HABITAT fill:#3f3f46,color:#f4f4f5,stroke:#72b7ef,stroke-width:3px\nstyle S3 fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle GITEA fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle OXIGRAPH fill:#3f3f46,color:#f4f4f5,stroke:#72b7ef,stroke-width:3px\nstyle DOCKER_METRICS fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle HOST_METRICS fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle OTEL fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle GRAFANA_MCP fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\n\n",
-        "escapeSpecialChars": true,
-        "maxDataRows": 100,
-        "showSeriesCount": false,
-        "seriesCountSize": "sm"
-      },
-      "pluginVersion": "1.0.6",
-      "links": [
-        {
-          "title": "Open Voice Product Health",
-          "url": "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
-        },
-        {
-          "title": "Open Platform Resources",
-          "url": "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
-        }
-      ],
-      "targets": [],
-      "title": "Deployment · Security boundaries",
-      "type": "neildengg-grafmaid-panel"
-    }
-  ],
-  "refresh": "30s",
-  "schemaVersion": 41,
-  "tags": [
-    "c4",
-    "architecture",
-    "evidence",
-    "prometheus",
-    "grafana-mcp"
-  ],
-  "templating": {
-    "list": []
+  "timepicker" : { },
+  "tags" : [ "c4", "architecture", "evidence", "prometheus", "grafana-mcp" ],
+  "timezone" : "browser",
+  "refresh" : "30s",
+  "editable" : false,
+  "graphTooltip" : 1,
+  "uid" : "voice-c4-heatmap",
+  "time" : {
+    "from" : "now-15m",
+    "to" : "now"
   },
-  "time": {
-    "from": "now-15m",
-    "to": "now"
+  "title" : "C4 Operational Heat Map",
+  "fiscalYearStartMonth" : 0,
+  "annotations" : {
+    "list" : [ {
+      "builtIn" : 0,
+      "datasource" : {
+        "type" : "grafana",
+        "uid" : "-- Grafana --"
+      },
+      "enable" : true,
+      "hide" : false,
+      "iconColor" : "#f59e0b",
+      "name" : "Deployments and E2E runs",
+      "target" : {
+        "limit" : 100,
+        "matchAny" : true,
+        "tags" : [ "deployment", "e2e" ]
+      },
+      "type" : "dashboard"
+    } ]
   },
-  "timepicker": {},
-  "timezone": "browser",
-  "title": "C4 Operational Heat Map",
-  "uid": "voice-c4-heatmap",
-  "version": 13
+  "version" : 13,
+  "panels" : [ {
+    "gridPos" : {
+      "h" : 8,
+      "w" : 24,
+      "x" : 0,
+      "y" : 0
+    },
+    "id" : 1,
+    "options" : {
+      "content" : "## Engineering evidence\n\n| Executable surface | Line coverage |\n|---|---:|\n| Flutter client | **63.9%** |\n| Pi Voice Service | **36.4%** |\n| Gondolin workspace adapter | **53.4%** |\n| Combined Pi agent JavaScript | **40.3%** |\n\nBuild evidence snapshot · 2026-10-16. Other surfaces have test evidence but no consolidated executable-line report.\n\n## How to read this dashboard\n\n**C2 fill = telemetry activity:** 🔴 missing or stale for 2 minutes · ⚪ idle · 🔵 low · 🟦 medium · 🟢 high. Activity is volume, not health.\n\n**C2 border = evidence:** 🟢 strong · 🟠 partial · 🔵 observed · 🔴 weak. All other views use neutral gray backgrounds so the live container trace remains the sole highlight.\n\nArchitecture and evidence remain source-controlled; operations remain live in Grafana. Use the dashboard links for RED product signals and USE resource signals.",
+      "mode" : "markdown"
+    },
+    "title" : "Source-backed code evidence",
+    "type" : "text"
+  }, {
+    "description" : "No live activity overlay is applied to this architecture detail view.",
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "prometheus"
+    },
+    "gridPos" : {
+      "h" : 14,
+      "w" : 24,
+      "x" : 0,
+      "y" : 8
+    },
+    "pluginVersion" : "1.0.6",
+    "type" : "neildengg-grafmaid-panel",
+    "targets" : [ ],
+    "title" : "C1 · System context",
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "thresholds"
+        },
+        "mappings" : [ ],
+        "thresholds" : {
+          "mode" : "absolute",
+          "steps" : [ {
+            "color" : "#ff778a",
+            "value" : null
+          }, {
+            "color" : "#94a3b8",
+            "value" : 0
+          }, {
+            "color" : "#38bdf8",
+            "value" : 1
+          }, {
+            "color" : "#22d3ee",
+            "value" : 10
+          }, {
+            "color" : "#2dd4bf",
+            "value" : 100
+          }, {
+            "color" : "#56e39f",
+            "value" : 1000
+          } ]
+        }
+      },
+      "overrides" : [ ]
+    },
+    "id" : 2,
+    "options" : {
+      "content" : "C4Context\ntitle Voice Agent - System Context\n\nPerson(user, \"Tailnet User\", \"Uses a private browser voice interface for interactive coding and durable delegated work\")\n\nSystem(voice_agent, \"Voice Agent\", \"Turns browser speech into a persistent Pi conversation, visual and spoken responses, and optional durable agent tasks\")\n\nSystem_Ext(tailscale, \"Tailscale Control Plane\", \"Authenticates devices and distributes private network configuration\")\nSystem_Ext(models, \"Model Providers\", \"Serve the models selected by the native Pi runtimes using host credentials\")\nSystem_Ext(integrations, \"External Integrations\", \"Optional APIs, such as GitHub, exposed through permission-scoped Wassette components\")\n\nRel_D(user, voice_agent, \"Talks, sees diagrams and transcripts, and delegates work\", \"Tailnet HTTPS, WebRTC\")\nRel_R(voice_agent, tailscale, \"Obtains device identity and private network configuration from\", \"Tailscale control protocol\")\nRel_R(voice_agent, models, \"Requests conversational and task-agent completions from\", \"Provider APIs\")\nRel_R(voice_agent, integrations, \"Uses explicitly configured integration capabilities from\", \"Permission-scoped HTTPS\")\n\n%% Grafana node backgrounds are intentionally neutral.\nUpdateElementStyle(user, \"#3f3f46\", \"#f4f4f5\")\nUpdateElementStyle(voice_agent, \"#3f3f46\", \"#f4f4f5\")\nUpdateElementStyle(tailscale, \"#3f3f46\", \"#f4f4f5\")\nUpdateElementStyle(models, \"#3f3f46\", \"#f4f4f5\")\nUpdateElementStyle(integrations, \"#3f3f46\", \"#f4f4f5\")\n\n%% Evidence colors generated by the C4 dashboard adapter.\nUpdateElementStyle(voice_agent, \"#3f3f46\", \"#f4f4f5\", \"#ffbd76\")\n\n",
+      "escapeSpecialChars" : true,
+      "maxDataRows" : 100,
+      "showSeriesCount" : false,
+      "seriesCountSize" : "sm"
+    },
+    "links" : [ {
+      "title" : "Open Voice Product Health",
+      "url" : "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
+    }, {
+      "title" : "Open Platform Resources",
+      "url" : "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
+    } ]
+  }, {
+    "description" : "Fill shows live PromQL activity: red is missing or stale, gray is idle, and brighter cyan means more activity in the selected range. Border shows static evidence strength.",
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "prometheus"
+    },
+    "gridPos" : {
+      "h" : 22,
+      "w" : 24,
+      "x" : 0,
+      "y" : 22
+    },
+    "pluginVersion" : "1.0.6",
+    "type" : "neildengg-grafmaid-panel",
+    "targets" : [ {
+      "datasource" : {
+        "type" : "prometheus",
+        "uid" : "prometheus"
+      },
+      "editorMode" : "code",
+      "expr" : "(sum(increase(pipecat_operation_total{service_name=\"pipecat-voice-edge\"}[$__range])) and on() (max(timestamp(pipecat_operation_total{service_name=\"pipecat-voice-edge\"})) > time() - 120)) or vector(-1)",
+      "instant" : true,
+      "legendFormat" : "A",
+      "range" : false,
+      "refId" : "A"
+    }, {
+      "datasource" : {
+        "type" : "prometheus",
+        "uid" : "prometheus"
+      },
+      "editorMode" : "code",
+      "expr" : "(sum(increase(pipecat_operation_total{service_name=\"pipecat-mlx-inference\"}[$__range])) and on() (max(timestamp(pipecat_operation_total{service_name=\"pipecat-mlx-inference\"})) > time() - 120)) or vector(-1)",
+      "instant" : true,
+      "legendFormat" : "B",
+      "range" : false,
+      "refId" : "B"
+    }, {
+      "datasource" : {
+        "type" : "prometheus",
+        "uid" : "prometheus"
+      },
+      "editorMode" : "code",
+      "expr" : "(sum(increase(pipecat_operation_total{service_name=\"pipecat-agent-gateway\"}[$__range])) and on() (max(timestamp(pipecat_operation_total{service_name=\"pipecat-agent-gateway\"})) > time() - 120)) or vector(-1)",
+      "instant" : true,
+      "legendFormat" : "C",
+      "range" : false,
+      "refId" : "C"
+    }, {
+      "datasource" : {
+        "type" : "prometheus",
+        "uid" : "prometheus"
+      },
+      "editorMode" : "code",
+      "expr" : "(sum(increase(pipecat_operation_total{service_name=\"pipecat-pi-voice\"}[$__range])) and on() (max(timestamp(pipecat_operation_total{service_name=\"pipecat-pi-voice\"})) > time() - 120)) or vector(-1)",
+      "instant" : true,
+      "legendFormat" : "D",
+      "range" : false,
+      "refId" : "D"
+    }, {
+      "datasource" : {
+        "type" : "prometheus",
+        "uid" : "prometheus"
+      },
+      "editorMode" : "code",
+      "expr" : "(sum(increase(pipecat_operation_total{service_name=\"pipecat-task-worker\"}[$__range])) and on() (max(timestamp(pipecat_operation_total{service_name=\"pipecat-task-worker\"})) > time() - 120)) or vector(-1)",
+      "instant" : true,
+      "legendFormat" : "E",
+      "range" : false,
+      "refId" : "E"
+    }, {
+      "datasource" : {
+        "type" : "prometheus",
+        "uid" : "prometheus"
+      },
+      "editorMode" : "code",
+      "expr" : "(sum(increase(pipecat_operation_total{service_name=\"pipecat-image-builder\"}[$__range])) and on() (max(timestamp(pipecat_operation_total{service_name=\"pipecat-image-builder\"})) > time() - 120)) or vector(-1)",
+      "instant" : true,
+      "legendFormat" : "F",
+      "range" : false,
+      "refId" : "F"
+    }, {
+      "datasource" : {
+        "type" : "prometheus",
+        "uid" : "prometheus"
+      },
+      "editorMode" : "code",
+      "expr" : "(sum(gitea_runner_info{service_name=\"pipecat-gitea-runner\"}) and on() (max(timestamp(gitea_runner_info{service_name=\"pipecat-gitea-runner\"})) > time() - 120)) or vector(-1)",
+      "instant" : true,
+      "legendFormat" : "G",
+      "range" : false,
+      "refId" : "G"
+    } ],
+    "title" : "C2 · Containers",
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "thresholds"
+        },
+        "mappings" : [ ],
+        "thresholds" : {
+          "mode" : "absolute",
+          "steps" : [ {
+            "color" : "#ff778a",
+            "value" : null
+          }, {
+            "color" : "#94a3b8",
+            "value" : 0
+          }, {
+            "color" : "#38bdf8",
+            "value" : 1
+          }, {
+            "color" : "#22d3ee",
+            "value" : 10
+          }, {
+            "color" : "#2dd4bf",
+            "value" : 100
+          }, {
+            "color" : "#56e39f",
+            "value" : 1000
+          } ]
+        }
+      },
+      "overrides" : [ ]
+    },
+    "id" : 3,
+    "options" : {
+      "content" : "flowchart TB\n    %% C4 container view. Each blue node is an independently running application or data store.\n    USER([\"Person<br/><b>Tailnet User</b><br/>talks, listens, reviews, delegates\"])\n    TSC[\"External system<br/><b>Tailscale Control Plane</b><br/>device and network authority\"]\n    MODELS[\"External system<br/><b>Model Providers</b><br/>Pi conversational and task models\"]\n    INTEGRATIONS[\"External system<br/><b>External Integrations</b><br/>optional permission-scoped APIs\"]\n\n    subgraph SYSTEM[\"Voice Agent · system boundary\"]\n        direction TB\n\n        subgraph VOICE[\"Interactive voice path\"]\n            direction LR\n            BROWSER[\"Container<br/><b>Browser Voice Client</b><br/>Flutter Web · Pipecat JS transport adapter\"]\n            DIAGNOSTICS[\"Container<br/><b>Input Diagnostics</b><br/>React · Recharts · WaveSurfer\"]\n            INGRESS[\"Container<br/><b>Tailnet Ingress</b><br/>Tailscale Serve\"]\n            ROUTER[\"Container<br/><b>Path Router</b><br/>Traefik · exact-owner forward-auth\"]\n            EDGE[\"Container<br/><b>Voice Edge</b><br/>Python · Pipecat · RNNoise/VoxLock · FastAPI\"]\n            BROKER[\"Container<br/><b>Inference Broker</b><br/>Python · FastAPI · MLX\"]\n            PI[\"Container<br/><b>Pi Voice Service</b><br/>TypeScript · Pi coding agent\"]\n            VOICE_VM[\"Container<br/><b>Voice Tool Sandbox</b><br/>Gondolin · Git/Tea/AWS CLI · workspace RW · skills RO\"]\n            BROWSER -->|\"signaling · audio · UI\"| INGRESS\n            DIAGNOSTICS -->|\"diagnostic APIs · replay audio\"| INGRESS\n            INGRESS -->|\"localhost HTTP<br/>authenticated identity\"| ROUTER\n            ROUTER -->|\"/ · WebSocket\"| EDGE\n            EDGE -->|\"STT · Pi stream · TTS · context\"| BROKER\n            BROKER -->|\"turns · transcript · context\"| PI\n            PI -->|\"read · write · edit · shell\"| VOICE_VM\n        end\n\n        subgraph TASK[\"Durable delegated-work path\"]\n            direction LR\n            GATEWAY[\"Container<br/><b>Agent Gateway</b><br/>Python · FastAPI\"]\n            TASKS[(\"Container database<br/><b>Task Database and Queue</b><br/>PostgreSQL · Absurd schema\")]\n            HABITAT[\"Container<br/><b>Durable Queue Dashboard</b><br/>Go · Absurd Habitat\"]\n            WORKER[\"Container<br/><b>Pi Task Worker</b><br/>Python · Pi coding agent\"]\n            TASK_PI[\"Container<br/><b>Pi Task Session</b><br/>Pi CLI · one process per claimed task\"]\n            BUILDER_MANAGER[\"Container<br/><b>Builder VM Manager</b><br/>Node.js · launchd\"]\n            BUILDER_VM[\"Container<br/><b>Shared Image Builder</b><br/>Gondolin · Gitea Runner · Docker CLI\"]\n            TASK_VM[\"Container<br/><b>Task Tool Sandbox</b><br/>Gondolin · one isolated workspace\"]\n            GATEWAY -->|\"persist · enqueue\"| TASKS\n            HABITAT -->|\"inspect · retry<br/>scoped SQL\"| TASKS\n            TASKS -->|\"claim · checkpoint\"| WORKER\n            WORKER -->|\"dispatch · observe · cancel image workflow\"| GITEA\n            GITEA -->|\"assign trusted workflow job\"| BUILDER_VM\n            BUILDER_MANAGER -->|\"resume · checkpoint\"| BUILDER_VM\n            WORKER -->|\"starts one bounded run\"| TASK_PI\n            TASK_PI -->|\"read · write · edit · shell · browser\"| TASK_VM\n        end\n\n        subgraph DATA[\"Runtime data and operations\"]\n            direction LR\n            VOICE_DATA[(\"Container data store<br/><b>Voice Runtime Data</b><br/>sessions · workspace · skills\")]\n            GITEA[(\"Container data store<br/><b>Git and Workflow State</b><br/>rootless Gitea · refs · Actions runs\")]\n            DOCKER_JOB_API[\"Container<br/><b>Docker Job API</b><br/>Go · authenticated HTTP · Docker Engine client\"]\n            HOST_DOCKER[\"External system<br/><b>Host Docker Engine</b><br/>shared layer cache · builds and pulls\"]\n            IMAGE_HANDOFF[(\"Host filesystem<br/><b>Image Handoff</b><br/>versioned Docker image tar files\")]\n            ARTIFACTS[(\"Container data store<br/><b>Workspace and Result Store</b><br/>S3-compatible object storage\")]\n            OXIGRAPH[(\"Container data store<br/><b>Knowledge Graph Store</b><br/>Oxigraph · loopback SPARQL 1.1 · persistent RDF\")]\n            DOCKER_METRICS[\"Container<br/><b>Docker VM Metrics</b><br/>Fluent Bit · Linux VM aggregate\"]\n            HOST_METRICS[\"Container<br/><b>Host and Gondolin Metrics</b><br/>Fluent Bit · QEMU process exporter\"]\n            WASSETTE[\"Container<br/><b>Wassette Integration Runtime</b><br/>native per-session MCP subprocesses · WebAssembly\"]\n            OTEL[\"Container<br/><b>Metrics and Traces</b><br/>OpenTelemetry LGTM\"]\n            GRAFANA_MCP[\"Container<br/><b>Grafana MCP</b><br/>read-only dashboards · PromQL · Tempo App\"]\n        end\n\n        EDGE -->|\"browser task API\"| GATEWAY\n        EDGE -->|\"identity-checked App resource<br/>and trace-data proxy\"| GRAFANA_MCP\n        PI -->|\"deferred MCP over stdio<br/>credential-scrubbed environment\"| WASSETTE\n        WASSETTE -->|\"composed task lifecycle tools<br/>read-only personal knowledge\"| GATEWAY\n        TASK_PI -->|\"MCP over stdio<br/>allowlisted task tools\"| WASSETTE\n        PI -->|\"authenticated streamable HTTP<br/>deferred observability tools\"| GRAFANA_MCP\n        EDGE -->|\"official trace MCP App\"| BROWSER\n        PI -->|\"session · workspace · skills\"| VOICE_DATA\n        VOICE_VM -->|\"clone · restricted read API · synthetic allowlist\"| GITEA\n        VOICE_VM -->|\"AWS CLI · S3Mock-only HTTP\"| ARTIFACTS\n        VOICE_VM -->|\"raw SPARQL query/update CLI<br/>synthetic loopback route\"| OXIGRAPH\n        GATEWAY -->|\"resolve workspace\"| ARTIFACTS\n        GATEWAY -->|\"fixed read-only SPARQL<br/>profile and learning facts\"| OXIGRAPH\n        ARTIFACTS -->|\"materialize · capture result\"| WORKER\n        BUILDER_VM -->|\"workflow checkout · run state\"| GITEA\n        BUILDER_VM -->|\"context · job status<br/>authenticated HTTP hook\"| DOCKER_JOB_API\n        DOCKER_JOB_API -->|\"Docker Engine API<br/>Unix socket\"| HOST_DOCKER\n        HOST_DOCKER -->|\"save built image tar\"| IMAGE_HANDOFF\n        WORKER -->|\"load local image tar\"| IMAGE_HANDOFF\n        BUILDER_MANAGER -->|\"host API writes image tar\"| VOICE_DATA\n        EDGE -.->|\"metrics · traces\"| OTEL\n        BROKER -.->|\"metrics · traces\"| OTEL\n        PI -.->|\"metrics · traces\"| OTEL\n        GATEWAY -.->|\"metrics · traces\"| OTEL\n        WORKER -.->|\"metrics · traces\"| OTEL\n        BUILDER_MANAGER -.->|\"metrics · traces\"| OTEL\n        BUILDER_VM -.->|\"Gitea Runner OTLP<br/>job traces · runner metrics\"| OTEL\n        PI -.->|\"register voice VM PID\"| HOST_METRICS\n        WORKER -.->|\"register task VM PID\"| HOST_METRICS\n        DOCKER_METRICS -->|\"private scrape<br/>Docker VM resources\"| OTEL\n        HOST_METRICS -->|\"loopback scrape<br/>Mac · each Gondolin VM\"| OTEL\n        GRAFANA_MCP -->|\"service account<br/>dashboards · Prometheus · Tempo\"| OTEL\n        GRAFANA_MCP -.->|\"MCP metrics · OTLP traces\"| OTEL\n        ROUTER -->|\"/metrics/\"| OTEL\n        ROUTER -->|\"/git/\"| GITEA\n        ROUTER -->|\"/queue/\"| HABITAT\n    end\n\n    USER -->|\"tailnet HTTPS · WebRTC\"| BROWSER\n    USER -->|\"tailnet HTTPS\"| DIAGNOSTICS\n    INGRESS -.->|\"control protocol\"| TSC\n    PI -->|\"provider API\"| MODELS\n    WORKER -->|\"provider API\"| MODELS\n    WASSETTE -->|\"declared component capabilities\"| INTEGRATIONS\n\n    classDef person fill:#3f3f46,color:#fff,stroke:#05345f,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    classDef container fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef data fill:#d4d4d8,color:#78350f,stroke:#d97706,stroke-width:2px;\n    class USER person;\n    class TSC,MODELS,INTEGRATIONS,HOST_DOCKER external;\n    class BROWSER,DIAGNOSTICS,INGRESS,ROUTER,EDGE,BROKER,PI,VOICE_VM,GATEWAY,HABITAT,WORKER,TASK_PI,BUILDER_MANAGER,BUILDER_VM,TASK_VM,DOCKER_JOB_API,DOCKER_METRICS,HOST_METRICS,WASSETTE,OTEL,GRAFANA_MCP container;\n    class TASKS,VOICE_DATA,GITEA,ARTIFACTS,OXIGRAPH,IMAGE_HANDOFF data;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle BROWSER fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle DIAGNOSTICS fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle INGRESS fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle ROUTER fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle EDGE fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle BROKER fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle PI fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle VOICE_VM fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle GATEWAY fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle TASKS fill:#3f3f46,color:#f4f4f5,stroke:#72b7ef,stroke-width:3px\nstyle HABITAT fill:#3f3f46,color:#f4f4f5,stroke:#72b7ef,stroke-width:3px\nstyle WORKER fill:#3f3f46,color:#f4f4f5,stroke:#ff778a,stroke-width:3px\nstyle TASK_PI fill:#3f3f46,color:#f4f4f5,stroke:#ff778a,stroke-width:3px\nstyle TASK_VM fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle WASSETTE fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle BUILDER_MANAGER fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle BUILDER_VM fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle VOICE_DATA fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle GITEA fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle ARTIFACTS fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle OXIGRAPH fill:#3f3f46,color:#f4f4f5,stroke:#72b7ef,stroke-width:3px\nstyle DOCKER_METRICS fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle HOST_METRICS fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle OTEL fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle GRAFANA_MCP fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle EDGE fill:${__data.A:color},color:#07130d,stroke:#56e39f,stroke-width:5px\nstyle BROKER fill:${__data.B:color},color:#07130d,stroke:#ffbd76,stroke-width:5px\nstyle GATEWAY fill:${__data.C:color},color:#07130d,stroke:#ffbd76,stroke-width:5px\nstyle PI fill:${__data.D:color},color:#07130d,stroke:#ffbd76,stroke-width:5px\nstyle WORKER fill:${__data.E:color},color:#07130d,stroke:#ff778a,stroke-width:5px\nstyle BUILDER_MANAGER fill:${__data.F:color},color:#07130d,stroke:#56e39f,stroke-width:5px\nstyle BUILDER_VM fill:${__data.G:color},color:#07130d,stroke:#56e39f,stroke-width:5px\n",
+      "escapeSpecialChars" : true,
+      "maxDataRows" : 100,
+      "showSeriesCount" : true,
+      "seriesCountSize" : "sm"
+    },
+    "links" : [ {
+      "title" : "Open Voice Product Health",
+      "url" : "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
+    }, {
+      "title" : "Open Platform Resources",
+      "url" : "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
+    } ]
+  }, {
+    "description" : "No live activity overlay is applied to this architecture detail view.",
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "prometheus"
+    },
+    "gridPos" : {
+      "h" : 14,
+      "w" : 12,
+      "x" : 0,
+      "y" : 44
+    },
+    "pluginVersion" : "1.0.6",
+    "type" : "neildengg-grafmaid-panel",
+    "targets" : [ ],
+    "title" : "C3 · Browser Voice Client",
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "thresholds"
+        },
+        "mappings" : [ ],
+        "thresholds" : {
+          "mode" : "absolute",
+          "steps" : [ {
+            "color" : "#ff778a",
+            "value" : null
+          }, {
+            "color" : "#94a3b8",
+            "value" : 0
+          }, {
+            "color" : "#38bdf8",
+            "value" : 1
+          }, {
+            "color" : "#22d3ee",
+            "value" : 10
+          }, {
+            "color" : "#2dd4bf",
+            "value" : 100
+          }, {
+            "color" : "#56e39f",
+            "value" : 1000
+          } ]
+        }
+      },
+      "overrides" : [ ]
+    },
+    "id" : 4,
+    "options" : {
+      "content" : "flowchart LR\n    USER([Person<br/><b>Tailnet User</b>])\n    EDGE[External container<br/><b>Voice Edge</b><br/>WebRTC and owner-scoped HTTP APIs]\n\n    subgraph BROWSER[\"Container: Browser Voice Client · Flutter Web\"]\n        direction TB\n        ROUTER[\"Component<br/><b>View Router</b><br/>selects voice or chat/task view\"]\n        VOICE[\"Component<br/><b>Voice Experience</b><br/>conversation, activity, context, and responsive layout\"]\n        TIMELINE[\"Component<br/><b>Chat and Task Timeline</b><br/>polls transcript/tasks and submits messages or task decisions\"]\n        API[\"Component<br/><b>Owner API Client</b><br/>typed same-origin HTTP requests\"]\n        DIAGRAM[\"Component<br/><b>Mermaid Platform View</b><br/>embeds validated SVG inside Flutter\"]\n        ADAPTER[\"Component<br/><b>Browser Integration Adapter</b><br/>official Pipecat JS transport, Mermaid, and audio\"]\n\n        ROUTER -->|\"opens\"| VOICE\n        ROUTER -->|\"opens\"| TIMELINE\n        VOICE -->|\"starts, mutes, stops; consumes activity\"| ADAPTER\n        VOICE -->|\"renders live response\"| DIAGRAM\n        TIMELINE -->|\"renders completed response\"| DIAGRAM\n        DIAGRAM -->|\"requests strict SVG render\"| ADAPTER\n        VOICE -->|\"polls usage; compacts\"| API\n        TIMELINE -->|\"polls and commands\"| API\n    end\n\n    USER -->|\"navigates and operates\"| ROUTER\n    ADAPTER -->|\"WebRTC signaling and media\"| EDGE\n    API -->|\"owner-scoped HTTP APIs\"| EDGE\n\n    classDef person fill:#3f3f46,color:#fff,stroke:#05345f,stroke-width:2px;\n    classDef component fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    class USER person;\n    class ROUTER,VOICE,TIMELINE,API,DIAGRAM,ADAPTER component;\n    class EDGE external;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle BROWSER fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\n\n",
+      "escapeSpecialChars" : true,
+      "maxDataRows" : 100,
+      "showSeriesCount" : false,
+      "seriesCountSize" : "sm"
+    },
+    "links" : [ {
+      "title" : "Open Voice Product Health",
+      "url" : "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
+    }, {
+      "title" : "Open Platform Resources",
+      "url" : "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
+    } ]
+  }, {
+    "description" : "No live activity overlay is applied to this architecture detail view.",
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "prometheus"
+    },
+    "gridPos" : {
+      "h" : 14,
+      "w" : 12,
+      "x" : 12,
+      "y" : 44
+    },
+    "pluginVersion" : "1.0.6",
+    "type" : "neildengg-grafmaid-panel",
+    "targets" : [ ],
+    "title" : "C3 · Input Diagnostics",
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "thresholds"
+        },
+        "mappings" : [ ],
+        "thresholds" : {
+          "mode" : "absolute",
+          "steps" : [ {
+            "color" : "#ff778a",
+            "value" : null
+          }, {
+            "color" : "#94a3b8",
+            "value" : 0
+          }, {
+            "color" : "#38bdf8",
+            "value" : 1
+          }, {
+            "color" : "#22d3ee",
+            "value" : 10
+          }, {
+            "color" : "#2dd4bf",
+            "value" : 100
+          }, {
+            "color" : "#56e39f",
+            "value" : 1000
+          } ]
+        }
+      },
+      "overrides" : [ ]
+    },
+    "id" : 5,
+    "options" : {
+      "content" : "flowchart LR\n    USER([Person<br/><b>Tailnet User</b>])\n    EDGE[External container<br/><b>Voice Edge</b><br/>owner-scoped diagnostics and replay APIs]\n\n    subgraph DIAGNOSTICS[\"Container: Input Diagnostics · React\"]\n        direction TB\n        PAGE[\"Component<br/><b>Diagnostics Page</b><br/>loads the latest five completed voice sessions\"]\n        LIVE[\"Component<br/><b>Live Input Monitor</b><br/>polls and plots the active microphone envelope\"]\n        REPLAY[\"Component<br/><b>Session Replay</b><br/>plays raw and selected-filter audio\"]\n        CHARTS[\"Component<br/><b>Model Charts</b><br/>plots energy, suppression, latency, LSTM state, and masks\"]\n        API[\"Component<br/><b>Diagnostics API Adapter</b><br/>same-origin fetch with runtime validation\"]\n\n        PAGE -->|\"refreshes sessions\"| API\n        PAGE -->|\"shows\"| LIVE\n        PAGE -->|\"selects a session\"| REPLAY\n        PAGE -->|\"selects a session\"| CHARTS\n        LIVE -->|\"polls live envelope\"| API\n        REPLAY -->|\"streams raw and selected WAV\"| API\n        CHARTS -->|\"loads metric series\"| API\n    end\n\n    USER -->|\"inspects and replays\"| PAGE\n    API -->|\"HTTPS JSON and WAV\"| EDGE\n\n    classDef person fill:#3f3f46,color:#fff,stroke:#05345f,stroke-width:2px;\n    classDef component fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    class USER person;\n    class PAGE,LIVE,REPLAY,CHARTS,API component;\n    class EDGE external;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle DIAGNOSTICS fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\n\n",
+      "escapeSpecialChars" : true,
+      "maxDataRows" : 100,
+      "showSeriesCount" : false,
+      "seriesCountSize" : "sm"
+    },
+    "links" : [ {
+      "title" : "Open Voice Product Health",
+      "url" : "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
+    }, {
+      "title" : "Open Platform Resources",
+      "url" : "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
+    } ]
+  }, {
+    "description" : "No live activity overlay is applied to this architecture detail view.",
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "prometheus"
+    },
+    "gridPos" : {
+      "h" : 14,
+      "w" : 12,
+      "x" : 0,
+      "y" : 58
+    },
+    "pluginVersion" : "1.0.6",
+    "type" : "neildengg-grafmaid-panel",
+    "targets" : [ ],
+    "title" : "C3 · Voice Edge",
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "thresholds"
+        },
+        "mappings" : [ ],
+        "thresholds" : {
+          "mode" : "absolute",
+          "steps" : [ {
+            "color" : "#ff778a",
+            "value" : null
+          }, {
+            "color" : "#94a3b8",
+            "value" : 0
+          }, {
+            "color" : "#38bdf8",
+            "value" : 1
+          }, {
+            "color" : "#22d3ee",
+            "value" : 10
+          }, {
+            "color" : "#2dd4bf",
+            "value" : 100
+          }, {
+            "color" : "#56e39f",
+            "value" : 1000
+          } ]
+        }
+      },
+      "overrides" : [ ]
+    },
+    "id" : 6,
+    "options" : {
+      "content" : "flowchart TB\n    BROWSER[External container<br/><b>Browser Client</b><br/>RTVI and owner HTTP requests]\n    BROKER[External container<br/><b>Inference Broker</b><br/>STT · Pi stream · TTS · context]\n    GATEWAY[External container<br/><b>Agent Gateway</b><br/>task lifecycle]\n    STORE[(External data store<br/><b>Diagnostic Volume</b><br/>last five sessions)]\n    OTEL[External container<br/><b>OTel LGTM</b><br/>metrics and traces]\n\n    subgraph EDGE[\"Container: Voice Edge · Python + Pipecat + FastAPI\"]\n        direction TB\n        HTTP[\"Component<br/><b>Owner HTTP Boundary</b><br/>origin and exact tailnet-identity checks\"]\n        API[\"Component<br/><b>Browser API</b><br/>features, tasks, transcript, context, diagnostics\"]\n        TRANSPORT[\"Component<br/><b>SmallWebRTC Transport</b><br/>bidirectional 16/24 kHz audio\"]\n        FILTER[\"Component<br/><b>Input Filter and Recorder</b><br/>one selected filter plus bounded replay\"]\n        TURN[\"Component<br/><b>Turn Detector</b><br/>Silero VAD and Smart Turn v3\"]\n        STT[\"Component<br/><b>STT Adapter</b><br/>OpenAI-compatible audio request\"]\n        CONTEXT[\"Component<br/><b>Conversation Aggregators</b><br/>user and assistant context frames\"]\n        LLM[\"Component<br/><b>Pi LLM Adapter</b><br/>streaming OpenAI-compatible completion\"]\n        VISUAL[\"Component<br/><b>Visual Response Processor</b><br/>stream speech and publish final Mermaid\"]\n        TTS[\"Component<br/><b>TTS Adapter</b><br/>OpenAI-compatible PCM request\"]\n        TELEMETRY[\"Component<br/><b>Pipecat Telemetry Bridge</b><br/>turn, speaking, latency, service, and error signals\"]\n\n        HTTP --> API\n        TRANSPORT --> FILTER --> TURN --> STT --> CONTEXT --> LLM --> VISUAL --> TTS --> TRANSPORT\n        TURN -.->|\"lifecycle events\"| TELEMETRY\n        STT -.->|\"service metrics\"| TELEMETRY\n        LLM -.->|\"service metrics\"| TELEMETRY\n        TTS -.->|\"service metrics\"| TELEMETRY\n    end\n\n    BROWSER -->|\"signaling, microphone audio, owner APIs\"| HTTP\n    HTTP -->|\"authorized signaling\"| TRANSPORT\n    API -->|\"task commands and queries\"| GATEWAY\n    API -->|\"context, transcript, speech\"| BROKER\n    FILTER -->|\"bounded session audio and metrics\"| STORE\n    STT -->|\"WAV\"| BROKER\n    LLM -->|\"messages · SSE response\"| BROKER\n    TTS -->|\"text · PCM\"| BROKER\n    TRANSPORT -->|\"audio and server Mermaid message\"| BROWSER\n    TELEMETRY -.->|\"OTLP\"| OTEL\n\n    classDef component fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    classDef data fill:#d4d4d8,color:#78350f,stroke:#d97706,stroke-width:2px;\n    class HTTP,API,TRANSPORT,FILTER,TURN,STT,CONTEXT,LLM,VISUAL,TTS,TELEMETRY component;\n    class BROWSER,BROKER,GATEWAY,OTEL external;\n    class STORE data;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle EDGE fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\n\n",
+      "escapeSpecialChars" : true,
+      "maxDataRows" : 100,
+      "showSeriesCount" : false,
+      "seriesCountSize" : "sm"
+    },
+    "links" : [ {
+      "title" : "Open Voice Product Health",
+      "url" : "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
+    }, {
+      "title" : "Open Platform Resources",
+      "url" : "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
+    } ]
+  }, {
+    "description" : "No live activity overlay is applied to this architecture detail view.",
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "prometheus"
+    },
+    "gridPos" : {
+      "h" : 14,
+      "w" : 12,
+      "x" : 12,
+      "y" : 58
+    },
+    "pluginVersion" : "1.0.6",
+    "type" : "neildengg-grafmaid-panel",
+    "targets" : [ ],
+    "title" : "C3 · Inference Broker",
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "thresholds"
+        },
+        "mappings" : [ ],
+        "thresholds" : {
+          "mode" : "absolute",
+          "steps" : [ {
+            "color" : "#ff778a",
+            "value" : null
+          }, {
+            "color" : "#94a3b8",
+            "value" : 0
+          }, {
+            "color" : "#38bdf8",
+            "value" : 1
+          }, {
+            "color" : "#22d3ee",
+            "value" : 10
+          }, {
+            "color" : "#2dd4bf",
+            "value" : 100
+          }, {
+            "color" : "#56e39f",
+            "value" : 1000
+          } ]
+        }
+      },
+      "overrides" : [ ]
+    },
+    "id" : 7,
+    "options" : {
+      "content" : "flowchart LR\n    EDGE[External container<br/><b>Voice Edge</b><br/>bounded bearer-authenticated requests]\n    PI[External container<br/><b>Pi Voice Service</b><br/>persistent streamed turns]\n    OLLAMA[External system<br/><b>Ollama</b><br/>configured fallback LLM]\n    MODELS[(External data<br/><b>Local MLX Models</b><br/>Parakeet v3 and Kokoro)]\n    OTEL[External container<br/><b>OTel LGTM</b>]\n\n    subgraph BROKER[\"Container: Inference Broker · native Python + FastAPI + MLX\"]\n        direction TB\n        GUARD[\"Component<br/><b>Capability Guard</b><br/>constant-time bearer auth and request limits\"]\n        SLOT[\"Component<br/><b>Inference Slot</b><br/>serializes local STT and TTS work\"]\n        STT_API[\"Component<br/><b>Transcription Endpoint</b><br/>validates mono 16-bit 16 kHz WAV\"]\n        STT[\"Component<br/><b>Parakeet STT Adapter</b><br/>cached MLX model and log-mel inference\"]\n        NORMALIZE[\"Component<br/><b>Transcript Normalizer</b><br/>extracts bounded text and outcomes\"]\n        TTS_API[\"Component<br/><b>Speech Endpoint</b><br/>validates text, voice, speed, and PCM format\"]\n        TTS[\"Component<br/><b>Kokoro TTS Adapter</b><br/>cached MLX synthesis and 24 kHz PCM\"]\n        PI_ADAPTER[\"Component<br/><b>Pi Protocol Adapter</b><br/>OpenAI stream to native Pi SSE\"]\n        CONTEXT[\"Component<br/><b>Pi Projection Proxy</b><br/>transcript, context, and compaction only\"]\n        FALLBACK[\"Component<br/><b>Fallback LLM Proxy</b><br/>fixed model and allowlisted tool schema\"]\n        TELEMETRY[\"Component<br/><b>Inference Telemetry</b><br/>content-free latency and outcome signals\"]\n\n        GUARD --> STT_API --> SLOT --> STT --> NORMALIZE\n        GUARD --> TTS_API --> SLOT --> TTS\n        GUARD --> PI_ADAPTER\n        GUARD --> CONTEXT\n        GUARD --> FALLBACK\n        STT_API -.-> TELEMETRY\n        TTS_API -.-> TELEMETRY\n        PI_ADAPTER -.-> TELEMETRY\n    end\n\n    EDGE -->|\"STT, TTS, Pi, and context HTTP\"| GUARD\n    STT -->|\"loads\"| MODELS\n    TTS -->|\"loads\"| MODELS\n    PI_ADAPTER -->|\"SSE turn stream\"| PI\n    CONTEXT -->|\"bounded owner projections\"| PI\n    FALLBACK -->|\"streamed fixed-model completion\"| OLLAMA\n    NORMALIZE -->|\"transcript text\"| EDGE\n    TTS -->|\"PCM\"| EDGE\n    TELEMETRY -.->|\"OTLP\"| OTEL\n\n    classDef component fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    classDef data fill:#d4d4d8,color:#78350f,stroke:#d97706,stroke-width:2px;\n    class GUARD,SLOT,STT_API,STT,NORMALIZE,TTS_API,TTS,PI_ADAPTER,CONTEXT,FALLBACK,TELEMETRY component;\n    class EDGE,PI,OLLAMA,OTEL external;\n    class MODELS data;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle BROKER fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\n\n",
+      "escapeSpecialChars" : true,
+      "maxDataRows" : 100,
+      "showSeriesCount" : false,
+      "seriesCountSize" : "sm"
+    },
+    "links" : [ {
+      "title" : "Open Voice Product Health",
+      "url" : "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
+    }, {
+      "title" : "Open Platform Resources",
+      "url" : "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
+    } ]
+  }, {
+    "description" : "No live activity overlay is applied to this architecture detail view.",
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "prometheus"
+    },
+    "gridPos" : {
+      "h" : 14,
+      "w" : 12,
+      "x" : 0,
+      "y" : 72
+    },
+    "pluginVersion" : "1.0.6",
+    "type" : "neildengg-grafmaid-panel",
+    "targets" : [ ],
+    "title" : "C3 · Pi Voice Service",
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "thresholds"
+        },
+        "mappings" : [ ],
+        "thresholds" : {
+          "mode" : "absolute",
+          "steps" : [ {
+            "color" : "#ff778a",
+            "value" : null
+          }, {
+            "color" : "#94a3b8",
+            "value" : 0
+          }, {
+            "color" : "#38bdf8",
+            "value" : 1
+          }, {
+            "color" : "#22d3ee",
+            "value" : 10
+          }, {
+            "color" : "#2dd4bf",
+            "value" : 100
+          }, {
+            "color" : "#56e39f",
+            "value" : 1000
+          } ]
+        }
+      },
+      "overrides" : [ ]
+    },
+    "id" : 8,
+    "options" : {
+      "content" : "flowchart LR\n    BROKER[External container<br/><b>Inference Broker</b><br/>turn, transcript, and context API caller]\n    PROVIDER[External system<br/><b>Model Provider</b>]\n    GATEWAY[External container<br/><b>Agent Gateway</b><br/>task lifecycle and personal knowledge]\n    VM[External container<br/><b>Voice Tool Sandbox</b><br/>Gondolin VM]\n    WASSETTE[External container<br/><b>Wassette Integration Runtime</b><br/>tasking and personal-knowledge WASM components]\n    GRAFANA[External container<br/><b>Grafana MCP</b><br/>read-only dashboards, PromQL, and Tempo App data]\n    STATE[(External data store<br/><b>Voice Runtime Data</b><br/>sessions, workspace, skills)]\n\n    subgraph PI[\"Container: Pi Voice Service · TypeScript + Pi coding-agent SDK\"]\n        direction TB\n        HTTP[\"Component<br/><b>Private HTTP API</b><br/>bearer auth, bounded body, JSON and SSE\"]\n        QUEUE[\"Component<br/><b>Turn Coordinator</b><br/>serializes turns and compaction; aborts on timeout\"]\n        SESSION[\"Component<br/><b>Agent Session</b><br/>persistent Pi context and streamed model events\"]\n        MODEL[\"Component<br/><b>Model Runtime</b><br/>host credentials with model network disabled\"]\n        SKILLS[\"Component<br/><b>Skill Resource Loader</b><br/>discovers trusted read-only SKILL.md resources\"]\n        WORKSPACE[\"Component<br/><b>Gondolin Workspace Adapter</b><br/>creates VM-backed read, write, edit, and bash tools\"]\n        SEARCH[\"Component<br/><b>Deferred Tool Search</b><br/>reveals MCP tools only when the model searches for them\"]\n        MCP[\"Component<br/><b>Wassette MCP Registration</b><br/>stdio child with a dedicated mode-0600 capability env file\"]\n        GRAFANA_MCP[\"Component<br/><b>Grafana MCP Registration</b><br/>authenticated deferred streamable HTTP\"]\n        TRANSCRIPT[\"Component<br/><b>Public Transcript Projection</b><br/>bounded user, assistant, and tool-status entries\"]\n        USAGE[\"Component<br/><b>Context Usage Projection</b><br/>tokens, window, percentage, and compactability\"]\n        PERSIST[\"Component<br/><b>Session Manager</b><br/>loads and persists the voice session branch\"]\n\n        HTTP --> QUEUE --> SESSION\n        MODEL --> SESSION\n        SKILLS --> SESSION\n        WORKSPACE --> SESSION\n        SESSION --> SEARCH --> MCP\n        SEARCH --> GRAFANA_MCP\n        SESSION --> TRANSCRIPT\n        SESSION --> USAGE\n        SESSION <--> PERSIST\n    end\n\n    BROKER -->|\"private turn and projection HTTP\"| HTTP\n    SESSION -->|\"model requests\"| PROVIDER\n    WORKSPACE -->|\"VM lifecycle and tools\"| VM\n    MCP -->|\"MCP over stdio<br/>configured component directory\"| WASSETTE\n    GRAFANA_MCP -->|\"read-only MCP calls\"| GRAFANA\n    WASSETTE -->|\"task commands · reader-token<br/>personal-knowledge queries\"| GATEWAY\n    SKILLS -->|\"read only\"| STATE\n    PERSIST -->|\"session files\"| STATE\n    TRANSCRIPT -->|\"bounded display projection\"| HTTP\n    USAGE -->|\"context status\"| HTTP\n\n    classDef component fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    classDef data fill:#d4d4d8,color:#78350f,stroke:#d97706,stroke-width:2px;\n    class HTTP,QUEUE,SESSION,MODEL,SKILLS,WORKSPACE,SEARCH,MCP,GRAFANA_MCP,TRANSCRIPT,USAGE,PERSIST component;\n    class BROKER,PROVIDER,GATEWAY,VM,WASSETTE,GRAFANA external;\n    class STATE data;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle PI fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\n\n",
+      "escapeSpecialChars" : true,
+      "maxDataRows" : 100,
+      "showSeriesCount" : false,
+      "seriesCountSize" : "sm"
+    },
+    "links" : [ {
+      "title" : "Open Voice Product Health",
+      "url" : "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
+    }, {
+      "title" : "Open Platform Resources",
+      "url" : "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
+    } ]
+  }, {
+    "description" : "No live activity overlay is applied to this architecture detail view.",
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "prometheus"
+    },
+    "gridPos" : {
+      "h" : 14,
+      "w" : 12,
+      "x" : 12,
+      "y" : 72
+    },
+    "pluginVersion" : "1.0.6",
+    "type" : "neildengg-grafmaid-panel",
+    "targets" : [ ],
+    "title" : "C3 · Voice Tool Sandbox",
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "thresholds"
+        },
+        "mappings" : [ ],
+        "thresholds" : {
+          "mode" : "absolute",
+          "steps" : [ {
+            "color" : "#ff778a",
+            "value" : null
+          }, {
+            "color" : "#94a3b8",
+            "value" : 0
+          }, {
+            "color" : "#38bdf8",
+            "value" : 1
+          }, {
+            "color" : "#22d3ee",
+            "value" : 10
+          }, {
+            "color" : "#2dd4bf",
+            "value" : 100
+          }, {
+            "color" : "#56e39f",
+            "value" : 1000
+          } ]
+        }
+      },
+      "overrides" : [ ]
+    },
+    "id" : 9,
+    "options" : {
+      "content" : "flowchart LR\n    PI[External container<br/><b>Pi Voice Service</b><br/>owns VM lifecycle and invokes tools]\n    S3[(External data store<br/><b>S3Mock</b><br/>scoped artifacts)]\n    GITEA[(External data store<br/><b>Gitea</b><br/>scoped repository access)]\n    REGISTRY[(External data<br/><b>VM Metrics Registry</b><br/>host PID registration files)]\n    DATA[(External data<br/><b>Voice Runtime Data</b><br/>workspace RW · skills RO)]\n\n    subgraph VM[\"Container: Voice Tool Sandbox · Gondolin micro-VM boundary\"]\n        direction TB\n        LIFECYCLE[\"Component<br/><b>VM Lifecycle</b><br/>fixed image, 2 CPU, 2 GiB, synthetic DNS\"]\n        PATHS[\"Component<br/><b>Workspace Path Guard</b><br/>maps host paths under /workspace only\"]\n        FILES[\"Component<br/><b>File Tool Adapters</b><br/>read, write, and edit through VM filesystem\"]\n        SHELL[\"Component<br/><b>Bash Tool Adapter</b><br/>streamed output, timeout, and abort\"]\n        MOUNTS[\"Component<br/><b>Mount Policy</b><br/>workspace read-write and skills read-only\"]\n        EGRESS[\"Component<br/><b>Service Egress Gate</b><br/>deny-by-default URL rewrite to two loopback services\"]\n        TEA[\"Component<br/><b>Scoped Tea Provisioner</b><br/>configures one Gitea login inside the guest\"]\n        METRICS[\"Component<br/><b>VM Registration</b><br/>publishes runner PID and resource allocation\"]\n\n        LIFECYCLE --> MOUNTS\n        LIFECYCLE --> EGRESS\n        LIFECYCLE --> METRICS\n        PATHS --> FILES\n        PATHS --> SHELL\n        MOUNTS --> FILES\n        MOUNTS --> SHELL\n        EGRESS --> TEA\n    end\n\n    PI -->|\"create, execute, close\"| LIFECYCLE\n    PI -->|\"tool calls\"| FILES\n    PI -->|\"commands\"| SHELL\n    MOUNTS -->|\"VFS providers\"| DATA\n    EGRESS -->|\"synthetic s3mock.local only\"| S3\n    EGRESS -->|\"synthetic gitea.local only\"| GITEA\n    METRICS -->|\"0600 registration\"| REGISTRY\n\n    classDef component fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    classDef data fill:#d4d4d8,color:#78350f,stroke:#d97706,stroke-width:2px;\n    class LIFECYCLE,PATHS,FILES,SHELL,MOUNTS,EGRESS,TEA,METRICS component;\n    class PI external;\n    class S3,GITEA,REGISTRY,DATA data;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle VM fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\n\n",
+      "escapeSpecialChars" : true,
+      "maxDataRows" : 100,
+      "showSeriesCount" : false,
+      "seriesCountSize" : "sm"
+    },
+    "links" : [ {
+      "title" : "Open Voice Product Health",
+      "url" : "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
+    }, {
+      "title" : "Open Platform Resources",
+      "url" : "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
+    } ]
+  }, {
+    "description" : "No live activity overlay is applied to this architecture detail view.",
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "prometheus"
+    },
+    "gridPos" : {
+      "h" : 14,
+      "w" : 12,
+      "x" : 0,
+      "y" : 86
+    },
+    "pluginVersion" : "1.0.6",
+    "type" : "neildengg-grafmaid-panel",
+    "targets" : [ ],
+    "title" : "C3 · Agent Gateway",
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "thresholds"
+        },
+        "mappings" : [ ],
+        "thresholds" : {
+          "mode" : "absolute",
+          "steps" : [ {
+            "color" : "#ff778a",
+            "value" : null
+          }, {
+            "color" : "#94a3b8",
+            "value" : 0
+          }, {
+            "color" : "#38bdf8",
+            "value" : 1
+          }, {
+            "color" : "#22d3ee",
+            "value" : 10
+          }, {
+            "color" : "#2dd4bf",
+            "value" : 100
+          }, {
+            "color" : "#56e39f",
+            "value" : 1000
+          } ]
+        }
+      },
+      "overrides" : [ ]
+    },
+    "id" : 10,
+    "options" : {
+      "content" : "flowchart LR\n    CALLERS[External containers<br/><b>Voice Edge and Wassette</b><br/>owner task and knowledge requests]\n    DB[(External data store<br/><b>PostgreSQL</b><br/>proposals and Absurd queue)]\n    S3[(External data store<br/><b>S3Mock</b><br/>immutable workspace pointers)]\n    OXIGRAPH[(External data store<br/><b>Oxigraph</b><br/>private profile and learning RDF)]\n    OTEL[External container<br/><b>OTel LGTM</b>]\n\n    subgraph GATEWAY[\"Container: Agent Gateway · Python + FastAPI\"]\n        direction TB\n        AUTH[\"Component<br/><b>Capability Authenticator</b><br/>constant-time bearer-token validation\"]\n        IDENTITY[\"Component<br/><b>Identity Policy</b><br/>normalizes and requires the single configured owner\"]\n        API[\"Component<br/><b>Task API</b><br/>propose, list, inspect, approve, and cancel\"]\n        KNOWLEDGE[\"Component<br/><b>Personal Knowledge API</b><br/>bounded profile and learning queries\"]\n        SPARQL[\"Component<br/><b>Knowledge Store Adapter</b><br/>fixed SELECT queries and plain-text filtering\"]\n        SERVICE[\"Component<br/><b>Task Service</b><br/>owns proposal and durable-task lifecycle\"]\n        APPROVAL[\"Component<br/><b>Approval Authority</b><br/>plan hash, signed claims, expiry, and binding\"]\n        WORKSPACE[\"Component<br/><b>Workspace Resolver</b><br/>allowlisted logical name to immutable S3 URI\"]\n        QUEUE[\"Component<br/><b>Absurd Queue Adapter</b><br/>spawn, cancel, and fetch result\"]\n        VIEW[\"Component<br/><b>Public View Projector</b><br/>removes approval token and raw Pi events\"]\n        TELEMETRY[\"Component<br/><b>Gateway Telemetry</b><br/>content-free operation spans\"]\n\n        AUTH --> IDENTITY --> API --> SERVICE\n        IDENTITY --> KNOWLEDGE --> SPARQL\n        SERVICE --> APPROVAL\n        SERVICE --> WORKSPACE\n        SERVICE --> QUEUE\n        SERVICE --> VIEW\n        API -.-> TELEMETRY\n        KNOWLEDGE -.-> TELEMETRY\n    end\n\n    CALLERS -->|\"bearer-authenticated owner request\"| AUTH\n    SERVICE -->|\"proposal transactions\"| DB\n    QUEUE -->|\"durable task operations\"| DB\n    WORKSPACE -->|\"read current immutable pointer\"| S3\n    SPARQL -->|\"fixed read-only SPARQL\"| OXIGRAPH\n    VIEW -->|\"bounded response\"| CALLERS\n    KNOWLEDGE -->|\"bounded facts\"| CALLERS\n    TELEMETRY -.->|\"OTLP\"| OTEL\n\n    classDef component fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    classDef data fill:#d4d4d8,color:#78350f,stroke:#d97706,stroke-width:2px;\n    class AUTH,IDENTITY,API,KNOWLEDGE,SPARQL,SERVICE,APPROVAL,WORKSPACE,QUEUE,VIEW,TELEMETRY component;\n    class CALLERS,OTEL external;\n    class DB,S3,OXIGRAPH data;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle GATEWAY fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\n\n",
+      "escapeSpecialChars" : true,
+      "maxDataRows" : 100,
+      "showSeriesCount" : false,
+      "seriesCountSize" : "sm"
+    },
+    "links" : [ {
+      "title" : "Open Voice Product Health",
+      "url" : "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
+    }, {
+      "title" : "Open Platform Resources",
+      "url" : "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
+    } ]
+  }, {
+    "description" : "No live activity overlay is applied to this architecture detail view.",
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "prometheus"
+    },
+    "gridPos" : {
+      "h" : 14,
+      "w" : 12,
+      "x" : 12,
+      "y" : 86
+    },
+    "pluginVersion" : "1.0.6",
+    "type" : "neildengg-grafmaid-panel",
+    "targets" : [ ],
+    "title" : "C3 · Pi Task Worker",
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "thresholds"
+        },
+        "mappings" : [ ],
+        "thresholds" : {
+          "mode" : "absolute",
+          "steps" : [ {
+            "color" : "#ff778a",
+            "value" : null
+          }, {
+            "color" : "#94a3b8",
+            "value" : 0
+          }, {
+            "color" : "#38bdf8",
+            "value" : 1
+          }, {
+            "color" : "#22d3ee",
+            "value" : 10
+          }, {
+            "color" : "#2dd4bf",
+            "value" : 100
+          }, {
+            "color" : "#56e39f",
+            "value" : 1000
+          } ]
+        }
+      },
+      "overrides" : [ ]
+    },
+    "id" : 11,
+    "options" : {
+      "content" : "flowchart TB\n    DB[(External data store<br/><b>PostgreSQL</b><br/>agent-run and image-build queues)]\n    S3[(External data store<br/><b>S3Mock</b><br/>immutable source and bounded results)]\n    HANDOFF[(Host filesystem<br/><b>Image Handoff</b><br/>versioned image tar files)]\n    PI[External container<br/><b>Pi Task Session</b><br/>Pi CLI with in-process Gondolin extension]\n\n    subgraph WORKER[\"Container: Pi Task Worker · native Python + Absurd\"]\n        direction TB\n        CLAIM[\"Component<br/><b>Agent-Run Handler</b><br/>claims one task with concurrency one\"]\n        MATERIALIZE[\"Component<br/><b>Workspace Materializer</b><br/>download, digest-check, and detached checkout\"]\n        PLAN[\"Component<br/><b>Execution Image Planner</b><br/>reads versioned .pi/gondolin configuration\"]\n        BUILD[\"Component<br/><b>Image Build Coordinator</b><br/>spawn child task, durably await, verify, and install\"]\n        INTENT[\"Component<br/><b>Irreversible Intent Checkpoint</b><br/>prevents unsafe Pi replay after a crash\"]\n        COMMAND[\"Component<br/><b>Pi Command Builder</b><br/>fixed flags, model, skill, and extension selection\"]\n        EXECUTE[\"Component<br/><b>Pi Process Runner</b><br/>bounded stdout/stderr and timeout\"]\n        NORMALIZE[\"Component<br/><b>Response Normalizer</b><br/>extracts text, spoken response, and Mermaid\"]\n        CAPTURE[\"Component<br/><b>Result Capturer</b><br/>bounded binary patch, status, and execution JSON\"]\n\n        CLAIM --> MATERIALIZE --> PLAN --> BUILD --> INTENT --> COMMAND --> EXECUTE --> NORMALIZE --> CAPTURE\n    end\n\n    DB -->|\"claim agent-run\"| CLAIM\n    CLAIM -->|\"steps and final checkpoint\"| DB\n    MATERIALIZE -->|\"source bundle\"| S3\n    BUILD -->|\"spawn and await image-build\"| DB\n    BUILD -->|\"read local image tar\"| HANDOFF\n    EXECUTE -->|\"one no-session invocation\"| PI\n    CAPTURE -->|\"write task artifacts\"| S3\n    CAPTURE -->|\"completed result\"| DB\n\n    classDef component fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    classDef data fill:#d4d4d8,color:#78350f,stroke:#d97706,stroke-width:2px;\n    class CLAIM,MATERIALIZE,PLAN,BUILD,INTENT,COMMAND,EXECUTE,NORMALIZE,CAPTURE component;\n    class PI,RUNTIME external;\n    class DB,S3,HANDOFF data;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle WORKER fill:#3f3f46,color:#f4f4f5,stroke:#ff778a,stroke-width:3px\n\n",
+      "escapeSpecialChars" : true,
+      "maxDataRows" : 100,
+      "showSeriesCount" : false,
+      "seriesCountSize" : "sm"
+    },
+    "links" : [ {
+      "title" : "Open Voice Product Health",
+      "url" : "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
+    }, {
+      "title" : "Open Platform Resources",
+      "url" : "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
+    } ]
+  }, {
+    "description" : "No live activity overlay is applied to this architecture detail view.",
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "prometheus"
+    },
+    "gridPos" : {
+      "h" : 14,
+      "w" : 12,
+      "x" : 0,
+      "y" : 100
+    },
+    "pluginVersion" : "1.0.6",
+    "type" : "neildengg-grafmaid-panel",
+    "targets" : [ ],
+    "title" : "C3 · Image Build Orchestration",
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "thresholds"
+        },
+        "mappings" : [ ],
+        "thresholds" : {
+          "mode" : "absolute",
+          "steps" : [ {
+            "color" : "#ff778a",
+            "value" : null
+          }, {
+            "color" : "#94a3b8",
+            "value" : 0
+          }, {
+            "color" : "#38bdf8",
+            "value" : 1
+          }, {
+            "color" : "#22d3ee",
+            "value" : 10
+          }, {
+            "color" : "#2dd4bf",
+            "value" : 100
+          }, {
+            "color" : "#56e39f",
+            "value" : 1000
+          } ]
+        }
+      },
+      "overrides" : [ ]
+    },
+    "id" : 12,
+    "options" : {
+      "content" : "flowchart LR\n    TASK[(External data store<br/><b>PostgreSQL</b><br/>agent task and durable checkpoints)]\n    GITEA[External system<br/><b>Gitea Actions</b><br/>workflow dispatch and run state]\n    HANDOFF[(Host filesystem<br/><b>Image Handoff</b><br/>versioned image tar files)]\n\n    subgraph WORKER[\"Container: Pi Task Worker · Python\"]\n        direction TB\n        PLAN[\"Component<br/><b>Execution Image Planner</b><br/>validates declaration and computes content key\"]\n        CACHE[\"Component<br/><b>Local Handoff Lookup</b><br/>checks the versioned host archive\"]\n        ACTIONS[\"Component<br/><b>Gitea Actions Client</b><br/>dispatches, observes, and cancels workflow runs\"]\n        INSTALL[\"Component<br/><b>Local Image Installer</b><br/>loads tar and registers Gondolin image ref\"]\n        PLAN --> CACHE\n        CACHE -->|\"cache miss\"| ACTIONS\n        CACHE -->|\"cache hit\"| INSTALL\n        ACTIONS -->|\"successful run\"| CACHE\n    end\n\n    TASK -->|\"claims task and checkpoints workflow run ID\"| WORKER\n    ACTIONS -->|\"workflow dispatch, status, cancel\"| GITEA\n    HANDOFF -->|\"versioned tar\"| INSTALL\n\n    classDef component fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    classDef data fill:#d4d4d8,color:#78350f,stroke:#d97706,stroke-width:2px;\n    class PLAN,CACHE,ACTIONS,INSTALL component;\n    class GITEA external;\n    class TASK,HANDOFF data;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle WORKER fill:#3f3f46,color:#f4f4f5,stroke:#ff778a,stroke-width:3px\n\n",
+      "escapeSpecialChars" : true,
+      "maxDataRows" : 100,
+      "showSeriesCount" : false,
+      "seriesCountSize" : "sm"
+    },
+    "links" : [ {
+      "title" : "Open Voice Product Health",
+      "url" : "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
+    }, {
+      "title" : "Open Platform Resources",
+      "url" : "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
+    } ]
+  }, {
+    "description" : "No live activity overlay is applied to this architecture detail view.",
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "prometheus"
+    },
+    "gridPos" : {
+      "h" : 14,
+      "w" : 12,
+      "x" : 12,
+      "y" : 100
+    },
+    "pluginVersion" : "1.0.6",
+    "type" : "neildengg-grafmaid-panel",
+    "targets" : [ ],
+    "title" : "C3 · Shared Image Builder",
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "thresholds"
+        },
+        "mappings" : [ ],
+        "thresholds" : {
+          "mode" : "absolute",
+          "steps" : [ {
+            "color" : "#ff778a",
+            "value" : null
+          }, {
+            "color" : "#94a3b8",
+            "value" : 0
+          }, {
+            "color" : "#38bdf8",
+            "value" : 1
+          }, {
+            "color" : "#22d3ee",
+            "value" : 10
+          }, {
+            "color" : "#2dd4bf",
+            "value" : 100
+          }, {
+            "color" : "#56e39f",
+            "value" : 1000
+          } ]
+        }
+      },
+      "overrides" : [ ]
+    },
+    "id" : 13,
+    "options" : {
+      "content" : "flowchart TB\n    GITEA[External system<br/><b>Gitea Actions</b><br/>assigns trusted repository jobs]\n    SOURCE[(External data<br/><b>Gitea Repository</b><br/>workflow and immutable revision)]\n    HOST_DOCKER[External system<br/><b>Host Docker Engine</b><br/>shared layer cache · builds and pulls]\n    HANDOFF[(Host filesystem<br/><b>Image Handoff</b><br/>versioned image tar files)]\n    INTERNET[External system<br/><b>Public Package Sources</b><br/>build dependencies]\n    OTEL[External system<br/><b>OTel LGTM</b><br/>runner metrics and job traces]\n\n    subgraph HOST[\"Deployment node: macOS host\"]\n        MANAGER[\"Container<br/><b>Builder VM Manager</b><br/>starts, monitors, and checkpoints one warm VM\"]\n        API[\"Container<br/><b>Docker Job API</b><br/>Go · authenticated jobs · streamed contexts\"]\n        CHECKPOINT[(\"Builder disk checkpoint<br/>runner registration and workflow state\")]\n        subgraph VM[\"Deployment node: Shared Gondolin Builder VM · trusted repositories only\"]\n            RUNNER[\"Component<br/><b>Gitea Runner</b><br/>capacity one · Docker CLI/Compose\"]\n            CLIENT[\"Component<br/><b>Image Workflow Client</b><br/>packages context · submits and polls host job\"]\n            RUNNER --> CLIENT\n        end\n        MANAGER -->|\"creates or resumes\"| VM\n        MANAGER -->|\"writes on graceful stop\"| CHECKPOINT\n    end\n\n    GITEA -->|\"one labeled job at a time\"| RUNNER\n    RUNNER -->|\"checks out requested revision\"| SOURCE\n    CLIENT -->|\"context · status<br/>authenticated HTTP hook\"| API\n    API -->|\"Docker Engine API<br/>Unix socket\"| HOST_DOCKER\n    HOST_DOCKER -->|\"pulls build dependencies\"| INTERNET\n    HOST_DOCKER -->|\"saves image tar\"| HANDOFF\n    MANAGER -.->|\"lifecycle metrics and traces\"| OTEL\n    RUNNER -.->|\"native OTLP job traces and metrics\"| OTEL\n\n    classDef component fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef container fill:#d4d4d8,color:#14532d,stroke:#16a34a,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    classDef data fill:#d4d4d8,color:#78350f,stroke:#d97706,stroke-width:2px;\n    class RUNNER,CLIENT component;\n    class MANAGER,API container;\n    class GITEA,INTERNET,OTEL,HOST_DOCKER external;\n    class SOURCE,HANDOFF,CHECKPOINT data;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle MANAGER fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle RUNNER fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle OTEL fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\n\n",
+      "escapeSpecialChars" : true,
+      "maxDataRows" : 100,
+      "showSeriesCount" : false,
+      "seriesCountSize" : "sm"
+    },
+    "links" : [ {
+      "title" : "Open Voice Product Health",
+      "url" : "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
+    }, {
+      "title" : "Open Platform Resources",
+      "url" : "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
+    } ]
+  }, {
+    "description" : "No live activity overlay is applied to this architecture detail view.",
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "prometheus"
+    },
+    "gridPos" : {
+      "h" : 14,
+      "w" : 12,
+      "x" : 0,
+      "y" : 114
+    },
+    "pluginVersion" : "1.0.6",
+    "type" : "neildengg-grafmaid-panel",
+    "targets" : [ ],
+    "title" : "C3 · Pi Task Session",
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "thresholds"
+        },
+        "mappings" : [ ],
+        "thresholds" : {
+          "mode" : "absolute",
+          "steps" : [ {
+            "color" : "#ff778a",
+            "value" : null
+          }, {
+            "color" : "#94a3b8",
+            "value" : 0
+          }, {
+            "color" : "#38bdf8",
+            "value" : 1
+          }, {
+            "color" : "#22d3ee",
+            "value" : 10
+          }, {
+            "color" : "#2dd4bf",
+            "value" : 100
+          }, {
+            "color" : "#56e39f",
+            "value" : 1000
+          } ]
+        }
+      },
+      "overrides" : [ ]
+    },
+    "id" : 14,
+    "options" : {
+      "content" : "flowchart LR\n    WORKER[External container<br/><b>Pi Task Worker</b><br/>starts one bounded Pi CLI process]\n    WORKSPACE[(External data<br/><b>Task Workspace</b><br/>mounted at /workspace)]\n    SKILLS[(External data<br/><b>Trusted Skills</b><br/>optional read-only /skills)]\n    MEMORY[(External data store<br/><b>Browser Memory</b><br/>local JSONL MCP storage)]\n    GITHUB[External system<br/><b>GitHub API</b><br/>optional scoped integration]\n    WASSETTE_RUNTIME[External container<br/><b>Wassette Integration Runtime</b><br/>native per-session MCP subprocess]\n\n    subgraph RUNTIME[\"Container: Pi Task Session · Pi CLI + in-process Gondolin extension\"]\n        direction TB\n        CONFIG[\"Component<br/><b>Project Runtime Resolver</b><br/>reads .pi/gondolin.json and in-repo network policy\"]\n        LIFECYCLE[\"Component<br/><b>Extension Lifecycle</b><br/>start, prompt augmentation, and shutdown\"]\n        VM[\"Component<br/><b>Gondolin Tool Client</b><br/>isolated bash and optional Playwright MCP\"]\n        MEM[\"Component<br/><b>Memory MCP Client</b><br/>optional durable browser knowledge\"]\n        WASSETTE[\"Component<br/><b>Wassette MCP Client</b><br/>loads configured component and grants explicit capabilities\"]\n        POLICY[\"Component<br/><b>GitHub Tool Policy</b><br/>read allowlist; writes require explicit enablement\"]\n        REGISTRY[\"Component<br/><b>Tool Registrar</b><br/>normalizes schemas and bounds returned output\"]\n\n        CONFIG --> LIFECYCLE --> VM\n        LIFECYCLE --> MEM\n        LIFECYCLE --> WASSETTE --> POLICY\n        VM --> REGISTRY\n        MEM --> REGISTRY\n        POLICY --> REGISTRY\n    end\n\n    WORKER -->|\"start one process\"| LIFECYCLE\n    CONFIG -->|\"select image, CPU, memory, egress\"| VM\n    VM -->|\"read-write mount\"| WORKSPACE\n    VM -->|\"read-only mount\"| SKILLS\n    MEM -->|\"MCP operations\"| MEMORY\n    WASSETTE -->|\"MCP over stdio\"| WASSETTE_RUNTIME\n    WASSETTE_RUNTIME -->|\"network and environment capabilities\"| GITHUB\n\n    classDef component fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    classDef data fill:#d4d4d8,color:#78350f,stroke:#d97706,stroke-width:2px;\n    class CONFIG,LIFECYCLE,VM,MEM,WASSETTE,POLICY,REGISTRY component;\n    class WORKER,GITHUB,WASSETTE_RUNTIME external;\n    class WORKSPACE,SKILLS,MEMORY data;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle RUNTIME fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\n\n",
+      "escapeSpecialChars" : true,
+      "maxDataRows" : 100,
+      "showSeriesCount" : false,
+      "seriesCountSize" : "sm"
+    },
+    "links" : [ {
+      "title" : "Open Voice Product Health",
+      "url" : "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
+    }, {
+      "title" : "Open Platform Resources",
+      "url" : "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
+    } ]
+  }, {
+    "description" : "No live activity overlay is applied to this architecture detail view.",
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "prometheus"
+    },
+    "gridPos" : {
+      "h" : 14,
+      "w" : 12,
+      "x" : 12,
+      "y" : 114
+    },
+    "pluginVersion" : "1.0.6",
+    "type" : "neildengg-grafmaid-panel",
+    "targets" : [ ],
+    "title" : "C3 · Host Observability",
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "thresholds"
+        },
+        "mappings" : [ ],
+        "thresholds" : {
+          "mode" : "absolute",
+          "steps" : [ {
+            "color" : "#ff778a",
+            "value" : null
+          }, {
+            "color" : "#94a3b8",
+            "value" : 0
+          }, {
+            "color" : "#38bdf8",
+            "value" : 1
+          }, {
+            "color" : "#22d3ee",
+            "value" : 10
+          }, {
+            "color" : "#2dd4bf",
+            "value" : 100
+          }, {
+            "color" : "#56e39f",
+            "value" : 1000
+          } ]
+        }
+      },
+      "overrides" : [ ]
+    },
+    "id" : 15,
+    "options" : {
+      "content" : "flowchart LR\n    MAC[External system<br/><b>macOS</b><br/>host CPU, memory, disk, and process table]\n    REGISTRY[(External data<br/><b>VM Metrics Registry</b><br/>0600 lifecycle records)]\n    OTEL[External container<br/><b>OTel LGTM</b><br/>Prometheus-compatible ingestion]\n\n    subgraph OBS[\"Container: Host and Gondolin Metrics · native Node.js + Fluent Bit\"]\n        direction TB\n        SUPERVISOR[\"Component<br/><b>Collector Supervisor</b><br/>starts Fluent Bit and coordinates shutdown\"]\n        HOSTCOLLECTOR[\"Component<br/><b>Host Metrics Collector</b><br/>Fluent Bit host metrics configuration\"]\n        REGREAD[\"Component<br/><b>Registration Reader</b><br/>ignores partial and malformed VM records\"]\n        PROCESSES[\"Component<br/><b>Process Sampler</b><br/>parses ps CPU, RSS, and elapsed time\"]\n        RENDER[\"Component<br/><b>VM Metric Renderer</b><br/>safe labels, liveness, allocation ratios\"]\n        ENDPOINT[\"Component<br/><b>Loopback Metrics Endpoint</b><br/>serves Prometheus text at /metrics\"]\n\n        SUPERVISOR --> HOSTCOLLECTOR\n        REGREAD --> RENDER\n        PROCESSES --> RENDER --> ENDPOINT\n    end\n\n    MAC -->|\"host metrics\"| HOSTCOLLECTOR\n    MAC -->|\"ps process table\"| PROCESSES\n    REGISTRY -->|\"VM IDs, labels, PIDs, allocations\"| REGREAD\n    HOSTCOLLECTOR -->|\"OTLP metrics\"| OTEL\n    OTEL -->|\"loopback scrape\"| ENDPOINT\n\n    classDef component fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    classDef data fill:#d4d4d8,color:#78350f,stroke:#d97706,stroke-width:2px;\n    class SUPERVISOR,HOSTCOLLECTOR,REGREAD,PROCESSES,RENDER,ENDPOINT component;\n    class MAC,OTEL external;\n    class REGISTRY data;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle OBS fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\n\n",
+      "escapeSpecialChars" : true,
+      "maxDataRows" : 100,
+      "showSeriesCount" : false,
+      "seriesCountSize" : "sm"
+    },
+    "links" : [ {
+      "title" : "Open Voice Product Health",
+      "url" : "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
+    }, {
+      "title" : "Open Platform Resources",
+      "url" : "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
+    } ]
+  }, {
+    "description" : "No live activity overlay is applied to this architecture detail view.",
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "prometheus"
+    },
+    "gridPos" : {
+      "h" : 22,
+      "w" : 24,
+      "x" : 0,
+      "y" : 128
+    },
+    "pluginVersion" : "1.0.6",
+    "type" : "neildengg-grafmaid-panel",
+    "targets" : [ ],
+    "title" : "Deployment · Security boundaries",
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "thresholds"
+        },
+        "mappings" : [ ],
+        "thresholds" : {
+          "mode" : "absolute",
+          "steps" : [ {
+            "color" : "#ff778a",
+            "value" : null
+          }, {
+            "color" : "#94a3b8",
+            "value" : 0
+          }, {
+            "color" : "#38bdf8",
+            "value" : 1
+          }, {
+            "color" : "#22d3ee",
+            "value" : 10
+          }, {
+            "color" : "#2dd4bf",
+            "value" : 100
+          }, {
+            "color" : "#56e39f",
+            "value" : 1000
+          } ]
+        }
+      },
+      "overrides" : [ ]
+    },
+    "id" : 16,
+    "options" : {
+      "content" : "flowchart LR\n    %% C4 deployment view. Only boundary crossings and primary runtime relationships are shown.\n    USER([\"Person<br/><b>Tailnet User</b>\"])\n\n    subgraph DEVICE[\"User device\"]\n        BROWSER[\"Browser Client<br/>Flutter Web · Pipecat transport\"]\n    end\n\n    subgraph MAC[\"Apple Silicon Mac · one macOS user boundary\"]\n        direction LR\n\n        subgraph DOCKER[\"Docker Desktop Linux VM\"]\n            direction TB\n            subgraph TRUST_NS[\"Shared namespace · 172.30.90.2 · trusted proxy source IP\"]\n                direction TB\n                INGRESS[\"Tailscale Serve<br/>tailnet HTTPS\"]\n                ROUTER[\"Traefik<br/>owner forward-auth\"]\n                EDGE[\"Voice Edge<br/>Pipecat · read-only · non-root\"]\n                TRUST_RISK[\"Risk<br/>Edge shares Grafana's trusted proxy source IP\"]\n                INGRESS -->|\"identity header\"| ROUTER\n                ROUTER -->|\"/ · WebRTC\"| EDGE\n                EDGE -.-> TRUST_RISK\n            end\n\n            subgraph CONTROL_NET[\"control · non-internal\"]\n                GATEWAY[\"Agent Gateway<br/>identity · commands\"]\n                HABITAT[\"Absurd Habitat<br/>queue operations\"]\n            end\n\n            subgraph DATA_NET[\"data · internal\"]\n                POSTGRES[(\"PostgreSQL<br/>proposals · queue · checkpoints\")]\n                S3[(\"S3Mock<br/>workspaces · results\")]\n                GITEA[(\"Gitea<br/>Git · Actions · workflow state\")]\n                DOCKER_JOB_API[\"Docker Job API<br/>Go · authenticated jobs\"]\n                HOST_DOCKER[\"Host Docker Engine<br/>Engine API · socket protected\"]\n                OXIGRAPH[(\"Oxigraph<br/>loopback SPARQL · persistent RDF\")]\n            end\n\n            subgraph MONITOR_NET[\"monitoring · internal\"]\n                DOCKER_METRICS[\"Docker VM Metrics<br/>Fluent Bit\"]\n                OTEL[\"OTel LGTM<br/>Prometheus · Tempo · Grafana\"]\n                GRAFANA_MCP[\"Grafana MCP<br/>read-only · caller bearer · MCP Apps\"]\n                DOCKER_METRICS --> OTEL\n                GRAFANA_MCP -->|\"service-account API<br/>PromQL · TraceQL\"| OTEL\n                GRAFANA_MCP -.->|\"metrics · OTLP traces\"| OTEL\n            end\n\n            EDGE -->|\"task API\"| GATEWAY\n            EDGE -->|\"identity-checked App and trace proxy\"| GRAFANA_MCP\n            GATEWAY --> POSTGRES\n            GATEWAY --> S3\n            GATEWAY -->|\"fixed read-only SPARQL\"| OXIGRAPH\n            HABITAT -->|\"scoped queue SQL\"| POSTGRES\n            ROUTER -->|\"/queue/\"| HABITAT\n            ROUTER -->|\"/git/\"| GITEA\n            ROUTER -->|\"/metrics/\"| OTEL\n            EDGE -.->|\"OTLP\"| OTEL\n        end\n\n        subgraph NATIVE[\"Native macOS · launchd and child processes\"]\n            direction TB\n            BROKER[\"Inference Broker<br/>FastAPI · MLX STT/TTS\"]\n            PI[\"Pi Voice Service<br/>persistent Pi session\"]\n            WORKER[\"Pi Task Worker<br/>claim · execute · checkpoint\"]\n            TASK_PI[\"Pi Task Session<br/>bounded child process\"]\n            BUILDER_MANAGER[\"Builder VM Manager<br/>warm VM lifecycle\"]\n            IMAGE_HANDOFF[(\"Image Handoff<br/>versioned image tar files\")]\n            VOICE_WASSETTE[\"Voice Wassette MCP<br/>per-session child\"]\n            TASK_WASSETTE[\"Task Wassette MCP<br/>per-task child\"]\n            HOST_METRICS[\"Host Observability<br/>Mac + QEMU metrics\"]\n            RUNTIME[(\"Host-private data<br/>sessions · skills · scratch · secrets\")]\n\n            BROKER --> PI\n            PI --> RUNTIME\n            WORKER --> RUNTIME\n            WORKER --> TASK_PI\n            PI --> VOICE_WASSETTE\n            TASK_PI --> TASK_WASSETTE\n            PI -->|\"bearer · loopback streamable HTTP\"| GRAFANA_MCP\n        end\n\n        subgraph VMS[\"Gondolin micro-VM isolation\"]\n            direction TB\n            subgraph VOICE_VM[\"Persistent voice VM · no public egress\"]\n                VOICE_TOOLS[\"Voice tools<br/>workspace RW · Git · Tea · AWS CLI\"]\n            end\n            subgraph TASK_VM[\"Per-task VM · public egress enabled by current default\"]\n                TASK_TOOLS[\"Task tools<br/>isolated workspace · project policy\"]\n            end\n            subgraph BUILDER_VM[\"Shared builder VM · trusted workflows\"]\n                RUNNER[\"Gitea Runner · Docker CLI/Compose\"]\n                CLIENT[\"Host Docker Job API client\"]\n                RUNNER --> CLIENT\n            end\n        end\n\n        EDGE -->|\"bearer · host-access\"| BROKER\n        VOICE_WASSETTE -->|\"component-scoped bearers<br/>task and read-only knowledge tools\"| GATEWAY\n        PI -->|\"native tools\"| VOICE_TOOLS\n        TASK_PI -->|\"isolated tools\"| TASK_TOOLS\n        BUILDER_MANAGER -->|\"resume · checkpoint\"| RUNNER\n        VOICE_TOOLS -->|\"synthetic allowlist\"| GITEA\n        VOICE_TOOLS -->|\"synthetic allowlist\"| S3\n        VOICE_TOOLS -->|\"raw SPARQL query/update<br/>loopback-published endpoint\"| OXIGRAPH\n        RUNNER -->|\"Actions · checkout\"| GITEA\n        CLIENT -->|\"authenticated context · job status\"| DOCKER_JOB_API\n        DOCKER_JOB_API -->|\"Engine API over Docker socket\"| HOST_DOCKER\n        HOST_DOCKER -->|\"versioned image tar\"| IMAGE_HANDOFF\n        RUNNER -.->|\"OTLP job traces · runner metrics\"| OTEL\n        WORKER -->|\"local image tar\"| IMAGE_HANDOFF\n        HOST_METRICS -.->|\"host-access scrape\"| OTEL\n    end\n\n    subgraph EXTERNAL[\"External systems\"]\n        direction TB\n        CONTROL[\"Tailscale Control Plane\"]\n        MODELS[\"Model Providers\"]\n        INTERNET[\"Public Internet and Integrations\"]\n    end\n\n    USER --> BROWSER -->|\"tailnet HTTPS · WebRTC\"| INGRESS\n    INGRESS -.-> CONTROL\n    PI -->|\"host-held credential\"| MODELS\n    TASK_PI -->|\"host-held credential\"| MODELS\n    VOICE_WASSETTE -->|\"granted capability\"| INTERNET\n    TASK_WASSETTE -->|\"granted capability\"| INTERNET\n    TASK_TOOLS -->|\"current default\"| INTERNET\n    HOST_DOCKER -->|\"base-image pulls and builds\"| INTERNET\n\n    classDef person fill:#3f3f46,color:#fff,stroke:#05345f,stroke-width:2px;\n    classDef external fill:#3f3f46,color:#fff,stroke:#374151,stroke-width:2px;\n    classDef runtime fill:#d4d4d8,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;\n    classDef security fill:#d4d4d8,color:#14532d,stroke:#16a34a,stroke-width:2px;\n    classDef warning fill:#3f3f46,color:#ffd7de,stroke:#ff778a,stroke-width:3px;\n    classDef data fill:#d4d4d8,color:#78350f,stroke:#d97706,stroke-width:2px;\n    class USER person;\n    class CONTROL,MODELS,INTERNET,HOST_DOCKER external;\n    class BROWSER,BROKER,PI,WORKER,TASK_PI,BUILDER_MANAGER,VOICE_WASSETTE,TASK_WASSETTE,HOST_METRICS,VOICE_TOOLS,TASK_TOOLS,RUNNER,CLIENT,DOCKER_JOB_API,HABITAT,DOCKER_METRICS,OTEL,GRAFANA_MCP runtime;\n    class INGRESS,ROUTER,EDGE,GATEWAY security;\n    class TRUST_RISK warning;\n    class POSTGRES,S3,GITEA,OXIGRAPH,RUNTIME,IMAGE_HANDOFF data;\n\n%% Evidence colors generated by the C4 dashboard adapter.\nstyle EDGE fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle GATEWAY fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle BROKER fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle PI fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle VOICE_TOOLS fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle WORKER fill:#3f3f46,color:#f4f4f5,stroke:#ff778a,stroke-width:3px\nstyle TASK_PI fill:#3f3f46,color:#f4f4f5,stroke:#ff778a,stroke-width:3px\nstyle TASK_TOOLS fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle VOICE_WASSETTE fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle TASK_WASSETTE fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle BUILDER_MANAGER fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle RUNNER fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle POSTGRES fill:#3f3f46,color:#f4f4f5,stroke:#72b7ef,stroke-width:3px\nstyle HABITAT fill:#3f3f46,color:#f4f4f5,stroke:#72b7ef,stroke-width:3px\nstyle S3 fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle GITEA fill:#3f3f46,color:#f4f4f5,stroke:#ffbd76,stroke-width:3px\nstyle OXIGRAPH fill:#3f3f46,color:#f4f4f5,stroke:#72b7ef,stroke-width:3px\nstyle DOCKER_METRICS fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle HOST_METRICS fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle OTEL fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\nstyle GRAFANA_MCP fill:#3f3f46,color:#f4f4f5,stroke:#56e39f,stroke-width:3px\n\n",
+      "escapeSpecialChars" : true,
+      "maxDataRows" : 100,
+      "showSeriesCount" : false,
+      "seriesCountSize" : "sm"
+    },
+    "links" : [ {
+      "title" : "Open Voice Product Health",
+      "url" : "/metrics/d/pipecat-voice-overview/voice-product-health?${__url_time_range}"
+    }, {
+      "title" : "Open Platform Resources",
+      "url" : "/metrics/d/voice-system-resources/platform-resources?${__url_time_range}"
+    } ]
+  } ],
+  "links" : [ {
+    "tags" : [ ],
+    "asDropdown" : false,
+    "keepTime" : true,
+    "type" : "link",
+    "icon" : "dashboard",
+    "title" : "Voice Product Health",
+    "includeVars" : true,
+    "targetBlank" : false,
+    "url" : "/metrics/d/pipecat-voice-overview/voice-product-health",
+    "tooltip" : "RED signals and voice-flow outcomes"
+  }, {
+    "tags" : [ ],
+    "asDropdown" : false,
+    "keepTime" : true,
+    "type" : "link",
+    "icon" : "dashboard",
+    "title" : "Platform Resources",
+    "includeVars" : true,
+    "targetBlank" : false,
+    "url" : "/metrics/d/voice-system-resources/platform-resources",
+    "tooltip" : "Host, Docker, and Gondolin resource utilization"
+  } ],
+  "schemaVersion" : 41
 }

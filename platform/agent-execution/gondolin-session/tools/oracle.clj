@@ -1,0 +1,280 @@
+#!/usr/local/bin/bb
+
+(ns oracle
+  (:require [babashka.fs :as fs]
+            [cheshire.core :as json]
+            [clojure.string :as str])
+  (:import [java.net URI]
+           [java.net.http HttpClient HttpRequest HttpRequest$BodyPublishers HttpResponse$BodyHandlers]
+           [java.nio.file Files]
+           [java.security MessageDigest SecureRandom]
+           [java.time Duration]
+           [java.util Base64 UUID]
+           [java.util.zip CRC32 ZipFile]))
+
+(defn hex [bytes]
+  (apply str (map #(format "%02x" (bit-and 0xff %)) bytes)))
+
+(defn sha256 [path]
+  (let [digest (MessageDigest/getInstance "SHA-256")]
+    (with-open [input (Files/newInputStream (fs/path path) (make-array java.nio.file.OpenOption 0))]
+      (let [buffer (byte-array 8192)]
+        (loop []
+          (let [size (.read input buffer)]
+            (when (pos? size)
+              (.update digest buffer 0 size)
+              (recur))))))
+    (hex (.digest digest))))
+
+(defn valid-zip? [path]
+  (try
+    (with-open [zip (ZipFile. (str path))]
+      (let [names (set (map #(.getName %) (enumeration-seq (.entries zip))))]
+        (when (and (contains? names "trace.trace") (contains? names "trace.network"))
+          (doseq [entry (enumeration-seq (.entries zip))]
+            (with-open [input (.getInputStream zip entry)]
+              (let [buffer (byte-array 8192)
+                    crc (CRC32.)]
+                (loop []
+                  (let [size (.read input buffer)]
+                    (when (pos? size)
+                      (.update crc buffer 0 size)
+                      (recur))))
+                (when (not= (.getValue crc) (.getCrc entry))
+                  (throw (ex-info "Trace ZIP CRC mismatch" {:entry (.getName entry)}))))))
+          true)))
+    (catch Exception _ false)))
+
+(defn browser-traces [run-dir]
+  (let [summary (json/parse-string (slurp (str run-dir "/evidence.json")))
+        traces (get summary "traces" [])
+        failures (atom (vec (get summary "inspectionFailures" [])))
+        live? (= "full-mock" (System/getenv "GONDOLIN_COMPOSE_PROFILE"))
+        required (cond-> ["voice" "workspace"] live? (conj "live-edge"))
+        journeys (into {}
+                       (for [journey required]
+                         (let [archives (vec (fs/glob (str run-dir "/results/" journey) "**/trace.zip"))]
+                           (if (not= 1 (count archives))
+                             (do (swap! failures conj (str journey ": expected one trace, found " (count archives)))
+                                 [journey nil])
+                             (let [archive (first archives)
+                                   digest (sha256 archive)
+                                   matches (filter #(= digest (get % "sha256")) traces)
+                                   item (first matches)
+                                   actions (reduce + 0 (vals (get item "browserActions" {})))
+                                   requests (get item "networkRequests" 0)]
+                               (when (not= 1 (count matches))
+                                 (swap! failures conj (str journey ": trace SHA-256 absent or duplicated in evidence")))
+                               (when-not (valid-zip? archive)
+                                 (swap! failures conj (str journey ": incomplete or unreadable trace ZIP")))
+                               (doseq [field ["badResponses" "networkFailures" "consoleErrors"]]
+                                 (when (seq (get item field))
+                                   (swap! failures conj (str journey ": " field " present"))))
+                               (when (or (< actions 1) (< requests 1))
+                                 (swap! failures conj (str journey ": no browser actions or network requests")))
+                               (when (and (contains? #{"workspace" "live-edge"} journey)
+                                          (not-any? #(and (= "POST" (get % "method"))
+                                                          (= "/api/pi-message" (get % "path"))
+                                                          (= 200 (get % "status")))
+                                                    (get item "apiRequests" [])))
+                                 (swap! failures conj (str journey ": successful POST /api/pi-message absent")))
+                               [journey {"sha256" digest "actions" actions "networkRequests" requests}])))))]
+    (when (not= (count required) (count traces))
+      (swap! failures conj (str "expected " (count required) " inspected traces, found " (count traces))))
+    {"passed" (empty? @failures) "journeys" journeys "failures" @failures}))
+
+(defn random-id [size]
+  (let [bytes (byte-array size)]
+    (.nextBytes (SecureRandom.) bytes)
+    (hex bytes)))
+
+(defn attributes [values]
+  (mapv (fn [[key value]] {"key" key "value" {"stringValue" value}}) values))
+
+(def http-client (-> (HttpClient/newBuilder)
+                     (.connectTimeout (Duration/ofSeconds 5))
+                     (.build)))
+
+(defn request-json [url payload]
+  (let [builder (-> (HttpRequest/newBuilder (URI/create url))
+                    (.timeout (Duration/ofSeconds 5))
+                    (.header "Accept" "application/json"))
+        request (if payload
+                  (-> builder
+                      (.header "Content-Type" "application/json")
+                      (.POST (HttpRequest$BodyPublishers/ofString (json/generate-string payload)))
+                      (.build))
+                  (.build (.GET builder)))
+        response (.send http-client request (HttpResponse$BodyHandlers/ofString))]
+    (when-not (<= 200 (.statusCode response) 299)
+      (throw (ex-info (str "HTTP " (.statusCode response)) {"url" url})))
+    (json/parse-string (.body response))))
+
+(defn id-matches? [observed expected]
+  (or (= expected (some-> observed .toLowerCase))
+      (try
+        (= expected (hex (.decode (Base64/getDecoder) ^String observed)))
+        (catch Exception _ false))))
+
+(defn returned-canary? [response trace-id span-id expected-attributes]
+  (boolean
+   (some (fn [span]
+           (let [found (into {} (map (fn [attribute]
+                                       [(get attribute "key") (get-in attribute ["value" "stringValue"])])
+                                 (get span "attributes" [])))]
+             (and (id-matches? (get span "traceId") trace-id)
+                  (id-matches? (get span "spanId") span-id)
+                  (= "patrol.oracle.canary" (get span "name"))
+                  (every? (fn [[key value]] (= value (get found key))) expected-attributes))))
+         (for [resource (get-in response ["trace" "resourceSpans"])
+               scope (get resource "scopeSpans")
+               span (get scope "spans")]
+           span))))
+
+(defn otel-canary [collector tempo run-id vm-index]
+  (let [trace-id (random-id 16)
+        span-id (random-id 8)
+        now (str (* 1000000 (System/currentTimeMillis)))
+        canary-attributes {"benchmark.run_id" run-id "benchmark.vm_index" (str vm-index)}
+        payload {"resourceSpans"
+                 [{"resource" {"attributes" (attributes {"service.name" "awp-patrol-oracle"})}
+                   "scopeSpans" [{"scope" {"name" "awp.patrol-oracle"}
+                                  "spans" [{"traceId" trace-id "spanId" span-id
+                                            "name" "patrol.oracle.canary"
+                                            "startTimeUnixNano" now
+                                            "endTimeUnixNano" (str (+ 1000000 (Long/parseLong now)))
+                                            "attributes" (attributes canary-attributes)}]}]}]}
+        result {"traceId" trace-id "spanId" span-id "collector" collector
+                "tempo" tempo "passed" false "failures" []}]
+    (try
+      (let [accepted (request-json (str collector "/v1/traces") payload)]
+        (when (pos? (get-in accepted ["partialSuccess" "rejectedSpans"] 0))
+          (throw (ex-info "collector rejected the canary span" {}))))
+      (let [deadline (+ (System/currentTimeMillis) 30000)]
+        (loop []
+          (let [response (try (request-json (str tempo "/api/v2/traces/" trace-id) nil)
+                              (catch Exception _ nil))]
+            (cond
+              (returned-canary? response trace-id span-id canary-attributes)
+              (assoc result "passed" true)
+
+              (>= (System/currentTimeMillis) deadline)
+              (assoc result "failures" ["canary span not returned by Tempo before deadline"])
+
+              :else (do (Thread/sleep 1000) (recur))))))
+      (catch Exception error
+        (assoc result "failures" [(str "OTLP export failed: " (.getMessage error))])))))
+
+(defn returned-edge-span? [response trace-id]
+  (boolean
+   (some (fn [[resource span]]
+           (let [resource-attributes (into {} (map (fn [item] [(get item "key") (get-in item ["value" "stringValue"])])
+                                            (get-in resource ["resource" "attributes"])))
+                 span-attributes (into {} (map (fn [item] [(get item "key") (get-in item ["value" "stringValue"])])
+                                        (get span "attributes")))]
+             (and (= "pipecat-voice-edge" (get resource-attributes "service.name"))
+                  (id-matches? (get span "traceId") trace-id)
+                  (= "pipecat-voice-edge.browser.pi.turn" (get span "name"))
+                  (= "browser.pi.turn" (get span-attributes "app.operation")))))
+         (for [resource (get-in response ["trace" "resourceSpans"])
+               scope (get resource "scopeSpans")
+               span (get scope "spans")]
+           [resource span]))))
+
+(defn live-edge-trace [run-dir tempo]
+  (let [evidence-path (str run-dir "/live-edge-evidence.json")]
+    (try
+      (let [evidence (json/parse-string (slurp evidence-path))
+            trace-id (get evidence "traceId")
+            result {"traceId" trace-id "tempo" tempo "passed" false "failures" []}]
+        (when-not (and (string? trace-id) (re-matches #"[0-9a-f]{32}" trace-id))
+          (throw (ex-info "invalid live edge trace ID" {})))
+        (let [deadline (+ (System/currentTimeMillis) 30000)]
+          (loop []
+            (let [response (try (request-json (str tempo "/api/v2/traces/" trace-id) nil)
+                                (catch Exception _ nil))]
+              (cond
+                (returned-edge-span? response trace-id) (assoc result "passed" true)
+                (>= (System/currentTimeMillis) deadline)
+                (assoc result "failures" ["voice-edge browser.pi.turn span not returned by Tempo before deadline"])
+                :else (do (Thread/sleep 1000) (recur)))))))
+      (catch Exception error
+        {"passed" false "failures" [(str "live edge trace check failed: " (.getMessage error))]}))))
+
+(defn evaluate [run-dir run-id vm-index]
+  (let [browser (try (browser-traces run-dir)
+                     (catch Exception error
+                       {"passed" false "failures" [(str "trace inspection failed: " (.getMessage error))]}))
+        collector (or (System/getenv "ORACLE_OTLP_COLLECTOR") "http://127.0.0.1:4318")
+        tempo (or (System/getenv "ORACLE_TEMPO") "http://127.0.0.1:3200")
+        otel (otel-canary collector tempo run-id vm-index)
+        live? (= "full-mock" (System/getenv "GONDOLIN_COMPOSE_PROFILE"))
+        edge (when live? (live-edge-trace run-dir tempo))]
+    {"passed" (and (get browser "passed") (get otel "passed")
+                   (or (not live?) (get edge "passed")))
+     "browserTrace" browser "otel" otel "liveEdge" edge}))
+
+(defn sha256-string [value]
+  (hex (.digest (MessageDigest/getInstance "SHA-256") (.getBytes ^String value "UTF-8"))))
+
+(defn allure-result [verdict run-id vm-index start stop uuid]
+  (let [full-name "gondolin.patrol.oracle"
+        browser (get verdict "browserTrace")
+        otel (get verdict "otel")
+        edge (get verdict "liveEdge")
+        step (fn [name check]
+               (let [failures (get check "failures" [])]
+                 {"name" name
+                  "status" (if (get check "passed") "passed" "failed")
+                  "statusDetails" {"message" (str/join "; " (map str failures))}
+                  "start" start "stop" stop}))
+        failures (concat (get browser "failures" []) (get otel "failures" [])
+                         (get edge "failures" []))]
+    {"uuid" uuid
+     "testCaseId" (subs (sha256-string full-name) 0 32)
+     "historyId" (subs (sha256-string (str full-name "|vm=" vm-index)) 0 32)
+     "fullName" full-name
+     "name" (str "Patrol oracle (VM " vm-index ")")
+     "status" (if (get verdict "passed") "passed" "failed")
+     "statusDetails" {"message" (str/join "; " (map str failures))}
+     "stage" "finished"
+     "start" start "stop" stop
+     "parameters" [{"name" "vmIndex" "value" (str vm-index)}
+                   {"name" "runId" "value" run-id "excluded" true}]
+     "labels" [{"name" "parentSuite" "value" "Gondolin"}
+               {"name" "suite" "value" "Patrol Oracle"}
+               {"name" "framework" "value" "gondolin-harness"}
+               {"name" "language" "value" "clojure"}]
+     "steps" (cond-> [(step "Browser trace evidence" browser)
+                       (step "OTLP collector to Tempo canary" otel)]
+               edge (conj (step "Live voice-edge application span" edge)))
+     "attachments" [{"name" "Oracle verdict" "source" (str uuid "-attachment.json")
+                     "type" "application/json"}]}))
+
+(defn write-allure! [directory verdict run-id vm-index start stop]
+  (let [uuid (str (UUID/randomUUID))
+        result (allure-result verdict run-id vm-index start stop uuid)]
+    (fs/create-dirs directory)
+    (spit (str directory "/" uuid "-attachment.json")
+          (str (json/generate-string verdict {:pretty true}) "\n"))
+    (spit (str directory "/" uuid "-result.json")
+          (str (json/generate-string result {:pretty true}) "\n"))
+    result))
+
+(defn -main [& args]
+  (when-not (<= 3 (count args) 4)
+    (binding [*out* *err*]
+      (println "Usage: oracle.clj <patrol-run-dir> <run-id> <vm-index> [allure-results-dir]"))
+    (System/exit 2))
+  (let [[run-dir run-id vm-index allure-directory] args
+        started (System/currentTimeMillis)
+        index (Long/parseLong vm-index)
+        result (evaluate run-dir run-id index)
+        stopped (System/currentTimeMillis)]
+    (when allure-directory
+      (write-allure! allure-directory result run-id index started stopped))
+    (println (json/generate-string result))
+    (System/exit (if (get result "passed") 0 1))))
+
+(when (= *file* (System/getProperty "babashka.file"))
+  (apply -main *command-line-args*))

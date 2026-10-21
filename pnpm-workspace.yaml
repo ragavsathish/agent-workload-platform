@@ -4,6 +4,8 @@ packages:
   - platform/agent-execution/gondolin-session
   - platform/observability/otel
   - products/voice-agent/apps/pi-agent
+  - products/voice-agent/apps/journal-review-mcp
+  - products/voice-agent/apps/trace-explainer-mcp
 
 allowBuilds:
   '@google/genai': false

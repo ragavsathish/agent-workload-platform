@@ -27,7 +27,8 @@ type ToolOperations = {
 };
 
 const guestWorkspace = "/workspace";
-const guestShell = ["/bin/bash", "-lc"] as const;
+// Login shells reset the image PATH, hiding tools such as /opt/flutter/bin/flutter.
+const guestShell = ["/bin/bash", "-c"] as const;
 const imageMimeTypes = {
   ".png": "image/png",
   ".jpg": "image/jpeg",

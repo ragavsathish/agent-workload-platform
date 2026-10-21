@@ -1,0 +1,67 @@
+---
+host_services_runtime_dir: "{{ ansible_facts.user_dir }}/Library/Application Support/PipecatEdge"
+host_services_bin_dir: "{{ host_services_runtime_dir }}/bin"
+host_services_logs_dir: "{{ ansible_facts.user_dir }}/Library/Logs/PipecatEdge"
+host_services_agents_dir: "{{ ansible_facts.user_dir }}/Library/LaunchAgents"
+host_services_gondolin_runtime: "{{ host_services_runtime_dir }}/gondolin-agent"
+host_services_voice_runtime: "{{ host_services_runtime_dir }}/voice-pi-agent"
+host_services_gondolin_assets: "{{ host_services_runtime_dir }}/gondolin-assets"
+host_services_builder_assets: "{{ host_services_runtime_dir }}/gondolin-builder-assets"
+host_services_component_dir: "{{ host_services_runtime_dir }}/wassette-components"
+host_services_staging_dir: "{{ host_services_runtime_dir }}/.staging"
+host_services_gondolin_deploy_dir: "{{ host_services_staging_dir }}/gondolin-agent"
+host_services_voice_deploy_dir: "{{ host_services_staging_dir }}/voice-pi-agent"
+host_services_image_store: "{{ ansible_facts.user_dir }}/.cache/gondolin/images"
+host_services_legacy_skills_dir: "{{ ansible_facts.user_dir }}/git/skills"
+host_services_stable_skills_dir: "{{ host_services_runtime_dir }}/skills-source"
+host_services_skills_runtime: "{{ host_services_runtime_dir }}/skills"
+host_services_domain: "gui/{{ ansible_facts.user_uid }}"
+host_services_architecture: "{{ 'aarch64' if ansible_facts.architecture in ['arm64', 'aarch64'] else 'x86_64' }}"
+host_services_pi_rpc_artifact_architecture: "{{ 'arm64' if ansible_facts.architecture in ['arm64', 'aarch64'] else 'x86_64' }}"
+host_services_pi_rpc_artifact: "{{ voice_agent_root }}/apps/pi-rpc-host/dist/pi-task-rpc-darwin-{{ host_services_pi_rpc_artifact_architecture }}"
+host_services_gondolin_assets_source: "{{ voice_agent_root }}/../../artifacts/gondolin-browser/{{ host_services_architecture }}"
+host_services_builder_assets_source: "{{ voice_agent_root }}/../../artifacts/gondolin-builder/{{ host_services_architecture }}"
+host_services_wassette_override: "{{ lookup('ansible.builtin.env', 'WASSETTE_BIN') }}"
+host_services_skills_override: "{{ lookup('ansible.builtin.env', 'PI_VOICE_SKILLS_SOURCE') }}"
+host_services_music_dir: "{{ host_services_runtime_dir }}/apps/music-generation"
+host_services_music_ref: ca1e85fe9430179831e6bc6be790c332190a3866
+
+host_services_runtime_directories:
+  - bin
+  - apps/broker/src
+  - apps/classifier
+  - apps/pi-voice
+  - apps/digital-twin
+  - apps/worker/src
+  - apps/host-observability
+  - observability
+  - packages/tasking/src
+  - packages/tasking/migrations
+  - packages/telemetry/src
+  - gondolin-agent
+  - voice-pi-agent
+  - gondolin-assets
+  - gondolin-builder-assets
+  - skills
+  - voice-workspace
+
+host_services_secure_directories:
+  - .staging
+  - runtime-home
+  - gondolin-metrics
+  - wassette-components
+
+host_services_log_names:
+  - broker
+  - music-generation
+  - pi-voice
+  - worker
+  - image-builder
+  - host-observability
+  - digital-twin-listener
+  - digital-twin-classifier
+
+host_services_legacy_agents:
+  - com.sathish.pipecat-agent-gateway
+  - com.sathish.pipecat-edge-machine
+  - com.sathish.pipecat-edge-tunnel

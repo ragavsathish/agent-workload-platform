@@ -1,0 +1,10 @@
+---
+- name: Restart host services
+  community.general.launchd:
+    name: "{{ item }}"
+    state: restarted
+  loop: "{{ launch_agents | reject('equalto', 'com.sathish.pipecat-image-builder') }}"
+  register: host_services_restart_result
+  until: not host_services_restart_result.failed
+  retries: 15
+  delay: 1

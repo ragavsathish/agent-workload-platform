@@ -1,0 +1,3 @@
+# Keep DVC scans out of generated dependencies and evaluation result caches.
+node_modules
+eval/results

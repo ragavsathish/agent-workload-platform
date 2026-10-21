@@ -27,7 +27,7 @@ RUN /app/.venv/bin/python fetch_voxlock_model.py /app/models/voxlock \
     && uv cache clean --cache-dir /tmp/voxlock-instrument-cache \
     && chmod -R a-w /app/models/voxlock
 COPY apps/edge/bot.py ./
-COPY apps/edge/prompt.toml ./
+COPY apps/edge/SYSTEM.md ./
 COPY apps/edge/audio_filter.py ./
 COPY apps/edge/audio_diagnostics.py ./
 COPY apps/edge/otel_bridge.py ./

@@ -1,5 +1,12 @@
+import { readFileSync } from "node:fs";
+
 import { Type, type Static } from "typebox";
 import { Check } from "typebox/value";
+
+const CANDIDATE_EXTRACTION_SYSTEM_PROMPT = readFileSync(
+  new URL("./image/prompts/candidate-extraction/SYSTEM.md", import.meta.url),
+  "utf8",
+).trim();
 
 export const ASSERTION_KINDS = [
   "conversation_topic",
@@ -138,7 +145,7 @@ export async function classifyTranscript(
   const text = transcript.trim();
   if (!text) throw new Error("transcript must not be empty");
   const request = options.fetch ?? fetch;
-  const baseUrl = (options.baseUrl ?? "http://127.0.0.1:8000").replace(/\/$/, "");
+  const baseUrl = (options.baseUrl ?? "http://127.0.0.1:8010").replace(/\/$/, "");
   const response = await request(`${baseUrl}/v1/systemone`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -175,7 +182,7 @@ export async function classifyTranscript(
   }
   const kind = kindAnswer.choice as AssertionKind;
   const profileField = profileAnswer.choice as ProfileField;
-  const threshold = options.reviewThreshold ?? 0.82;
+  const threshold = options.reviewThreshold ?? 0.60;
   return {
     kind,
     kindConfidence: kindAnswer.confidence,
@@ -228,10 +235,7 @@ export async function extractTranscriptCandidates(
           role: "system",
           content: [
             extractionInstruction[decision.kind],
-            "Extract only what is explicitly stated by the owner; never infer expertise from a question or command.",
-            "Each evidence_quote must be one exact, contiguous substring copied character-for-character from the transcript.",
-            "Never insert ellipses, combine separated spans, normalize, or paraphrase evidence_quote.",
-            "Return an empty candidates array rather than guessing.",
+            CANDIDATE_EXTRACTION_SYSTEM_PROMPT,
             `Required JSON schema: ${JSON.stringify(schema)}`,
           ].join("\n"),
         },

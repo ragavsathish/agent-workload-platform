@@ -83,6 +83,111 @@ class PresentationResponseTest(unittest.TestCase):
         self.assertEqual(result.resource_uri, "ui://mermaid/main")
         self.assertEqual(result.presentation, fallback_presentation(result.spoken))
 
+    def test_accepts_bounded_playwright_trace_viewer_presentation(self):
+        trace_id = "0123456789abcdef0123456789abcdef"
+        viewer_url = (
+            "http://trace-viewer:9450/trace-viewer/index.html?trace="
+            f"http%3A%2F%2Ftrace-viewer%3A9450%2Fapi%2Fplaywright-traces%2F{trace_id}%2Ftrace.zip"
+        )
+        result = parse_presentation_response(json.dumps({
+            "spoken": "Opening the matching workspace trace.",
+            "presentation": {
+                "kind": "playwright-trace-viewer",
+                "title": "durable work through HTTP",
+                "summary": "workspace · latest",
+                "traceId": trace_id,
+                "project": "workspace",
+                "run": "latest",
+                "modifiedAt": "2026-10-17T10:00:00.000Z",
+                "viewerUrl": viewer_url,
+                "narratedVideoUrl": (
+                    "http://trace-viewer:9450/api/trace-explainers/"
+                    "abcdef0123456789abcdef0123456789/video"
+                ),
+                "narratedDurationSeconds": 23,
+                "narratedSceneCount": 2,
+            },
+        }))
+
+        self.assertEqual(result.resource_uri, "ui://playwright-trace-viewer/main.html")
+        self.assertEqual(result.presentation["traceId"], trace_id)
+        self.assertEqual(result.presentation["viewerUrl"], viewer_url)
+        self.assertEqual(result.presentation["narratedSceneCount"], 2)
+
+    def test_rejects_cross_origin_playwright_trace_recording(self):
+        trace_id = "0123456789abcdef0123456789abcdef"
+        result = parse_presentation_response(json.dumps({
+            "spoken": "Trace unavailable.",
+            "presentation": {
+                "kind": "playwright-trace-viewer",
+                "traceId": trace_id,
+                "viewerUrl": (
+                    "https://viewer.example/trace-viewer/index.html?trace="
+                    f"https%3A%2F%2Fevil.example%2Fapi%2Fplaywright-traces%2F{trace_id}%2Ftrace.zip"
+                ),
+            },
+        }))
+
+        self.assertEqual(result.resource_uri, "ui://mermaid/main")
+        self.assertEqual(result.presentation, fallback_presentation(result.spoken))
+
+    def test_routes_exact_evidence_to_the_journal_review_app(self):
+        transcript = (
+            "I want to improve the prompt and annotate examples first. "
+            "Use reviewed labels before training a model."
+        )
+        quote = "Use reviewed labels before training a model."
+        start = transcript.index(quote)
+        result = parse_presentation_response(json.dumps({
+            "spoken": "The journal review is ready.",
+            "presentation": {
+                "kind": "journal-review",
+                "reviewId": "review-local-001",
+                "title": "Review journal extraction",
+                "source": "Voice session",
+                "transcript": transcript,
+                "suggestion": {
+                    "id": "suggestion-001",
+                    "type": "decision",
+                    "statement": quote,
+                    "topics": ["annotation", "training"],
+                    "confidence": 0.91,
+                    "evidence": {"quote": quote, "start": start, "end": start + len(quote)},
+                },
+                "progress": {"current": 1, "total": 40, "reviewed": 0},
+                "outcome": "pending",
+            },
+        }))
+
+        self.assertEqual(result.resource_uri, "ui://journal-review/main.html")
+        self.assertEqual(result.presentation["kind"], "journal-review")
+        suggestion = result.presentation["suggestion"]
+        assert isinstance(suggestion, dict)
+        evidence = suggestion["evidence"]
+        assert isinstance(evidence, dict)
+        self.assertEqual(evidence["quote"], quote)
+
+    def test_rejects_journal_evidence_that_is_not_an_exact_quote(self):
+        result = parse_presentation_response(json.dumps({
+            "spoken": "Review unavailable.",
+            "presentation": {
+                "kind": "journal-review",
+                "reviewId": "review-local-001",
+                "transcript": "The exact transcript.",
+                "suggestion": {
+                    "id": "suggestion-001",
+                    "type": "decision",
+                    "statement": "A decision.",
+                    "topics": [],
+                    "confidence": 0.8,
+                    "evidence": {"quote": "invented", "start": 0, "end": 8},
+                },
+            },
+        }))
+
+        self.assertEqual(result.resource_uri, "ui://mermaid/main")
+        self.assertEqual(result.presentation, fallback_presentation(result.spoken))
+
     def test_routes_bounded_marp_slides_to_the_slides_app(self):
         markdown = """---
 marp: true

@@ -28,6 +28,12 @@ class ExecutionImagePlan:
     artifact_version: str
 
     @property
+    def installed_image_ref(self) -> str:
+        """Bind the Gondolin tag to the declared build inputs, not a mutable alias."""
+
+        return f"{self.image_ref}-{self.artifact_version}"
+
+    @property
     def idempotency_key(self) -> str:
         return f"image-build:{self.artifact_version}"
 

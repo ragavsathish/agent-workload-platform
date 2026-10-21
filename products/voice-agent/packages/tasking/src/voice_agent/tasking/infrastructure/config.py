@@ -40,26 +40,32 @@ class Settings:
     task_timeout_seconds: int
     max_output_bytes: int
     skills_dir: Path | None
+    pi_rpc_host_binary: Path = Path("/opt/homebrew/bin/pi-task-rpc")
+    pi_rpc_socket_dir: Path = Path(f"/tmp/awp-pi-rpc-{os.getuid()}")
+    pi_rpc_idle_seconds: float = 30.0
     artifact_endpoint_url: str = ""
     artifact_bucket: str = ""
     artifact_access_key: str = ""
     artifact_secret_key: str = ""
     allowed_workspaces: tuple[str, ...] = ()
     worker_scratch_root: Path = Path("~/.local/share/agent-workload-platform/workspaces")
+    scratch_image_ref: str = ""
     max_artifact_bytes: int = 16_777_216
     defer_workspace_validation: bool = False
     image_build_timeout_seconds: int = 7200
     image_installer_cli: Path | None = None
+    image_handoff_dir: Path | None = None
     gitea_endpoint_url: str = ""
     gitea_source_owner: str = "source-publisher"
     gitea_image_workflow: str = "build-execution-image.yml"
     gitea_workflow_ref: str = "refs/heads/main"
-    gitea_package_owner: str = "image-builder"
-    gitea_builder_token: str = ""
     gitea_actions_token: str = ""
     node_binary: str = "/opt/homebrew/bin/node"
     digital_twin_runner: Path | None = None
     digital_twin_timeout_seconds: int = 120
+    music_generation_base_url: str = ""
+    music_generation_timeout_seconds: int = 600
+    music_ffmpeg_binary: str = "/opt/homebrew/bin/ffmpeg"
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -85,6 +91,16 @@ class Settings:
                 if _value("PI_TASK_SKILLS_DIR")
                 else None
             ),
+            pi_rpc_host_binary=Path(
+                _value("PI_TASK_RPC_HOST_BINARY", "/opt/homebrew/bin/pi-task-rpc")
+            ).expanduser(),
+            pi_rpc_socket_dir=Path(
+                _value(
+                    "PI_TASK_RPC_SOCKET_DIR",
+                    f"/tmp/awp-pi-rpc-{os.getuid()}",
+                )
+            ).expanduser(),
+            pi_rpc_idle_seconds=float(os.getenv("PI_TASK_RPC_IDLE_SECONDS", "30")),
             artifact_endpoint_url=_value("ARTIFACT_ENDPOINT_URL"),
             artifact_bucket=_value("ARTIFACT_BUCKET", "agent-artifacts"),
             artifact_access_key=_value("ARTIFACT_ACCESS_KEY", "local-test"),
@@ -93,9 +109,10 @@ class Settings:
             worker_scratch_root=Path(
                 _value(
                     "WORKER_SCRATCH_ROOT",
-                    "~/.local/share/agent-workload-platform/workspaces",
+                    "/tmp/agent-workload-platform/workspaces",
                 )
             ).expanduser(),
+            scratch_image_ref=_value("WORKER_SCRATCH_IMAGE_REF") or _value("GONDOLIN_BROWSER_ASSETS"),
             max_artifact_bytes=int(os.getenv("WORKER_MAX_ARTIFACT_BYTES", "16777216")),
             defer_workspace_validation=_bool_env("ORCHESTRATOR_DEFER_WORKSPACE_VALIDATION"),
             image_build_timeout_seconds=int(os.getenv("IMAGE_BUILD_TIMEOUT_SECONDS", "7200")),
@@ -104,14 +121,17 @@ class Settings:
                 if _value("IMAGE_INSTALLER_CLI")
                 else None
             ),
+            image_handoff_dir=(
+                Path(_value("GONDOLIN_IMAGE_HANDOFF_DIR")).expanduser().resolve()
+                if _value("GONDOLIN_IMAGE_HANDOFF_DIR")
+                else None
+            ),
             gitea_endpoint_url=_value("GITEA_ENDPOINT_URL", "http://127.0.0.1:3001"),
             gitea_source_owner=_value("GITEA_OWNER", "source-publisher"),
             gitea_image_workflow=_value(
                 "GITEA_IMAGE_WORKFLOW", "build-execution-image.yml"
             ),
             gitea_workflow_ref=_value("GITEA_WORKFLOW_REF", "refs/heads/main"),
-            gitea_package_owner=_value("GITEA_PACKAGE_OWNER", "image-builder"),
-            gitea_builder_token=_value("GITEA_BUILDER_TOKEN"),
             gitea_actions_token=_value("GITEA_ACTIONS_TOKEN"),
             node_binary=_value("NODE_BINARY", "/opt/homebrew/bin/node"),
             digital_twin_runner=(
@@ -122,11 +142,30 @@ class Settings:
             digital_twin_timeout_seconds=int(
                 os.getenv("DIGITAL_TWIN_TIMEOUT_SECONDS", "120")
             ),
+            music_generation_base_url=_value("MUSIC_GENERATION_BASE_URL"),
+            music_generation_timeout_seconds=int(
+                os.getenv("MUSIC_GENERATION_TIMEOUT_SECONDS", "600")
+            ),
+            music_ffmpeg_binary=_value(
+                "MUSIC_FFMPEG_BINARY", "/opt/homebrew/bin/ffmpeg"
+            ),
         )
 
     @property
     def artifact_workspaces(self) -> bool:
         return bool(self.artifact_endpoint_url)
+
+    @property
+    def execution_image_handoff_dir(self) -> Path:
+        if self.image_handoff_dir is not None:
+            return self.image_handoff_dir
+        if self.image_installer_cli is None:
+            raise RuntimeError("IMAGE_INSTALLER_CLI is required for execution image handoff")
+        return self.image_installer_cli.parents[3] / "gondolin-image-handoff"
+
+    @property
+    def music_generation_enabled(self) -> bool:
+        return bool(self.music_generation_base_url)
 
     def require_api(self) -> None:
         missing = []
@@ -139,9 +178,5 @@ class Settings:
                 missing.append("ARTIFACT_BUCKET")
             if not self.artifact_access_key or not self.artifact_secret_key:
                 missing.append("ARTIFACT_ACCESS_KEY/ARTIFACT_SECRET_KEY")
-            if not self.allowed_workspaces:
-                missing.append("ORCHESTRATOR_ALLOWED_WORKSPACES")
-        elif not self.workspace_roots:
-            missing.append("ORCHESTRATOR_WORKSPACE_ROOTS")
         if missing:
             raise RuntimeError("Missing secure orchestrator configuration: " + ", ".join(missing))

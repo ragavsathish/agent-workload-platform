@@ -2,7 +2,7 @@
 # This never exposes a port and must not be used as the production tunnel.
 services:
   tailscale:
-    entrypoint: ["/bin/sh", "-c", "exec sleep infinity"]
+    entrypoint: ["sleep", "infinity"]
     command: []
     healthcheck:
       test: ["CMD", "true"]

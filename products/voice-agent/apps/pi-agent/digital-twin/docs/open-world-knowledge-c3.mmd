@@ -1,0 +1,58 @@
+flowchart TB
+    owner["Owner / Reviewer<br/><small>[Person · HITL authority]</small><br/>Reviews candidates and governs ontology changes"]
+    sessions[("Pi Session Store<br/><small>[External container: PostgreSQL]</small><br/>Persists completed owner turns with origin metadata")]
+
+    subgraph runtime["Digital Twin Ingestion Runtime — Component view (C3 scope)"]
+        direction TB
+        intake["Transcript Intake & Fan-out<br/><small>[Component]</small><br/>Filters developer turns and creates independently retryable journal and classifier work"]
+        journal["Cognitive Journal Extractor<br/><small>[Component]</small><br/>Discovers grounded thoughts, ideas, questions, decisions, goals, learnings, or unclassified entries"]
+        classifier["SystemOne Classifier Client<br/><small>[Component]</small><br/>Chooses exactly one class from frozen ontology version N and applies the review threshold"]
+        candidate["Typed Candidate Extractor<br/><small>[Component]</small><br/>Extracts labels and verbatim evidence only for the selected assertion kind"]
+        validator["Schema & Grounding Validator<br/><small>[Component]</small><br/>Rejects invalid shapes, unsupported text, duplicate identities, and non-verbatim evidence"]
+        writer["Bounded Write Port<br/><small>[Component]</small><br/>Emits fixed-shape journal entries or pending-review candidates without database credentials"]
+
+        intake -->|"dispatches journal work"| journal
+        intake -->|"dispatches classifier work"| classifier
+        classifier -->|"supplies bounded assertion kind"| candidate
+        journal -->|"submits discovered entries"| validator
+        candidate -->|"submits typed candidates"| validator
+        validator -->|"emits validated payload"| writer
+    end
+
+    journal_model["Qwen / Ollama<br/><small>[External container: model service]</small><br/>Generates structured journal entries and candidate labels"]
+    systemone["Von / Clef SystemOne<br/><small>[External container: classifier service]</small><br/>Returns calibrated probabilities over the frozen class set"]
+    gateway["Agent Gateway Review API<br/><small>[External container: HITL boundary]</small><br/>Presents review actions, validates writes, and records owner feedback"]
+    oxigraph[("Oxigraph Knowledge Store<br/><small>[External container: RDF database]</small><br/>Open-world journal, review, accepted, feedback, and provenance graphs")]
+    learning["Learning & Ontology Governance<br/><small>[External container: offline toolchain]</small><br/>Curates reviewed evidence, proposes ontology versions, runs bounded autoresearch, and qualifies releases"]
+    assets[("Versioned Learning Assets<br/><small>[External container: Git + DVC]</small><br/>Ontology criteria, prompts, schemas, split manifests, baselines, and evaluation reports")]
+    promptfoo["Promptfoo + Journal Harnesses<br/><small>[External container: evaluation tools]</small><br/>Measure product behavior on development, challenge, and locked-holdout data"]
+
+    sessions -->|"provides completed owner turns"| intake
+    journal -->|"requests structured extraction"| journal_model
+    candidate -->|"requests grounded extraction"| journal_model
+    classifier -->|"requests closed-set classification"| systemone
+    writer -->|"posts fixed-shape payloads"| gateway
+    gateway -->|"writes journal and pending candidates"| oxigraph
+    owner -->|"keeps, edits, deletes, retypes, accepts, or rejects"| gateway
+    gateway -->|"records reviewed decisions"| oxigraph
+    oxigraph -->|"exports reviewed evidence only"| learning
+    learning -->|"runs fixed evaluators"| promptfoo
+    promptfoo -->|"returns metrics and gate results"| learning
+    learning -->|"publishes approved version N+1"| assets
+    assets -->|"loads frozen ontology N"| classifier
+    assets -->|"loads versioned schema, prompt, and examples"| journal
+    assets -->|"loads immutable datasets and baselines"| promptfoo
+
+    classDef hitl fill:#ccfbf1,stroke:#0f766e,color:#134e4a,stroke-width:3px;
+    classDef component fill:#dbeafe,stroke:#1d4ed8,color:#102a56,stroke-width:1.5px;
+    classDef openworld fill:#dcfce7,stroke:#15803d,color:#123d20,stroke-width:2px;
+    classDef closedworld fill:#fee2e2,stroke:#b91c1c,color:#531313,stroke-width:2px;
+    classDef governance fill:#f3e8ff,stroke:#7e22ce,color:#3b125d,stroke-width:1.5px;
+    classDef external fill:#f3f4f6,stroke:#4b5563,color:#1f2937,stroke-width:1.5px;
+
+    class owner,gateway hitl;
+    class intake,candidate,validator,writer component;
+    class journal,oxigraph openworld;
+    class classifier,systemone closedworld;
+    class learning,assets,promptfoo governance;
+    class sessions,journal_model external;

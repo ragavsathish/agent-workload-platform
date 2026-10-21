@@ -1,5 +1,6 @@
 import json
 from io import StringIO
+from typing import cast
 
 import pytest
 from voice_agent.tasking.application.pi_response import parse_pi_event_stream, response_from_text
@@ -93,7 +94,8 @@ def test_plain_response_gets_safe_presentation_fallback() -> None:
 
     assert response.spoken == 'Completed <unsafe> "work".'
     assert response.presentation["kind"] == "status"
-    assert response.presentation["nodes"][0]["label"] == 'Completed <unsafe> "work".'
+    nodes = cast(list[dict[str, object]], response.presentation["nodes"])
+    assert nodes[0]["label"] == 'Completed <unsafe> "work".'
 
 
 def test_rejects_incomplete_event_stream() -> None:

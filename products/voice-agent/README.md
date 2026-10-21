@@ -8,6 +8,29 @@ tool isolation are available.
 The [C4 architecture views](docs/architecture/README.md) include the deployment and security
 boundaries as authoritative Mermaid sources.
 
+[![Watch the narrated Voice Agent product tour](docs/assets/voice-agent-demo.png)](docs/assets/voice-agent-demo.mp4)
+
+[Read the timed video transcript](docs/assets/voice-agent-demo.srt).
+
+The conference-style tour starts with a developer who would rather listen to,
+see, and explore agent work than read long conversations. Public synthetic
+content shows a live voice session, a switch to durable work, and Mermaid,
+Marp, and editable Excalidraw views. Playwright Trace Viewer and Grafana let
+the developer inspect browser evidence and telemetry. Journal Review closes
+the story: source-backed, human-chosen knowledge may eventually shape a
+digital professional twin, but extraction alone is not memory. Rebuild its
+Playwright trace, narration, transcript, poster, and MP4 locally with
+`make playwright-readme-demo`; the workflow does not require Tailscale. Named
+`Tour:` steps are both browser actions and grounded speaker notes. Full-size
+1920×1080 MCP App captures preserve readable evidence, while the container
+worker emits Kokoro audio, captions, and payload-free render telemetry.
+
+Listen to **Let Me Hear the Work** in its
+[contemporary R&B](docs/assets/let-me-hear-the-work.m4a) or
+[late-1950s soul](docs/assets/let-me-hear-the-work-soul-take.m4a) arrangement.
+The [pull request soundtrack workflow](../../docs/pull-request-soundtrack-workflow.md)
+documents lyric review, durable rendering, artifact checks, and publication.
+
 ## Product structure
 
 Deployable processes live in `apps/`. Code shared by multiple apps lives in `packages/`.
@@ -82,13 +105,19 @@ tools still execute through Gondolin rather than in the voice stack.
 ```bash
 cd products/voice-agent
 make setup
-# Fill deploy/.env using deploy/.env.example, including fresh random secrets.
+# Configure deploy/.env and the service files under deploy/host-env.
 make pull-model
 make host-preflight
 make start
 make login
 make warm-models
 ```
+
+The repository-root `Makefile` is the main entry point. This product Makefile
+remains usable from this directory and owns product-specific orchestration.
+Every WASM module owns its build implementation in its component directory;
+run `make wasm-build`, `make wasm-check`, or `make wasm-install` here to invoke
+the same interface across all components.
 
 `make start` deploys in the background. Use `make up` to deploy and then follow
 bounded container output together with the native broker, Pi voice, and worker
@@ -131,6 +160,10 @@ name when the Mac itself is not connected as a Tailscale client.
 make status       # Compose services, tailnet state, native service state
 make start        # deploy, verify, and return after services become healthy
 make up           # deploy, verify, and follow service stdout
+make native-status # inspect all eight launchd services
+make native-start  # start the installed native services; Compose dependencies must be running
+make native-stop   # unload the native services in reverse order
+make native-restart # restart the native services and wait for model readiness
 make logs         # follow container and native-service stdout
 make verify       # isolation, capabilities, ingress, broker, and gateway checks
 make grafana-password # print the local Grafana credential after make up
@@ -146,14 +179,29 @@ make digital-twin-load-judge # load Selene with the API identifier used by the e
 make digital-twin-eval # compare Von, optional Jev, and local Clef; LM Studio Selene judges outputs
 make digital-twin-judge-calibration # run grouped development/holdout judge calibration
 make digital-twin-judge-report RESULTS=digital-twin/eval/results/judge-calibration.json
-make down         # stop Compose services; preserve Postgres and Tailscale volumes
+make down         # stop native and Compose services; preserve Postgres and Tailscale volumes
 make check        # tests, lint, type checks, build, Compose and plist validation
 ```
+
+`make start` installs and starts the native services after Postgres, S3Mock, and Gitea are healthy.
+Use `make native-start` after installation when those container dependencies are already running.
+`make native-stop` unloads the services, so launchd will not immediately restart jobs configured
+with `KeepAlive`. `make down` stops native services before stopping Compose. `make native-status`
+reads launchd state without changing it; `make verify` checks service readiness.
 
 Postgres and S3Mock are published only on host loopback so the native Pi worker can consume the
 queue and immutable workspace bundles. The bearer-protected agent gateway is also published on
 host loopback so the optional Pi voice backend can use bounded task-lifecycle and read-only
 personal-knowledge operations.
+The same gateway exposes a review-gated durable music workflow. Creating a generation starts an
+attachable Pi session that writes a bounded lyric manifest. A later explicit render command sends
+the reviewed manifest to a loopback-only ACE-Step host API, encodes the result as M4A, and stores it
+in S3Mock. The browser retrieves completed audio through the identity-checked edge proxy; model
+weights, S3 credentials, lyrics, and audio never enter MCP arguments or OpenTelemetry.
+The host-service install pins ACE-Step 1.5 in the persistent `PipecatEdge/apps/music-generation`
+directory and runs its loopback API as a launchd service. `make start` installs and starts it;
+`make status` shows its launchd state. The first start may take several minutes while the model
+downloads and loads. `make verify` checks that both audio and language models are ready.
 The native inference broker listens on `127.0.0.1:9443`; Docker Desktop makes that protected
 capability available through the private `inference-broker` host-gateway alias. No service listens
 on the Mac LAN interface; browser access is available only through the tailnet listener.
@@ -175,10 +223,13 @@ instruments the digest-verified VoxLock ONNX graph at build time to expose that 
 only frequency-band aggregates, not model tensors. The live view polls a bounded microphone
 envelope rather than sending replayable audio samples. Synthesized speech exists only in memory while
 streaming. Transcripts remain in the in-memory conversation context for the active call and are
-discarded with it. Postgres stores only an explicitly proposed task instruction. Queue workers run Pi
-with `--no-session`, and native
-launch services write stdout and stderr to `/dev/null`, so agent conversations are not retained as
-Pi session JSONL. The synthetic black-box runner reports event counts, never transcript text.
+discarded with it. Postgres stores only an explicitly proposed task instruction. Queue workers retain
+each durable Pi task as a local Pi session JSONL so the owner can attach the voice conversation to the
+still-running task. The native Rust `pi-task-rpc` supervisor owns Pi's JSONL protocol, process
+lifecycle, and a mode-0600 Unix socket that accepts only bounded conversational RPC commands; its
+outbound projection includes assistant text and command status, never model reasoning, tool arguments,
+or tool results. Native launch services still write stdout and stderr to `/dev/null`, and the synthetic
+black-box runner reports event counts, never transcript text.
 
 The server-side microphone filter is selected with `VOICE_INPUT_FILTER=rnnoise|voxlock`; RNNoise
 is the rollback default. Only the selected filter is initialized and executed; its output continues
@@ -263,6 +314,13 @@ headers; Traefik then uses the edge's forward-auth endpoint to require the exact
 before any route is served. Prometheus, OTLP, the Agent Gateway, S3Mock, Postgres, and the Traefik
 dashboard have no tailnet route.
 
+For browser testing on the Docker host, the voice UI is also available at
+<http://127.0.0.1:8080>. This ingress is published on host loopback only and maps to a separate
+Traefik entry point. Traefik marks requests from that entry point, while every tailnet router removes
+client-supplied copies of the marker. The edge accepts the marker only when
+`EDGE_ALLOW_LOCAL_INGRESS=true` and resolves it to the sole configured edge owner. Set
+`VOICE_LOCAL_PORT` to change the host port or `EDGE_ALLOW_LOCAL_INGRESS=false` to disable it.
+
 The black-box runner synthesizes speech with Kokoro, streams it through the same authenticated
 WebSocket used by the browser, transcribes it with Parakeet v3 on MLX, and exercises the LLM/tool path.
 Before Tailscale login it uses `deploy/compose.local-test.yml` as a non-listening network anchor;
@@ -290,6 +348,27 @@ The same VM mounts a read-only `oxigraph` CLI and reaches the loopback-published
 synthetic network origin. `oxigraph query`, `oxigraph update`, and `oxigraph graphs` intentionally
 provide unrestricted RDF access; they should be replaced by reviewed domain operations before this
 becomes a multi-user deployment.
+
+When a durable task is running, ask the voice agent to attach using the returned lowercase `task_id`.
+The first turn invokes `attach_task_session`; later voice turns are sent directly to that task's Pi RPC
+process and therefore use its existing context, workspace, tools, and Gondolin VM. No worker LLM,
+database transcript projection, or polling loop sits between the two sessions. Disconnecting voice
+releases the attachment, and an unattached settled task exits after the bounded RPC idle grace.
+Run `make pi-rpc-host-release` to produce a platform-labelled executable and SHA-256 manifest under
+`apps/pi-rpc-host/dist`. `make install-host-services` builds and installs that
+executable under `PipecatEdge/bin`; the worker's configured
+`PI_TASK_RPC_HOST_BINARY` points to the installed copy.
+Run `make pi-rpc-host-smoke` for a local, non-installing check of the worker, Rust supervisor, Pi,
+and Gondolin path. It reads the local worker environment, uses temporary session and socket
+directories under `/tmp`, emits only bounded status JSON, and does not restart deployed services.
+The worker propagates W3C trace context into the Rust process. With `OTEL_EXPORTER_OTLP_ENDPOINT`
+configured, Grafana Tempo shows `pipecat-task-worker.agent-task.pi-rpc` parenting
+`pi-task-rpc.session`, `pi-task-rpc.client.attached`, and `pi-task-rpc.command` spans. Search with
+`{ resource.service.name = "pi-task-rpc" }`; errors use OpenTelemetry error status and
+`app.outcome`, while Prometheus exposes the matching `pipecat_operation_total` and
+`pipecat_operation_duration_seconds` series. Telemetry contains operational names, bounded outcome
+labels, allowed command kinds, counts, and task UUID correlation only—never prompt, response,
+reasoning, tool, workspace-path, or exception text.
 Kokoro speaks the final text produced
 by Pi after any tool calls complete. `PI_VOICE_MODEL` selects the model; when blank, Pi uses its
 configured default. The VM image includes AWS CLI and receives mock-only credentials plus a
@@ -300,7 +379,7 @@ synthetic origin backed by Prometheus's loopback-only host port, so Pi can query
 receiving access to Grafana credentials or the Docker monitoring network.
 
 Gitea uses rootless mode, SQLite, and named Docker volumes. Registration and SSH are disabled.
-Actions schedule trusted image builds, while Packages store immutable project-image artifacts. `scripts/gitea-sync.sh`
+Actions schedule trusted image builds; completed image archives stay in the host's local handoff folder. `tools/ops/gitea_sync.py`
 creates the publisher account and repository idempotently, then
 mirrors only committed refs from this repository. Gitea is reachable from macOS only on
 `http://127.0.0.1:3001`; Gondolin can reach only its synthetic read endpoint and S3Mock, with all
@@ -312,12 +391,10 @@ The VM image includes the checksum-verified `tea` CLI. Deployment provisions a s
 VM configures that token as Tea login `local`; it cannot publish code or mutate issues and pull
 requests. The deployment-only `source-publisher` credential never enters the VM.
 
-Project-specific task images are declared in `.pi/gondolin.json`. On a cache miss, the task worker
-dispatches the repository's fixed Gitea workflow and checkpoints its run ID. One shared, capacity-one
-Gitea Runner executes trusted repository workflows inside a warm Gondolin builder VM. Its private
-Docker daemon keeps an `overlay2` layer cache; it never receives the macOS Docker socket. The VM
-publishes a checksummed archive and manifest to Gitea Generic Packages. The task worker verifies the
-manifest and digest before registering the requested Gondolin image reference. The builder VM is a
+Project-specific task images are declared in `.pi/gondolin.json`. Before Pi starts, the task worker
+checks the local versioned handoff folder and dispatches the repository's fixed Gitea workflow on a miss. One shared, capacity-one
+Gitea Runner executes trusted repository workflows inside a warm Gondolin builder VM. The build context is sent to the host Docker Job API, which builds through the host Docker Engine and writes the image tar to that handoff folder. The task worker imports the tar and registers the requested Gondolin image reference. Pi then starts one
+VM for the task's session using the repository's `.pi` policy. The builder VM is a
 shared trust domain, so only administrator-approved repositories may use its runner label.
 
 See [BENCHMARKS.md](BENCHMARKS.md) for the measured M4 Pro CPU, unified-memory, LLM throughput,

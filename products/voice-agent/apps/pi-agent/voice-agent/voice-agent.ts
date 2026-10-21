@@ -13,12 +13,16 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { GondolinSession } from "@agent-workload-platform/gondolin-session";
 
-import { parseVoiceTurn } from "./conversation.js";
+import { parseVoiceTurn, VOICE_TURN_ORIGIN_CUSTOM_TYPE } from "./conversation.js";
 import {
   assistantText,
   createGrafanaMcpRegistration,
+  createJournalReviewMcpRegistration,
+  createPlaywrightTraceMcpRegistration,
+  createRemoteTaskSessionRegistration,
   createWassetteMcpRegistration,
   isolatedVoiceMcpConfig,
+  PLAYWRIGHT_TRACE_TOOLS,
   skillResourceLoader,
 } from "./pi-session.js";
 import {
@@ -37,6 +41,7 @@ import {
   type PublicSessionSummary,
   readVoiceSession,
 } from "./voice-sessions.js";
+import { RemoteTaskSession } from "./remote-task-session.js";
 
 type GondolinTools = Awaited<ReturnType<GondolinSession["codingTools"]>>;
 type VoiceAgentSettings = Pick<
@@ -45,6 +50,11 @@ type VoiceAgentSettings = Pick<
   | "cwd"
   | "grafanaMcpToken"
   | "grafanaMcpUrl"
+  | "playwrightTraceArtifactRoot"
+  | "playwrightTraceOutputRoot"
+  | "playwrightTraceRenderer"
+  | "playwrightTraceViewerBaseUrl"
+  | "remoteTaskSocketDir"
   | "model"
   | "sessionDir"
   | "skillsDir"
@@ -73,6 +83,25 @@ type VoiceSessionState =
   }
   | { kind: "closed" };
 
+// Keep this as an additive selection. Passing plain tool names makes Pi treat
+// the list as an allowlist; once any mcp__ name is present, every other MCP
+// tool is discarded, including Wassette's deferred tools. Additive entries
+// preserve the MCP registry while still making the voice tools available.
+export const VOICE_INITIAL_TOOLS = [
+  "+read",
+  "+write",
+  "+edit",
+  "+bash",
+  "+tool_search",
+  "+mcp__grafana__search_tempo_traces",
+  "+mcp__grafana__get_tempo_trace",
+  ...PLAYWRIGHT_TRACE_TOOLS.map((name) => `+${name}`),
+  "+mcp__journal_review__render_journal_review",
+  "+mcp__journal_review__review_active",
+  "+mcp__journal_review__get_review_status",
+  "+attach_task_session",
+] as const;
+
 export function canManuallyCompact(
   tokens: number | null,
   keepRecentTokens: number,
@@ -92,6 +121,11 @@ function runtimeSettings(settings: ServiceSettings): VoiceAgentSettings {
     cwd: settings.cwd,
     grafanaMcpToken: settings.grafanaMcpToken,
     grafanaMcpUrl: settings.grafanaMcpUrl,
+    playwrightTraceArtifactRoot: settings.playwrightTraceArtifactRoot,
+    playwrightTraceOutputRoot: settings.playwrightTraceOutputRoot,
+    playwrightTraceRenderer: settings.playwrightTraceRenderer,
+    playwrightTraceViewerBaseUrl: settings.playwrightTraceViewerBaseUrl,
+    remoteTaskSocketDir: settings.remoteTaskSocketDir,
     model: settings.model,
     sessionDir: settings.sessionDir,
     skillsDir: settings.skillsDir,
@@ -111,6 +145,7 @@ export class VoiceAgent {
   private activeDeltaSink?: (delta: string) => void;
   private estimatedContextTokens?: number;
   private compacting = false;
+  private readonly remoteTask: RemoteTaskSession;
 
   private constructor(
     private readonly settings: VoiceAgentSettings,
@@ -124,6 +159,7 @@ export class VoiceAgent {
   ) {
     this.sessionState = { kind: "unbound", manager: persistedSession, systemPrompt: "" };
     this.transcript = transcript;
+    this.remoteTask = new RemoteTaskSession(settings.remoteTaskSocketDir, settings.timeoutMs);
   }
 
   static async create(settings: ServiceSettings): Promise<VoiceAgent> {
@@ -192,9 +228,15 @@ export class VoiceAgent {
     this.replaceWithUnbound(sessionManager, systemPrompt);
     const resourceLoader = await skillResourceLoader(systemPrompt, this.settings, [
       createToolSearchExtension(),
-      createMcpExtension({ loadConfig: isolatedVoiceMcpConfig }),
+      createMcpExtension({
+        loadConfig: isolatedVoiceMcpConfig,
+        logPath: join(this.settings.agentDir, "mcp.log"),
+      }),
       createWassetteMcpRegistration(this.settings),
       createGrafanaMcpRegistration(this.settings),
+      createPlaywrightTraceMcpRegistration(this.settings),
+      createJournalReviewMcpRegistration(),
+      createRemoteTaskSessionRegistration(this.remoteTask),
     ]);
     const model = this.settings.model
       ? this.modelRuntime.getModel(this.settings.model.provider, this.settings.model.modelId)
@@ -208,13 +250,7 @@ export class VoiceAgent {
       modelRuntime: this.modelRuntime,
       model,
       thinkingLevel: this.settings.thinking,
-      tools: [
-        "read",
-        "write",
-        "edit",
-        "bash",
-        "tool_search",
-      ],
+      tools: [...VOICE_INITIAL_TOOLS],
       customTools: this.gondolinTools,
       resourceLoader,
       sessionManager,
@@ -273,6 +309,7 @@ export class VoiceAgent {
     if (this.operations.isBusy()) {
       throw new Error("Pi is busy; stop or finish the active turn before starting a new session");
     }
+    void this.remoteTask.detach();
     const manager = SessionManager.create(this.settings.cwd, this.settings.sessionDir);
     this.replaceWithUnbound(manager);
     this.persistedContextTokens = null;
@@ -286,6 +323,7 @@ export class VoiceAgent {
     if (this.operations.isBusy()) {
       throw new Error("Pi is busy; stop or finish the active turn before resuming a session");
     }
+    void this.remoteTask.detach();
     const path = SessionManager.findById(this.settings.cwd, sessionId, this.settings.sessionDir);
     if (!path) return undefined;
     const manager = SessionManager.open(path, this.settings.sessionDir, this.settings.cwd);
@@ -353,7 +391,27 @@ export class VoiceAgent {
 
   private runTurn(rawMessages: unknown, onDelta?: (delta: string) => void): Promise<string> {
     return this.operations.run("turn", async () => {
-      const { systemPrompt, prompt } = parseVoiceTurn(rawMessages);
+      const { systemPrompt, prompt, origin } = parseVoiceTurn(rawMessages);
+      if (this.remoteTask.attachedTaskId) {
+        this.transcript.addUser(prompt);
+        const assistantId = this.transcript.beginAssistant();
+        let streamed = "";
+        try {
+          const text = await this.remoteTask.send(prompt, (delta) => {
+            streamed += delta;
+            this.transcript.appendAssistantText(assistantId, delta);
+            onDelta?.(delta);
+          });
+          if (text.startsWith(streamed) && text.length > streamed.length) {
+            const remainder = text.slice(streamed.length);
+            this.transcript.appendAssistantText(assistantId, remainder);
+            onDelta?.(remainder);
+          }
+          return text;
+        } finally {
+          this.transcript.finishAssistant(assistantId);
+        }
+      }
       if (this.sessionState.kind !== "active" || this.sessionState.systemPrompt !== systemPrompt) {
         await this.newSession(systemPrompt);
       }
@@ -368,6 +426,7 @@ export class VoiceAgent {
         void session.abort();
       }, this.settings.timeoutMs);
       try {
+        session.sessionManager.appendCustomEntry(VOICE_TURN_ORIGIN_CUSTOM_TYPE, { origin });
         await session.prompt(prompt, { expandPromptTemplates: false, source: "rpc" });
         await session.waitForIdle();
       } finally {
@@ -388,7 +447,12 @@ export class VoiceAgent {
   }
 
   async abort(): Promise<void> {
-    await this.activeSession()?.abort();
+    if (this.remoteTask.attachedTaskId) await this.remoteTask.abort();
+    else await this.activeSession()?.abort();
+  }
+
+  async detachTaskSession(): Promise<void> {
+    await this.remoteTask.detach();
   }
 
   async close(): Promise<void> {
@@ -399,6 +463,7 @@ export class VoiceAgent {
       await session.abort().catch(() => undefined);
       session.dispose();
     }
+    await this.remoteTask.detach();
     await this.gondolin.close();
   }
 }

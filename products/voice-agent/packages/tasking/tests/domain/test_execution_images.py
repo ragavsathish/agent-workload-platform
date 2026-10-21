@@ -59,6 +59,7 @@ def test_loads_a_deterministic_project_image_build_plan(tmp_path: Path) -> None:
     assert plan is not None
     assert plan.config_path == Path(".pi/gondolin.json")
     assert plan.image_ref == "project-build:v1"
+    assert plan.installed_image_ref == f"project-build:v1-{plan.artifact_version}"
     assert plan.context == Path("container")
     assert plan.dockerfile == Path("container/Dockerfile")
     assert plan.asset_config == Path("images/build.json")

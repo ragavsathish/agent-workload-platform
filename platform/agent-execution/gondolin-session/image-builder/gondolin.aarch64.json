@@ -16,7 +16,7 @@
   },
   "rootfs": {
     "label": "agent-image-builder",
-    "sizeMb": 2048
+    "sizeMb": 8192
   },
   "runtimeDefaults": {
     "rootfsMode": "cow"

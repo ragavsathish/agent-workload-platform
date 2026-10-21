@@ -1,0 +1,8 @@
+[core]
+    remote = local-s3mock
+['remote "local-s3mock"']
+    url = s3://agent-artifacts/dvc/digital-twin
+    endpointurl = http://127.0.0.1:9090
+    region = us-east-1
+    use_ssl = false
+    jobs = 4

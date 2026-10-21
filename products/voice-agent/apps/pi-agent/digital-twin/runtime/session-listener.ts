@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import process from "node:process";
 
 import { SessionManager, type SessionEntry } from "@earendil-works/pi-coding-agent";
+import { VOICE_TURN_ORIGIN_CUSTOM_TYPE } from "../../voice-agent/conversation.js";
 
 export type CompletedOwnerTurn = {
   sessionId: string;
@@ -44,11 +45,22 @@ export function completedOwnerTurns(
 ): CompletedOwnerTurn[] {
   const completed: CompletedOwnerTurn[] = [];
   let pending: CompletedOwnerTurn[] = [];
+  let nextTurnOrigin: "user" | "developer" | undefined;
   for (const entry of entries) {
+    if (entry.type === "custom" && entry.customType === VOICE_TURN_ORIGIN_CUSTOM_TYPE) {
+      const data = entry.data;
+      if (data && typeof data === "object" && !Array.isArray(data)) {
+        const origin = (data as Record<string, unknown>).origin;
+        nextTurnOrigin = origin === "developer" ? "developer" : origin === "user" ? "user" : undefined;
+      }
+      continue;
+    }
     if (entry.type !== "message") continue;
     if (entry.message.role === "user") {
       const transcript = messageText(entry.message.content);
-      if (transcript) {
+      const origin = nextTurnOrigin;
+      nextTurnOrigin = undefined;
+      if (transcript && origin !== "developer") {
         pending.push({
           sessionId,
           messageId: entry.id,
@@ -59,6 +71,7 @@ export function completedOwnerTurns(
     } else if (entry.message.role === "assistant" && pending.length > 0) {
       completed.push(...pending);
       pending = [];
+      nextTurnOrigin = undefined;
     }
   }
   return completed;

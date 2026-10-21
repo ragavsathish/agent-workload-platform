@@ -1,0 +1,28 @@
+name: Prepare Compose image cache
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_revision:
+        description: Immutable Git revision containing the Compose file
+        required: true
+        type: string
+
+jobs:
+  prepare:
+    runs-on: gondolin-builder
+    timeout-minutes: 90
+    steps:
+      - name: Check out the requested revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ inputs.source_revision }}
+      - name: Request host pull of Compose images
+        shell: bash
+        env:
+          COMPOSE_CACHE_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          docker compose -f products/voice-agent/deploy/compose.yml config \
+            --format json --no-env-resolution --no-interpolate |
+            /usr/local/bin/gondolin-oci compose pull --via-api - "$COMPOSE_CACHE_RUN_ID"

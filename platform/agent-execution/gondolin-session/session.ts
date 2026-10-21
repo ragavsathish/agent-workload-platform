@@ -2,12 +2,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import { randomUUID } from "node:crypto";
 
 import {
   createHttpHooks,
   ReadonlyProvider,
   RealFSProvider,
   VM,
+  VmCheckpoint,
   type CreateHttpHooksOptions,
   type ExecOptions,
   type ExecProcess,
@@ -51,10 +53,13 @@ export type GondolinSessionOptions = {
   environment?: Record<string, string>;
   dns?: VMOptions["dns"];
   sandbox?: Omit<NonNullable<VMOptions["sandbox"]>, "imagePath" | "netEnabled">;
+  rootfs?: VMOptions["rootfs"];
+  maxHttpResponseBodyBytes?: number;
   startupCommands?: readonly (readonly string[])[];
   memory?: string;
   cpus?: number;
   sessionLabel?: string;
+  resumeCheckpointPath?: string;
 };
 
 class GondolinMcpTransport implements McpTransport {
@@ -217,12 +222,41 @@ export class GondolinSession {
     try {
       await vm?.close();
     } finally {
-      if (this.metricsRegistration) {
-        fs.rmSync(this.metricsRegistration, { force: true });
-        this.metricsRegistration = undefined;
-      }
-      fs.rmSync(this.outputDirectory, { recursive: true, force: true });
+      this.cleanupHostResources();
     }
+  }
+
+  /** Stop the VM and atomically replace its disk-only checkpoint. */
+  async checkpoint(checkpointPath: string): Promise<void> {
+    const vm = this.vm ?? await this.vmPromise?.catch(() => undefined);
+    this.vm = undefined;
+    this.vmPromise = undefined;
+    if (!vm) {
+      this.cleanupHostResources();
+      return;
+    }
+    const staged = `${checkpointPath}.${randomUUID()}.tmp.qcow2`;
+    try {
+      fs.mkdirSync(path.dirname(checkpointPath), { recursive: true, mode: 0o700 });
+      await vm.checkpoint(staged);
+      fs.chmodSync(staged, 0o600);
+      fs.renameSync(staged, checkpointPath);
+    } finally {
+      try {
+        await vm.close();
+      } finally {
+        fs.rmSync(staged, { force: true });
+        this.cleanupHostResources();
+      }
+    }
+  }
+
+  private cleanupHostResources(): void {
+    if (this.metricsRegistration) {
+      fs.rmSync(this.metricsRegistration, { force: true });
+      this.metricsRegistration = undefined;
+    }
+    fs.rmSync(this.outputDirectory, { recursive: true, force: true });
   }
 
   private async ensureVm(): Promise<VM> {
@@ -253,7 +287,7 @@ export class GondolinSession {
     );
     const configuredMemory = this.options.memory ?? "2G";
     const configuredCpus = this.options.cpus ?? 2;
-    const vm = await VM.create({
+    const vmOptions: VMOptions = {
       sandbox: {
         ...this.options.sandbox,
         imagePath: this.options.imagePath,
@@ -263,17 +297,30 @@ export class GondolinSession {
       env: { ...network?.env, ...this.options.environment },
       dns: this.options.dns,
       vfs: { mounts },
+      rootfs: this.options.rootfs,
+      maxHttpResponseBodyBytes: this.options.maxHttpResponseBodyBytes,
       memory: configuredMemory,
       cpus: configuredCpus,
       sessionLabel: this.options.sessionLabel ?? "pi-playwright-mcp",
-    });
+    };
+    const checkpointPath = this.options.resumeCheckpointPath;
+    const vm = checkpointPath && fs.existsSync(checkpointPath)
+      ? await VmCheckpoint.load(checkpointPath).resume<VM>(vmOptions)
+      : await VM.create(vmOptions);
     await vm.start();
     try {
       for (const command of this.options.startupCommands ?? []) {
         if (command.length === 0) throw new Error("Gondolin startup command must not be empty");
         const result = await vm.exec([...command]);
         if (!result.ok) {
-          throw new Error(`Gondolin startup command ${command[0]} exited with code ${result.exitCode}`);
+          const output = [result.stderr.trim(), result.stdout.trim()]
+            .filter(Boolean)
+            .join("\n")
+            .slice(-4_000);
+          throw new Error(
+            `Gondolin startup command ${command[0]} exited with code ${result.exitCode}`
+            + (output ? `:\n${output}` : ""),
+          );
         }
       }
       this.registerMetrics(vm, configuredCpus, configuredMemory);

@@ -1,0 +1,22 @@
+---
+- name: Render benchmark Markdown report
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/benchmark-report.md.j2"
+    dest: "{{ benchmark_run.report_dir }}/report.md"
+    mode: "0600"
+  when: benchmark_run.report_dir is defined
+
+- name: Show benchmark report locations
+  ansible.builtin.debug:
+    msg:
+      - "Markdown: {{ benchmark_run.report_dir }}/report.md"
+      - "JSON: {{ benchmark_run.json_report }}"
+      - "Evidence: {{ benchmark_run.evidence_path | default('unavailable', true) }}"
+  when: benchmark_run.report_dir is defined
+
+- name: Fail after preserving benchmark report
+  ansible.builtin.assert:
+    that: benchmark_run.success | default(false)
+    fail_msg: >-
+      Benchmark failed: {{ benchmark_run.error | default('module did not return a result', true) }}.
+      Inspect {{ benchmark_run.report_dir | default('the Ansible task output') }}.

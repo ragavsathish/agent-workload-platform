@@ -1,0 +1,22 @@
+---
+- name: "Recreate Compose deployment for cycle {{ lifecycle_cycle }}"
+  community.docker.docker_compose_v2:
+    project_src: "{{ compose_project_src }}"
+    files: "{{ compose_files }}"
+    env_files: "{{ compose_env_files }}"
+    project_name: "{{ compose_project_name }}"
+    state: present
+    recreate: always
+    wait: true
+
+- name: "Verify cycle {{ lifecycle_cycle }}"
+  ansible.builtin.include_role:
+    name: verify_infrastructure
+
+- name: "Stop Compose deployment after cycle {{ lifecycle_cycle }}"
+  community.docker.docker_compose_v2:
+    project_src: "{{ compose_project_src }}"
+    files: "{{ compose_files }}"
+    env_files: "{{ compose_env_files }}"
+    project_name: "{{ compose_project_name }}"
+    state: stopped

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Digital Twin Oumi"
+  short_description: "Run gated Oumi training research safely"
+  default_prompt: "Use $digital-twin-oumi to prepare, run, and qualify a bounded Oumi training or autoresearch experiment."

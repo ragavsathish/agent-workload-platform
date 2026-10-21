@@ -8,7 +8,7 @@ function parseOutput(output) {
   return JSON.parse(normalized);
 }
 
-function normalized(output) {
+function normalized(output, reviewThreshold) {
   const payload = parseOutput(output);
   const answers = payload.answers && typeof payload.answers === "object" ? payload.answers : payload;
   const kind = answers.assertion_kind;
@@ -16,14 +16,14 @@ function normalized(output) {
   if (!kind || !KINDS.includes(kind.choice)) throw new Error("missing valid assertion_kind.choice");
   const kindConfidence = Number(kind.confidence);
   const fieldConfidence = Number(field?.confidence);
-  const review = kind.choice !== "none" && (
+  const review = typeof payload.review === "boolean" ? payload.review : kind.choice !== "none" && (
     !Number.isFinite(kindConfidence)
-    || kindConfidence < 0.82
+    || kindConfidence < reviewThreshold
     || (kind.choice === "profile_update" && (
       !field?.choice
       || field.choice === "none"
       || !Number.isFinite(fieldConfidence)
-      || fieldConfidence < 0.82
+      || fieldConfidence < reviewThreshold
     ))
   );
   return { kind, field, review };
@@ -48,7 +48,13 @@ export default function classificationAssertion(output, context) {
   const expected = context.vars.expectedKind;
   let prediction;
   try {
-    prediction = normalized(output);
+    const configuredThreshold = Number(
+      context?.config?.reviewThreshold
+      ?? process.env.DIGITAL_TWIN_REVIEW_THRESHOLD
+      ?? 0.60,
+    );
+    const reviewThreshold = Number.isFinite(configuredThreshold) ? configuredThreshold : 0.60;
+    prediction = normalized(output, reviewThreshold);
   } catch (error) {
     return result(0, error instanceof Error ? error.message : "invalid classifier output");
   }

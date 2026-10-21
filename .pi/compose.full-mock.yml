@@ -1,0 +1,172 @@
+name: awp-task-full-mock
+
+# Full application Compose stack for Gondolin. Host networking is required
+# because the guest daemon cannot create bridge networks; service DNS is mapped
+# to loopback explicitly. The inference broker and tailnet identity/ingress are
+# the only external dependencies replaced for this local benchmark profile.
+services:
+  s3mock-init:
+    profiles: !reset []
+    network_mode: none
+    networks: !reset []
+    volumes: !override [s3-dev-data:/s3mockroot]
+
+  trace-render-worker:
+    profiles: !reset []
+    network_mode: host
+    networks: !reset []
+    ports: !reset []
+    extra_hosts: !reset []
+    environment:
+      ARTIFACT_ENDPOINT_URL: http://127.0.0.1:9092
+      INFERENCE_BROKER_BASE_URL: http://127.0.0.1:9443/v1
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://127.0.0.1:4318
+
+  oxigraph-init:
+    profiles: !reset []
+    network_mode: none
+    networks: !reset []
+    volumes: !override [oxigraph-dev-data:/data]
+
+  habitat:
+    profiles: !reset []
+    network_mode: host
+    networks: !reset []
+    ports: !reset []
+    environment:
+      HABITAT_DB_HOST: 127.0.0.1
+
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?missing postgres password}
+    volumes:
+      - /var/lib/gondolin-full-mock-secrets/compose-full-mock-init.sql:/docker-entrypoint-initdb.d/20-habitat-role.sql:ro
+
+  fluent-bit:
+    profiles: !reset []
+    network_mode: host
+    networks: !reset []
+
+  otel-lgtm:
+    profiles: !reset []
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?missing Grafana admin password}
+
+  grafana-mcp-bootstrap:
+    profiles: !reset []
+    network_mode: host
+    networks: !reset []
+    depends_on: !override
+      otel-lgtm:
+        condition: service_started
+    environment:
+      GRAFANA_URL: http://127.0.0.1:3000
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://127.0.0.1:4317
+    volumes: !override
+      - grafana-mcp-token:/var/lib/grafana-mcp
+      - /var/lib/gondolin-full-mock-secrets/bootstrap-grafana-mcp.sh:/bootstrap-grafana-mcp.sh:ro
+
+  grafana-mcp:
+    profiles: !reset []
+    network_mode: host
+    networks: !reset []
+    ports: !reset []
+    environment:
+      GRAFANA_URL: http://127.0.0.1:3000
+    user: "0:0"
+    volumes: !override
+      - grafana-mcp-token:/var/lib/grafana-mcp:ro
+      - /var/lib/gondolin-full-mock-secrets/run-grafana-mcp.sh:/run-grafana-mcp.sh:ro
+
+  agent-gateway:
+    profiles: !reset []
+    network_mode: host
+    networks: !reset []
+    ports: !reset []
+    depends_on: !override
+      postgres:
+        condition: service_healthy
+      s3mock:
+        condition: service_healthy
+      otel-lgtm:
+        condition: service_started
+      oxigraph:
+        condition: service_started
+    environment:
+      ARTIFACT_ENDPOINT_URL: http://127.0.0.1:9092
+      OXIGRAPH_QUERY_URL: http://127.0.0.1:7878/query
+      OXIGRAPH_UPDATE_URL: http://127.0.0.1:7878/update
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://127.0.0.1:4318
+
+  traefik:
+    profiles: !reset []
+    network_mode: host
+    networks: !reset []
+    depends_on: !override
+      gitea:
+        condition: service_healthy
+      habitat:
+        condition: service_healthy
+      otel-lgtm:
+        condition: service_started
+      voice-edge:
+        condition: service_healthy
+    volumes: !override
+      - /var/lib/gondolin-full-mock-secrets/traefik.yml:/etc/traefik/traefik.yml:ro
+      - /var/lib/gondolin-full-mock-secrets/traefik-routes.yml:/etc/traefik/routes.yml:ro
+
+  voice-edge:
+    profiles: !reset []
+    network_mode: host
+    networks: !reset []
+    ports: !reset []
+    depends_on: !override
+      agent-gateway:
+        condition: service_started
+      grafana-mcp:
+        condition: service_started
+    secrets: !override [broker-token, agent-gateway-token, grafana-mcp-caller-token]
+    environment:
+      INFERENCE_BROKER_BASE_URL: http://127.0.0.1:9443/v1
+      AGENT_GATEWAY_BASE_URL: http://127.0.0.1:9444/v1
+      GRAFANA_MCP_URL: http://127.0.0.1:8000/mcp
+      PLAYWRIGHT_TRACE_VIEWER_INTERNAL_BASE_URL: http://127.0.0.1:9450
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://127.0.0.1:4318
+      INFERENCE_BROKER_TOKEN: ${INFERENCE_BROKER_TOKEN:?missing inference mock token}
+      AGENT_GATEWAY_TOKEN: ${AGENT_GATEWAY_TOKEN:?missing gateway token}
+      GRAFANA_MCP_SERVER_TOKEN: ${GRAFANA_MCP_SERVER_TOKEN:?missing Grafana MCP token}
+      VOICE_DEFAULT_WORKSPACE: /workspace
+      EDGE_ALLOWED_USERS: patrol@example.test
+      PIPECAT_ALLOWED_ORIGINS: http://127.0.0.1:7860,http://localhost:7860
+      EDGE_LOCAL_ORIGINS: http://127.0.0.1:7860,http://localhost:7860
+      EDGE_ALLOW_LOCAL_INGRESS: "true"
+      VOICE_LLM_BACKEND: pi
+      VOICE_INPUT_FILTER: rnnoise
+      VOICE_DIAGNOSTIC_DIR: /tmp/voice-diagnostics
+
+  tailscale:
+    profiles: [tailnet-mock]
+
+secrets:
+  broker-token:
+    file: /var/lib/gondolin-full-mock-secrets/broker-token
+  agent-gateway-token:
+    file: /var/lib/gondolin-full-mock-secrets/agent-gateway-token
+  digital-twin-reader-token:
+    file: /var/lib/gondolin-full-mock-secrets/digital-twin-reader-token
+  digital-twin-writer-token:
+    file: /var/lib/gondolin-full-mock-secrets/digital-twin-writer-token
+  postgres-password:
+    file: /var/lib/gondolin-full-mock-secrets/postgres-password
+  database-url:
+    file: /var/lib/gondolin-full-mock-secrets/database-url
+  habitat-database-password:
+    file: /var/lib/gondolin-full-mock-secrets/habitat-database-password
+  approval-secret:
+    file: /var/lib/gondolin-full-mock-secrets/approval-secret
+  grafana-admin-password:
+    file: /var/lib/gondolin-full-mock-secrets/grafana-admin-password
+  grafana-mcp-caller-token:
+    file: /var/lib/gondolin-full-mock-secrets/grafana-mcp-caller-token
+  voxlock-voice-sample:
+    file: /workspace/products/voice-agent/deploy/secrets/voxlock-voice-sample.wav

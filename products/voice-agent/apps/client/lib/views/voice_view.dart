@@ -13,9 +13,17 @@ import '../widgets/mcp_app_view.dart';
 enum VoicePhase { ready, starting, listening, muted, thinking, speaking }
 
 class VoiceView extends StatefulWidget {
-  const VoiceView({required this.api, this.session, super.key});
+  const VoiceView({
+    required this.api,
+    this.session,
+    this.initialPresentation,
+    this.initialResourceUri = 'ui://mermaid/main',
+    super.key,
+  });
   final VoiceApi api;
   final VoiceSession? session;
+  final JsonMap? initialPresentation;
+  final String initialResourceUri;
 
   @override
   State<VoiceView> createState() => _VoiceViewState();
@@ -37,14 +45,31 @@ class _VoiceViewState extends State<VoiceView> {
   @override
   void initState() {
     super.initState();
+    _presentation = widget.initialPresentation;
+    _resourceUri = widget.initialResourceUri;
     _ownsSession = widget.session == null;
     _session = widget.session ?? createVoiceSession();
     _eventSubscription = _session.events.listen(_handleEvent);
     _refreshContext();
+    _restorePresentation();
     _contextTimer = Timer.periodic(
       const Duration(seconds: 10),
       (_) => _refreshContext(),
     );
+  }
+
+  Future<void> _restorePresentation() async {
+    if (_presentation != null) return;
+    try {
+      final response = (await widget.api.transcript()).latestVisualResponse;
+      if (!mounted || response == null || _presentation != null) return;
+      setState(() {
+        _presentation = response.presentation;
+        _resourceUri = response.resourceUri;
+      });
+    } on Object {
+      // The visual is recoverable state; keep voice controls usable when absent.
+    }
   }
 
   @override

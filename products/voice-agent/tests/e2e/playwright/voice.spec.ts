@@ -44,6 +44,10 @@ test('renders the official Grafana trace MCP App inside voice chat', async ({
   page,
   browserEvidence,
 }, testInfo) => {
+  test.skip(
+    process.env.VOICE_E2E_INGRESS !== 'tailscale',
+    'Grafana remains an explicit authenticated tailnet-ingress test',
+  );
   const traceId = process.env.GRAFANA_TRACE_ID;
   expect(traceId).toMatch(/^[0-9a-f]{32}$/);
   await page.goto('/', { waitUntil: 'networkidle' });

@@ -18,7 +18,14 @@ from voice_agent.tasking.domain.approval import (
     plan_hash,
     verify_approval,
 )
+from voice_agent.tasking.domain.session_albums import (
+    album_by_key,
+    least_used_album_for_session,
+    session_name_for_take,
+)
 from voice_agent.tasking.domain.workspaces import (
+    SCRATCH_WORKSPACE,
+    is_scratch_workspace,
     resolve_workspace,
     validate_workspace_boundary,
 )
@@ -28,6 +35,39 @@ from voice_agent.tasking.infrastructure.config import Settings
 
 class ProposalError(ValueError):
     """A safe proposal lifecycle error."""
+
+
+def bounded_trace_context(carrier: dict[str, str] | None) -> dict[str, str]:
+    """Keep only bounded W3C context required to continue a durable trace."""
+    if carrier is None:
+        return {}
+    return {
+        key: value
+        for key in ("traceparent", "tracestate")
+        if isinstance((value := carrier.get(key)), str) and 0 < len(value) <= 512
+    }
+
+
+def persisted_plan_hash_is_valid(row: dict[str, Any]) -> bool:
+    named = plan_hash(
+        {
+            "instruction": row["instruction"],
+            "workspace": row["workspace"],
+            "session_album_key": row["session_album_key"],
+            "session_name": row["session_name"],
+        }
+    )
+    album_only = plan_hash(
+        {
+            "instruction": row["instruction"],
+            "workspace": row["workspace"],
+            "session_album_key": row["session_album_key"],
+        }
+    )
+    legacy = plan_hash(
+        {"instruction": row["instruction"], "workspace": row["workspace"]}
+    )
+    return row["plan_hash"] in {named, album_only, legacy}
 
 
 class TaskService:
@@ -49,6 +89,8 @@ class TaskService:
         cleaned = instruction.strip()
         if not cleaned:
             raise ProposalError("instruction cannot be empty")
+        if is_scratch_workspace(workspace):
+            return {"instruction": cleaned, "workspace": SCRATCH_WORKSPACE}
         if self.artifacts:
             resolved = self.artifacts.resolve_workspace(
                 workspace, self.settings.allowed_workspaces
@@ -69,8 +111,8 @@ class TaskService:
         message_id: str,
         transcript: str,
         captured_at: str,
-    ) -> dict[str, str]:
-        """Persist one owner turn as an idempotent background ingestion task."""
+    ) -> dict[str, Any]:
+        """Fan one owner turn out to independently retryable ingestion tasks."""
 
         text = transcript.strip()
         if not text:
@@ -79,36 +121,77 @@ class TaskService:
             raise ProposalError("transcript is too large")
         if not session_id.strip() or not message_id.strip():
             raise ProposalError("session_id and message_id are required")
-        idempotency_key = f"digital-twin:{session_id.strip()}:{message_id.strip()}"
-        with closing(Absurd(self.settings.database_url, queue_name=self.settings.queue)) as absurd:
-            spawned = absurd.spawn(
-                "digital-twin-ingest",
-                {
-                    "identity": identity,
-                    "sessionId": session_id.strip(),
-                    "messageId": message_id.strip(),
-                    "transcript": text,
-                    "capturedAt": captured_at,
-                },
-                max_attempts=3,
-                queue=self.settings.queue,
-                cancellation={"max_duration": 180},
-                idempotency_key=idempotency_key,
-            )
-        return {"task_id": str(spawned["task_id"]), "idempotency_key": idempotency_key}
+        source_key = f"{session_id.strip()}:{message_id.strip()}"
+        tasks: dict[str, dict[str, str]] = {}
+        with closing(
+            Absurd(self.settings.database_url, queue_name=self.settings.queue)
+        ) as absurd:
+            for mode in ("journal", "classify"):
+                idempotency_key = f"digital-twin:{mode}:{source_key}"
+                spawned = absurd.spawn(
+                    f"digital-twin-{mode}",
+                    {
+                        "mode": mode,
+                        "identity": identity,
+                        "sessionId": session_id.strip(),
+                        "messageId": message_id.strip(),
+                        "transcript": text,
+                        "capturedAt": captured_at,
+                    },
+                    max_attempts=3,
+                    queue=self.settings.queue,
+                    cancellation={"max_duration": 180},
+                    idempotency_key=idempotency_key,
+                )
+                tasks[mode] = {
+                    "task_id": str(spawned["task_id"]),
+                    "idempotency_key": idempotency_key,
+                }
+        return {"tasks": tasks}
 
-    def propose(self, *, identity: str, instruction: str, workspace: str) -> dict[str, Any]:
+    def propose(
+        self, *, identity: str, instruction: str, workspace: str
+    ) -> dict[str, Any]:
         plan = self._plan(instruction, workspace)
         proposal_id = str(uuid.uuid4())
-        digest = plan_hash(plan)
-        expires_at = datetime.now(UTC) + timedelta(seconds=self.settings.approval_ttl_seconds)
+        expires_at = datetime.now(UTC) + timedelta(
+            seconds=self.settings.approval_ttl_seconds
+        )
         with psycopg.connect(self.settings.database_url) as conn:
             with conn.cursor(row_factory=dict_row) as cursor:
                 cursor.execute(
+                    "SELECT pg_advisory_xact_lock(hashtext(%s))",
+                    (f"session-album:{identity}",),
+                )
+                cursor.execute(
+                    """
+                    SELECT session_album_key, count(*) AS count
+                    FROM voice_task_proposals
+                    WHERE identity = %s
+                    GROUP BY session_album_key
+                    """,
+                    (identity,),
+                )
+                usage = {
+                    str(row["session_album_key"]): int(row["count"])
+                    for row in cursor.fetchall()
+                }
+                session_album = least_used_album_for_session(proposal_id, usage)
+                take = usage.get(session_album.key, 0) + 1
+                session_name = session_name_for_take(session_album, take)
+                digest = plan_hash(
+                    {
+                        **plan,
+                        "session_album_key": session_album.key,
+                        "session_name": session_name,
+                    }
+                )
+                cursor.execute(
                     """
                     INSERT INTO voice_task_proposals
-                        (id, identity, instruction, workspace, plan_hash, status, expires_at)
-                    VALUES (%s, %s, %s, %s, %s, 'pending', %s)
+                        (id, identity, instruction, workspace, session_album_key,
+                         session_name, plan_hash, status, expires_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, 'pending', %s)
                     RETURNING *
                     """,
                     (
@@ -116,6 +199,8 @@ class TaskService:
                         identity,
                         plan["instruction"],
                         plan["workspace"],
+                        session_album.key,
+                        session_name,
                         digest,
                         expires_at,
                     ),
@@ -125,18 +210,31 @@ class TaskService:
             raise RuntimeError("proposal insert returned no row")
         return self._view(row, include_token=True)
 
-    def list(self, *, identity: str, limit: int = 50) -> list[dict[str, Any]]:
+    def list(
+        self, *, identity: str, limit: int = 50, session_name: str | None = None
+    ) -> list[dict[str, Any]]:
         with psycopg.connect(self.settings.database_url) as conn:
             with conn.cursor(row_factory=dict_row) as cursor:
-                cursor.execute(
-                    """
-                    SELECT * FROM voice_task_proposals
-                    WHERE identity = %s
-                    ORDER BY created_at DESC
-                    LIMIT %s
-                    """,
-                    (identity, min(max(limit, 1), 100)),
-                )
+                if session_name is None:
+                    cursor.execute(
+                        """
+                        SELECT * FROM voice_task_proposals
+                        WHERE identity = %s
+                        ORDER BY created_at DESC
+                        LIMIT %s
+                        """,
+                        (identity, min(max(limit, 1), 100)),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        SELECT * FROM voice_task_proposals
+                        WHERE identity = %s AND session_name = %s
+                        ORDER BY created_at DESC
+                        LIMIT %s
+                        """,
+                        (identity, session_name.strip(), min(max(limit, 1), 100)),
+                    )
                 rows = cursor.fetchall()
         return [self._view(row, include_token=True) for row in rows]
 
@@ -144,9 +242,18 @@ class TaskService:
         row = self._get_owned(identity, proposal_id)
         return self._view(row, include_token=True)
 
-    def approve(self, *, identity: str, proposal_id: str, token: str) -> dict[str, Any]:
+    def approve(
+        self,
+        *,
+        identity: str,
+        proposal_id: str,
+        token: str,
+        trace_context: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         try:
-            claims = verify_approval(token, identity=identity, secret=self.settings.approval_secret)
+            claims = verify_approval(
+                token, identity=identity, secret=self.settings.approval_secret
+            )
         except ApprovalError as exc:
             raise ProposalError(str(exc)) from exc
         if claims.proposal_id != proposal_id:
@@ -165,10 +272,9 @@ class TaskService:
                 row = cursor.fetchone()
                 if row is None:
                     raise ProposalError("proposal not found")
-                actual_hash = plan_hash(
-                    {"instruction": row["instruction"], "workspace": row["workspace"]}
-                )
-                if claims.plan_hash != row["plan_hash"] or claims.plan_hash != actual_hash:
+                if claims.plan_hash != row[
+                    "plan_hash"
+                ] or not persisted_plan_hash_is_valid(row):
                     raise ProposalError("proposal changed after it was reviewed")
                 if row["expires_at"].timestamp() < time.time():
                     raise ProposalError("proposal expired; create a new proposal")
@@ -187,10 +293,13 @@ class TaskService:
                             "identity": identity,
                             "instruction": row["instruction"],
                             "workspace": row["workspace"],
+                            "trace_context": bounded_trace_context(trace_context),
                         },
                         max_attempts=1,
                         queue=self.settings.queue,
-                        cancellation={"max_duration": self.settings.task_timeout_seconds + 60},
+                        cancellation={
+                            "max_duration": self.settings.task_timeout_seconds + 60
+                        },
                         idempotency_key=f"voice-proposal:{row['id']}",
                     )
                 cursor.execute(
@@ -225,7 +334,9 @@ class TaskService:
                     return self._view(row, include_token=False)
                 if row["task_id"]:
                     with closing(
-                        Absurd(self.settings.database_url, queue_name=self.settings.queue)
+                        Absurd(
+                            self.settings.database_url, queue_name=self.settings.queue
+                        )
                     ) as absurd:
                         absurd.cancel_task(str(row["task_id"]))
                 cursor.execute(
@@ -257,13 +368,18 @@ class TaskService:
     def _task_result(self, task_id: object | None) -> dict[str, Any] | None:
         if not task_id:
             return None
-        with closing(Absurd(self.settings.database_url, queue_name=self.settings.queue)) as absurd:
+        with closing(
+            Absurd(self.settings.database_url, queue_name=self.settings.queue)
+        ) as absurd:
             snapshot: TaskResultSnapshot | None = absurd.fetch_task_result(str(task_id))
         return (
-            asdict(snapshot) if snapshot else {"state": "pending", "result": None, "failure": None}
+            asdict(snapshot)
+            if snapshot
+            else {"state": "pending", "result": None, "failure": None}
         )
 
     def _view(self, row: dict[str, Any], *, include_token: bool) -> dict[str, Any]:
+        album = album_by_key(row["session_album_key"])
         token = None
         if (
             include_token
@@ -282,6 +398,11 @@ class TaskService:
             "identity": row["identity"],
             "instruction": row["instruction"],
             "workspace": row["workspace"],
+            "session_name": row["session_name"],
+            "session_reference": {
+                "artist": album.artist,
+                "spotify_url": album.spotify_url,
+            },
             "plan_hash": row["plan_hash"],
             "status": row["status"],
             "task_id": str(row["task_id"]) if row["task_id"] else None,

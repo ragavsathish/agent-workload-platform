@@ -1,20 +1,19 @@
 flowchart TB
     GITEA[External system<br/><b>Gitea Actions</b><br/>assigns trusted repository jobs]
     SOURCE[(External data<br/><b>Gitea Repository</b><br/>workflow and immutable revision)]
-    PACKAGES[(External data store<br/><b>Gitea Generic Packages</b><br/>archive and manifest)]
+    HOST_DOCKER[External system<br/><b>Host Docker Engine</b><br/>shared layer cache · builds and pulls]
+    HANDOFF[(Host filesystem<br/><b>Image Handoff</b><br/>versioned image tar files)]
     INTERNET[External system<br/><b>Public Package Sources</b><br/>build dependencies]
     OTEL[External system<br/><b>OTel LGTM</b><br/>runner metrics and job traces]
 
     subgraph HOST["Deployment node: macOS host"]
         MANAGER["Container<br/><b>Builder VM Manager</b><br/>starts, monitors, and checkpoints one warm VM"]
-        CHECKPOINT[("Builder disk checkpoint<br/>Docker layers and runner registration")]
+        API["Container<br/><b>Docker Job API</b><br/>Go · authenticated jobs · streamed contexts"]
+        CHECKPOINT[("Builder disk checkpoint<br/>runner registration and workflow state")]
         subgraph VM["Deployment node: Shared Gondolin Builder VM · trusted repositories only"]
-            RUNNER["Component<br/><b>Gitea Runner</b><br/>host-mode label, capacity one"]
-            DOCKER["Component<br/><b>Private Docker Daemon</b><br/>overlay2 cache; no macOS socket"]
-            BUILD["Component<br/><b>Fixed Image Build Helper</b><br/>revalidates content key and builds OCI image"]
-            ASSETS["Component<br/><b>Gondolin Asset Generator</b><br/>converts OCI image and hashes archive"]
-            RUNNER --> BUILD --> DOCKER
-            BUILD --> ASSETS
+            RUNNER["Component<br/><b>Gitea Runner</b><br/>capacity one · Docker CLI/Compose"]
+            CLIENT["Component<br/><b>Image Workflow Client</b><br/>packages context · submits and polls host job"]
+            RUNNER --> CLIENT
         end
         MANAGER -->|"creates or resumes"| VM
         MANAGER -->|"writes on graceful stop"| CHECKPOINT
@@ -22,8 +21,10 @@ flowchart TB
 
     GITEA -->|"one labeled job at a time"| RUNNER
     RUNNER -->|"checks out requested revision"| SOURCE
-    DOCKER -->|"pulls build dependencies"| INTERNET
-    ASSETS -->|"uploads checksummed package"| PACKAGES
+    CLIENT -->|"context · status<br/>authenticated HTTP hook"| API
+    API -->|"Docker Engine API<br/>Unix socket"| HOST_DOCKER
+    HOST_DOCKER -->|"pulls build dependencies"| INTERNET
+    HOST_DOCKER -->|"saves image tar"| HANDOFF
     MANAGER -.->|"lifecycle metrics and traces"| OTEL
     RUNNER -.->|"native OTLP job traces and metrics"| OTEL
 
@@ -31,7 +32,7 @@ flowchart TB
     classDef container fill:#dcfce7,color:#14532d,stroke:#16a34a,stroke-width:2px;
     classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
-    class RUNNER,DOCKER,BUILD,ASSETS component;
-    class MANAGER container;
-    class GITEA,INTERNET,OTEL external;
-    class SOURCE,PACKAGES,CHECKPOINT data;
+    class RUNNER,CLIENT component;
+    class MANAGER,API container;
+    class GITEA,INTERNET,OTEL,HOST_DOCKER external;
+    class SOURCE,HANDOFF,CHECKPOINT data;
