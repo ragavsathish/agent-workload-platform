@@ -2,8 +2,9 @@
 
 The Go service handles host-side Docker jobs for Gitea workflows. Compose cache
 jobs inspect, pull, tag, and export images through the Docker Engine HTTP API
-over the host Unix socket. The service does not spawn the Docker CLI, and no
-Docker socket is exposed to the VM. Its container publishes the API on host
+over the host Unix socket. Image builds use the host Docker Buildx CLI over that
+same socket so BuildKit can establish the build session. No Docker socket is
+exposed to the VM. Its container publishes the API on host
 loopback at `127.0.0.1:18081`; the Gondolin manager's HTTP hook is the bridge.
 
 ## Endpoints
@@ -55,8 +56,8 @@ the job response.
 
 The service streams the image-build context into a job-specific temporary
 file, checks its declared byte count and SHA-256, then atomically installs it
-and queues the job. The Go worker sends the tar to `POST /build` through the
-Docker Engine API, applies the requested platform and target, tags the result,
+and queues the job. The Go worker sends the verified context tar to host Docker
+Buildx, applies the requested platform and target, tags the result,
 and saves a tar into the shared `gondolin-image-handoff` folder. Context uploads
 are capped at 1 GiB. Invalid uploads are rejected and their temporary file is
 removed.

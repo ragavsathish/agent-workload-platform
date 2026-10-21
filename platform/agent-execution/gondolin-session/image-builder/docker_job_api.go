@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -660,56 +661,50 @@ func (h *Handler) buildImage(job Job) (*BuildResult, error) {
 		platform = "linux/arm64"
 	}
 	dockerfile := manifest.Dockerfile
-	query := url.Values{
-		"t":           []string{localTag},
-		"dockerfile":  []string{dockerfile},
-		"platform":    []string{platform},
-		"networkmode": []string{"host"},
-		"forcerm":     []string{"1"},
-		"version":     []string{"2"},
-	}
-	if len(manifest.BuildArgs) != 0 {
-		args, _ := json.Marshal(manifest.BuildArgs)
-		query.Set("buildargs", string(args))
-	}
-	if manifest.Target != "" {
-		query.Set("target", manifest.Target)
-	}
 	contextFile, err := os.Open(job.Context.path)
 	if err != nil {
 		return nil, fmt.Errorf("open verified build context: %w", err)
 	}
-	buildReq, err := http.NewRequest(http.MethodPost, "http://docker/build?"+query.Encode(), contextFile)
-	if err != nil {
-		contextFile.Close()
-		return nil, err
+	args := []string{"buildx", "build", "--load", "--progress=plain", "--platform", platform, "--network", "host", "--tag", localTag, "--file", dockerfile}
+	if manifest.Target != "" {
+		args = append(args, "--target", manifest.Target)
 	}
-	buildReq.ContentLength = manifest.ContextBytes
-	buildReq.Header.Set("Content-Type", "application/x-tar")
+	buildArgNames := make([]string, 0, len(manifest.BuildArgs))
+	for name := range manifest.BuildArgs {
+		buildArgNames = append(buildArgNames, name)
+	}
+	sort.Strings(buildArgNames)
+	for _, name := range buildArgNames {
+		args = append(args, "--build-arg", name+"="+manifest.BuildArgs[name])
+	}
+	args = append(args, "-")
+	command := exec.CommandContext(context.Background(), "docker", args...)
+	command.Stdin = contextFile
+	command.Env = append(os.Environ(), "DOCKER_HOST=unix:///var/run/docker.sock")
+	var buildOutput strings.Builder
+	command.Stdout = &buildOutput
+	command.Stderr = &buildOutput
 	if manifest.BaseImagePullToken != "" {
 		registry := "127.0.0.1:3001"
-		registryConfig, _ := json.Marshal(map[string]any{registry: map[string]string{
-			"username": "image-builder", "password": manifest.BaseImagePullToken, "serveraddress": registry,
-		}})
-		buildReq.Header.Set("X-Registry-Config", base64.RawURLEncoding.EncodeToString(registryConfig))
+		configDir, err := os.MkdirTemp("", "gondolin-docker-config-")
+		if err != nil {
+			contextFile.Close()
+			return nil, fmt.Errorf("create temporary Docker auth config: %w", err)
+		}
+		defer os.RemoveAll(configDir)
+		config, _ := json.Marshal(map[string]any{"auths": map[string]any{registry: map[string]string{
+			"auth": base64.StdEncoding.EncodeToString([]byte("image-builder:" + manifest.BaseImagePullToken)),
+		}}})
+		if err := os.WriteFile(filepath.Join(configDir, "config.json"), config, 0o600); err != nil {
+			contextFile.Close()
+			return nil, fmt.Errorf("write temporary Docker auth config: %w", err)
+		}
+		command.Env = append(command.Env, "DOCKER_CONFIG="+configDir)
 	}
-	buildResp, err := h.engine.Do(buildReq)
+	err = command.Run()
 	contextFile.Close()
 	if err != nil {
-		return nil, fmt.Errorf("Docker Engine build request failed: %w", err)
-	}
-	if buildResp.StatusCode < 200 || buildResp.StatusCode >= 300 {
-		data, _ := io.ReadAll(io.LimitReader(buildResp.Body, 8192))
-		buildResp.Body.Close()
-		return nil, fmt.Errorf("Docker Engine build returned %s: %s", buildResp.Status, strings.TrimSpace(string(data)))
-	}
-	buildErr := readBuildStream(buildResp.Body)
-	closeErr := buildResp.Body.Close()
-	if buildErr != nil {
-		return nil, buildErr
-	}
-	if closeErr != nil {
-		return nil, closeErr
+		return nil, fmt.Errorf("Docker Buildx build failed: %w: %s", err, strings.TrimSpace(buildOutput.String()))
 	}
 	if err := h.tagImage(localTag, manifest.ImageRef); err != nil {
 		return nil, fmt.Errorf("tag built image: %w", err)

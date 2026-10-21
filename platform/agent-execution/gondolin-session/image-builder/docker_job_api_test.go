@@ -10,7 +10,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -224,6 +223,16 @@ func TestImageBuildWorkerBuildsAndSavesViaDockerEngineAPI(t *testing.T) {
 	if err := os.WriteFile(contextPath, context, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	binDir := t.TempDir()
+	argsPath := filepath.Join(t.TempDir(), "docker-args")
+	stdinPath := filepath.Join(t.TempDir(), "docker-context")
+	fakeDocker := "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$DOCKER_TEST_ARGS_FILE\"\ncat > \"$DOCKER_TEST_STDIN_FILE\"\necho build-succeeded\n"
+	if err := os.WriteFile(filepath.Join(binDir, "docker"), []byte(fakeDocker), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("DOCKER_TEST_ARGS_FILE", argsPath)
+	t.Setenv("DOCKER_TEST_STDIN_FILE", stdinPath)
 	version := "v2-" + strings.Repeat("b", 32)
 	manifest := &BuildManifest{
 		Context: ".", Dockerfile: "Dockerfile", AssetConfig: ".pi/gondolin.json", ImageRef: "voice-agent:local",
@@ -239,21 +248,19 @@ func TestImageBuildWorkerBuildsAndSavesViaDockerEngineAPI(t *testing.T) {
 	if result.Digest != engine.imageID || result.Handoff != "/image-handoff/"+version+".tar" || result.ImageRef != manifest.ImageRef {
 		t.Fatalf("unexpected build result: %+v", result)
 	}
-	if !bytes.Equal(engine.context, context) {
-		t.Fatalf("Engine received wrong build context: %q", engine.context)
+	stdin, err := os.ReadFile(stdinPath)
+	if err != nil || !bytes.Equal(stdin, context) {
+		t.Fatalf("Buildx received wrong context: %q (%v)", stdin, err)
 	}
-	if !strings.Contains(engine.calls[0], "platform=linux%2Farm64") || !strings.Contains(engine.calls[0], "networkmode=host") {
-		t.Fatalf("build options missing from Engine API request: %v", engine.calls)
-	}
-	query, err := url.ParseQuery(strings.TrimPrefix(engine.buildURL, "/build?"))
+	args, err := os.ReadFile(argsPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := query.Get("buildargs"); !strings.Contains(got, "127.0.0.1:3001") {
-		t.Fatalf("host registry build argument missing: %s", got)
-	}
-	if got := query.Get("version"); got != "2" {
-		t.Fatalf("build must select BuildKit (version=2), got %q", got)
+	argsText := string(args)
+	for _, expected := range []string{"buildx\nbuild\n", "--load\n", "--platform\nlinux/arm64\n", "--network\nhost\n", "--build-arg\nVOICE_RUNTIME_IMAGE=127.0.0.1:3001/image-builder/base:latest\n", "-\n"} {
+		if !strings.Contains(argsText, expected) {
+			t.Fatalf("Buildx args missing %q: %s", expected, argsText)
+		}
 	}
 	archive, err := os.ReadFile(filepath.Join(h.imageHandoffDir, version+".tar"))
 	if err != nil || !bytes.Equal(archive, engine.imageArchive) {
