@@ -29,6 +29,9 @@ jobs:
           COMPOSE_CACHE_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -eu
+          export PATH="/usr/local/bin:/usr/local/sbin:$PATH"
+          bb --version
+          docker compose version
           case "$COMPOSE_CACHE_COMPOSE_FILE" in
             ""|/*|../*|*/../*|*/..) echo "Compose path must stay inside the checked-out repository" >&2; exit 1 ;;
           esac
