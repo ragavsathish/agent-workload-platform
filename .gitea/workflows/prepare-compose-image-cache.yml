@@ -45,6 +45,9 @@ jobs:
             *) echo "Compose path escapes the checked-out repository" >&2; exit 1 ;;
           esac
           test -f "$compose_path"
+          # Compose validates service env_file paths while rendering config, even though this job never starts services.
+          mkdir -p "$workspace/products/voice-agent/apps/edge"
+          : > "$workspace/products/voice-agent/apps/edge/.env"
           revision=$(git rev-parse HEAD)
           case "$(uname -m)" in
             aarch64|x86_64) arch=$(uname -m) ;;
