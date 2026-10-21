@@ -73,9 +73,11 @@ the printed handoff directory with `make gondolin-dev-cache-import
 GONDOLIN_DEV_CACHE_HANDOFF=<host-handoff-path>`. The importer checks SHA-256
 checksums before installing archives into the shared store. It is implemented
 as `gondolin-oci compose import` and runs in the pinned Go container, so cache
-promotion does not require Babashka on the host. The host cache job
-skips Compose services with `build:` entries; task VMs build those from their
-checked out source. Repository indexes and overrides stay separate while
+promotion does not require Babashka on the host. The Gitea builder VM creates
+the client and diagnostics web assets, then submits each Compose `build:`
+service to the Go host API for an image build against the committed source.
+The cache job verifies the resulting host image IDs before exporting those
+images alongside the pulled images. Repository indexes and overrides stay separate while
 archives share a content store. In the
 guest, set `COMPOSE_FILE` to that worktree's Compose path and
 `COMPOSE_CACHE_SERVICES` to the needed service names, then use `dev-compose`

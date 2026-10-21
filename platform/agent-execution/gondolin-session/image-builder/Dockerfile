@@ -1,10 +1,16 @@
 # syntax=docker/dockerfile:1.7
 
 FROM docker.io/gitea/runner:4.1.0@sha256:131ff842ec12453108f1c1a454031c325d3c95e4af459979a2e303e12d99c98c AS gitea-runner
+FROM docker.io/plugfox/flutter:3.47.7-web@sha256:bdff6627c0421b1c05f830d60e2792e5930da222318de1c70ffbae954b88c491 AS flutter-toolchain
 
 FROM alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0
 
 COPY --from=gitea-runner /usr/local/bin/gitea-runner /usr/local/bin/gitea-runner
+COPY --from=flutter-toolchain /opt/flutter /opt/flutter
+COPY --from=flutter-toolchain /var/cache/pub /var/cache/pub
+ENV FLUTTER_BIN=/opt/flutter/bin/flutter \
+    PUB_CACHE=/var/cache/pub \
+    PATH=/opt/flutter/bin:/opt/flutter/bin/cache/dart-sdk/bin:${PATH}
 
 RUN apk add --no-cache \
       bash=5.3.3-r1 \
@@ -21,6 +27,8 @@ RUN apk add --no-cache \
       tar=1.35-r4 \
       xz=5.8.4-r0 \
       zig=0.15.2-r0
+
+RUN npm install --global pnpm@11.19.0 && flutter --version
 
 RUN case "$(apk --print-arch)" in \
       aarch64) compose_arch=aarch64; compose_sha=733ec76717ceb59052a9609b9dadfb523b2df8eab57a54212872d10a58078ea2 ;; \

@@ -53,9 +53,18 @@ jobs:
             *) echo "Unsupported builder architecture: $(uname -m)" >&2; exit 1 ;;
           esac
           docker compose -f "$compose_path" config --format json > /tmp/compose-config.json
+          npm --prefix "$workspace/products/voice-agent/apps/client" ci --prefer-offline --no-audit --no-fund
+          pnpm --dir "$workspace/vendor/excalidraw-mcp" install --frozen-lockfile --ignore-scripts --ignore-workspace --config.node-linker=isolated
+          npm --prefix "$workspace/products/voice-agent/apps/client" run build
+          npm --prefix "$workspace/products/voice-agent/apps/diagnostics" ci --prefer-offline --no-audit --no-fund
+          npm --prefix "$workspace/products/voice-agent/apps/diagnostics" run build
+          test -f "$workspace/products/voice-agent/apps/client/build/web/index.html"
+          test -f "$workspace/products/voice-agent/apps/diagnostics/dist/index.html"
           # Send only the committed build context to the host API. The runner
           # never needs a Docker daemon or access to the host source tree.
           git archive --format=tar HEAD:products/voice-agent > /tmp/compose-build-context.tar
+          tar -rf /tmp/compose-build-context.tar -C "$workspace/products/voice-agent" \
+            apps/client/build/web apps/diagnostics/dist
           export revision arch workspace
           node --input-type=module <<'NODE'
           import { createHash } from "node:crypto";
