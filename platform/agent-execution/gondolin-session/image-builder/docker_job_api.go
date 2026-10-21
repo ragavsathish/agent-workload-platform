@@ -1045,7 +1045,7 @@ func main() {
 		args = args[1:]
 	}
 	if len(args) != 0 {
-		fmt.Fprintln(os.Stderr, "usage: gondolin-oci [serve | image build <manifest.json> <context.tar> <revision> <arch> | image export <image-ref> <archive.tar> | compose pull <compose-config.json> <revision> <arch> <run-id> [<preload-root> <shared-store-root>] | compose import <handoff-root> <preload-root> <shared-store-root>]")
+		fmt.Fprintln(os.Stderr, "usage: gondolin-oci [serve | image build <manifest.json> <context.tar> <revision> <arch> | image export <image-ref> <archive.tar> | compose pull <compose-config.json> <revision> <arch> <run-id> [<preload-root> <shared-store-root>] | compose pull --via-api <compose-config.json|-> <run-id> | compose import <handoff-root> <preload-root> <shared-store-root>]")
 		os.Exit(2)
 	}
 	serveDockerJobAPI()

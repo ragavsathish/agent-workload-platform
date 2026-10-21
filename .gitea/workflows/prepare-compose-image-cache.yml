@@ -7,11 +7,6 @@ on:
         description: Immutable Git revision containing the Compose file
         required: true
         type: string
-      compose_file:
-        description: Repository-relative Compose file
-        required: false
-        default: products/voice-agent/deploy/compose.yml
-        type: string
 
 jobs:
   prepare:
@@ -22,168 +17,12 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: ${{ inputs.source_revision }}
-          submodules: recursive
-      - name: Resolve Compose config and request host cache preparation
+      - name: Request host pull of Compose images
+        shell: bash
         env:
-          COMPOSE_CACHE_COMPOSE_FILE: ${{ inputs.compose_file }}
           COMPOSE_CACHE_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
-          # Required only for `docker compose config`; this job never starts the stack.
-          ORCHESTRATOR_ALLOWED_WORKSPACES: /workspace
-          VOICE_DEFAULT_WORKSPACE: /workspace
-          FLUTTER_BIN: /opt/flutter/bin/flutter
-          PUB_CACHE: /var/cache/pub
         run: |
-          set -eu
-          export PATH="/usr/local/bin:/usr/local/sbin:$PATH"
-          docker compose version
-          case "$COMPOSE_CACHE_COMPOSE_FILE" in
-            ""|/*|../*|*/../*|*/..) echo "Compose path must stay inside the checked-out repository" >&2; exit 1 ;;
-          esac
-          workspace=$(pwd -P)
-          compose_path=$(realpath "$workspace/$COMPOSE_CACHE_COMPOSE_FILE")
-          case "$compose_path" in
-            "$workspace"/*) ;;
-            *) echo "Compose path escapes the checked-out repository" >&2; exit 1 ;;
-          esac
-          test -f "$compose_path"
-          # Compose validates service env_file paths while rendering config, even though this job never starts services.
-          mkdir -p "$workspace/products/voice-agent/apps/edge"
-          : > "$workspace/products/voice-agent/apps/edge/.env"
-          revision=$(git rev-parse HEAD)
-          case "$(uname -m)" in
-            aarch64|x86_64) arch=$(uname -m) ;;
-            *) echo "Unsupported builder architecture: $(uname -m)" >&2; exit 1 ;;
-          esac
-          docker compose -f "$compose_path" config --format json > /tmp/compose-config.json
-          npm --prefix "$workspace/products/voice-agent/apps/client" ci --prefer-offline --no-audit --no-fund
-          pnpm --dir "$workspace/vendor/excalidraw-mcp" install --frozen-lockfile --ignore-scripts --ignore-workspace --config.node-linker=isolated --network-concurrency=4
-          npm --prefix "$workspace/products/voice-agent/apps/client" run build
-          npm --prefix "$workspace/products/voice-agent/apps/diagnostics" ci --prefer-offline --no-audit --no-fund
-          npm --prefix "$workspace/products/voice-agent/apps/diagnostics" run build
-          test -f "$workspace/products/voice-agent/apps/client/build/web/index.html"
-          test -f "$workspace/products/voice-agent/apps/diagnostics/dist/index.html"
-          # Send only the committed build context to the host API. The runner
-          # never needs a Docker daemon or access to the host source tree.
-          git archive --format=tar HEAD:products/voice-agent > /tmp/compose-build-context.tar
-          tar -rf /tmp/compose-build-context.tar -C "$workspace/products/voice-agent" \
-            apps/client/build/web apps/diagnostics/dist
-          gzip -n -c /tmp/compose-build-context.tar > /tmp/compose-build-context.tar.gz
-          export revision arch workspace
-          node --input-type=module <<'NODE'
-          import { createHash } from "node:crypto";
-          import fs from "node:fs";
-          import path from "node:path";
-
-          const endpoint = "http://compose-cache.local:18080/v1";
-          const headers = {
-            Authorization: `Bearer ${process.env.DOCKER_JOB_API_VM_TOKEN}`,
-            "Content-Type": "application/json",
-          };
-          const composeConfig = JSON.parse(fs.readFileSync("/tmp/compose-config.json", "utf8"));
-          const workspace = process.env.workspace;
-          const buildContext = "/tmp/compose-build-context.tar";
-          const buildContextBytes = fs.statSync(buildContext).size;
-          const compressedContext = `${buildContext}.gz`;
-          const compressedContextBytes = fs.statSync(compressedContext).size;
-          if (compressedContextBytes > 60 * 1024 * 1024) {
-            throw new Error(`Compressed build context exceeds the VM upload limit: ${compressedContextBytes} bytes`);
-          }
-          const contextHash = createHash("sha256");
-          for await (const chunk of fs.createReadStream(buildContext)) contextHash.update(chunk);
-          const buildContextSha256 = contextHash.digest("hex");
-          const builtImageIds = {};
-          const buildServices = Object.entries(composeConfig.services)
-            .filter(([, service]) => service.build && service.image)
-            .sort(([left], [right]) => left.localeCompare(right));
-          for (const [name, service] of buildServices) {
-            const context = path.resolve(service.build.context);
-            if (context !== path.join(workspace, "products/voice-agent")) {
-              throw new Error(`Unsupported build context for ${name}: ${context}`);
-            }
-            const dockerfile = service.build.dockerfile;
-            if (typeof dockerfile !== "string" || path.isAbsolute(dockerfile) ||
-                dockerfile.split("/").includes("..")) {
-              throw new Error(`Invalid Dockerfile path for ${name}`);
-            }
-            const artifactVersion = `v2-${createHash("sha256")
-              .update(JSON.stringify([process.env.revision, name, service.image,
-                dockerfile, service.build.args ?? {}, service.build.target ?? "", buildContextSha256]))
-              .digest("hex").slice(0, 32)}`;
-            const buildRequest = {
-              type: "image-build",
-              runId: `build-${process.env.COMPOSE_CACHE_RUN_ID}-${name}`,
-              revision: process.env.revision,
-              arch: process.env.arch,
-              buildManifest: {
-                context: ".", dockerfile, assetConfig: process.env.COMPOSE_CACHE_COMPOSE_FILE,
-                artifactVersion, imageRef: service.image,
-                buildArgs: service.build.args ?? {}, target: service.build.target ?? "",
-                contextSha256: buildContextSha256, contextBytes: buildContextBytes,
-                skipHandoff: true,
-              },
-            };
-            const createdResponse = await fetch(`${endpoint}/jobs`, {
-              method: "POST", headers, body: JSON.stringify(buildRequest),
-            });
-            if (!createdResponse.ok) throw new Error(`Build submission for ${name} returned ${createdResponse.status}: ${await createdResponse.text()}`);
-            const created = await createdResponse.json();
-            if (created.status === "awaiting-context") {
-              const upload = await fetch(`${endpoint}/jobs/${created.id}/context`, {
-                method: "PUT",
-                headers: { ...headers, "Content-Type": "application/x-tar", "Content-Encoding": "gzip", "Content-Length": String(compressedContextBytes) },
-                body: fs.createReadStream(compressedContext), duplex: "half",
-              });
-              if (!upload.ok) throw new Error(`Build context upload for ${name} returned ${upload.status}: ${await upload.text()}`);
-            }
-            let completedBuild = false;
-            for (let elapsed = 0; elapsed < 5100; elapsed += 10) {
-              const response = await fetch(`${endpoint}/jobs/${created.id}`, { headers });
-              if (!response.ok) throw new Error(`Build status for ${name} returned ${response.status}: ${await response.text()}`);
-              const state = await response.json();
-              if (state.status === "succeeded") {
-                if (state.result?.imageRef !== service.image ||
-                    !/^sha256:[a-f0-9]{64}$/.test(state.result?.digest ?? "")) {
-                  throw new Error(`Host build for ${name} returned an invalid image result`);
-                }
-                builtImageIds[name] = state.result.digest;
-                console.log(`Host built ${name}: ${state.result.digest}`);
-                completedBuild = true;
-                break;
-              }
-              if (state.status === "failed") throw new Error(`Host build for ${name} failed: ${state.error}`);
-              await new Promise((resolve) => setTimeout(resolve, 10_000));
-            }
-            if (!completedBuild) throw new Error(`Timed out building ${name}`);
-          }
-          const input = {
-            composeConfig,
-            revision: process.env.revision,
-            arch: process.env.arch,
-            runId: process.env.COMPOSE_CACHE_RUN_ID,
-            builtImageIds,
-          };
-          const submitted = await fetch(`${endpoint}/prepare`, {
-            method: "POST",
-            headers,
-            body: JSON.stringify(input),
-          });
-          if (!submitted.ok) throw new Error(`Host cache request returned ${submitted.status}: ${await submitted.text()}`);
-
-          let completed = false;
-          for (let elapsed = 0; elapsed < 5100; elapsed += 10) {
-            const response = await fetch(`${endpoint}/status?runId=${encodeURIComponent(input.runId)}`, { headers });
-            if (!response.ok) throw new Error(`Host cache status returned ${response.status}: ${await response.text()}`);
-            const state = await response.json();
-            if (state.status === "ready") {
-              console.log(`Compose cache handoff ready: ${state.handoff} (${state.images} images, ${state.services} services; cache ${state.cacheId})`);
-              completed = true;
-              break;
-            }
-            if (state.status === "failed") throw new Error(state.error);
-            if (state.status !== "queued" && state.status !== "running") {
-              throw new Error(`Unexpected host cache preparation state: ${state.status}`);
-            }
-            await new Promise((resolve) => setTimeout(resolve, 10_000));
-          }
-          if (!completed) throw new Error("Timed out waiting for host Compose cache preparation");
-          NODE
+          set -euo pipefail
+          docker compose -f products/voice-agent/deploy/compose.yml config \
+            --format json --no-env-resolution --no-interpolate |
+            gondolin-oci compose pull --via-api - "$COMPOSE_CACHE_RUN_ID"

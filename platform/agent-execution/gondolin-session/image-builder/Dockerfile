@@ -2,12 +2,17 @@
 
 FROM docker.io/gitea/runner:4.1.0@sha256:131ff842ec12453108f1c1a454031c325d3c95e4af459979a2e303e12d99c98c AS gitea-runner
 FROM docker.io/plugfox/flutter:3.47.7-web@sha256:bdff6627c0421b1c05f830d60e2792e5930da222318de1c70ffbae954b88c491 AS flutter-toolchain
+FROM golang:1.25-alpine AS gondolin-oci-build
+WORKDIR /src
+COPY platform/agent-execution/gondolin-session/image-builder/go.mod platform/agent-execution/gondolin-session/image-builder/*.go ./
+RUN CGO_ENABLED=0 go build -o /out/gondolin-oci .
 
 FROM alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0
 
 COPY --from=gitea-runner /usr/local/bin/gitea-runner /usr/local/bin/gitea-runner
 COPY --from=flutter-toolchain /opt/flutter /opt/flutter
 COPY --from=flutter-toolchain /var/cache/pub /var/cache/pub
+COPY --from=gondolin-oci-build /out/gondolin-oci /usr/local/bin/gondolin-oci
 ENV FLUTTER_BIN=/opt/flutter/bin/flutter \
     PUB_CACHE=/var/cache/pub \
     PATH=/opt/flutter/bin:/opt/flutter/bin/cache/dart-sdk/bin:${PATH}

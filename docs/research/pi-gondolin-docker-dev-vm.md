@@ -48,8 +48,9 @@ K3s's preload directory convention. Each repository keeps its own
 index and override while all VMs mount the same archive bytes. Pruning one
 repository's index cannot remove archives used by another. SHA-256 checksums
 in the index are verified before loading.
-The `Prepare Compose image cache` Gitea workflow runs this export in the trusted
-builder VM and writes to its separate host-mounted Compose-cache handoff. The
+The `Prepare Compose image cache` Gitea workflow submits rendered Compose config
+from the trusted builder VM; the host API pulls and exports registry images to
+its separate Compose-cache handoff. The
 host importer verifies each archive checksum before installing it into the
 shared store and updating the repository index. Services with Compose `build:`
 entries are left for each task VM to build from its checked-out source. The

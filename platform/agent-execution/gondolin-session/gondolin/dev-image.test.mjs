@@ -72,9 +72,13 @@ test("Compose image preloads use the K3s agent/images folder convention", () => 
 test("Gitea cache workflow writes a checksummed handoff for host promotion", () => {
   assert.match(cacheWorkflow, /workflow_dispatch:/);
   assert.match(cacheWorkflow, /runs-on: gondolin-builder/);
-  assert.match(cacheWorkflow, /http:\/\/compose-cache\.local:18080\/v1/);
-  assert.match(cacheWorkflow, /\/prepare/);
-  assert.match(cacheWorkflow, /DOCKER_JOB_API_VM_TOKEN/);
+  assert.match(cacheWorkflow, /gondolin-oci compose pull --via-api/);
+  assert.doesNotMatch(cacheWorkflow, /node --input-type=module/);
+  assert.doesNotMatch(cacheWorkflow, /npm|pnpm|git archive|compose-build-context/);
+  assert.match(builderDockerfile, /COPY --from=gondolin-oci-build \/out\/gondolin-oci/);
+  const composeAPIClient = fs.readFileSync(new URL("../image-builder/compose_pull_api.go", import.meta.url), "utf8");
+  assert.match(composeAPIClient, /DOCKER_JOB_API_VM_TOKEN/);
+  assert.match(composeAPIClient, /http:\/\/compose-cache\.local:18080\/v1/);
   assert.match(builderManager, /class DockerJobHostService/);
   assert.match(builderManager, /GONDOLIN_DOCKER_JOB_API_URL/);
   assert.match(dockerJobAPI, /func \(h \*Handler\) pullImage/);

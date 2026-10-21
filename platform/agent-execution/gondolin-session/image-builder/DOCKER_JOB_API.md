@@ -64,8 +64,7 @@ Buildx, applies the requested platform and target, tags the result,
 and saves a tar into the shared `gondolin-image-handoff` folder. Context uploads
 may use `Content-Encoding: gzip` to cross the VM's 64 MiB request limit; the
 service verifies the uncompressed tar against `contextBytes` and
-`contextSha256`. The Gitea Compose workflow uses this transport encoding for
-its generated web assets. Context tar content is capped at 1 GiB. Invalid uploads are rejected and their temporary file is
+`contextSha256`. Context tar content is capped at 1 GiB. Invalid uploads are rejected and their temporary file is
 removed.
 
 ### `GET /v1/jobs/{id}`
@@ -73,17 +72,16 @@ removed.
 Read job status and metadata. Status values are `awaiting-context`, `queued`,
 `running`, `succeeded`, and `failed`.
 
-## Compose cache compatibility endpoints
+## Compose cache jobs
 
-The builder VM uses the existing `POST /v1/prepare` and `GET /v1/status?runId=…`
-routes through the manager HTTP hook. The Gitea workflow archives the committed
-`products/voice-agent` build context, submits each Compose `build:` service as
-an image-build job, and passes the returned `builtImageIds` to `/v1/prepare`.
-The cache worker refuses an image ID mismatch before exporting it. These build
-jobs set `skipHandoff: true`; the cache worker exports their images directly
-into the shared Compose store. A request without `builtImageIds` still skips
-build services. Both paths retain the `index.json`, `compose.override.json`,
-`cache-id`, and `agent/images` handoff layout.
+The Gitea workflow runs `gondolin-oci compose pull --via-api` to submit the
+rendered Compose config to `POST /v1/jobs` as a `compose-cache` job and poll
+`GET /v1/jobs/{id}` through the manager HTTP hook. The host worker pulls and
+exports registry images. Services with Compose
+`build:` are skipped because the request has no `builtImageIds`. The handoff
+contains `index.json`, `compose.override.json`, `cache-id`, and `agent/images`.
+The older `POST /v1/prepare` and `GET /v1/status?runId=…` routes remain for
+existing clients.
 
 Start the host API with a shared internal API token:
 
@@ -108,9 +106,13 @@ image or upload a result package to Gitea. Set
 builder manager's `/image-handoff` mount. The current worker rejects local
 named build contexts; `build.dockerfile` must be inside `build.context`.
 
-The local CLI accepts a JSON-rendered Compose configuration:
+The local host CLI accepts a JSON-rendered Compose configuration:
 `gondolin-oci compose pull <compose-config.json> <revision> <arch> <run-id>`.
-It pulls missing service images, exports them into the Compose handoff, and
+The builder VM pipes `docker compose config --format json --no-env-resolution
+--no-interpolate` into `gondolin-oci compose pull --via-api - <run-id>`. The
+CLI resolves the checked-out Git revision and its architecture, then uses
+`DOCKER_JOB_API_VM_TOKEN` to reach the host API without a Docker socket. The host pulls
+missing service images on the host, exports them into the Compose handoff, and
 prints the cache metadata. Import a completed Gitea handoff into the shared VM
 store with `gondolin-oci compose import <handoff> <preload-root> <shared-store>`.
 `gondolin-oci image build <manifest.json> <context.tar> <revision> <arch>` and

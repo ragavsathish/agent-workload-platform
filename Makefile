@@ -24,7 +24,7 @@ GONDOLIN_BUILDER_SERVICE := image-builder-$(GONDOLIN_PROFILE)
 GONDOLIN_DEV_ASSETS := artifacts/gondolin-dev/$(GONDOLIN_ARCH)
 GONDOLIN_DEV_CONFIG := platform/agent-execution/gondolin-session/gondolin/dev.$(GONDOLIN_ARCH).json
 GONDOLIN_DEV_SERVICE := dev-runtime-$(GONDOLIN_PROFILE)
-GONDOLIN_DEV_IMAGE_CACHE := artifacts/gondolin-dev-images/$(GONDOLIN_ARCH)
+GONDOLIN_DEV_IMAGE_CACHE ?= $(HOME)/.cache/gondolin/compose-index/$(notdir $(CURDIR))/$(GONDOLIN_ARCH)
 GONDOLIN_DEV_IMAGE_STORE ?= $(HOME)/.cache/gondolin/$(GONDOLIN_ARCH)
 GONDOLIN_ONBOARDING_IMAGE ?= artifacts/gondolin-dev-qemu-current/$(GONDOLIN_ARCH)
 GONDOLIN_DEV_CACHE_HANDOFF ?=
@@ -87,6 +87,7 @@ gondolin-dev-cache:
 	docker run --rm \
 		-v "$(CURDIR):/workspace" \
 		-v "$(HOME):/hosthome" \
+		-v "$(abspath $(GONDOLIN_DEV_IMAGE_CACHE)):/image-cache" \
 		-v "$(GONDOLIN_COMPOSE_CACHE_HANDOFF):/handoff" \
 		-v "$(GONDOLIN_DEV_IMAGE_STORE):/image-store" \
 		-v /var/run/docker.sock:/var/run/docker.sock \
@@ -97,7 +98,7 @@ gondolin-dev-cache:
 		-e GONDOLIN_COMPOSE_CACHE_HANDOFF=/handoff \
 		-e GONDOLIN_COMPOSE_CACHE_HOST_HANDOFF="$(GONDOLIN_COMPOSE_CACHE_HANDOFF)" \
 		golang:1.25-alpine go run . compose pull /compose.json "$$revision" "$(GONDOLIN_ARCH)" "$$run_id" \
-			/workspace/$(GONDOLIN_DEV_IMAGE_CACHE) /image-store
+			/image-cache /image-store
 
 gondolin-dev-cache-import:
 	@test -n "$(GONDOLIN_DEV_CACHE_HANDOFF)" || { echo "Set GONDOLIN_DEV_CACHE_HANDOFF to the completed Gitea handoff directory." >&2; exit 1; }
@@ -114,7 +115,6 @@ gondolin-docker-job-api-test:
 
 gondolin-docker-job-api-up:
 	@test -n "$(GONDOLIN_DOCKER_JOB_API_TOKEN)" || { echo "Set GONDOLIN_DOCKER_JOB_API_TOKEN before starting the host API." >&2; exit 1; }
-	@mkdir -p "$(GONDOLIN_COMPOSE_CACHE_HANDOFF)"
 	@mkdir -p "$(GONDOLIN_COMPOSE_CACHE_HANDOFF)" "$(GONDOLIN_IMAGE_BUILDER_HANDOFF)"
 	@GONDOLIN_DOCKER_JOB_API_TOKEN="$(GONDOLIN_DOCKER_JOB_API_TOKEN)" GONDOLIN_COMPOSE_CACHE_HANDOFF="$(GONDOLIN_COMPOSE_CACHE_HANDOFF)" GONDOLIN_IMAGE_BUILDER_HANDOFF="$(GONDOLIN_IMAGE_BUILDER_HANDOFF)" docker compose --profile host-api -f platform/agent-execution/gondolin-session/image-builder/compose.yaml up -d --build docker-job-api
 

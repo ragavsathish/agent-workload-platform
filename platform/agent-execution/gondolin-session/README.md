@@ -62,9 +62,14 @@ the per-repository Compose index and override. Set `GONDOLIN_DEV_IMAGE_STORE`
 to the shared host store; these mount read-only at `/image-cache` and
 `/image-store` in each VM. The source repository's `make gondolin-dev-cache`
 uses `gondolin-oci compose pull` to prepare the Voice Agent image set with host
-Docker. The separate
+Docker. The Makefile stores the index under
+`~/.cache/gondolin/compose-index/<repository>/<architecture>` so the background
+Pi worker can read it. On macOS, its Python LaunchAgent can stall reading a
+cache index under `~/Documents` even when an interactive benchmark can read it.
+The separate
 Gitea workflow `Prepare Compose image cache` resolves Compose in its builder VM,
-then asks the host builder manager to bridge to the Go Docker job API. The Go
+then calls `gondolin-oci compose pull --via-api` to submit the rendered config
+through the host builder manager's bridge to the Go Docker job API. The Go
 service pulls and exports images through the host Docker Engine API without
 exposing its socket to the VM. Start it with `make gondolin-docker-job-api-up`
 before starting the builder manager; see [the API guide](image-builder/DOCKER_JOB_API.md)
@@ -73,13 +78,10 @@ the printed handoff directory with `make gondolin-dev-cache-import
 GONDOLIN_DEV_CACHE_HANDOFF=<host-handoff-path>`. The importer checks SHA-256
 checksums before installing archives into the shared store. It is implemented
 as `gondolin-oci compose import` and runs in the pinned Go container, so cache
-promotion does not require Babashka on the host. The Gitea builder VM creates
-the client and diagnostics web assets, then submits each Compose `build:`
-service to the Go host API for an image build against the committed source.
-The cache job verifies the resulting host image IDs before exporting those
-images alongside the pulled images. This committed-revision cache supplies a
-baseline for full-stack startup and Patrol benchmarks. Pi development builds
-edited client source inside its own VM with the tools in the development image;
+promotion does not require Babashka on the host. The Gitea job pulls and
+exports registry images only. Compose services with `build:` are omitted from
+this cache and must be built from source in a task VM when needed. Pi development
+builds edited client source inside its own VM with the tools in the development image;
 the default Pi stack starts dependency services and does not run voice-edge.
 Repository indexes and overrides stay separate while
 archives share a content store. In the

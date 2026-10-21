@@ -135,6 +135,9 @@ and checkpoint were disposed. See the [Gitea-cache validation result](../../../.
 and its [Allure report](../../../../artifacts/benchmarks/patrol-evidence/compose-overlay2-1vm-2026-10-21T133601Z/allure-report/index.html).
 This validates a committed-revision benchmark baseline. Edited application
 source in an interactive Pi session is built inside that session's VM.
+Run 64 records the earlier build-enabled workflow. The current Gitea cache job
+pulls registry images only; a fresh full-mock trial must build its application
+services in the VM before making the same claims.
 
 A subsequent three-VM cache-backed trial reached Compose readiness in all
 three guests in 103.075–106.292 seconds. Two guests produced all three Patrol

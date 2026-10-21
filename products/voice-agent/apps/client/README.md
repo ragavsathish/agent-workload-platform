@@ -58,8 +58,7 @@ session with its worktree mounted at `/workspace`. Run `npm ci`, `npm run build`
 browser tests, and the mock server through Pi's Gondolin tools **inside that
 VM**. Later sessions reuse the image but get fresh VMs and private Docker
 state. Build edited client code in the Pi VM. The separate Gitea Compose-cache
-job builds application images from a committed revision for full-stack
-benchmark baselines; those images do not replace a Pi session's source build.
+job pulls registry images; it does not build this repository's application images.
 Use a clean worktree: macOS `node_modules` contains native binaries such as
 `esbuild` that fail in Linux. The durable task's materialized Git checkout is
 clean, and `npm ci` installs Linux dependencies there without touching the
@@ -71,10 +70,14 @@ it. Run that command to install a new revision when using an older dev image or
 after changing the lockfile. Forcing the MCP browser executable for client
 tests caused pointer actions to miss MCP App controls.
 
-Optionally run `make gondolin-dev-cache` from the repository root to export its Compose
-images once. Set `GONDOLIN_DEV_IMAGE_CACHE` to the resulting
-`artifacts/gondolin-dev-images/<architecture>` directory and
-`GONDOLIN_DEV_IMAGE_STORE` to `~/.cache/gondolin/<architecture>` before starting Pi.
+Run the Gitea `Prepare Compose image cache` workflow for a committed revision,
+then import its reported handoff with `make gondolin-dev-cache-import
+GONDOLIN_DEV_CACHE_HANDOFF=<host-handoff-path>`. The Compose index is installed
+under `~/.cache/gondolin/compose-index/<repository>/<architecture>` and the
+archives under `~/.cache/gondolin/<architecture>`. Configure the Pi worker's
+`GONDOLIN_DEV_IMAGE_CACHE` and `GONDOLIN_DEV_IMAGE_STORE` to those absolute
+host paths before starting Pi. `make gondolin-dev-cache` remains available for
+local cache preparation without Gitea.
 The uncompressed image archives are shared read-only; Docker volumes, networks, ports, and
 runtime layers remain private to each VM. For another worktree or project,
 prepare its own cache from its Compose file. Inside the guest, set `COMPOSE_FILE`

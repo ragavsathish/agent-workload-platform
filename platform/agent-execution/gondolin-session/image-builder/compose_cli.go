@@ -11,8 +11,11 @@ import (
 )
 
 func runComposePull(args []string, input io.Reader, output io.Writer) error {
+	if len(args) > 0 && args[0] == "--via-api" {
+		return runComposePullViaAPI(args[1:], input, output)
+	}
 	if len(args) != 4 && len(args) != 6 {
-		return errors.New("usage: gondolin-oci compose pull <compose-config.json> <revision> <arch> <run-id> [<preload-root> <shared-store-root>]")
+		return errors.New("usage: gondolin-oci compose pull <compose-config.json|-> <revision> <arch> <run-id> [<preload-root> <shared-store-root>] | gondolin-oci compose pull --via-api <compose-config.json|-> <run-id>")
 	}
 	var config []byte
 	var err error
