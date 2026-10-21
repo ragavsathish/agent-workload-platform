@@ -25,4 +25,4 @@ jobs:
           set -euo pipefail
           docker compose -f products/voice-agent/deploy/compose.yml config \
             --format json --no-env-resolution --no-interpolate |
-            gondolin-oci compose pull --via-api - "$COMPOSE_CACHE_RUN_ID"
+            /usr/local/bin/gondolin-oci compose pull --via-api - "$COMPOSE_CACHE_RUN_ID"
