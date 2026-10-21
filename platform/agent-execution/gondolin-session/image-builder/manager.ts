@@ -15,9 +15,9 @@ import {
 
 export const BUILDER_LABEL = "gondolin-builder:host";
 export const DEFAULT_BUILDER_DISK = "128G";
-// Flutter's Linux Dart SDK archive is ~236 MiB; keep this larger response cap
-// on the trusted image-builder VM rather than widening ordinary task egress.
-const BUILDER_MAX_HTTP_RESPONSE_BYTES = 512 * 1024 * 1024;
+// The Compose cache includes a 690 MiB Grafana LGTM image layer. Keep the larger
+// response cap on the trusted image-builder VM rather than widening ordinary task egress.
+const BUILDER_MAX_HTTP_RESPONSE_BYTES = 1024 * 1024 * 1024;
 const GITEA_GUEST_ORIGIN = "http://gitea.local:3001";
 const OTEL_GUEST_ORIGIN = "http://otel.local:4318";
 
