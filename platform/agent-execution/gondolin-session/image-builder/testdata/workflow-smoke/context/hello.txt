@@ -1,0 +1,1 @@
+Gondolin Go image workflow smoke test

@@ -128,5 +128,11 @@ workflow supplies a read-only token for private base images. The Dockerfile's
 optional Gondolin MITM CA secret is not sent to the host build; host builds use
 the Docker daemon's network directly.
 
+For a small end-to-end Gitea check, dispatch `build-execution-image.yml` with
+`image_config` set to
+`platform/agent-execution/gondolin-session/image-builder/testdata/workflow-smoke/config.json`
+and the matching `artifact_version` from the checked-out revision. This fixture
+builds a single-file `scratch` image and exercises the same host job and handoff.
+
 Run tests with `make gondolin-docker-job-api-test` (requires Docker to run the
 Go toolchain container) or `go test ./...` from this directory.

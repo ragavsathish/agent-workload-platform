@@ -1,0 +1,8 @@
+{
+  "image": "local/gondolin-workflow-smoke:latest",
+  "build": {
+    "context": "platform/agent-execution/gondolin-session/image-builder/testdata/workflow-smoke/context",
+    "dockerfile": "platform/agent-execution/gondolin-session/image-builder/testdata/workflow-smoke/context/Dockerfile",
+    "assetConfig": "platform/agent-execution/gondolin-session/image-builder/testdata/workflow-smoke/config.json"
+  }
+}
