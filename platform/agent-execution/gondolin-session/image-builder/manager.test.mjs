@@ -40,13 +40,14 @@ test("image build context upload streams through the authenticated host hook", a
   const bytes = Buffer.from("verified-context-tar");
   const response = await service.handle(new Request("http://compose-cache.local:18080/v1/jobs/123e4567-e89b-12d3-a456-426614174000/context", {
     method: "PUT",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/x-tar", "Content-Length": String(bytes.length) },
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/x-tar", "Content-Encoding": "gzip", "Content-Length": String(bytes.length) },
     body: bytes,
   }));
   assert.equal(response.status, 202);
   assert.equal(calls[0].url, "http://127.0.0.1:18081/v1/jobs/123e4567-e89b-12d3-a456-426614174000/context");
   assert.equal(calls[0].init.headers.get("authorization"), `Bearer ${apiToken}`);
   assert.equal(calls[0].init.headers.get("content-type"), "application/x-tar");
+  assert.equal(calls[0].init.headers.get("content-encoding"), "gzip");
   assert.equal(await new Response(calls[0].init.body).text(), bytes.toString());
 });
 

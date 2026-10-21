@@ -62,7 +62,10 @@ file, checks its declared byte count and SHA-256, then atomically installs it
 and queues the job. The Go worker sends the verified context tar to host Docker
 Buildx, applies the requested platform and target, tags the result,
 and saves a tar into the shared `gondolin-image-handoff` folder. Context uploads
-are capped at 1 GiB. Invalid uploads are rejected and their temporary file is
+may use `Content-Encoding: gzip` to cross the VM's 64 MiB request limit; the
+service verifies the uncompressed tar against `contextBytes` and
+`contextSha256`. The Gitea Compose workflow uses this transport encoding for
+its generated web assets. Context tar content is capped at 1 GiB. Invalid uploads are rejected and their temporary file is
 removed.
 
 ### `GET /v1/jobs/{id}`

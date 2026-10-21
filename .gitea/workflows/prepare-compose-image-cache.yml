@@ -67,6 +67,7 @@ jobs:
           git archive --format=tar HEAD:products/voice-agent > /tmp/compose-build-context.tar
           tar -rf /tmp/compose-build-context.tar -C "$workspace/products/voice-agent" \
             apps/client/build/web apps/diagnostics/dist
+          gzip -n -c /tmp/compose-build-context.tar > /tmp/compose-build-context.tar.gz
           export revision arch workspace
           node --input-type=module <<'NODE'
           import { createHash } from "node:crypto";
@@ -82,6 +83,11 @@ jobs:
           const workspace = process.env.workspace;
           const buildContext = "/tmp/compose-build-context.tar";
           const buildContextBytes = fs.statSync(buildContext).size;
+          const compressedContext = `${buildContext}.gz`;
+          const compressedContextBytes = fs.statSync(compressedContext).size;
+          if (compressedContextBytes > 60 * 1024 * 1024) {
+            throw new Error(`Compressed build context exceeds the VM upload limit: ${compressedContextBytes} bytes`);
+          }
           const contextHash = createHash("sha256");
           for await (const chunk of fs.createReadStream(buildContext)) contextHash.update(chunk);
           const buildContextSha256 = contextHash.digest("hex");
@@ -124,8 +130,8 @@ jobs:
             if (created.status === "awaiting-context") {
               const upload = await fetch(`${endpoint}/jobs/${created.id}/context`, {
                 method: "PUT",
-                headers: { ...headers, "Content-Type": "application/x-tar", "Content-Length": String(buildContextBytes) },
-                body: fs.createReadStream(buildContext), duplex: "half",
+                headers: { ...headers, "Content-Type": "application/x-tar", "Content-Encoding": "gzip", "Content-Length": String(compressedContextBytes) },
+                body: fs.createReadStream(compressedContext), duplex: "half",
               });
               if (!upload.ok) throw new Error(`Build context upload for ${name} returned ${upload.status}: ${await upload.text()}`);
             }

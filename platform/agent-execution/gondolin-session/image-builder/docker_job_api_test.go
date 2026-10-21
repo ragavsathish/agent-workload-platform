@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -108,6 +109,35 @@ func TestImageBuildContextMustMatchDigestAndSize(t *testing.T) {
 	stored, err := os.ReadFile(filepath.Join(h.contextDir, id+".context.tar"))
 	if err != nil || !bytes.Equal(stored, data) {
 		t.Fatalf("stored context mismatch: %v", err)
+	}
+}
+
+func TestGzipImageBuildContextIsVerifiedAsTar(t *testing.T) {
+	h := newTestHandler(t)
+	data := bytes.Repeat([]byte("compressible build context"), 100)
+	sum := sha256.Sum256(data)
+	manifest := &BuildManifest{Context: ".", Dockerfile: "Dockerfile", AssetConfig: ".pi/gondolin.json", ArtifactVersion: "v2-" + strings.Repeat("e", 32), ImageRef: "voice-agent:test", ContextSHA256: hex.EncodeToString(sum[:]), ContextBytes: int64(len(data))}
+	job := JobRequest{Type: "image-build", RunID: "gzip-build", Revision: strings.Repeat("b", 40), Arch: "aarch64", BuildManifest: manifest}
+	id := decode(t, callJSON(t, h, "POST", "/v1/jobs", job, "Bearer "+testToken))["id"].(string)
+	var compressed bytes.Buffer
+	writer := gzip.NewWriter(&compressed)
+	if _, err := writer.Write(data); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest("PUT", "/v1/jobs/"+id+"/context", &compressed)
+	request.Header.Set("Authorization", "Bearer "+testToken)
+	request.Header.Set("Content-Encoding", "gzip")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, request)
+	if w.Code != 202 {
+		t.Fatalf("gzip upload: %d %s", w.Code, w.Body)
+	}
+	stored, err := os.ReadFile(filepath.Join(h.contextDir, id+".context.tar"))
+	if err != nil || !bytes.Equal(stored, data) {
+		t.Fatalf("decompressed context mismatch: %v", err)
 	}
 }
 

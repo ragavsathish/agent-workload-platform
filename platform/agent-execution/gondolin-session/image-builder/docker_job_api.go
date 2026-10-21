@@ -1,6 +1,7 @@
 package main
 
 import (
+	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -832,7 +833,12 @@ func (h *Handler) uploadContext(w http.ResponseWriter, r *http.Request, job Job)
 		writeError(w, http.StatusBadRequest, "missing build manifest")
 		return
 	}
-	if r.ContentLength > manifest.ContextBytes || r.ContentLength > h.maxContextLen {
+	encoding := r.Header.Get("Content-Encoding")
+	if encoding != "" && encoding != "gzip" {
+		writeError(w, http.StatusUnsupportedMediaType, "unsupported context encoding")
+		return
+	}
+	if r.ContentLength > h.maxContextLen || (encoding == "" && r.ContentLength > manifest.ContextBytes) {
 		writeError(w, http.StatusRequestEntityTooLarge, "context upload exceeds declared byte count")
 		return
 	}
@@ -848,7 +854,19 @@ func (h *Handler) uploadContext(w http.ResponseWriter, r *http.Request, job Job)
 		return
 	}
 	hash := sha256.New()
-	written, copyErr := io.Copy(io.MultiWriter(file, hash), io.LimitReader(r.Body, manifest.ContextBytes+1))
+	var source io.Reader = r.Body
+	if encoding == "gzip" {
+		compressed, err := gzip.NewReader(r.Body)
+		if err != nil {
+			_ = file.Close()
+			_ = os.Remove(staging)
+			writeError(w, http.StatusUnprocessableEntity, "invalid gzip build context")
+			return
+		}
+		defer compressed.Close()
+		source = compressed
+	}
+	written, copyErr := io.Copy(io.MultiWriter(file, hash), io.LimitReader(source, manifest.ContextBytes+1))
 	closeErr := file.Close()
 	if copyErr != nil || closeErr != nil || written != manifest.ContextBytes {
 		_ = os.Remove(staging)

@@ -46,7 +46,7 @@ export class DockerJobHostService {
     }
     const upstream = new URL(url.pathname + url.search, this.apiEndpoint);
     const headers = new Headers({ authorization: `Bearer ${this.apiToken}` });
-    for (const name of ["content-type", "content-length"]) {
+    for (const name of ["content-type", "content-length", "content-encoding"]) {
       const value = request.headers.get(name);
       if (value) headers.set(name, value);
     }
