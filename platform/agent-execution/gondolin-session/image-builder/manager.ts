@@ -43,6 +43,16 @@ function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function sha256File(file: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const hash = createHash("sha256");
+    const stream = fs.createReadStream(file);
+    stream.on("data", (chunk) => { hash.update(chunk); });
+    stream.once("error", reject);
+    stream.once("end", () => resolve(hash.digest("hex")));
+  });
+}
+
 function hostDockerCommand(): string {
   if (process.env.GONDOLIN_HOST_DOCKER) return process.env.GONDOLIN_HOST_DOCKER;
   const pathCandidates = (process.env.PATH ?? "").split(path.delimiter)
@@ -187,11 +197,14 @@ export class ComposeCacheHostService {
         image: image.tag,
         pull_policy: "never",
       }]));
-      const indexServices = Object.fromEntries([...serviceImages.entries()].map(([name, image]) => [name, {
-        image: image.tag,
-        archive: `${image.key}.tar`,
-        sha256: createHash("sha256").update(fs.readFileSync(path.join(staging, "agent", "images", `${image.key}.tar`))).digest("hex"),
-      }]));
+      const indexServices: Record<string, { image: string; archive: string; sha256: string }> = {};
+      for (const [name, image] of serviceImages) {
+        indexServices[name] = {
+          image: image.tag,
+          archive: `${image.key}.tar`,
+          sha256: await sha256File(path.join(staging, "agent", "images", `${image.key}.tar`)),
+        };
+      }
       fs.writeFileSync(path.join(staging, "compose.override.json"), `${JSON.stringify({ services }, null, 2)}\n`);
       fs.writeFileSync(path.join(staging, "index.json"), `${JSON.stringify({ services: indexServices }, null, 2)}\n`);
       fs.writeFileSync(path.join(staging, "cache-id"), `${cacheId}\n`);
