@@ -30,6 +30,8 @@ jobs:
           # Required only for `docker compose config`; this job never starts the stack.
           ORCHESTRATOR_ALLOWED_WORKSPACES: /workspace
           VOICE_DEFAULT_WORKSPACE: /workspace
+          FLUTTER_BIN: /opt/flutter/bin/flutter
+          PUB_CACHE: /var/cache/pub
         run: |
           set -eu
           export PATH="/usr/local/bin:/usr/local/sbin:$PATH"
