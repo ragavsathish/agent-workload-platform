@@ -175,7 +175,7 @@
   (doseq [service services]
     (let [{image "image" archive "archive" checksum "sha256"} (get-in index ["services" service])]
       (when-not (and (string? image) (re-matches #"gondolin-preload:[a-f0-9]{24}" image)
-                     (string? archive) (re-matches #"[a-f0-9]{24}\.tar\.zst" archive)
+                     (string? archive) (re-matches #"[a-f0-9]{24}\.tar" archive)
                      (string? checksum) (re-matches #"[a-f0-9]{64}" checksum))
         (throw (ex-info (str "image preload has no valid " service " entry") {})))))
   services)

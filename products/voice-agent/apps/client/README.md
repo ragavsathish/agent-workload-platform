@@ -73,7 +73,7 @@ Optionally run `make gondolin-dev-cache` from the repository root to export its 
 images once. Set `GONDOLIN_DEV_IMAGE_CACHE` to the resulting
 `artifacts/gondolin-dev-images/<architecture>` directory and
 `GONDOLIN_DEV_IMAGE_STORE` to `~/.cache/gondolin/<architecture>` before starting Pi.
-The image archives are shared read-only; Docker volumes, networks, ports, and
+The uncompressed image archives are shared read-only; Docker volumes, networks, ports, and
 runtime layers remain private to each VM. For another worktree or project,
 prepare its own cache from its Compose file. Inside the guest, set `COMPOSE_FILE`
 to that worktree's Compose path and `COMPOSE_CACHE_SERVICES` to the needed

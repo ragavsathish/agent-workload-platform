@@ -49,14 +49,15 @@ test("development image pins Babashka for the Clojure session-start hook", () =>
 test("Compose image preloads use the K3s agent/images folder convention", () => {
   assert.match(preloadBuilder, /\.resolve \(\.resolve preload-root "agent"\) "images"/);
   assert.match(preloadBuilder, /gondolin-preload:/);
-  assert.match(preloadBuilder, /\.tar\.zst/);
+  assert.match(preloadBuilder, /\.tar"/);
   assert.match(preloadBuilder, /"sha256"/);
   assert.match(composeLoader, /image_store=\/image-store\/agent\/images/);
   assert.match(composeLoader, /\$image_store\/\$archive/);
   assert.match(composeLoader, /sha256sum --check/);
-  assert.match(composeLoader, /zstd --quiet --decompress --stdout/);
   assert.match(composeLoader, /GONDOLIN_DEV_IMAGE_STORE/);
+  assert.match(composeLoader, /docker load --input "\$archive_path"/);
+  assert.doesNotMatch(composeLoader, /zstd/);
   assert.match(piExtension, /"\/image-store"/);
-  assert.match(dockerfile, /zip zstd/);
+  assert.doesNotMatch(dockerfile, /zstd/);
   assert.match(stackHook, /gondolin-preload:/);
 });

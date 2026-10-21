@@ -25,13 +25,13 @@ if [ "${1:-}" != config ]; then
     "$preload/index.json" "$COMPOSE_CACHE_SERVICES")
   printf '%s\n' "$archives" | while IFS="$(printf '\t')" read -r archive checksum; do
     archive_path="$image_store/$archive"
-    marker="/var/lib/docker/.gondolin-preload-${archive%.tar.zst}"
+    marker="/var/lib/docker/.gondolin-preload-${archive%.tar}"
     if [ ! -e "$marker" ]; then
       printf '%s  %s\n' "$checksum" "$archive_path" | sha256sum --check --status || {
         echo "Image preload checksum mismatch: $archive" >&2
         exit 1
       }
-      zstd --quiet --decompress --stdout "$archive_path" | docker load
+      docker load --input "$archive_path"
       touch "$marker"
     fi
   done

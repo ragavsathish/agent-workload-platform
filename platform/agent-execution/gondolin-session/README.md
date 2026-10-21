@@ -60,14 +60,14 @@ to the shared host store; these mount read-only at `/image-cache` and
 `/image-store` in each VM. The source repository's `make gondolin-dev-cache` prepares the Voice Agent
 image set as one example; other repositories can use
 `gondolin/prepare-compose-cache.clj <compose.yml> <cache-directory> <shared-store-root>`
-with Babashka, Docker, and zstd installed on the host. The per-repository index
+with Babashka and Docker installed on the host. The per-repository index
 and override stay separate while archives share a content store; each index
 records a SHA-256 checksum. In the
 guest, set `COMPOSE_FILE` to that worktree's Compose path and
 `COMPOSE_CACHE_SERVICES` to the needed service names, then use `dev-compose`
 to load only those cached image tags and apply its no-pull override. The
-compressed `.tar.zst` archives use the `agent/images` layout in the shared store
-and are preloaded on demand into each VM's private Docker store; image bytes are shared, but no Docker data root,
+`.tar` archives use the `agent/images` layout in the shared store and are
+preloaded on demand into each VM's private Docker store; image bytes are shared, but no Docker data root,
 named volume, or port is shared.
 For this repository, `.pi/gondolin.json` selects `.pi/hooks/start-dev-stack.clj`
 as a Pi `session_start` hook. The development image includes a checksum-pinned

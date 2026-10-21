@@ -76,7 +76,7 @@
          :key key
          :source image
          :imageId image-id
-         :archive (str key ".tar.zst")}))))
+         :archive (str key ".tar")}))))
 
 (defn write-json! [path value]
   (spit (str path) (str (json/generate-string value {:pretty true}) "\n")
@@ -93,20 +93,17 @@
 (defn ensure-shared-archive! [image shared-directory]
   (let [archive (.resolve shared-directory (:archive image))]
     (if (Files/exists archive (make-array java.nio.file.LinkOption 0))
-      (command "zstd" "-t" (str archive))
-      (let [raw (.resolve shared-directory (str (:key image) "." (UUID/randomUUID) ".tar"))
-            compressed (.resolve shared-directory (str (:key image) "." (UUID/randomUUID) ".tar.zst"))]
+      (validate-archive! archive)
+      (let [temporary (.resolve shared-directory
+                                (str (:key image) "." (UUID/randomUUID) ".tar"))]
         (try
-          (command "docker" "save" "--output" (str raw) (:tag image))
-          (validate-archive! raw)
-          (command "zstd" "-q" "-T0" "-3" "-f" (str raw) "-o" (str compressed))
-          (command "zstd" "-t" (str compressed))
+          (command "docker" "save" "--output" (str temporary) (:tag image))
+          (validate-archive! temporary)
           (try
-            (Files/move compressed archive (into-array StandardCopyOption [StandardCopyOption/ATOMIC_MOVE]))
+            (Files/move temporary archive (into-array StandardCopyOption [StandardCopyOption/ATOMIC_MOVE]))
             (catch java.nio.file.FileAlreadyExistsException _ nil))
           (finally
-            (Files/deleteIfExists raw)
-            (Files/deleteIfExists compressed)))))
+            (Files/deleteIfExists temporary)))))
     archive))
 
 (defn prepare-preload! [compose-argument preload-root-argument shared-root-argument]

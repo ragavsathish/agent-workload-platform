@@ -12,7 +12,7 @@
                              (let [archive (get-in index ["services" service "archive"])
                                    checksum (get-in index ["services" service "sha256"])]
                                (when-not (and (string? archive)
-                                              (re-matches #"[a-f0-9]{24}\.tar\.zst" archive)
+                                              (re-matches #"[a-f0-9]{24}\.tar" archive)
                                               (string? checksum)
                                               (re-matches #"[a-f0-9]{64}" checksum))
                                  (throw (ex-info (str "No cached image for Compose service: " service) {})))
