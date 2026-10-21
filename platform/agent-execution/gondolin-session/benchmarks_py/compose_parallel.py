@@ -22,6 +22,36 @@ from vm_client import VMClient
 
 ROOT = Path(__file__).resolve().parents[4]
 ORACLE_TOOL = "platform/agent-execution/gondolin-session/tools/oracle.clj"
+ALLURE_BIN = ROOT / "platform/agent-execution/gondolin-session/node_modules/.bin/allure"
+ALLURE_CONFIG = ROOT / "platform/agent-execution/gondolin-session/tools/allurerc.json"
+
+
+def _generate_allure(evidence_dir: Path, parallelism: int) -> dict:
+    results_dirs = [evidence_dir / f"run-{index + 1}-patrol" / "allure-results"
+                    for index in range(parallelism)]
+    for index, directory in enumerate(results_dirs, start=1):
+        count = len(list(directory.glob("*-result.json")))
+        if count != 1:
+            raise RuntimeError(f"VM {index}: expected one Allure Oracle result, found {count}")
+    if not ALLURE_BIN.is_file():
+        raise RuntimeError(f"Allure CLI is missing: {ALLURE_BIN}; run pnpm install")
+    report_dir = evidence_dir / "allure-report"
+    try:
+        subprocess.run(
+            [str(ALLURE_BIN), "generate", *(str(directory) for directory in results_dirs),
+             "--config", str(ALLURE_CONFIG),
+             "--output", str(report_dir), "--clean"],
+            cwd=ROOT, check=True, capture_output=True, text=True, timeout=120,
+        )
+    except subprocess.CalledProcessError as exc:
+        details = (exc.stderr or exc.stdout or "").strip()
+        raise RuntimeError(f"Allure report generation failed: {details or exc}") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("Allure report generation exceeded 120 seconds") from exc
+    return {"results": [str(directory) for directory in results_dirs],
+            "report": str(report_dir / "index.html"),
+            "history": str(ROOT / "artifacts/benchmarks/oracle-allure-history.jsonl"),
+            "resultCount": parallelism}
 
 
 def _monitor(futures, *, phase, samples, workspace, baseline_swap, started, clock,
@@ -219,7 +249,7 @@ def measure(image, workspace, *, compose_file=None, workload_command=None,
                             oracle_execution = clients[index].run([
                                 "/usr/local/bin/bb", f"/workspace/{ORACLE_TOOL}",
                                 "/workspace/products/voice-agent/apps/client/build/patrol-latest",
-                                result_id, str(index + 1),
+                                result_id, str(index + 1), "/benchmark-evidence/allure-results",
                             ])
                             oracle_result = json.loads(oracle_execution.get("stdout") or "{}")
                             if not isinstance(oracle_result, dict) or not isinstance(oracle_result.get("passed"), bool):
@@ -302,6 +332,13 @@ def measure(image, workspace, *, compose_file=None, workload_command=None,
                      and (not patrol_oracle or all(item and item.get("passed") for item in patrol_oracle_results)),
         "error": error, "checkpointsSaved": False,
     }
+    if patrol_oracle:
+        try:
+            result["allure"] = _generate_allure(evidence_dir, parallelism)
+        except (OSError, RuntimeError) as exc:
+            result["allure"] = {"error": str(exc)}
+            result["error"] = result["error"] or str(exc)
+            result["allPassed"] = False
     return result
 
 

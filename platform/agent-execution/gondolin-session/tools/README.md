@@ -6,7 +6,7 @@ harness. It runs inside the VM, after Patrol has written `build/patrol-latest`.
 ```sh
 /usr/local/bin/bb /workspace/platform/agent-execution/gondolin-session/tools/oracle.clj \
   /workspace/products/voice-agent/apps/client/build/patrol-latest \
-  <run-id> <vm-index>
+  <run-id> <vm-index> [/benchmark-evidence/allure-results]
 ```
 
 The tool prints one JSON verdict with `passed`, `browserTrace`, and `otel` fields.
@@ -16,6 +16,19 @@ an incorrect argument count. The collector and Tempo endpoints default to
 `ORACLE_OTLP_COLLECTOR` and `ORACLE_TEMPO` to override them. The canary tests
 collector-to-Tempo delivery, while the browser check validates the saved
 Patrol trace evidence.
+
+When an Allure results directory is supplied, Oracle writes one
+`*-result.json` file and a JSON verdict attachment there, including browser
+trace and OTEL steps. Its `historyId` is stable for the same VM index across
+benchmark generations; its `uuid` changes for every execution. The run ID is
+recorded as an excluded parameter so it does not split the history.
+
+The benchmark passes the VM result directories directly to `allure generate`,
+stores an HTML report under the run's Patrol evidence directory, and appends to
+`artifacts/benchmarks/oracle-allure-history.jsonl`. Those ignored artifacts
+retain each generation locally. The Allure CLI is pinned as a dev dependency
+of `@agent-workload-platform/gondolin-session`; run `pnpm install` before an
+oracle-enabled benchmark. The JSON verdict remains the pass/fail source.
 
 Run focused tests with Babashka:
 

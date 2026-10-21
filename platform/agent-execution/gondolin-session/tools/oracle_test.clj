@@ -47,5 +47,22 @@
         (is (false? (get (oracle/browser-traces run-dir) "passed"))))
       (finally (fs/delete-tree run-dir)))))
 
+(deftest allure-results-track-vm-across-generations
+  (let [verdict {"passed" true
+                 "browserTrace" {"passed" true "failures" []}
+                 "otel" {"passed" true "failures" []}}
+        first-run (oracle/allure-result verdict "generation-1" 1 100 200 "uuid-1")
+        next-run (oracle/allure-result verdict "generation-2" 1 300 400 "uuid-2")
+        other-vm (oracle/allure-result verdict "generation-2" 2 300 400 "uuid-3")]
+    (is (= (get first-run "historyId") (get next-run "historyId")))
+    (is (not= (get first-run "historyId") (get other-vm "historyId")))
+    (is (not= (get first-run "uuid") (get next-run "uuid")))
+    (is (= ["passed" "passed"] (mapv #(get % "status") (get first-run "steps"))))
+    (let [failed (oracle/allure-result
+                  (assoc-in (assoc verdict "passed" false) ["otel" "passed"] false)
+                  "generation-3" 1 500 600 "uuid-4")]
+      (is (= "failed" (get failed "status")))
+      (is (= ["passed" "failed"] (mapv #(get % "status") (get failed "steps")))))))
+
 (let [result (run-tests 'oracle-test)]
   (System/exit (if (zero? (+ (:fail result) (:error result))) 0 1)))

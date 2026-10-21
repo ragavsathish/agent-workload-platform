@@ -65,6 +65,18 @@ every five seconds.
 
 ## Parallel full Compose startup
 
+The 2026-10-21 Allure-enabled one-VM validation passed Compose readiness,
+both Patrol journeys, browser trace checks, and the OTEL canary. It produced
+one Allure test result with the Oracle verdict attached and generated a
+[local HTML report](../../../../artifacts/benchmarks/patrol-evidence/compose-overlay2-1vm-2026-10-21T101852Z/allure-report/index.html).
+The complete benchmark took 168.643 seconds; the
+[raw result](../../../../artifacts/benchmarks/compose-overlay2-1vm-2026-10-21T101852Z/result.json)
+records the Allure paths. The preceding three-VM result was also converted
+into its own Allure generation. The shared ignored
+`artifacts/benchmarks/oracle-allure-history.jsonl` now contains both
+generations, with VM 1 linked by a stable history ID. Allure generation
+happens after the measured VM time and does not change the Oracle verdict.
+
 The 2026-10-21 rerun with the Babashka Oracle passed in all three independent
 QEMU/Overlay2 VMs. Each VM started Compose, completed both Patrol journeys,
 validated its two browser traces, and retrieved its own OTLP canary from

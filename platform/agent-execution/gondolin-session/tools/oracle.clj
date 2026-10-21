@@ -2,13 +2,14 @@
 
 (ns oracle
   (:require [babashka.fs :as fs]
-            [cheshire.core :as json])
+            [cheshire.core :as json]
+            [clojure.string :as str])
   (:import [java.net URI]
            [java.net.http HttpClient HttpRequest HttpRequest$BodyPublishers HttpResponse$BodyHandlers]
            [java.nio.file Files]
            [java.security MessageDigest SecureRandom]
            [java.time Duration]
-           [java.util Base64]
+           [java.util Base64 UUID]
            [java.util.zip CRC32 ZipFile]))
 
 (defn hex [bytes]
@@ -172,13 +173,62 @@
     {"passed" (and (get browser "passed") (get otel "passed"))
      "browserTrace" browser "otel" otel}))
 
+(defn sha256-string [value]
+  (hex (.digest (MessageDigest/getInstance "SHA-256") (.getBytes ^String value "UTF-8"))))
+
+(defn allure-result [verdict run-id vm-index start stop uuid]
+  (let [full-name "gondolin.patrol.oracle"
+        browser (get verdict "browserTrace")
+        otel (get verdict "otel")
+        step (fn [name check]
+               (let [failures (get check "failures" [])]
+                 {"name" name
+                  "status" (if (get check "passed") "passed" "failed")
+                  "statusDetails" {"message" (str/join "; " (map str failures))}
+                  "start" start "stop" stop}))
+        failures (concat (get browser "failures" []) (get otel "failures" []))]
+    {"uuid" uuid
+     "testCaseId" (subs (sha256-string full-name) 0 32)
+     "historyId" (subs (sha256-string (str full-name "|vm=" vm-index)) 0 32)
+     "fullName" full-name
+     "name" (str "Patrol oracle (VM " vm-index ")")
+     "status" (if (get verdict "passed") "passed" "failed")
+     "statusDetails" {"message" (str/join "; " (map str failures))}
+     "stage" "finished"
+     "start" start "stop" stop
+     "parameters" [{"name" "vmIndex" "value" (str vm-index)}
+                   {"name" "runId" "value" run-id "excluded" true}]
+     "labels" [{"name" "parentSuite" "value" "Gondolin"}
+               {"name" "suite" "value" "Patrol Oracle"}
+               {"name" "framework" "value" "gondolin-harness"}
+               {"name" "language" "value" "clojure"}]
+     "steps" [(step "Browser trace evidence" browser)
+              (step "OTLP collector to Tempo canary" otel)]
+     "attachments" [{"name" "Oracle verdict" "source" (str uuid "-attachment.json")
+                     "type" "application/json"}]}))
+
+(defn write-allure! [directory verdict run-id vm-index start stop]
+  (let [uuid (str (UUID/randomUUID))
+        result (allure-result verdict run-id vm-index start stop uuid)]
+    (fs/create-dirs directory)
+    (spit (str directory "/" uuid "-attachment.json")
+          (str (json/generate-string verdict {:pretty true}) "\n"))
+    (spit (str directory "/" uuid "-result.json")
+          (str (json/generate-string result {:pretty true}) "\n"))
+    result))
+
 (defn -main [& args]
-  (when-not (= 3 (count args))
+  (when-not (<= 3 (count args) 4)
     (binding [*out* *err*]
-      (println "Usage: oracle.clj <patrol-run-dir> <run-id> <vm-index>"))
+      (println "Usage: oracle.clj <patrol-run-dir> <run-id> <vm-index> [allure-results-dir]"))
     (System/exit 2))
-  (let [[run-dir run-id vm-index] args
-        result (evaluate run-dir run-id (Long/parseLong vm-index))]
+  (let [[run-dir run-id vm-index allure-directory] args
+        started (System/currentTimeMillis)
+        index (Long/parseLong vm-index)
+        result (evaluate run-dir run-id index)
+        stopped (System/currentTimeMillis)]
+    (when allure-directory
+      (write-allure! allure-directory result run-id index started stopped))
     (println (json/generate-string result))
     (System/exit (if (get result "passed") 0 1))))
 

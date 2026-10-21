@@ -78,3 +78,14 @@ VM index; it prints one JSON verdict and exits nonzero on failure. The Compose
 benchmark invokes it inside each VM, records the verdict, and fails if an
 enabled oracle fails. The canary proves the collector-to-Tempo path; it is not
 evidence that an application service emitted spans.
+
+Allure sits above this verdict as a presentation and history layer. Oracle
+emits one Allure test result per VM with browser-trace and OTEL steps, and the
+verdict JSON as an attachment. Each test has a stable `historyId` for its VM
+index, a fresh `uuid`, and an excluded run-ID parameter, matching Allure's
+[test result format](https://allurereport.org/docs/how-it-works-test-result-file/)
+and [history identifier rules](https://allurereport.org/docs/how-it-works-test-identifiers/).
+The harness generates a per-run report and retains Allure 3's JSONL history
+across generations using `historyPath`, as described in Allure's
+[history documentation](https://allurereport.org/docs/history-and-retries/).
+Allure displays and stores the verdict; it does not redefine the oracle rule.

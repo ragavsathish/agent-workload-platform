@@ -50,7 +50,10 @@ journey once in every isolated VM after Compose readiness; use
 checkouts. Set `benchmark_patrol_oracle=true` to run Gondolin's Babashka
 `tools/oracle.clj` inside each VM and require its Patrol trace and OTEL canary
 verdict; this requires the dev OTEL LGTM service. The tool is copied into
-isolated benchmark checkouts automatically, including pending edits.
+isolated benchmark checkouts automatically, including pending edits. Each
+oracle-enabled run also stores Allure results and a generated report in its
+Patrol evidence directory, while Allure's shared JSONL history tracks run
+generations. Install the workspace's pinned Allure CLI with `pnpm install`.
 Use a VM image whose Docker driver matches
 `benchmark_storage_driver`. Qemu is the default VMM.
 
