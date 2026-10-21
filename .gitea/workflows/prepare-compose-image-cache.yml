@@ -23,7 +23,7 @@ jobs:
         with:
           ref: ${{ inputs.source_revision }}
           submodules: recursive
-      - name: Export shareable Compose images to the host handoff
+      - name: Resolve Compose config and request host cache preparation
         env:
           COMPOSE_CACHE_COMPOSE_FILE: ${{ inputs.compose_file }}
           COMPOSE_CACHE_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
@@ -33,7 +33,6 @@ jobs:
         run: |
           set -eu
           export PATH="/usr/local/bin:/usr/local/sbin:$PATH"
-          bb --version
           docker compose version
           case "$COMPOSE_CACHE_COMPOSE_FILE" in
             ""|/*|../*|*/../*|*/..) echo "Compose path must stay inside the checked-out repository" >&2; exit 1 ;;
@@ -53,15 +52,45 @@ jobs:
             aarch64|x86_64) arch=$(uname -m) ;;
             *) echo "Unsupported builder architecture: $(uname -m)" >&2; exit 1 ;;
           esac
-          handoff_root="/compose-cache-handoff/${revision}-${arch}-${COMPOSE_CACHE_RUN_ID}"
-          staging="${handoff_root}.partial"
-          test ! -e "$handoff_root"
-          rm -rf "$staging"
-          mkdir -p "$staging"
-          bb "$workspace/platform/agent-execution/gondolin-session/gondolin/prepare-compose-cache.clj" \
-            "$compose_path" "$staging" "$staging" skip-build-services
-          cache_id=$(cat "$staging/cache-id")
-          final="${handoff_root}-${cache_id}"
-          test ! -e "$final"
-          mv "$staging" "$final"
-          echo "Compose cache handoff ready: $final"
+          docker compose -f "$compose_path" config --format json > /tmp/compose-config.json
+          export revision arch
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+
+          const endpoint = "http://compose-cache.local:18080/v1";
+          const headers = {
+            Authorization: `Bearer ${process.env.COMPOSE_CACHE_HOST_TOKEN}`,
+            "Content-Type": "application/json",
+          };
+          const composeConfig = JSON.parse(fs.readFileSync("/tmp/compose-config.json", "utf8"));
+          const input = {
+            composeConfig,
+            revision: process.env.revision,
+            arch: process.env.arch,
+            runId: process.env.COMPOSE_CACHE_RUN_ID,
+          };
+          const submitted = await fetch(`${endpoint}/prepare`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(input),
+          });
+          if (!submitted.ok) throw new Error(`Host cache request returned ${submitted.status}: ${await submitted.text()}`);
+
+          let completed = false;
+          for (let elapsed = 0; elapsed < 5100; elapsed += 10) {
+            const response = await fetch(`${endpoint}/status?runId=${encodeURIComponent(input.runId)}`, { headers });
+            if (!response.ok) throw new Error(`Host cache status returned ${response.status}: ${await response.text()}`);
+            const state = await response.json();
+            if (state.status === "ready") {
+              console.log(`Compose cache handoff ready: ${state.handoff} (${state.images} images, ${state.services} services; cache ${state.cacheId})`);
+              completed = true;
+              break;
+            }
+            if (state.status === "failed") throw new Error(state.error);
+            if (state.status !== "queued" && state.status !== "running") {
+              throw new Error(`Unexpected host cache preparation state: ${state.status}`);
+            }
+            await new Promise((resolve) => setTimeout(resolve, 10_000));
+          }
+          if (!completed) throw new Error("Timed out waiting for host Compose cache preparation");
+          NODE

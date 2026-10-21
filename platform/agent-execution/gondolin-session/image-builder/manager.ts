@@ -1,4 +1,7 @@
+import { createHash, randomBytes } from "node:crypto";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -15,11 +18,191 @@ import {
 
 export const BUILDER_LABEL = "gondolin-builder:host";
 export const DEFAULT_BUILDER_DISK = "128G";
-// The Compose cache includes a 690 MiB Grafana LGTM image layer. Keep the larger
-// response cap on the trusted image-builder VM rather than widening ordinary task egress.
+// Trusted builder VM Docker builds may fetch large OCI layers. Keep the larger
+// response cap on this VM rather than widening ordinary task egress.
 const BUILDER_MAX_HTTP_RESPONSE_BYTES = 1024 * 1024 * 1024;
 const GITEA_GUEST_ORIGIN = "http://gitea.local:3001";
 const OTEL_GUEST_ORIGIN = "http://otel.local:4318";
+const COMPOSE_CACHE_GUEST_ORIGIN = "http://compose-cache.local:18080";
+
+type ComposeService = { image?: unknown; build?: unknown };
+type ComposeConfig = { services?: Record<string, ComposeService> };
+type ComposeCacheRequest = {
+  arch?: unknown;
+  composeConfig?: unknown;
+  revision?: unknown;
+  runId?: unknown;
+};
+
+type ComposeCacheJob =
+  | { status: "queued" | "running" }
+  | { status: "failed"; error: string }
+  | { status: "ready"; handoff: string; cacheId: string; images: number; services: number };
+
+function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function hostDockerCommand(): string {
+  if (process.env.GONDOLIN_HOST_DOCKER) return process.env.GONDOLIN_HOST_DOCKER;
+  const pathCandidates = (process.env.PATH ?? "").split(path.delimiter)
+    .map((directory) => path.join(directory, "docker"));
+  const candidates = [
+    ...pathCandidates,
+    path.join(os.userInfo().homedir, ".rd", "bin", "docker"),
+    "/opt/homebrew/bin/docker",
+    "/usr/local/bin/docker",
+    "/usr/bin/docker",
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? "docker";
+}
+
+function runHostCommand(command: string, args: string[], quietStderr = false): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      env: { ...process.env, HOME: os.userInfo().homedir },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+      if (!quietStderr) process.stdout.write(chunk);
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+      if (!quietStderr) process.stderr.write(chunk);
+    });
+    child.once("error", reject);
+    child.once("exit", (code) => code === 0
+      ? resolve(stdout.trim())
+      : reject(new Error(`${command} ${args[0]} exited with ${code ?? "a signal"}${stderr.trim() ? `: ${stderr.trim()}` : ""}`)));
+  });
+}
+
+function hostDockerImageId(image: string): Promise<string | undefined> {
+  return runHostCommand(hostDockerCommand(), ["image", "inspect", image, "--format", "{{.Id}}"], true)
+    .then((imageId) => /^sha256:[a-f0-9]{64}$/.test(imageId) ? imageId : undefined)
+    .catch(() => undefined);
+}
+
+export class ComposeCacheHostService {
+  private readonly jobs = new Map<string, ComposeCacheJob>();
+
+  constructor(private readonly handoffDirectory: string, private readonly token: string) {}
+
+  async handle(request: Request): Promise<Response | undefined> {
+    const url = new URL(request.url);
+    if (url.hostname !== "compose-cache.local" || url.port !== "18080") return undefined;
+    if (request.headers.get("authorization") !== `Bearer ${this.token}`) {
+      return Response.json({ error: "unauthorized" }, { status: 401 });
+    }
+    if (request.method === "POST" && url.pathname === "/v1/prepare") {
+      return this.startJob(request);
+    }
+    if (request.method === "GET" && url.pathname === "/v1/status") {
+      const runId = url.searchParams.get("runId") ?? "";
+      const job = this.jobs.get(runId);
+      return job
+        ? Response.json(job)
+        : Response.json({ error: "unknown cache preparation run" }, { status: 404 });
+    }
+    return Response.json({ error: "not found" }, { status: 404 });
+  }
+
+  private async startJob(request: Request): Promise<Response> {
+    const body = await request.arrayBuffer();
+    if (body.byteLength > 4 * 1024 * 1024) {
+      return Response.json({ error: "Compose config exceeds 4 MiB" }, { status: 413 });
+    }
+    let input: ComposeCacheRequest;
+    try {
+      input = JSON.parse(new TextDecoder().decode(body)) as ComposeCacheRequest;
+    } catch {
+      return Response.json({ error: "request must contain JSON" }, { status: 400 });
+    }
+    if (typeof input.runId !== "string" || !/^[A-Za-z0-9.-]{1,80}$/.test(input.runId)
+        || typeof input.revision !== "string" || !/^[a-f0-9]{40,64}$/.test(input.revision)
+        || typeof input.arch !== "string" || !["aarch64", "x86_64"].includes(input.arch)
+        || input.arch !== (process.arch === "arm64" ? "aarch64" : process.arch === "x64" ? "x86_64" : "unsupported")) {
+      return Response.json({ error: "invalid run ID, revision, or host architecture" }, { status: 400 });
+    }
+    if (!input.composeConfig || typeof input.composeConfig !== "object" || Array.isArray(input.composeConfig)) {
+      return Response.json({ error: "composeConfig must be an object" }, { status: 400 });
+    }
+    const current = this.jobs.get(input.runId);
+    if (current) return Response.json(current, { status: 202 });
+    this.jobs.set(input.runId, { status: "queued" });
+    void this.prepare(input as Required<ComposeCacheRequest>).then(
+      (result) => this.jobs.set(input.runId as string, result),
+      (error: unknown) => this.jobs.set(input.runId as string, {
+        status: "failed",
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    return Response.json({ status: "queued" }, { status: 202 });
+  }
+
+  private async prepare(input: Required<ComposeCacheRequest>): Promise<ComposeCacheJob> {
+    this.jobs.set(input.runId as string, { status: "running" });
+    const config = input.composeConfig as ComposeConfig;
+    const composeServices = config.services;
+    if (!composeServices || typeof composeServices !== "object" || Array.isArray(composeServices)) {
+      throw new Error("Compose configuration has no services map");
+    }
+    const serviceImages = new Map<string, { source: string; imageId: string; tag: string; key: string }>();
+    for (const [name, service] of Object.entries(composeServices)) {
+      if (!service || typeof service !== "object") throw new Error(`invalid Compose service: ${name}`);
+      if (service.build !== undefined) continue;
+      if (service.image === undefined) continue;
+      if (typeof service.image !== "string" || service.image.length > 512
+          || !/^[A-Za-z0-9][A-Za-z0-9._/:@-]*$/.test(service.image)) {
+        throw new Error(`invalid image reference for Compose service ${name}`);
+      }
+      if (serviceImages.size >= 128) throw new Error("Compose config has too many image services");
+      let imageId = await hostDockerImageId(service.image);
+      if (!imageId) {
+        await runHostCommand(hostDockerCommand(), ["pull", service.image]);
+        imageId = await hostDockerImageId(service.image);
+      }
+      if (!imageId) throw new Error(`host Docker could not resolve image ${service.image}`);
+      const key = sha256(`${service.image}\n${imageId}`).slice(0, 24);
+      serviceImages.set(name, { source: service.image, imageId, key, tag: `gondolin-preload:${key}` });
+    }
+    const images = new Map([...serviceImages.values()].map((image) => [image.tag, image]));
+    if (images.size === 0) throw new Error("Compose configuration has no images to cache");
+    const cacheEntries = [...images.entries()].sort(([left], [right]) => left.localeCompare(right))
+      .map(([tag, image]) => [tag, { source: image.source, imageId: image.imageId }]);
+    const cacheId = sha256(JSON.stringify(cacheEntries));
+    const staging = path.join(this.handoffDirectory, `${input.revision}-${input.arch}-${input.runId}.partial`);
+    const handoffRoot = path.join(this.handoffDirectory, `${input.revision}-${input.arch}-${input.runId}-${cacheId}`);
+    fs.rmSync(staging, { recursive: true, force: true });
+    fs.mkdirSync(path.join(staging, "agent", "images"), { recursive: true, mode: 0o700 });
+    try {
+      for (const image of images.values()) {
+        await runHostCommand(hostDockerCommand(), ["tag", image.imageId, image.tag]);
+        await runHostCommand(hostDockerCommand(), ["save", "--output", path.join(staging, "agent", "images", `${image.key}.tar`), image.tag]);
+      }
+      const services = Object.fromEntries([...serviceImages.entries()].map(([name, image]) => [name, {
+        image: image.tag,
+        pull_policy: "never",
+      }]));
+      const indexServices = Object.fromEntries([...serviceImages.entries()].map(([name, image]) => [name, {
+        image: image.tag,
+        archive: `${image.key}.tar`,
+        sha256: createHash("sha256").update(fs.readFileSync(path.join(staging, "agent", "images", `${image.key}.tar`))).digest("hex"),
+      }]));
+      fs.writeFileSync(path.join(staging, "compose.override.json"), `${JSON.stringify({ services }, null, 2)}\n`);
+      fs.writeFileSync(path.join(staging, "index.json"), `${JSON.stringify({ services: indexServices }, null, 2)}\n`);
+      fs.writeFileSync(path.join(staging, "cache-id"), `${cacheId}\n`);
+      fs.renameSync(staging, handoffRoot);
+    } catch (error) {
+      fs.rmSync(staging, { recursive: true, force: true });
+      throw error;
+    }
+    return { status: "ready", handoff: handoffRoot, cacheId, images: images.size, services: serviceImages.size };
+  }
+}
 
 function loopbackEndpoint(endpoint: string, name: string): URL {
   const url = new URL(endpoint);
@@ -29,13 +212,18 @@ function loopbackEndpoint(endpoint: string, name: string): URL {
   return url;
 }
 
-export function createBuilderServiceAccess(giteaEndpoint: string, otelEndpoint: string) {
+export function createBuilderServiceAccess(
+  giteaEndpoint: string,
+  otelEndpoint: string,
+  composeCacheService?: ComposeCacheHostService,
+) {
   const giteaUpstream = loopbackEndpoint(giteaEndpoint, "Gitea");
   const otelUpstream = loopbackEndpoint(otelEndpoint, "OTel");
   const giteaGuest = new URL(GITEA_GUEST_ORIGIN);
   giteaGuest.port = giteaUpstream.port;
   const otelGuest = new URL(OTEL_GUEST_ORIGIN);
   otelGuest.port = otelUpstream.port;
+  const composeCacheGuest = new URL(COMPOSE_CACHE_GUEST_ORIGIN);
   const route = (requested: URL) => {
     if (requested.hostname === giteaGuest.hostname && requested.port === giteaGuest.port) {
       return giteaUpstream;
@@ -47,9 +235,11 @@ export function createBuilderServiceAccess(giteaEndpoint: string, otelEndpoint: 
   };
   return createHttpHooks({
     allowedHosts: ["*"],
-    allowedInternalHosts: [giteaUpstream.hostname, otelUpstream.hostname],
-    onRequest: (request) => {
+    allowedInternalHosts: [giteaUpstream.hostname, otelUpstream.hostname, composeCacheGuest.hostname],
+    onRequest: async (request) => {
       const requested = new URL(request.url);
+      const composeCacheResponse = await composeCacheService?.handle(request);
+      if (composeCacheResponse) return composeCacheResponse;
       const upstream = route(requested);
       if (!upstream) {
         if (requested.hostname === "127.0.0.1" || requested.hostname === "localhost") {
@@ -108,17 +298,23 @@ export class BuilderManager {
   private vm?: VM;
   private daemon?: ExecProcess;
   private runner?: ExecProcess;
+  private readonly composeCacheToken = randomBytes(32).toString("hex");
 
   constructor(private readonly options: BuilderManagerOptions) {}
 
   async start(): Promise<void> {
-    const service = createBuilderServiceAccess(this.options.giteaEndpoint, this.options.otelEndpoint);
     const imageHandoffDirectory = path.join(path.dirname(this.options.runnerDirectory), "gondolin-image-handoff");
     const composeCacheHandoffDirectory = path.join(
       path.dirname(this.options.runnerDirectory), "gondolin-compose-cache-handoff",
     );
     fs.mkdirSync(imageHandoffDirectory, { recursive: true, mode: 0o700 });
     fs.mkdirSync(composeCacheHandoffDirectory, { recursive: true, mode: 0o700 });
+    const composeCacheService = new ComposeCacheHostService(composeCacheHandoffDirectory, this.composeCacheToken);
+    const service = createBuilderServiceAccess(
+      this.options.giteaEndpoint,
+      this.options.otelEndpoint,
+      composeCacheService,
+    );
     const vmOptions = {
       sandbox: { imagePath: this.options.imagePath, netEnabled: true },
       dns: { mode: "synthetic" as const, syntheticHostMapping: "per-host" as const },
@@ -135,7 +331,6 @@ export class BuilderManager {
         mounts: {
           "/runner": new ReadonlyProvider(new RealFSProvider(this.options.runnerDirectory)),
           "/image-handoff": new RealFSProvider(imageHandoffDirectory),
-          "/compose-cache-handoff": new RealFSProvider(composeCacheHandoffDirectory),
         },
       },
       sessionLabel: "shared-image-builder",
@@ -180,6 +375,7 @@ export class BuilderManager {
       {
         cwd: "/var/lib/gitea-runner",
         env: {
+          COMPOSE_CACHE_HOST_TOKEN: this.composeCacheToken,
           OTEL_EXPORTER_OTLP_ENDPOINT: OTEL_GUEST_ORIGIN,
           OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf",
           OTEL_LOGS_EXPORTER: "none",

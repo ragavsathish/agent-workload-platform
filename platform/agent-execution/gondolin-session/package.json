@@ -15,7 +15,7 @@
     "clean": "node --input-type=module -e \"import fs from 'node:fs'; fs.rmSync('dist', { recursive: true, force: true })\"",
     "build": "pnpm run clean && tsc && node --input-type=module -e \"import fs from 'node:fs'; fs.cpSync('prompts', 'dist/prompts', { recursive: true })\"",
     "check": "tsc --noEmit && pnpm run test",
-    "test": "pnpm run build && node --test gondolin-operations.test.mjs task-vm-state.test.mjs gondolin/dev-image.test.mjs",
+    "test": "pnpm run build && node --test gondolin-operations.test.mjs task-vm-state.test.mjs gondolin/dev-image.test.mjs image-builder/manager.test.mjs",
     "task-vm": "node dist/task-vm-cli.js"
   },
   "dependencies": {

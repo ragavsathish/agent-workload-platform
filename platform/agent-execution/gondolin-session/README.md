@@ -58,15 +58,17 @@ certificate used for Flutter's fallback font CDN.
 the per-repository Compose index and override. Set `GONDOLIN_DEV_IMAGE_STORE`
 to the shared host store; these mount read-only at `/image-cache` and
 `/image-store` in each VM. The source repository's `make gondolin-dev-cache`
-prepares the Voice Agent image set locally. The separate Gitea workflow
-`Prepare Compose image cache` can prepare it in the trusted builder VM and hand
-it back to the host. Run it for a committed revision, then use the printed
-handoff directory with `make gondolin-dev-cache-import
+prepares the Voice Agent image set locally using host Docker. The separate
+Gitea workflow `Prepare Compose image cache` resolves Compose in its builder VM,
+then asks the host builder manager to pull and export images using the same host
+Docker daemon. This reuses the host image cache without exposing the Docker
+socket to the VM. Run it for a committed revision, then use the printed handoff
+directory with `make gondolin-dev-cache-import
 GONDOLIN_DEV_CACHE_HANDOFF=<host-handoff-path>`. The importer checks SHA-256
-checksums before installing archives into the shared store. The workflow skips
-Compose services with `build:` entries; task VMs build those from their checked
-out source. Repository indexes and overrides stay separate while archives
-share a content store. In the
+checksums before installing archives into the shared store. The host cache job
+skips Compose services with `build:` entries; task VMs build those from their
+checked out source. Repository indexes and overrides stay separate while
+archives share a content store. In the
 guest, set `COMPOSE_FILE` to that worktree's Compose path and
 `COMPOSE_CACHE_SERVICES` to the needed service names, then use `dev-compose`
 to load only those cached image tags and apply its no-pull override. The

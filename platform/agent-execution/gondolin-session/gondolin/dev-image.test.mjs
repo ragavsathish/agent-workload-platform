@@ -69,12 +69,15 @@ test("Compose image preloads use the K3s agent/images folder convention", () => 
 test("Gitea cache workflow writes a checksummed handoff for host promotion", () => {
   assert.match(cacheWorkflow, /workflow_dispatch:/);
   assert.match(cacheWorkflow, /runs-on: gondolin-builder/);
-  assert.match(cacheWorkflow, /skip-build-services/);
-  assert.match(cacheWorkflow, /\/compose-cache-handoff/);
+  assert.match(cacheWorkflow, /http:\/\/compose-cache\.local:18080\/v1/);
+  assert.match(cacheWorkflow, /\/prepare/);
+  assert.match(cacheWorkflow, /COMPOSE_CACHE_HOST_TOKEN/);
   assert.match(builderManager, /gondolin-compose-cache-handoff/);
-  assert.match(builderManager, /"\/compose-cache-handoff"/);
+  assert.match(builderManager, /class ComposeCacheHostService/);
+  assert.match(builderManager, /\["pull", service\.image\]/);
+  assert.match(builderManager, /\["save", "--output"/);
   assert.match(builderDockerfile, /docker\/compose\/releases\/download/);
-  assert.match(builderDockerfile, /babashka\/babashka\/releases\/download/);
+  assert.doesNotMatch(builderDockerfile, /babashka\/babashka\/releases\/download/);
   assert.match(preloadImporter, /sha256-file/);
   assert.match(preloadImporter, /Import.*shared image archives/);
 });
