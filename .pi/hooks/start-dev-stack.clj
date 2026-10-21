@@ -150,6 +150,7 @@
                           (when full-stack (str ":" full-compose-file)))
         defaults {"COMPOSE_FILE" compose-file
                   "COMPOSE_PROFILES" ""
+                  "PATH" (str "/usr/local/bin:/usr/local/sbin:" (get base "PATH" "/usr/bin:/bin"))
                   "ORCHESTRATOR_ALLOWED_WORKSPACES" "/workspace"
                   "VOICE_DEFAULT_WORKSPACE" "/workspace"
                   "OLLAMA_MODEL" "dev-mock"}]
@@ -169,27 +170,25 @@
           (when full-stack ["-f" full-compose-file])))
 
 (defn run-compose [environment & args]
-  (run-command (into ["dev-compose"] args) {:env environment}))
+  (run-command (into ["/usr/local/bin/dev-compose"] args) {:env environment}))
 
 (defn validate-preload! [services index]
   (let [configured (set services)
-        cached (->> (get index "services") keys sort vec)]
+        cached (->> (get index "services") keys (filter configured) sort vec)]
     (when (empty? cached)
-      (throw (ex-info "image preload index has no cached services" {})))
+      (throw (ex-info "image preload index has no active Compose services" {})))
     (doseq [service cached]
-      (when-not (contains? configured service)
-        (throw (ex-info (str "image preload references unknown Compose service " service) {})))
-    (let [{image "image" archive "archive" checksum "sha256"} (get-in index ["services" service])]
-      (when-not (and (string? image) (re-matches #"gondolin-preload:[a-f0-9]{24}" image)
-                     (string? archive) (re-matches #"[a-f0-9]{24}\.tar" archive)
-                     (string? checksum) (re-matches #"[a-f0-9]{64}" checksum))
-        (throw (ex-info (str "image preload has no valid " service " entry") {}))))
+      (let [{image "image" archive "archive" checksum "sha256"} (get-in index ["services" service])]
+        (when-not (and (string? image) (re-matches #"gondolin-preload:[a-f0-9]{24}" image)
+                       (string? archive) (re-matches #"[a-f0-9]{24}\.tar" archive)
+                       (string? checksum) (re-matches #"[a-f0-9]{64}" checksum))
+          (throw (ex-info (str "image preload has no valid " service " entry") {})))))
     cached))
 
 (defn wait-bootstrap! [environment]
   (let [deadline (+ (System/currentTimeMillis) 120000)]
     (loop []
-      (let [container-id (run-command (into ["dev-compose" "ps" "--all" "-q" "grafana-mcp-bootstrap"] [])
+      (let [container-id (run-command ["/usr/local/bin/dev-compose" "ps" "--all" "-q" "grafana-mcp-bootstrap"]
                                       {:env environment})]
         (if (seq container-id)
           (let [state (run-command ["docker" "inspect" "--format={{.State.Status}}:{{.State.ExitCode}}" container-id])]
@@ -225,7 +224,7 @@
           (if full-stack
             (apply run-compose compose-environment "up" "--detach" base-services)
             (apply run-compose compose-environment "up" "--detach" "--wait" "--wait-timeout" "180"
-                   "--no-deps" services))
+                   (remove #{"oxigraph-init"} services)))
           (doseq [[name url] [["Grafana" "http://127.0.0.1:3000/api/health"]
                               ["Prometheus" "http://127.0.0.1:9090/-/ready"]
                               ["S3Mock" "http://127.0.0.1:9092/favicon.ico"]
@@ -266,7 +265,8 @@
             diagnostics (transient [(str error)])]
         (doseq [args [["ps" "--all"] ["logs" "--no-color" "--tail" "80"]]]
           (try
-            (conj! diagnostics (apply run-compose environment args))
+            (conj! diagnostics (run-command (concat ["docker" "compose"] (compose-files) args)
+                                            {:env environment}))
             (catch Exception diagnostic-error
               (conj! diagnostics (str diagnostic-error)))))
         (try

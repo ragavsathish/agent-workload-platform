@@ -14,7 +14,7 @@ from vm_client import VMClient
 
 
 def measure(image, driver, workspace, *, compose_file=None, workload_command=None,
-            bootstrap_command=None, compose_wait=True, image_cache=None,
+            bootstrap_command=None, compose_wait=True, image_cache=None, image_store=None,
             guest_environment=None,
             memory_gib=8, cpus=4, vmm="qemu", vm_factory=VMClient, clock=time.monotonic):
     client = vm_factory()
@@ -25,6 +25,7 @@ def measure(image, driver, workspace, *, compose_file=None, workload_command=Non
                           "workloadCommand": workload_command,
                           "bootstrapCommand": bootstrap_command,
                           "composeWait": compose_wait, "imageCache": image_cache,
+                          "imageStore": image_store,
                           "guestEnvironmentKeys": sorted((guest_environment or {}).keys())},
               "vm": {"memoryGiB": memory_gib, "cpus": cpus, "vmm": vmm},
               "probeExitCode": None, "metrics": {}, "error": None}
@@ -33,6 +34,7 @@ def measure(image, driver, workspace, *, compose_file=None, workload_command=Non
                              workload_command=workload_command,
                              bootstrap_command=bootstrap_command if bootstrap_command is not None else DEFAULT_BOOTSTRAP,
                              compose_wait=compose_wait, image_cache=image_cache,
+                             image_store=image_store,
                              guest_environment=guest_environment or {},
                              label=f"compose-storage-benchmark-{driver}",
                              vmm=vmm, memory_gib=memory_gib, cpus=cpus))
@@ -61,6 +63,7 @@ def main():
     project.add_argument("--workload-command-json")
     parser.add_argument("--bootstrap-command-json")
     parser.add_argument("--image-cache")
+    parser.add_argument("--image-store")
     parser.add_argument("--no-compose-wait", action="store_true")
     parser.add_argument("--vm-memory-gib", type=int, default=8)
     parser.add_argument("--vm-cpus", type=int, default=4)
@@ -74,6 +77,7 @@ def main():
         bootstrap_command=json.loads(args.bootstrap_command_json) if args.bootstrap_command_json else None,
         guest_environment=json.loads(os.environ.get("GONDOLIN_BENCHMARK_GUEST_ENV_JSON", "{}")),
         compose_wait=not args.no_compose_wait, image_cache=args.image_cache,
+        image_store=args.image_store,
         memory_gib=args.vm_memory_gib, cpus=args.vm_cpus, vmm=args.vmm)
     save(result)
     raise SystemExit(0 if result["error"] is None else 1)

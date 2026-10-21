@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAtUtc": "2026-10-20T18:18:59Z",
+  "generatedAtUtc": "2026-10-21T10:13:46Z",
   "host": {
     "model": "Mac mini M4 Pro",
     "cores": 14,
@@ -636,6 +636,179 @@
           "note": "All four suites and eight journeys passed. Host memory came within two percentage points of the 40% floor; swap growth and disk remained within guardrails. All 15 full-mock Compose services reached readiness in each VM."
         }
       ]
+    },
+    {
+      "id": "compose-dev-overlay2-3vm-2026-10-21T073553Z",
+      "measuredAtUtc": "2026-10-21T07:35:53Z",
+      "parallelism": 3,
+      "vm": {
+        "vmm": "qemu",
+        "memoryGiB": 6,
+        "cpus": 2,
+        "guestSwapGiB": 0,
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2",
+        "image": "agent-workload-platform/dev:v2-e9a8d96b089bf217d82c14f0181dbbdc"
+      },
+      "outcome": "passed",
+      "readinessMs": [
+        48902,
+        48719,
+        49111
+      ],
+      "wallClockMs": 49111,
+      "totalElapsedMs": 49727,
+      "composeServicesStarted": 6,
+      "uniqueImages": 6,
+      "minFreeMemoryPercent": 65,
+      "hostSwapGrowthMiB": 0,
+      "minFreeDiskGiB": 104.16,
+      "checkpointsSaved": false,
+      "evidencePath": "artifacts/benchmarks/compose-overlay2-3vm-2026-10-21T073643Z/result.json",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64
+      },
+      "note": "Manual Ansible benchmark using Gitea run 57 VM image and run 58 Compose cache. Six active dev Compose services include one-shot oxigraph-init. No Patrol journey. Not directly comparable with the 15-service full-mock runs."
+    },
+    {
+      "id": "compose-dev-patrol-overlay2-3vm-2026-10-21T081514Z",
+      "measuredAtUtc": "2026-10-21T08:15:14Z",
+      "parallelism": 3,
+      "vm": {
+        "vmm": "qemu",
+        "memoryGiB": 6,
+        "cpus": 2,
+        "guestSwapGiB": 0,
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2",
+        "image": "agent-workload-platform/dev:v2-e9a8d96b089bf217d82c14f0181dbbdc"
+      },
+      "outcome": "passed",
+      "composeReadinessMs": [
+        46493,
+        45986,
+        45781
+      ],
+      "composeWallClockMs": 46493,
+      "patrolDurationMs": [
+        168530,
+        161654,
+        161381
+      ],
+      "patrolExitCodes": [
+        0,
+        0,
+        0
+      ],
+      "patrolWallClockMs": 215685,
+      "totalElapsedMs": 222023,
+      "patrolJourneysPerVm": 2,
+      "capturedTraces": 6,
+      "traceNetworkFailures": 0,
+      "traceConsoleErrors": 0,
+      "composeServicesStarted": 6,
+      "uniqueImages": 6,
+      "minFreeMemoryPercent": 62,
+      "hostSwapGrowthMiB": 0,
+      "minFreeDiskGiB": 99.54,
+      "checkpointsSaved": false,
+      "evidencePath": "artifacts/benchmarks/compose-overlay2-3vm-2026-10-21T081514Z/result.json",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64
+      },
+      "note": "Manual Ansible benchmark with Gitea-built VM image and Gitea-prepared Compose cache. Three isolated VMs started six dev Compose services, then each ran both Patrol journeys. Patrol uses a local fixture server, not the Compose voice edge. Browser HTTPS-ignore mode handles the Gondolin MITM certificate for external font requests."
+    },
+    {
+      "id": "compose-dev-patrol-oracle-overlay2-3vm-2026-10-21T090717Z",
+      "measuredAtUtc": "2026-10-21T09:07:19.314717+00:00",
+      "parallelism": 3,
+      "vm": {
+        "vmm": "qemu",
+        "memoryGiB": 6,
+        "cpus": 2,
+        "guestSwapGiB": 0,
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2",
+        "image": "agent-workload-platform/dev:v2-e9a8d96b089bf217d82c14f0181dbbdc"
+      },
+      "outcome": "passed",
+      "composeReadinessMs": [
+        46556,
+        46852,
+        46767
+      ],
+      "composeWallClockMs": 46852,
+      "patrolDurationMs": [
+        161156,
+        174186,
+        162492
+      ],
+      "patrolExitCodes": [
+        0,
+        0,
+        0
+      ],
+      "patrolWallClockMs": 225177,
+      "totalElapsedMs": 231849,
+      "patrolJourneysPerVm": 2,
+      "capturedTraces": 6,
+      "browserTraceOraclePassedVms": 3,
+      "otelCanaryOraclePassedVms": 3,
+      "composeServicesStarted": 6,
+      "uniqueImages": 6,
+      "minFreeMemoryPercent": 61,
+      "hostSwapGrowthMiB": 0,
+      "minFreeDiskGiB": 99.22,
+      "checkpointsSaved": false,
+      "evidencePath": "artifacts/benchmarks/compose-overlay2-3vm-2026-10-21T090717Z/result.json",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64
+      },
+      "note": "Manual QEMU/Overlay2 benchmark using the Gitea-built VM and prepared Compose cache. Three isolated VMs ran six active dev Compose services, one Patrol suite and one trace/OTEL oracle each. OTEL canary checks collector-to-Tempo round trip, not application spans. Patrol uses local fixtures, not the Compose voice edge. npm ci used bounded fetching. All benchmark VMs were disposed."
+    },
+    {
+      "id": "compose-dev-patrol-clj-oracle-overlay2-3vm-2026-10-21T092953Z",
+      "measuredAtUtc": "2026-10-21T09:29:54.934780+00:00",
+      "parallelism": 3,
+      "vm": {
+        "vmm": "qemu",
+        "memoryGiB": 6,
+        "cpus": 2,
+        "guestSwapGiB": 0,
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2",
+        "image": "agent-workload-platform/dev:v2-e9a8d96b089bf217d82c14f0181dbbdc"
+      },
+      "outcome": "passed",
+      "composeReadinessMs": [47866, 45695, 45998],
+      "composeWallClockMs": 47866,
+      "patrolDurationMs": [157047, 161394, 160100],
+      "patrolExitCodes": [0, 0, 0],
+      "patrolWallClockMs": 214333,
+      "totalElapsedMs": 219787,
+      "patrolJourneysPerVm": 2,
+      "capturedTraces": 6,
+      "browserTraceOraclePassedVms": 3,
+      "otelCanaryOraclePassedVms": 3,
+      "composeServicesStarted": 6,
+      "uniqueImages": 6,
+      "minFreeMemoryPercent": 63,
+      "hostSwapGrowthMiB": 0,
+      "minFreeDiskGiB": 99.13,
+      "checkpointsSaved": false,
+      "evidencePath": "artifacts/benchmarks/compose-overlay2-3vm-2026-10-21T092953Z/result.json",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64
+      },
+      "note": "Three isolated QEMU/Overlay2 VMs passed dev Compose readiness, two Patrol journeys each, and the in-guest Babashka trace/OTEL oracle. Three distinct canaries returned from Tempo. No benchmark checkpoints were retained."
     }
   ],
   "lifecycle": {

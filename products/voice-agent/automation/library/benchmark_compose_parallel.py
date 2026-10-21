@@ -53,6 +53,25 @@ options:
   image_cache:
     description: Optional host directory mounted read-only at /image-cache.
     type: path
+  image_store:
+    description: Optional shared image store mounted read-only at /image-store.
+    type: path
+  patrol_command:
+    description: Optional guest argument vector run once in every VM after Compose is ready.
+    type: list
+    elements: str
+  patrol_oracle:
+    description: Verify each Patrol trace and an OTLP canary round trip through guest OTEL LGTM.
+    type: bool
+    default: false
+  patrol_timeout_seconds:
+    description: Maximum time allowed for all parallel Patrol commands to finish.
+    type: int
+    default: 360
+  workspace_overlays:
+    description: Project-relative working-tree files copied into each isolated VM checkout for Patrol.
+    type: list
+    elements: str
   guest_environment:
     description: Guest environment variables for project startup. Values are omitted from reports.
     type: dict
@@ -129,11 +148,17 @@ report_dir:
 
 def summarize(data):
     ready = data.get("readinessMs", [])
+    patrol = data.get("patrolExitCodes", [])
     return {
         "ready_vms": sum(isinstance(value, (int, float)) for value in ready),
         "total_vms": data.get("parallelism"),
         "readiness_ms": ready,
         "wall_clock_ms": data.get("wallClockMs"),
+        "patrol_passed_vms": sum(code == 0 for code in patrol),
+        "patrol_exit_codes": patrol,
+        "patrol_oracle_passed_vms": sum(bool(item and item.get("passed")) for item in data.get("patrolOracle", [])),
+        "patrol_duration_ms": data.get("patrolDurationMs"),
+        "patrol_wall_clock_ms": data.get("patrolWallClockMs"),
         "minimum_host_free_memory_percent": data.get("minFreeMemoryPercent"),
         "maximum_host_swap_growth_mib": data.get("maxSwapGrowthMiB"),
         "minimum_host_free_disk_gib": data.get("minFreeDiskGiB"),
@@ -144,6 +169,10 @@ def summarize(data):
 def main():
     module = AnsibleModule(argument_spec={
         **common_argument_spec(), **compose_argument_spec(),
+        "patrol_command": {"type": "list", "elements": "str", "default": []},
+        "patrol_oracle": {"type": "bool", "default": False},
+        "patrol_timeout_seconds": {"type": "int", "default": 360},
+        "workspace_overlays": {"type": "list", "elements": "str", "default": []},
         "image": {"type": "str", "required": True},
         "expected_driver": {"type": "str", "choices": ["vfs", "overlay2"], "default": "overlay2"},
         "parallelism": {"type": "int", "default": 2}, "vm_memory_gib": {"type": "int", "default": 6},
@@ -162,8 +191,17 @@ def main():
     for name in ("max_swap_growth_mib", "min_free_disk_gib"):
         if module.params[name] < 0:
             module.fail_json(msg=f"{name} must be nonnegative")
+    if module.params["patrol_timeout_seconds"] <= 0:
+        module.fail_json(msg="patrol_timeout_seconds must be positive")
     command = python_runner(root, "compose_parallel.py") + ["--image", module.params["image"]]
     command += compose_cli_arguments(module)
+    if module.params["patrol_command"]:
+        command += ["--patrol-command-json", json.dumps(module.params["patrol_command"])]
+        for overlay in module.params["workspace_overlays"]:
+            command += ["--workspace-overlay", overlay]
+    if module.params["patrol_oracle"]:
+        command += ["--patrol-oracle"]
+    command += ["--patrol-timeout-seconds", str(module.params["patrol_timeout_seconds"])]
     command += ["--expected-driver", module.params["expected_driver"],
                "--parallelism", str(module.params["parallelism"]),
                "--vm-memory-gib", str(module.params["vm_memory_gib"]),
@@ -178,8 +216,8 @@ def main():
         evidence_reader=saved_result_evidence,
         summarize=summarize,
         validate_result=lambda data, summary: (
-            "not all Compose VMs became ready"
-            if not data.get("allReady") or summary["ready_vms"] != module.params["parallelism"] else None
+            "not all Compose VMs became ready and passed Patrol"
+            if not data.get("allPassed") or summary["ready_vms"] != module.params["parallelism"] else None
         ))
 
 

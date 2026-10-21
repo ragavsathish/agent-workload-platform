@@ -43,7 +43,15 @@ Compose workloads are project agnostic: the workspace is mounted at
 -d --wait`. A custom `benchmark_workload_command` argv list can replace that
 step. The default Docker bootstrap command can be replaced with
 `benchmark_bootstrap_command` or disabled with an empty list. The image cache
-mount is optional. Use a VM image whose Docker driver matches
+mount is optional. Set `benchmark_image_store` as well when the workload uses
+the shared OCI archive store. Set `benchmark_patrol_command` to run the Patrol
+journey once in every isolated VM after Compose readiness; use
+`benchmark_workspace_overlays` to copy pending source changes into those
+checkouts. Set `benchmark_patrol_oracle=true` to run Gondolin's Babashka
+`tools/oracle.clj` inside each VM and require its Patrol trace and OTEL canary
+verdict; this requires the dev OTEL LGTM service. The tool is copied into
+isolated benchmark checkouts automatically, including pending edits.
+Use a VM image whose Docker driver matches
 `benchmark_storage_driver`. Qemu is the default VMM.
 
 The Gondolin SDK is only available to JavaScript. A small `vm_bridge.mjs` adapter

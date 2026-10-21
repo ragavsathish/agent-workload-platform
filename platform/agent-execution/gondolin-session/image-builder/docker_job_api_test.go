@@ -292,7 +292,10 @@ func (f *fakeDockerEngine) Do(req *http.Request) (*http.Response, error) {
 }
 
 func TestComposeCacheWorkerUsesDockerEngineAPIAndWritesHandoff(t *testing.T) {
-	engine := &fakeDockerEngine{imageID: "sha256:" + strings.Repeat("d", 64), saved: []byte("docker image archive")}
+	imageID := "sha256:" + strings.Repeat("d", 64)
+	key := sha256.Sum256([]byte("grafana/grafana:12.0\n" + imageID))
+	tag := "gondolin-preload:" + hex.EncodeToString(key[:])[:24]
+	engine := &fakeDockerEngine{imageID: imageID, saved: dockerArchiveFixture(t, tag, true)}
 	h, err := NewHandler(testToken, t.TempDir(), engine)
 	if err != nil {
 		t.Fatal(err)

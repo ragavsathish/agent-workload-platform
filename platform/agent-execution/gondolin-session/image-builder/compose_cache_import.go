@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -23,6 +22,7 @@ var (
 type composeCacheIndex struct {
 	Services map[string]struct {
 		Archive string `json:"archive"`
+		Image   string `json:"image"`
 		SHA256  string `json:"sha256"`
 	} `json:"services"`
 }
@@ -75,53 +75,41 @@ func importComposeCache(args []string) error {
 	handoffImages := filepath.Join(handoff, "agent", "images")
 	sharedImages := filepath.Join(shared, "agent", "images")
 	preloadImages := filepath.Join(preload, "agent", "images")
-	archives := map[string]string{}
+	type archiveEntry struct{ checksum, tag string }
+	archives := map[string]archiveEntry{}
 	for service, entry := range index.Services {
-		if service == "" || !composeArchiveName.MatchString(entry.Archive) || !composeDigest.MatchString(entry.SHA256) {
+		if service == "" || !composeArchiveName.MatchString(entry.Archive) || !composeDigest.MatchString(entry.SHA256) ||
+			entry.Image != "gondolin-preload:"+strings.TrimSuffix(entry.Archive, ".tar") {
 			return fmt.Errorf("invalid cache entry for service %q", service)
 		}
-		if prior, ok := archives[entry.Archive]; ok && prior != entry.SHA256 {
+		if prior, ok := archives[entry.Archive]; ok && prior.checksum != entry.SHA256 {
 			return fmt.Errorf("conflicting checksums for archive %s", entry.Archive)
 		}
-		archives[entry.Archive] = entry.SHA256
+		archives[entry.Archive] = archiveEntry{entry.SHA256, entry.Image}
 	}
 	if err := os.MkdirAll(sharedImages, 0755); err != nil {
 		return err
 	}
-	for archive, checksum := range archives {
+	for archive, entry := range archives {
 		source, destination := filepath.Join(handoffImages, archive), filepath.Join(sharedImages, archive)
-		if _, err := os.Lstat(destination); err == nil {
-			if err := verifyComposeArchive(destination, checksum); err != nil {
-				return err
-			}
-			continue
-		} else if !os.IsNotExist(err) {
+		if err := verifyComposeArchive(source, entry.checksum, entry.tag); err != nil {
 			return err
 		}
-		if err := verifyComposeArchive(source, checksum); err != nil {
-			return err
+		if err := verifyComposeArchive(destination, entry.checksum, entry.tag); err == nil {
+			continue
 		}
 		temp := filepath.Join(sharedImages, fmt.Sprintf("%s.%d.partial", archive, time.Now().UnixNano()))
 		if err := copyFileExclusive(source, temp); err != nil {
 			return err
 		}
-		if err := verifyComposeArchive(temp, checksum); err != nil {
+		if err := verifyComposeArchive(temp, entry.checksum, entry.tag); err != nil {
 			_ = os.Remove(temp)
 			return err
 		}
-		if err := os.Link(temp, destination); err != nil {
-			if !os.IsExist(err) {
-				err = os.Rename(temp, destination)
-				if err != nil {
-					_ = os.Remove(temp)
-					return err
-				}
-			} else if err = verifyComposeArchive(destination, checksum); err != nil {
-				_ = os.Remove(temp)
-				return err
-			}
+		if err := os.Rename(temp, destination); err != nil {
+			_ = os.Remove(temp)
+			return err
 		}
-		_ = os.Remove(temp)
 	}
 	if err := os.MkdirAll(preloadImages, 0755); err != nil {
 		return err
@@ -164,7 +152,7 @@ func readJSON(path string, out any) error {
 	return json.Unmarshal(data, out)
 }
 
-func verifyComposeArchive(path, checksum string) error {
+func verifyComposeArchive(path, checksum, tag string) error {
 	if err := requireRegularFile(path, "image archive"); err != nil {
 		return err
 	}
@@ -183,18 +171,7 @@ func verifyComposeArchive(path, checksum string) error {
 	if hex.EncodeToString(h.Sum(nil)) != checksum {
 		return fmt.Errorf("image archive checksum mismatch: %s", path)
 	}
-	out, err := exec.Command("tar", "-tf", path).Output()
-	if err != nil {
-		return fmt.Errorf("list image archive %s: %w", path, err)
-	}
-	members := map[string]bool{}
-	for _, name := range strings.Split(string(out), "\n") {
-		members[name] = true
-	}
-	if !members["manifest.json"] && !(members["oci-layout"] && members["index.json"]) {
-		return fmt.Errorf("image archive has no Docker or OCI manifest: %s", path)
-	}
-	return nil
+	return validateDockerArchive(path, tag)
 }
 
 func copyFileExclusive(source, destination string) error {

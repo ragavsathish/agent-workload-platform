@@ -21,7 +21,8 @@ def options(image: str, *, workspace: str | Path, compose_file: str | None,
             workload_command: list[str] | None, bootstrap_command: list[str],
             compose_wait: bool, guest_environment: dict[str, str],
             label: str, vmm: str, memory_gib: int, cpus: int,
-            image_cache: str | None = None, guest_swap_gib: int = 0):
+            image_cache: str | None = None, image_store: str | None = None,
+            guest_swap_gib: int = 0):
     root = Path(workspace).resolve()
     if not root.is_dir():
         raise ValueError(f"workspace is not a directory: {root}")
@@ -64,6 +65,11 @@ def options(image: str, *, workspace: str | Path, compose_file: str | None,
         if not cache.is_dir():
             raise ValueError(f"image_cache is not a directory: {cache}")
         mounts["/image-cache"] = {"hostPath": str(cache), "readonly": True}
+    if image_store:
+        store = Path(image_store).resolve()
+        if not (store / "agent" / "images").is_dir():
+            raise ValueError(f"image_store has no agent/images directory: {store}")
+        mounts["/image-store"] = {"hostPath": str(store), "readonly": True}
     return {
         "imagePath": image,
         "mounts": mounts,

@@ -505,6 +505,18 @@ func (h *Handler) prepareComposeCache(job Job) (cacheResult, error) {
 		if err := h.exportImage(image.Tag, file); err != nil {
 			return cacheResult{}, fmt.Errorf("export %s: %w", tag, err)
 		}
+		if err := validateDockerArchive(file, image.Tag); err != nil {
+			// Docker's containerd image store can return a successful save with
+			// missing layer blobs. Buildx fetches the pinned source and exports
+			// a complete, single-platform archive in that case.
+			_ = os.Remove(file)
+			if buildErr := exportRemoteImage(image.Source, image.Tag, job.Arch, file); buildErr != nil {
+				return cacheResult{}, fmt.Errorf("export %s: incomplete Engine archive (%v); Buildx fallback: %w", tag, err, buildErr)
+			}
+			if err := validateDockerArchive(file, image.Tag); err != nil {
+				return cacheResult{}, fmt.Errorf("export %s: invalid Buildx archive: %w", tag, err)
+			}
+		}
 		checksum, err := sha256File(file)
 		if err != nil {
 			return cacheResult{}, err

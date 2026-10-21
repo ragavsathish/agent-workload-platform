@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,17 +16,11 @@ func TestImportComposeCachePromotesVerifiedArchivesAndMetadata(t *testing.T) {
 	if err := os.MkdirAll(archiveDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	manifestDir := filepath.Join(root, "archive-content")
-	if err := os.MkdirAll(manifestDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(manifestDir, "manifest.json"), []byte("[]"), 0644); err != nil {
-		t.Fatal(err)
-	}
 	archive := "0123456789abcdef01234567.tar"
+	tag := "gondolin-preload:0123456789abcdef01234567"
 	archivePath := filepath.Join(archiveDir, archive)
-	if output, err := exec.Command("tar", "-cf", archivePath, "-C", manifestDir, "manifest.json").CombinedOutput(); err != nil {
-		t.Fatalf("create fixture archive: %v: %s", err, output)
+	if err := os.WriteFile(archivePath, dockerArchiveFixture(t, tag, true), 0o600); err != nil {
+		t.Fatal(err)
 	}
 	archiveBytes, err := os.ReadFile(archivePath)
 	if err != nil {
@@ -35,7 +28,7 @@ func TestImportComposeCachePromotesVerifiedArchivesAndMetadata(t *testing.T) {
 	}
 	sum := sha256.Sum256(archiveBytes)
 	checksum := hex.EncodeToString(sum[:])
-	index := `{"services":{"db":{"archive":"` + archive + `","sha256":"` + checksum + `"},"api":{"archive":"` + archive + `","sha256":"` + checksum + `"}},"generatedAt":"kept"}`
+	index := `{"services":{"db":{"archive":"` + archive + `","image":"` + tag + `","sha256":"` + checksum + `"},"api":{"archive":"` + archive + `","image":"` + tag + `","sha256":"` + checksum + `"}},"generatedAt":"kept"}`
 	for name, data := range map[string]string{
 		"index.json":            index,
 		"compose.override.json": `{"services":{}}`,
@@ -46,10 +39,17 @@ func TestImportComposeCachePromotesVerifiedArchivesAndMetadata(t *testing.T) {
 		}
 	}
 	preload, shared := filepath.Join(root, "preload"), filepath.Join(root, "shared")
+	sharedImages := filepath.Join(shared, "agent", "images")
+	if err := os.MkdirAll(sharedImages, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sharedImages, archive), dockerArchiveFixture(t, tag, false), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if err := importComposeCache([]string{handoff, preload, shared}); err != nil {
 		t.Fatal(err)
 	}
-	if err := verifyComposeArchive(filepath.Join(shared, "agent", "images", archive), checksum); err != nil {
+	if err := verifyComposeArchive(filepath.Join(sharedImages, archive), checksum, tag); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(archivePath); !os.IsNotExist(err) {
@@ -65,7 +65,7 @@ func TestImportComposeCachePromotesVerifiedArchivesAndMetadata(t *testing.T) {
 }
 
 func TestImportComposeCacheRejectsBadArchiveChecksum(t *testing.T) {
-	if err := verifyComposeArchive("/nonexistent", strings.Repeat("0", 64)); err == nil {
+	if err := verifyComposeArchive("/nonexistent", strings.Repeat("0", 64), "gondolin-preload:test"); err == nil {
 		t.Fatal("expected missing archive to be rejected")
 	}
 }

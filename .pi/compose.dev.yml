@@ -36,7 +36,9 @@ services:
       retries: 30
 
   oxigraph:
-    depends_on: !reset []
+    depends_on: !override
+      oxigraph-init:
+        condition: service_completed_successfully
     network_mode: host
     networks: !reset []
     ports: !reset []
@@ -93,7 +95,9 @@ services:
   habitat:
     profiles: [production]
   oxigraph-init:
-    profiles: [production]
+    profiles: !reset []
+    volumes: !override
+      - oxigraph-dev-data:/data
   s3mock-init:
     profiles: [production]
   tailscale:

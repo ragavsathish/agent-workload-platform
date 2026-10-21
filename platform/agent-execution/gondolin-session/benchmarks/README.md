@@ -65,6 +65,71 @@ every five seconds.
 
 ## Parallel full Compose startup
 
+The 2026-10-21 rerun with the Babashka Oracle passed in all three independent
+QEMU/Overlay2 VMs. Each VM started Compose, completed both Patrol journeys,
+validated its two browser traces, and retrieved its own OTLP canary from
+Tempo. Readiness took 45.695–47.866 seconds and Patrol took
+157.047–161.394 seconds per VM. The complete run, including Oracle and VM
+disposal, took 219.787 seconds. Minimum free host memory was 63%, swap did not
+grow, and minimum free disk was 99.13 GiB. The
+[raw rerun](../../../../artifacts/benchmarks/compose-overlay2-3vm-2026-10-21T092953Z/result.json)
+contains all three Oracle verdicts. It finished 12.062 seconds faster than
+the earlier three-VM run, a single-run difference rather than a measured
+performance improvement. No benchmark checkpoints were saved.
+
+The 2026-10-21 one-VM validation of the Gondolin
+[`oracle.clj`](../tools/oracle.clj) tool passed Compose readiness, both Patrol
+journeys, browser trace checks, and a collector-to-Tempo OTLP canary. The
+benchmark harness invoked the Babashka tool inside the VM and captured its
+JSON verdict. Readiness took 38.964 seconds, Patrol 131.656 seconds, and the
+complete run including Oracle and VM disposal took 173.827 seconds. Host swap
+did not grow. The [raw result](../../../../artifacts/benchmarks/compose-overlay2-1vm-2026-10-21T091932Z/result.json)
+contains the verdict and trace IDs.
+
+The 2026-10-21 trace and OTEL oracle validation passed in three independent
+QEMU/Overlay2 VMs. Each VM started the six-service dev Compose profile, ran
+both Patrol journeys, passed the browser-trace checks, and returned its
+unique OTLP canary span from Tempo. Compose readiness was 46.556–46.852 seconds;
+Patrol took 161.156–174.186 seconds per VM. Total elapsed time including
+oracle checks and disposal was 231.849 seconds. Host swap did not grow;
+minimum free memory was 61% and minimum free disk was 99.22 GiB. The
+[raw oracle run](../../../../artifacts/benchmarks/compose-overlay2-3vm-2026-10-21T090717Z/result.json)
+and its per-VM `patrolOracle` verdicts are retained. This tests the OTEL
+collector-to-Tempo path; Patrol still uses its local HTTP fixture and does not
+exercise the Compose voice edge. An earlier oracle-enabled three-VM attempt
+stalled before one VM reached Patrol and was stopped; its other two completed
+traces were preserved under ignored artifacts. The passing retry used bounded
+npm fetching and a 360-second Patrol phase timeout. No benchmark VMs or
+checkpoints were retained.
+
+The preceding manual dev-stack benchmark uses the VM image built by Gitea run 57
+and the Compose cache prepared by Gitea run 58. Three independent QEMU guests
+(6 GiB RAM, 2 vCPUs each) started the six active dev Compose services with
+Overlay2, then each ran both Patrol journeys. All three passed Compose
+readiness in 45.781–46.493 seconds and Patrol in 161.381–168.530 seconds.
+The last Patrol run finished 215.685 seconds after VM startup began. All six
+captured traces passed inspection with no unexpected network failures or
+console errors. Host swap did not grow; minimum free memory was 62%, and
+minimum free disk was 99.54 GiB. The
+[manual Compose plus Patrol report](../../../../artifacts/benchmarks/ansible/20261021T081514Z-compose_parallel-1e70eea1/report.md)
+contains the inputs and per-VM evidence. Patrol's voice and workspace
+journeys use their local fixture server; they do not exercise the Compose
+voice edge. The run enabled Patrol's browser HTTPS-ignore option because the
+Gondolin proxy certificate is not trusted by Chromium for external font
+requests in this image. This is one successful trial, not a capacity limit.
+
+The preceding Compose-only baseline uses the same Gitea-built image
+and the Compose cache prepared by Gitea run 58. Three independent QEMU guests
+(6 GiB RAM, 2 vCPUs each) started the six active dev Compose services,
+including the one-shot Oxigraph volume initializer, with Overlay2. All three
+passed the Compose and endpoint readiness gates in 48.719–49.111 seconds;
+wall clock was 49.111 seconds. Host free memory bottomed at 65%, swap did not
+grow, and free disk bottomed at 104.16 GiB before recovering after VM disposal.
+The [manual run report](../../../../artifacts/benchmarks/ansible/20261021T073553Z-compose_parallel-8258b69c/report.md)
+contains inputs and per-VM evidence. This measures dev-stack startup, with no
+Patrol journey. Neither dev-stack run is directly comparable to the full-mock 15-service
+measurements below.
+
 I started the full-mock Compose profile in independent Overlay2 VMs at the
 same time. This measures startup and readiness only; no Patrol command ran.
 The first version of the runner pinned krun; after settling on QEMU, I changed

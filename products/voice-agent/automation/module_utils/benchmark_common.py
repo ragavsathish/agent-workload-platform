@@ -32,6 +32,7 @@ def compose_argument_spec():
                               "default": ["/usr/local/bin/start-dev-docker"]},
         "compose_wait": {"type": "bool", "default": True},
         "image_cache": {"type": "path"},
+        "image_store": {"type": "path"},
         "guest_environment": {"type": "dict", "default": {}, "no_log": True},
     }
 
@@ -61,6 +62,11 @@ def compose_cli_arguments(module):
         if not cache.is_dir():
             module.fail_json(msg=f"image_cache is not a directory: {cache}")
         args.extend(("--image-cache", str(cache)))
+    if params["image_store"]:
+        store = Path(params["image_store"]).resolve()
+        if not (store / "agent" / "images").is_dir():
+            module.fail_json(msg=f"image_store has no agent/images directory: {store}")
+        args.extend(("--image-store", str(store)))
     if not params["compose_wait"]:
         args.append("--no-compose-wait")
     return args

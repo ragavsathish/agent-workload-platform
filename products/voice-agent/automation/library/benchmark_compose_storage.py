@@ -53,6 +53,9 @@ options:
   image_cache:
     description: Optional host directory mounted read-only at /image-cache.
     type: path
+  image_store:
+    description: Optional shared image store mounted read-only at /image-store.
+    type: path
   guest_environment:
     description: Guest environment variables for project startup. Values are omitted from reports.
     type: dict

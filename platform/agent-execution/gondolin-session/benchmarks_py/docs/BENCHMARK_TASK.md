@@ -53,9 +53,31 @@ startup logic, set `benchmark_workload_command` to an argv list instead of a
 Compose file. `benchmark_bootstrap_command` defaults to
 `['/usr/local/bin/start-dev-docker']` and may be set to `[]` when the image
 starts Docker itself. `benchmark_image_cache` optionally mounts a host
-directory read-only at `/image-cache`. The workload command should read secrets
-from project files or its runtime environment, not from command arguments,
-because benchmark reports record the arguments.
+directory read-only at `/image-cache`. `benchmark_image_store` mounts the
+shared OCI archive store read-only at `/image-store`; the repository's
+`dev-compose` wrapper needs both mounts for preloaded images. The workload
+command should read secrets from project files or its runtime environment,
+not from command arguments, because benchmark reports record the arguments.
+For a Compose plus Patrol benchmark, set `benchmark_patrol_command` to the
+guest argument vector that installs the client dependencies and runs
+`npm run test:patrol`. The parallel runner creates a separate Git checkout for
+each VM, executes Patrol once per VM after Compose is ready, and records each
+exit status, timing, log, and trace directory. Use
+`benchmark_workspace_overlays` for modified project files that are not yet in
+the checked-out commit. The benchmark passes only when every VM passes both
+Compose readiness and Patrol.
+For the repository's dev Compose profile, set `benchmark_patrol_oracle=true`.
+Each VM then checks that the two Patrol trace ZIPs match the inspected hashes,
+contain browser and network activity, have no recorded HTTP/network/console
+errors, and include the workspace message request. It also sends a unique OTLP
+canary span to the VM's collector at `127.0.0.1:4318` and requires Tempo at
+`127.0.0.1:3200` to return that exact span. The result includes a per-VM
+`patrolOracle` verdict and saves each verdict beside the captured traces.
+This proves the OTEL ingestion and query pipeline, not application spans from
+the Compose voice edge. See
+[`test-oracles-in-gondolin-patrol-harness.md`](../../../../../docs/research/test-oracles-in-gondolin-patrol-harness.md).
+`benchmark_patrol_timeout_seconds` defaults to 360 and terminates benchmark
+VMs if the parallel Patrol phase stalls.
 Set `benchmark_guest_environment` for required VM environment variables; reports
 record only its key names. Qemu is the default VMM for all new VM benchmarks.
 
