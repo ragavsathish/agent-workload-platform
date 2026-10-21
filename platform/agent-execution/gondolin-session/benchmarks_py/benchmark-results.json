@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAtUtc": "2026-10-21T12:51:48Z",
+  "generatedAtUtc": "2026-10-21T13:41:06Z",
   "host": {
     "model": "Mac mini M4 Pro",
     "cores": 14,
@@ -1006,6 +1006,50 @@
       "error": "patrol exceeded 600 seconds",
       "allReady": true,
       "note": "All three QEMU/Overlay2 VMs reached full-mock Compose readiness from the shared image cache. One Patrol run stalled in its first target; the 600-second phase timeout stopped the trial. No per-VM Oracle verdict was retained. All benchmark VMs were disposed."
+    },
+    {
+      "id": "compose-full-mock-gitea-cache-passed-compose-overlay2-1vm-2026-10-21T133601Z",
+      "measuredAtUtc": "2026-10-21T13:36:01.892893+00:00",
+      "parallelism": 1,
+      "vm": {
+        "vmm": "qemu",
+        "memoryGiB": 6,
+        "cpus": 2,
+        "guestSwapGiB": 0,
+        "rootDiskGiB": 64,
+        "storageDriver": "overlay2",
+        "image": "Gondolin build c62cd11c-e69d-5eb5-ac70-bbb1c9854131"
+      },
+      "outcome": "passed",
+      "composeReadinessMs": [
+        84203
+      ],
+      "composeWallClockMs": 84203,
+      "patrolDurationMs": [
+        161030
+      ],
+      "patrolExitCodes": [
+        0
+      ],
+      "patrolWallClockMs": 248026,
+      "totalElapsedMs": 249506,
+      "patrolJourneysPerVm": 3,
+      "capturedTraces": 3,
+      "browserTraceOraclePassedVms": 1,
+      "otelCanaryOraclePassedVms": 1,
+      "edgeApplicationSpanOraclePassedVms": 1,
+      "minFreeMemoryPercent": 66,
+      "hostSwapGrowthMiB": 0,
+      "minFreeDiskGiB": 55.87,
+      "checkpointsSaved": false,
+      "evidencePath": "artifacts/benchmarks/compose-overlay2-1vm-2026-10-21T133601Z/result.json",
+      "allureReportPath": "artifacts/benchmarks/patrol-evidence/compose-overlay2-1vm-2026-10-21T133601Z/allure-report/index.html",
+      "host": {
+        "model": "Mac mini M4 Pro",
+        "cores": 14,
+        "memoryGiB": 64
+      },
+      "note": "Gitea run 64 built four application images through the Go host API from committed revision 831a417, then prepared and imported a 16-service cache with 15 unique images. One full-mock QEMU/Overlay2 VM preloaded that cache, passed three Patrol journeys and browser/OTLP/voice-edge oracles, and was disposed. This is a benchmark baseline, not a Pi session source build."
     }
   ],
   "lifecycle": {

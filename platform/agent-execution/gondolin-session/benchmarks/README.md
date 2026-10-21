@@ -124,6 +124,18 @@ passed all three Patrol journeys and the browser, OTLP canary, and voice-edge
 span oracles. Readiness took 87.544 seconds and the complete run took
 272.351 seconds; see the [cache-backed one-VM result](../../../../artifacts/benchmarks/compose-overlay2-1vm-2026-10-21T123400Z/result.json).
 
+Gitea Compose-cache run 64 then built the four application images through the
+Go host API from committed revision `831a417`, exported 15 unique images for
+16 services, and imported the handoff into the shared VM store. A fresh
+one-VM full-mock run using only that imported cache passed all three Patrol
+journeys and the browser-trace, OTLP canary, and voice-edge span oracles.
+Compose readiness was 84.203 seconds, Patrol took 161.030 seconds, and the
+complete run took 249.506 seconds. Host swap did not grow; the benchmark VM
+and checkpoint were disposed. See the [Gitea-cache validation result](../../../../artifacts/benchmarks/compose-overlay2-1vm-2026-10-21T133601Z/result.json)
+and its [Allure report](../../../../artifacts/benchmarks/patrol-evidence/compose-overlay2-1vm-2026-10-21T133601Z/allure-report/index.html).
+This validates a committed-revision benchmark baseline. Edited application
+source in an interactive Pi session is built inside that session's VM.
+
 A subsequent three-VM cache-backed trial reached Compose readiness in all
 three guests in 103.075–106.292 seconds. Two guests produced all three Patrol
 trace sets in their temporary workspaces; the third stalled in its first
