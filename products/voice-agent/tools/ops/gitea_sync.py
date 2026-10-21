@@ -6,7 +6,6 @@ import base64
 import json
 import os
 import subprocess
-import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -173,29 +172,31 @@ def publish_repository(password: str) -> None:
     except urllib.error.HTTPError as error:
         if error.code != 409:
             raise
-    with tempfile.TemporaryDirectory(prefix="voice-gitea-mirror.") as directory:
-        mirror = Path(directory) / "repository.git"
-        run(["git", "clone", "--quiet", "--bare", str(REPOSITORY_ROOT), str(mirror)])
-        environment = os.environ.copy()
-        environment.update(
-            {
-                "GIT_CONFIG_COUNT": "1",
-                "GIT_CONFIG_KEY_0": "http.extraHeader",
-                "GIT_CONFIG_VALUE_0": f"Authorization: {authorization}",
-            }
-        )
-        run(
-            [
-                "git",
-                "-C",
-                str(mirror),
-                "push",
-                "--quiet",
-                "--mirror",
-                f"{ENDPOINT}/{OWNER}/{REPOSITORY}.git",
-            ],
-            env=environment,
-        )
+    current_branch = run(
+        ["git", "-C", str(REPOSITORY_ROOT), "symbolic-ref", "--quiet", "--short", "HEAD"]
+    ).stdout.strip()
+    branches = {"main", current_branch}
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": "http.extraHeader",
+            "GIT_CONFIG_VALUE_0": f"Authorization: {authorization}",
+        }
+    )
+    run(
+        [
+            "git",
+            "-C",
+            str(REPOSITORY_ROOT),
+            "push",
+            "--quiet",
+            "--force",
+            f"{ENDPOINT}/{OWNER}/{REPOSITORY}.git",
+            *(f"refs/heads/{branch}:refs/heads/{branch}" for branch in sorted(branches)),
+        ],
+        env=environment,
+    )
 
 
 def configure_repositories(password: str, base_image_pull_token: str) -> None:

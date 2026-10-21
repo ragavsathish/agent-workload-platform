@@ -6,7 +6,8 @@ directly so dependency and environment selection stays consistent.
 
 - `login.py` completes Tailscale authentication and publishes local services.
 - `db_init.py` converges database schemas, queues, and roles.
-- `gitea_sync.py` converges Gitea identities and publishes committed Git state.
+- `gitea_sync.py` converges Gitea identities and publishes `main` plus the
+  checked-out branch. It leaves other remote branches untouched.
 - `warm_models.py` warms the configured inference models through the edge.
 - `digital_twin.py` validates, loads, queries, and captures digital-twin data.
 - `make pi-rpc-host-smoke` exercises the local Agent Task worker, Rust RPC
