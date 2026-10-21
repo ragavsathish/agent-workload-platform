@@ -158,12 +158,12 @@ class ArtifactStore:
                 branch_ref = branch_refs[0]
                 subprocess.run(
                     ["git", "-C", str(workspace), "fetch", "--quiet", str(bundle),
-                     f"{branch_ref}:{branch_ref}"],
+                     branch_ref],
                     check=True,
                 )
                 subprocess.run(
-                    ["git", "-C", str(workspace), "checkout", "--quiet",
-                     branch_ref.removeprefix("refs/heads/")],
+                    ["git", "-C", str(workspace), "checkout", "--quiet", "-b",
+                     branch_ref.removeprefix("refs/heads/"), "FETCH_HEAD"],
                     check=True,
                 )
             elif len(bundle_heads) == 1 and bundle_heads[0].endswith(" HEAD"):

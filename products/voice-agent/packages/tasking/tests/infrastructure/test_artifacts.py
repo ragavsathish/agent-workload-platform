@@ -43,10 +43,11 @@ def test_scratch_root_is_not_documents(tmp_path: Path) -> None:
     assert "Documents" not in scratch.parts
 
 
-def test_workspace_bundle_preserves_source_branch(tmp_path: Path) -> None:
+@pytest.mark.parametrize("branch", ["main", "feature/dev-vm"])
+def test_workspace_bundle_preserves_source_branch(tmp_path: Path, branch: str) -> None:
     repository = tmp_path / "source"
     repository.mkdir()
-    subprocess.run(["git", "-C", str(repository), "init", "-q", "-b", "feature/dev-vm"], check=True)
+    subprocess.run(["git", "-C", str(repository), "init", "-q", "-b", branch], check=True)
     subprocess.run(["git", "-C", str(repository), "config", "user.name", "Test"], check=True)
     subprocess.run(["git", "-C", str(repository), "config", "user.email", "test@example.invalid"], check=True)
     (repository / "README.md").write_text("source snapshot\n")
@@ -67,7 +68,7 @@ def test_workspace_bundle_preserves_source_branch(tmp_path: Path) -> None:
     store.client = Client()
     uri = store.publish_workspace("source", repository)
     with store.materialize_workspace(uri, tmp_path / "scratch") as workspace:
-        assert _workflow_ref(workspace) == "refs/heads/feature/dev-vm"
+        assert _workflow_ref(workspace) == f"refs/heads/{branch}"
         assert (workspace / "README.md").read_text() == "source snapshot\n"
 
 
