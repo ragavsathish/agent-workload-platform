@@ -68,6 +68,7 @@ jobs:
             "Content-Type": "application/json",
           };
           const composeConfig = JSON.parse(fs.readFileSync("/tmp/compose-config.json", "utf8"));
+          const workspace = process.env.workspace;
           const buildContext = "/tmp/compose-build-context.tar";
           const buildContextBytes = fs.statSync(buildContext).size;
           const contextHash = createHash("sha256");
