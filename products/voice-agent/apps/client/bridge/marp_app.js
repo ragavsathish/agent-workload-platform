@@ -3,6 +3,7 @@ import { browser } from '@marp-team/marp-core/browser';
 import katexPlugin from '@marp-team/marp-core/plugins/katex';
 import mermaidPlugin from '@marp-team/marp-core/plugins/mermaid';
 import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
+import '../design_system/elements.css';
 
 const MAX_MARKDOWN_BYTES = 64 * 1024;
 const deck = document.querySelector('#deck');

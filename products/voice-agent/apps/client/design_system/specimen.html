@@ -57,8 +57,9 @@
       <p class="pi-kicker">Pi Voice · MCP Apps</p>
       <div class="pi-stack">
         <a href="#foundations">Foundations</a><a href="#typography">Typography</a><a href="#layout">Layout</a>
-        <a href="#surfaces">Surfaces</a><a href="#buttons">Buttons</a><a href="#badges">Badges</a>
-        <a href="#notices">Notices</a><a href="#empty-states">Empty states</a>
+        <a href="#surfaces">Surfaces</a><a href="#buttons">Buttons</a><a href="#fields">Fields</a>
+        <a href="#navigation">Navigation</a><a href="#badges">Badges</a><a href="#feedback">Feedback</a>
+        <a href="#notices">Notices</a><a href="#dialogs">Dialogs</a><a href="#empty-states">Empty states</a>
       </div>
     </nav>
     <main class="gallery-main">
@@ -108,6 +109,31 @@
           <article class="story pi-surface" data-story="button-primary"><h3>Primary</h3><p>The main action.</p><div class="story-preview"><button class="pi-button" data-variant="primary" type="button">Accept review</button></div><code class="story-code">data-variant="primary"</code></article>
           <article class="story pi-surface" data-story="button-danger"><h3>Danger</h3><p>Destructive actions.</p><div class="story-preview"><button class="pi-button" data-variant="danger" type="button">Delete draft</button></div><code class="story-code">data-variant="danger"</code></article>
           <article class="story pi-surface" data-story="button-disabled"><h3>Disabled</h3><p>Unavailable actions.</p><div class="story-preview"><button class="pi-button" type="button" disabled>Waiting for data</button></div><code class="story-code">disabled</code></article>
+          <article class="story pi-surface" data-story="button-icon"><h3>Icon button</h3><p>An accessible name is required.</p><div class="story-preview"><button class="pi-button pi-icon-button" type="button" aria-label="More options">⋯</button></div><code class="story-code">.pi-icon-button + aria-label</code></article>
+        </div>
+      </section>
+
+      <section class="gallery-section" id="fields" aria-labelledby="fields-title">
+        <h2 id="fields-title">Fields</h2><p class="gallery-description">Native controls with visible labels, help, validation, focus, and disabled states.</p>
+        <div class="gallery-grid">
+          <article class="story pi-surface" data-story="field-text"><h3>Text input</h3><p>A hint is connected to the control.</p>
+            <div class="story-preview pi-field"><label class="pi-label" for="story-name">Task name</label><input class="pi-input" id="story-name" type="text" placeholder="Review trace" aria-describedby="story-name-hint"><span class="pi-hint" id="story-name-hint">Use a short, descriptive name.</span></div><code class="story-code">.pi-field · .pi-label · .pi-input · .pi-hint</code></article>
+          <article class="story pi-surface" data-story="field-select"><h3>Select</h3><p>The same field contract works for choices.</p>
+            <div class="story-preview pi-field"><label class="pi-label" for="story-status">Status</label><select class="pi-input" id="story-status"><option>All statuses</option><option>Ready</option><option>Pending</option></select></div><code class="story-code">select.pi-input</code></article>
+          <article class="story pi-surface" data-story="field-textarea"><h3>Textarea</h3><p>For longer content.</p>
+            <div class="story-preview pi-field"><label class="pi-label" for="story-note">Note</label><textarea class="pi-input" id="story-note" rows="3">Explain the evidence here.</textarea></div><code class="story-code">textarea.pi-input</code></article>
+          <article class="story pi-surface" data-story="field-invalid"><h3>Invalid</h3><p>An error message is connected to the field.</p>
+            <div class="story-preview pi-field"><label class="pi-label" for="story-error">Repository URL</label><input class="pi-input" id="story-error" type="url" value="not-a-url" aria-invalid="true" aria-describedby="story-error-message"><span class="pi-error" id="story-error-message">Enter a valid URL.</span></div><code class="story-code">aria-invalid="true" · aria-describedby</code></article>
+          <article class="story pi-surface" data-story="field-disabled"><h3>Disabled</h3><p>Unavailable input remains labeled.</p>
+            <div class="story-preview pi-field"><label class="pi-label" for="story-disabled">Workspace</label><input class="pi-input" id="story-disabled" type="text" value="Current workspace" disabled></div><code class="story-code">.pi-input:disabled</code></article>
+        </div>
+      </section>
+
+      <section class="gallery-section" id="navigation" aria-labelledby="navigation-title">
+        <h2 id="navigation-title">Navigation and toolbars</h2><p class="gallery-description">Use links for destinations and buttons for actions.</p>
+        <div class="gallery-grid">
+          <article class="story pi-surface" data-story="navigation"><h3>Navigation</h3><p>Mark the current destination.</p><div class="story-preview"><nav class="pi-nav" aria-label="Example app views"><a href="#navigation" aria-current="page">Overview</a><a href="#buttons">Actions</a></nav></div><code class="story-code">.pi-nav · aria-current="page"</code></article>
+          <article class="story pi-surface" data-story="toolbar"><h3>Toolbar</h3><p>Group related actions under a label.</p><div class="story-preview"><div class="pi-toolbar" role="group" aria-label="Review actions"><button class="pi-button" type="button">Previous</button><button class="pi-button" type="button">Next</button></div></div><code class="story-code">.pi-toolbar · role="group"</code></article>
         </div>
       </section>
 
@@ -116,6 +142,14 @@
         <div class="gallery-grid"><article class="story pi-surface" data-story="badges-all"><h3>All tones</h3><p>Neutral, success, warning, and danger.</p>
           <div class="story-preview pi-inline"><span class="pi-badge">Draft</span><span class="pi-badge" data-tone="success">Ready</span><span class="pi-badge" data-tone="warning">Pending</span><span class="pi-badge" data-tone="danger">Failed</span></div>
           <code class="story-code">.pi-badge · data-tone="success|warning|danger"</code></article></div>
+      </section>
+
+      <section class="gallery-section" id="feedback" aria-labelledby="feedback-title">
+        <h2 id="feedback-title">Loading and progress</h2><p class="gallery-description">Pair visual progress with a textual status; use native progress for a measurable task.</p>
+        <div class="gallery-grid">
+          <article class="story pi-surface" data-story="loading"><h3>Loading</h3><p>Indeterminate work.</p><div class="story-preview"><div class="pi-loading" role="status"><span class="pi-spinner" aria-hidden="true"></span><span>Loading trace…</span></div></div><code class="story-code">.pi-loading · .pi-spinner · role="status"</code></article>
+          <article class="story pi-surface" data-story="progress"><h3>Progress</h3><p>Known completion amount.</p><div class="story-preview pi-field"><label class="pi-label" for="story-progress">Importing images · 7 of 10</label><progress class="pi-progress" id="story-progress" value="7" max="10">70%</progress></div><code class="story-code">progress.pi-progress + label</code></article>
+        </div>
       </section>
 
       <section class="gallery-section" id="notices" aria-labelledby="notices-title">
@@ -127,14 +161,27 @@
         </div>
       </section>
 
+      <section class="gallery-section" id="dialogs" aria-labelledby="dialogs-title">
+        <h2 id="dialogs-title">Dialog</h2><p class="gallery-description">The native modal handles focus containment and Escape. Close returns focus to the launcher.</p>
+        <div class="gallery-grid"><article class="story pi-surface" data-story="dialog"><h3>Confirmation</h3><p>Open the interactive example to inspect its behavior.</p>
+          <div class="story-preview"><button class="pi-button" id="open-dialog" type="button">Open dialog</button></div><code class="story-code">dialog.pi-dialog + showModal()</code></article></div>
+      </section>
+
       <section class="gallery-section" id="empty-states" aria-labelledby="empty-states-title">
         <h2 id="empty-states-title">Empty states</h2><p class="gallery-description">Explain what is absent and how to continue.</p>
         <div class="gallery-grid"><article class="story pi-surface" data-story="empty-state"><h3>No selection</h3><p>A useful next step beats a blank panel.</p>
           <div class="story-preview"><div class="pi-empty-state pi-surface">No review selected yet. Choose an item to begin.</div></div><code class="story-code">.pi-empty-state .pi-surface</code></article></div>
       </section>
-      <footer class="gallery-footer">Built from the same tokens and CSS consumed by Mermaid and Journal Review MCP Apps.</footer>
+      <footer class="gallery-footer">Built from the same tokens and CSS consumed by Mermaid, Marp, Journal Review, and Trace Explainer MCP Apps.</footer>
     </main>
   </div>
+  <dialog class="pi-dialog" id="story-dialog" aria-labelledby="story-dialog-title" aria-describedby="story-dialog-description">
+    <div class="pi-stack">
+      <h2 class="pi-section-title" id="story-dialog-title">Discard draft?</h2>
+      <p id="story-dialog-description">This local gallery example will close without changing data.</p>
+      <form method="dialog" class="pi-toolbar"><button class="pi-button" value="cancel">Cancel</button><button class="pi-button" data-variant="danger" value="confirm">Discard</button></form>
+    </div>
+  </dialog>
   <script>
     const toggle = document.querySelector('#theme-toggle');
     toggle.addEventListener('click', () => {
@@ -143,6 +190,7 @@
       toggle.setAttribute('aria-pressed', String(light));
       toggle.textContent = light ? 'Switch to dark' : 'Switch to light';
     });
+    document.querySelector('#open-dialog').addEventListener('click', () => document.querySelector('#story-dialog').showModal());
   </script>
 </body>
 </html>

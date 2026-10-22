@@ -1,4 +1,5 @@
 import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
+import '../design_system/elements.css';
 
 const MAX_TEXT = 500;
 const TRACE_ID = /^[a-f0-9]{32}$/u;
@@ -156,7 +157,7 @@ const render = (value) => {
       element('h1', {}, presentation.title),
       element('p', { id: 'summary' }, presentation.summary),
     );
-    const fullscreen = element('button', { id: 'fullscreen', type: 'button' }, 'Open fullscreen');
+    const fullscreen = element('button', { id: 'fullscreen', class: 'pi-button', type: 'button' }, 'Open fullscreen');
     fullscreen.addEventListener('click', async () => {
       try {
         await app.requestDisplayMode({ mode: 'fullscreen' });
@@ -212,7 +213,7 @@ const render = (value) => {
 
     const launch = element('section', { id: 'viewer-launch' });
     launch.append(element('p', {}, 'Summary stays conversational. The complete recording opens in Playwright’s native debugger.'));
-    const openViewer = element('button', { id: 'open-viewer', type: 'button' }, 'Open Trace Viewer');
+    const openViewer = element('button', { id: 'open-viewer', class: 'pi-button', type: 'button' }, 'Open Trace Viewer');
     openViewer.addEventListener('click', async () => {
       try {
         await app.openLink({ url: presentation.viewerUrl });
@@ -223,7 +224,7 @@ const render = (value) => {
     });
     launch.append(openViewer);
     if (presentation.narratedVideoUrl) {
-      const openVideo = element('button', { id: 'open-video', type: 'button' }, 'Open narrated video');
+      const openVideo = element('button', { id: 'open-video', class: 'pi-button', type: 'button' }, 'Open narrated video');
       openVideo.addEventListener('click', async () => {
         try {
           await app.openLink({ url: presentation.narratedVideoUrl });
@@ -235,7 +236,7 @@ const render = (value) => {
       launch.append(openVideo);
     }
 
-    const actions = element('section', { id: 'conversation', 'aria-label': 'Ask about this trace' });
+    const actions = element('section', { id: 'conversation', class: 'pi-toolbar', 'aria-label': 'Ask about this trace' });
     const status = element('span', { id: 'conversation-status', role: 'status' });
     const prompts = [
       ['Explain the failure', 'Explain the likely cause of this Playwright trace failure and cite the relevant actions.'],
@@ -243,7 +244,7 @@ const render = (value) => {
       ['What next?', 'What should I inspect or change next based on this Playwright trace?'],
     ];
     for (const [label, prompt] of prompts) {
-      const button = element('button', { class: 'ask', type: 'button' }, label);
+      const button = element('button', { class: 'ask pi-button', type: 'button' }, label);
       button.addEventListener('click', () => void ask(presentation, prompt, status));
       actions.append(button);
     }

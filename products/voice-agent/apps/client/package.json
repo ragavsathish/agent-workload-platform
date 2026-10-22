@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node tool/generate-design-tokens.mjs && npm run build:mermaid && npm run build:marp && npm run build:trace-explainer && npm run build:journal-review && npm run build:excalidraw && npm run build:bridge && ./tool/flutterw build web --release --wasm",
     "build:mermaid": "node tool/generate-design-tokens.mjs && node tool/build-mermaid-app.mjs",
-    "build:marp": "node tool/build-marp-app.mjs",
+    "build:marp": "node tool/generate-design-tokens.mjs && node tool/build-marp-app.mjs",
     "build:trace-explainer": "node tool/generate-design-tokens.mjs && node tool/build-trace-explainer-app.mjs",
     "build:journal-review": "node tool/generate-design-tokens.mjs && node tool/build-journal-review-app.mjs",
     "build:excalidraw": "node tool/build-excalidraw-app.mjs",

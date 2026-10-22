@@ -23,9 +23,19 @@ Dark is the default; `data-pi-theme="light"` and `data-pi-theme="dark"` select a
 
 ## Patterns and accessibility
 
-The reusable web interface is `elements.css`. Import it once from an MCP App entry point; it imports generated tokens and the bundled typeface. Use `.pi-stack` and `.pi-inline` for layout, `.pi-surface` for panels, `.pi-section-title` and `.pi-kicker` for hierarchy, `.pi-button` with `data-variant="primary|danger"` for actions, `.pi-badge` for short labeled states, `.pi-notice` for status or error messages, and `.pi-empty-state` when content is absent. These are CSS classes and semantic HTML attributes; React, Vue, and plain DOM apps do not need separate runtime packages. Keep app-specific layout and behavior in the app.
+The reusable web interface is `elements.css`. Import it once from an MCP App entry point; it imports generated tokens and the bundled typeface. These are CSS classes and semantic HTML attributes; React, Vue, and plain DOM apps do not need separate runtime packages. Keep app-specific layout and behavior in the app.
 
-Focus must be visible (`--pi-color-focus`, 3px); do not remove it. Keep keyboard activation native, status updates in live regions, and controls at least 44px. Use responsive `clamp` typography and collapse grids at small widths. Avoid color-only status; preserve labels/icons. Do not add animation without the reduced-motion behavior. For example:
+| Need | Shared contract | Native semantics to keep |
+|---|---|---|
+| Layout and hierarchy | `.pi-stack`, `.pi-inline`, `.pi-surface`, `.pi-section-title`, `.pi-kicker` | Meaningful headings and sections |
+| Actions | `.pi-button` with `data-variant="primary|danger"`; `.pi-icon-button` | `<button type="button">`; icon-only actions need an accessible name |
+| Forms | `.pi-field`, `.pi-label`, `.pi-input`, `.pi-hint`, `.pi-error` | Explicit `<label for>`; `aria-describedby` for help/error; `aria-invalid="true"` for invalid fields |
+| Navigation | `.pi-nav`, `.pi-toolbar` | `<nav>` for destinations, links for navigation, buttons for actions; `aria-current="page"` |
+| Status | `.pi-badge`, `.pi-notice`, `.pi-empty-state` | Text labels for every tone; `role="status"` or `role="alert"` for updates |
+| Progress | `.pi-loading` with decorative `.pi-spinner`; `.pi-progress` | Text status for unknown duration, labeled native `<progress>` for known amount |
+| Modal | `.pi-dialog` | Native `<dialog>` opened with `showModal()` and a labeled heading; close via a dialog form or `close()` |
+
+Focus must be visible (`--pi-color-focus`, 3px); do not remove it. Keep keyboard activation native, status updates in live regions, and interactive controls at least 44px. Use responsive `clamp` typography and collapse grids at small widths. Avoid color-only status; preserve labels/icons. Respect reduced motion for the decorative spinner. Do not create a custom dialog focus trap when the native modal provides it. The choices follow [W3C form labeling](https://www.w3.org/WAI/tutorials/forms/labels/), [dialog guidance](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/), and [WCAG target sizing](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum). For example:
 
 ```html
 <section class="pi-surface pi-stack" aria-labelledby="review-title">
@@ -35,7 +45,7 @@ Focus must be visible (`--pi-color-focus`, 3px); do not remove it. Keep keyboard
 </section>
 ```
 
-Journal Review uses the shared surfaces, badges, actions, kicker, and typeface while retaining its evidence-specific layout. Mermaid uses the shared surface, section title, notice, and typeface. Flutter's theme maps the same dark values and Source Code Pro family through generated Dart tokens. Marp and Trace Explainer are migration candidates; Excalidraw/Grafana remain separately owned.
+Journal Review uses the shared surfaces, badges, actions, kicker, and typeface while retaining its evidence-specific layout. Mermaid uses the shared surface, section title, notice, and typeface. Marp uses shared navigation buttons, toolbar, font, and host theme for its frame; generated slide content still has its own theme. Trace Explainer uses shared buttons, toolbar, font, and host theme while retaining its evidence-specific layout. Flutter's theme maps the same dark values and Source Code Pro family through generated Dart tokens. Excalidraw/Grafana remain separately owned.
 
 ## Framework use
 
@@ -49,9 +59,9 @@ Journal Review uses the shared surfaces, badges, actions, kicker, and typeface w
 
 ## Packaging, migration, and validation
 
-Client build commands regenerate first. The Journal Review MCP package regenerates before bundling its self-contained HTML; Trace Explainer remains a documented migration target and does not yet consume the contract. Preserve **two separate quoted CSP hash sources** when changing the inline bootstrap or app script. Open `apps/client/design_system/specimen.html` directly in a browser for the component gallery. It shows every shared element and variant on one page, with section navigation and a dark/light theme toggle.
+Client build commands regenerate first. The Journal Review and Trace Explainer MCP packages bundle their self-contained HTML from the client entry points. Preserve **two separate quoted CSP hash sources** when changing the inline bootstrap or app script. Open `apps/client/design_system/specimen.html` directly in a browser for the component gallery. It shows every shared element and variant on one page, with section navigation, a dark/light theme toggle, labeled fields, progress, and an interactive native dialog.
 
-Migration order: (1) Marp controls and generated slide palette, (2) Trace Explainer roles/buttons, (3) first-party Excalidraw wrapper only if vendor updates permit, and never patch Grafana/Recogito vendor internals. Run `npm run test:design-tokens`, the relevant MCP App build, then browser rendering tests.
+Remaining work: align Marp's generated slide palette separately from its frame, and review first-party Excalidraw wrapper styling only if vendor updates permit. Never patch Grafana/Recogito vendor internals. Run `npm run test:design-tokens`, the relevant MCP App build, then browser rendering tests.
 
 ## Validation recorded
 
