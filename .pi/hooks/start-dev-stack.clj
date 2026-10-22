@@ -6,7 +6,7 @@
             [clojure.string :as str])
   (:import (java.io File)
            (java.lang ProcessBuilder ProcessBuilder$Redirect)
-           (java.nio.file FileAlreadyExistsException StandardOpenOption)
+           (java.nio.file FileAlreadyExistsException LinkOption StandardOpenOption)
            (java.net URI)
            (java.net.http HttpClient HttpRequest HttpResponse$BodyHandlers)
            (java.nio.charset StandardCharsets)
@@ -29,6 +29,25 @@
 
 (defn write-text! [path content]
   (spit path content :encoding "UTF-8"))
+
+(defn empty-directory? [path]
+  (and (not (Files/isSymbolicLink path))
+       (Files/isDirectory path (make-array LinkOption 0))
+       (with-open [entries (Files/list path)]
+         (not (.isPresent (.findAny entries))))))
+
+(defn link-vendor-sources! [workspace image-vendor-root]
+  (doseq [name ["excalidraw-mcp" "mermaid-to-excalidraw"]]
+    (let [source (Paths/get image-vendor-root (into-array String [name]))
+          destination (Paths/get workspace (into-array String ["vendor" name]))]
+      (when (Files/isDirectory source (make-array LinkOption 0))
+        (Files/createDirectories (.getParent destination)
+                                 (make-array java.nio.file.attribute.FileAttribute 0))
+        (when (empty-directory? destination)
+          (Files/delete destination))
+        (when-not (Files/exists destination (into-array LinkOption [LinkOption/NOFOLLOW_LINKS]))
+          (Files/createSymbolicLink destination source
+                                    (make-array java.nio.file.attribute.FileAttribute 0)))))))
 
 (defn run-command
   ([argv] (run-command argv {}))
@@ -203,6 +222,7 @@
             (throw (ex-info "Grafana MCP bootstrap did not finish within 120000ms" {}))))))))
 
 (defn -main []
+  (link-vendor-sources! "/workspace" "/opt/vendor")
   (let [index-path (str preload-root "/index.json")]
     (if-not (.exists (File. index-path))
       (println "dev Compose skipped: image preload is not mounted")

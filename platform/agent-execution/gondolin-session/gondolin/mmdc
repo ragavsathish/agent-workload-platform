@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+exec /opt/mermaid-cli/node_modules/.bin/mmdc \
+  --puppeteerConfigFile /etc/mermaid-cli/puppeteer.json "$@"

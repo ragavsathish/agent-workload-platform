@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import test from "node:test";
 
@@ -30,6 +31,21 @@ test("dev image Playwright version matches the client lockfile", () => {
   assert.ok(pinned, "Dockerfile.dev must pin CLIENT_PLAYWRIGHT_VERSION");
   assert.equal(pinned, lock.packages["node_modules/playwright"].version);
   assert.equal(pinned, lock.packages[""].devDependencies.playwright);
+});
+
+test("development image pins Mermaid CLI and the repository vendor revisions", () => {
+  assert.match(dockerfile, /^ARG MERMAID_CLI_VERSION=11\.12\.0$/m);
+  assert.match(dockerfile, /PUPPETEER_SKIP_DOWNLOAD=true/);
+  assert.match(dockerfile, /mmdc --input \/tmp\/mermaid-smoke\.mmd --output \/tmp\/mermaid-smoke\.png/);
+  assert.match(dockerfile, /pnpm install --frozen-lockfile --ignore-scripts/);
+  for (const [name, argument] of [
+    ["excalidraw-mcp", "EXCALIDRAW_MCP_REVISION"],
+    ["mermaid-to-excalidraw", "MERMAID_TO_EXCALIDRAW_REVISION"],
+  ]) {
+    const revision = execFileSync("git", ["rev-parse", `HEAD:vendor/${name}`], { encoding: "utf8" }).trim();
+    assert.match(dockerfile, new RegExp(`^ARG ${argument}=${revision}$`, "m"));
+  }
+  assert.match(stackHook, /link-vendor-sources! "\/workspace" "\/opt\/vendor"/);
 });
 
 test("Docker development VMs use QEMU and require OverlayFS before starting overlay2", () => {

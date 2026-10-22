@@ -50,8 +50,12 @@ from the repository root:
 make gondolin-dev-build
 ```
 
-This packages Flutter, Node, Docker, and Playwright tools; it does not build
-the project. Normal durable tasks instead read this repository's
+This packages Flutter, Node, Docker, Playwright, and `mmdc` tools; it does not
+build the project. The image also clones the pinned Excalidraw MCP and
+Mermaid-to-Excalidraw vendor sources under `/opt/vendor` and installs Excalidraw's
+locked build dependencies. At Pi session start,
+empty vendor submodule directories in `/workspace` become links to those shared
+image sources. Normal durable tasks instead read this repository's
 `.pi/gondolin.json`: the task worker asks the trusted image builder for the
 toolchain image only on a cache miss, then Pi starts one VM for that task
 session with its worktree mounted at `/workspace`. Run `npm ci`, `npm run build`,

@@ -65,4 +65,57 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && git config --system --add safe.directory /workspace \
     && docker compose version
 
+ARG MERMAID_CLI_VERSION=11.12.0
+
+COPY mmdc /usr/local/bin/mmdc
+COPY puppeteer-config.json /etc/mermaid-cli/puppeteer.json
+
+RUN --mount=type=secret,id=gondolin_mitm_ca,required=false \
+    set -eu; \
+    cp /etc/ssl/certs/ca-certificates.crt /tmp/build-ca-bundle.crt; \
+    if [ -f /run/secrets/gondolin_mitm_ca ]; then \
+      cat /run/secrets/gondolin_mitm_ca >> /tmp/build-ca-bundle.crt; \
+    fi; \
+    PUPPETEER_SKIP_DOWNLOAD=true NODE_EXTRA_CA_CERTS=/tmp/build-ca-bundle.crt \
+      npm install --prefix /opt/mermaid-cli --no-audit --no-fund \
+      "@mermaid-js/mermaid-cli@${MERMAID_CLI_VERSION}"; \
+    browser="$(find /ms-playwright -path '*/chromium-*/chrome-linux/chrome' -type f | sort -V | tail -1)"; \
+    test -n "$browser"; \
+    ln -s "$browser" /usr/local/bin/playwright-chromium; \
+    chmod 0555 /usr/local/bin/mmdc; \
+    mmdc --version; \
+    printf 'flowchart LR\nA-->B\n' >/tmp/mermaid-smoke.mmd; \
+    mmdc --input /tmp/mermaid-smoke.mmd --output /tmp/mermaid-smoke.png; \
+    test -s /tmp/mermaid-smoke.png; \
+    rm /tmp/mermaid-smoke.mmd /tmp/mermaid-smoke.png /tmp/build-ca-bundle.crt; \
+    npm cache clean --force
+
+ARG EXCALIDRAW_MCP_REVISION=157aa23ceb1976008aadc89eb05e3444060f09d6
+ARG MERMAID_TO_EXCALIDRAW_REVISION=7849b487be67cf2d439c713c847839d2494d59b6
+
+RUN --mount=type=secret,id=gondolin_mitm_ca,required=false \
+    set -eu; \
+    cp /etc/ssl/certs/ca-certificates.crt /tmp/build-ca-bundle.crt; \
+    if [ -f /run/secrets/gondolin_mitm_ca ]; then \
+      cat /run/secrets/gondolin_mitm_ca >> /tmp/build-ca-bundle.crt; \
+    fi; \
+    mkdir -p /opt/vendor; \
+    for source in \
+      "excalidraw-mcp|https://github.com/excalidraw/excalidraw-mcp.git|${EXCALIDRAW_MCP_REVISION}" \
+      "mermaid-to-excalidraw|https://github.com/excalidraw/mermaid-to-excalidraw.git|${MERMAID_TO_EXCALIDRAW_REVISION}"; do \
+      name="${source%%|*}"; remainder="${source#*|}"; \
+      url="${remainder%%|*}"; revision="${remainder#*|}"; \
+      git init --quiet "/opt/vendor/$name"; \
+      git -C "/opt/vendor/$name" remote add origin "$url"; \
+      GIT_SSL_CAINFO=/tmp/build-ca-bundle.crt git -C "/opt/vendor/$name" fetch --quiet --depth 1 origin "$revision"; \
+      git -C "/opt/vendor/$name" checkout --quiet --detach FETCH_HEAD; \
+      test "$(git -C "/opt/vendor/$name" rev-parse HEAD)" = "$revision"; \
+      rm -rf "/opt/vendor/$name/.git"; \
+    done; \
+    (cd /opt/vendor/excalidraw-mcp \
+      && NODE_EXTRA_CA_CERTS=/tmp/build-ca-bundle.crt pnpm install --frozen-lockfile --ignore-scripts); \
+    test -x /opt/vendor/excalidraw-mcp/node_modules/.bin/vite; \
+    rm /tmp/build-ca-bundle.crt; \
+    pnpm store prune
+
 WORKDIR /workspace

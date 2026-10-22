@@ -39,8 +39,13 @@ cover [Docker storage selection](../../../docs/research/gondolin-docker-storage-
 and [checkpoint disk use](../../../docs/research/gondolin-checkpoint-disk-optimization.md).
 
 For a manual probe, `make gondolin-dev-build` prepares a reusable
-Flutter/Node/Docker/Playwright toolchain image without repository source or app
-output. Normal durable tasks select and provision their image through the
+Flutter/Node/Docker/Playwright/Mermaid CLI toolchain image. It includes the two
+pinned public vendor submodules under `/opt/vendor` and installs Excalidraw's
+locked build dependencies, but no application checkout or built app output. The
+session-start hook links those sources into an empty
+`/workspace/vendor` checkout, so every VM reads the image layers instead of
+copying vendor files into its writable disk. A populated submodule checkout is
+left alone. Normal durable tasks select and provision their image through the
 repository's `.pi/gondolin.json` before Pi starts. The extension remains
 project-agnostic: it mounts only that session's chosen worktree at `/workspace`,
 does not copy host process credentials or `.env` files, and starts a private
