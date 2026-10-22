@@ -49,7 +49,7 @@ Journal Review uses the shared surfaces, badges, actions, kicker, and typeface w
 
 ## Packaging, migration, and validation
 
-Client build commands regenerate first. The Journal Review MCP package regenerates before bundling its self-contained HTML; Trace Explainer remains a documented migration target and does not yet consume the contract. Preserve **two separate quoted CSP hash sources** when changing the inline bootstrap or app script. Open `apps/client/design_system/specimen.html` in a static/mock browser flow for a visual fixture with a theme toggle.
+Client build commands regenerate first. The Journal Review MCP package regenerates before bundling its self-contained HTML; Trace Explainer remains a documented migration target and does not yet consume the contract. Preserve **two separate quoted CSP hash sources** when changing the inline bootstrap or app script. Open `apps/client/design_system/specimen.html` directly in a browser for the component gallery. It shows every shared element and variant on one page, with section navigation and a dark/light theme toggle.
 
 Migration order: (1) Marp controls and generated slide palette, (2) Trace Explainer roles/buttons, (3) first-party Excalidraw wrapper only if vendor updates permit, and never patch Grafana/Recogito vendor internals. Run `npm run test:design-tokens`, the relevant MCP App build, then browser rendering tests.
 

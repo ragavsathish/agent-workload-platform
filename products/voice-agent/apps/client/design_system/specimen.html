@@ -3,59 +3,145 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Pi MCP App design system</title>
+  <title>Pi MCP App component gallery</title>
   <link rel="stylesheet" href="elements.css">
   <style>
-    body { margin: 0; padding: var(--pi-space-6); background: var(--pi-color-canvas); color: var(--pi-color-text); font-size: var(--pi-font-body); line-height: var(--pi-font-line); }
-    main { max-width: 52rem; margin: auto; }
-    .specimen { padding: var(--pi-space-6); }
-    .specimen + .specimen { margin-top: var(--pi-space-4); }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--pi-color-canvas); color: var(--pi-color-text); font: var(--pi-font-body)/var(--pi-font-line) var(--pi-font-sans); }
+    a:focus-visible { outline: var(--pi-size-focus) solid var(--pi-color-focus); outline-offset: 3px; }
+    .gallery { display: grid; grid-template-columns: 14rem minmax(0, 1fr); min-height: 100vh; }
+    .gallery-nav { position: sticky; top: 0; height: 100vh; box-sizing: border-box; overflow: auto; padding: var(--pi-space-6); border-right: 1px solid var(--pi-color-border); background: var(--pi-color-surface); }
+    .gallery-nav a { display: block; padding: var(--pi-space-2) 0; color: var(--pi-color-text-muted); text-decoration: none; }
+    .gallery-nav a:hover { color: var(--pi-color-accent); }
+    .gallery-main { width: min(100%, 70rem); box-sizing: border-box; padding: var(--pi-space-8); }
+    .gallery-header { display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: var(--pi-space-4); }
+    h1 { margin: var(--pi-space-2) 0; font-size: var(--pi-font-title); line-height: 1.2; }
+    .gallery-intro { max-width: 65ch; }
+    .gallery-section { margin-top: var(--pi-space-10); scroll-margin-top: var(--pi-space-4); }
+    .gallery-section > h2 { margin: 0 0 var(--pi-space-2); font-size: 20px; }
+    .gallery-description, .gallery-intro, .story > p { color: var(--pi-color-text-muted); }
+    .gallery-description { margin: 0 0 var(--pi-space-4); }
+    .gallery-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: var(--pi-space-4); }
+    .story { min-width: 0; padding: var(--pi-space-5); }
+    .story > h3 { margin: 0 0 var(--pi-space-2); font-size: var(--pi-font-body); }
+    .story > p { margin: 0 0 var(--pi-space-4); font-size: var(--pi-font-small); }
+    .story-preview { min-height: 5rem; }
+    .story-preview > .pi-surface { padding: var(--pi-space-4); }
+    .story-code { display: block; margin-top: var(--pi-space-4); padding-top: var(--pi-space-3); border-top: 1px solid var(--pi-color-border); color: var(--pi-color-text-muted); font-size: var(--pi-font-small); overflow-wrap: anywhere; }
     .swatches { display: grid; grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr)); gap: var(--pi-space-2); }
-    .swatch { padding: var(--pi-space-3); border: 1px solid var(--pi-color-border); border-radius: var(--pi-radius-md); background: var(--pi-color-surface-raised); }
+    .swatch { min-height: 4rem; box-sizing: border-box; padding: var(--pi-space-3); border: 1px solid var(--pi-color-border); border-radius: var(--pi-radius-md); }
+    .swatch[data-color='canvas'] { background: var(--pi-color-canvas); }
+    .swatch[data-color='surface'] { background: var(--pi-color-surface); }
+    .swatch[data-color='raised'] { background: var(--pi-color-surface-raised); }
+    .swatch[data-color='accent'] { background: var(--pi-color-accent); color: var(--pi-color-accent-text); }
+    .swatch[data-color='info'] { background: var(--pi-color-info); color: var(--pi-color-canvas); }
+    .swatch[data-color='warning'] { background: var(--pi-color-warning); color: var(--pi-color-canvas); }
+    .swatch[data-color='danger'] { background: var(--pi-color-danger); color: var(--pi-color-canvas); }
+    .type-sample { margin: 0; }
+    .type-sample[data-size='title'] { font-size: var(--pi-font-title); line-height: 1.2; }
+    .type-sample[data-size='small'] { font-size: var(--pi-font-small); color: var(--pi-color-text-muted); }
+    .layout-tile { display: inline-block; padding: var(--pi-space-2) var(--pi-space-3); border: 1px solid var(--pi-color-border-strong); border-radius: var(--pi-radius-sm); background: var(--pi-color-surface-raised); }
+    .gallery-footer { margin-top: var(--pi-space-10); color: var(--pi-color-text-muted); }
+    @media (max-width: 740px) {
+      .gallery { display: block; }
+      .gallery-nav { position: static; height: auto; padding: var(--pi-space-4); border-right: 0; border-bottom: 1px solid var(--pi-color-border); }
+      .gallery-nav .pi-stack { display: flex; flex-wrap: wrap; gap: var(--pi-space-2) var(--pi-space-4); }
+      .gallery-nav a { padding: var(--pi-space-1) 0; }
+      .gallery-main { padding: var(--pi-space-4); }
+    }
   </style>
 </head>
 <body>
-  <main class="pi-stack">
-    <header class="pi-inline">
-      <div>
-        <p class="pi-kicker">Pi Voice · MCP Apps · tokens 1.1.0</p>
-        <h1>Design system specimen</h1>
+  <div class="gallery">
+    <nav class="gallery-nav" aria-label="Component gallery">
+      <p class="pi-kicker">Pi Voice · MCP Apps</p>
+      <div class="pi-stack">
+        <a href="#foundations">Foundations</a><a href="#typography">Typography</a><a href="#layout">Layout</a>
+        <a href="#surfaces">Surfaces</a><a href="#buttons">Buttons</a><a href="#badges">Badges</a>
+        <a href="#notices">Notices</a><a href="#empty-states">Empty states</a>
       </div>
-      <button class="pi-button" type="button" id="theme-toggle">Toggle light theme</button>
-    </header>
-    <section class="pi-surface specimen pi-stack" aria-labelledby="actions-title">
-      <h2 id="actions-title" class="pi-section-title">Actions and status</h2>
-      <div class="pi-inline">
-        <button class="pi-button" data-variant="primary" type="button">Primary action</button>
-        <button class="pi-button" type="button">Secondary action</button>
-        <button class="pi-button" data-variant="danger" type="button">Destructive action</button>
-        <button class="pi-button" type="button" disabled>Unavailable</button>
-      </div>
-      <div class="pi-inline" aria-label="Example statuses">
-        <span class="pi-badge" data-tone="success">Ready</span>
-        <span class="pi-badge" data-tone="warning">Pending</span>
-        <span class="pi-badge" data-tone="danger">Failed</span>
-      </div>
-      <p class="pi-notice" role="status">A neutral status message explains what happened.</p>
-      <p class="pi-notice" data-tone="danger" role="alert">An error message names the recovery step.</p>
-    </section>
-    <section class="pi-surface specimen pi-stack" aria-labelledby="typography-title">
-      <h2 id="typography-title" class="pi-section-title">Typography and empty state</h2>
-      <p>Source Code Pro is bundled locally for the host and each first-party MCP App iframe. <em>Italic</em> and <strong>semibold</strong> are available.</p>
-      <div class="pi-empty-state pi-surface">No review selected yet. Choose an item to begin.</div>
-      <div class="swatches" aria-label="Semantic surfaces">
-        <div class="swatch">Canvas and surface</div>
-        <div class="swatch">Focused controls</div>
-        <div class="swatch">Responsive layout</div>
-      </div>
-    </section>
-  </main>
+    </nav>
+    <main class="gallery-main">
+      <header class="gallery-header">
+        <div><p class="pi-kicker">Tokens 1.1.0 · Component gallery</p><h1>One page, every shared element</h1>
+          <p class="gallery-intro">The actual <code>elements.css</code> used by first-party MCP Apps. Every variant is visible; switch themes to check both palettes.</p></div>
+        <button class="pi-button" type="button" id="theme-toggle" aria-pressed="false">Switch to light</button>
+      </header>
+
+      <section class="gallery-section" id="foundations" aria-labelledby="foundations-title">
+        <h2 id="foundations-title">Foundations</h2><p class="gallery-description">Semantic color tokens change together with the theme.</p>
+        <div class="swatches"><div class="swatch" data-color="canvas">Canvas</div><div class="swatch" data-color="surface">Surface</div>
+          <div class="swatch" data-color="raised">Raised</div><div class="swatch" data-color="accent">Accent</div>
+          <div class="swatch" data-color="info">Info</div><div class="swatch" data-color="warning">Warning</div><div class="swatch" data-color="danger">Danger</div></div>
+      </section>
+
+      <section class="gallery-section" id="typography" aria-labelledby="typography-title">
+        <h2 id="typography-title">Typography</h2><p class="gallery-description">Source Code Pro, bundled locally.</p>
+        <div class="gallery-grid">
+          <article class="story pi-surface" data-story="type-scale"><h3>Type scale</h3><p>Upright, italic, and semibold weights.</p>
+            <div class="story-preview pi-stack"><p class="type-sample" data-size="title">A clear title</p><p class="type-sample">Body text with <em>italic</em> and <strong>semibold</strong>.</p><p class="type-sample" data-size="small">Small supporting text · 12px</p></div></article>
+          <article class="story pi-surface" data-story="headings"><h3>Labels and headings</h3><p>Hierarchy within a view.</p>
+            <div class="story-preview pi-stack"><p class="pi-kicker">Evidence review</p><h4 class="pi-section-title">Ready for annotation</h4></div><code class="story-code">.pi-kicker · .pi-section-title</code></article>
+        </div>
+      </section>
+
+      <section class="gallery-section" id="layout" aria-labelledby="layout-title">
+        <h2 id="layout-title">Layout</h2><p class="gallery-description">Primitives for vertical rhythm and wrapping rows.</p>
+        <div class="gallery-grid">
+          <article class="story pi-surface" data-story="stack"><h3>Stack</h3><p>Vertical flow with token spacing.</p><div class="story-preview pi-stack"><span class="layout-tile">First</span><span class="layout-tile">Second</span><span class="layout-tile">Third</span></div><code class="story-code">.pi-stack</code></article>
+          <article class="story pi-surface" data-story="inline"><h3>Inline</h3><p>Aligned items wrap when space narrows.</p><div class="story-preview pi-inline"><span class="layout-tile">First</span><span class="layout-tile">Second</span><span class="layout-tile">Third</span></div><code class="story-code">.pi-inline</code></article>
+        </div>
+      </section>
+
+      <section class="gallery-section" id="surfaces" aria-labelledby="surfaces-title">
+        <h2 id="surfaces-title">Surfaces</h2><p class="gallery-description">Default and raised containers.</p>
+        <div class="gallery-grid">
+          <article class="story pi-surface" data-story="surface-default"><h3>Default</h3><p>Grouped content.</p><div class="story-preview"><div class="pi-surface">A contained review item</div></div><code class="story-code">.pi-surface</code></article>
+          <article class="story pi-surface" data-story="surface-raised"><h3>Raised</h3><p>Stronger separation.</p><div class="story-preview"><div class="pi-surface" data-elevation="raised">An elevated detail panel</div></div><code class="story-code">data-elevation="raised"</code></article>
+        </div>
+      </section>
+
+      <section class="gallery-section" id="buttons" aria-labelledby="buttons-title">
+        <h2 id="buttons-title">Buttons</h2><p class="gallery-description">44px touch targets. Tab through them to inspect keyboard focus.</p>
+        <div class="gallery-grid">
+          <article class="story pi-surface" data-story="button-default"><h3>Default</h3><p>Ordinary actions.</p><div class="story-preview"><button class="pi-button" type="button">Open details</button></div><code class="story-code">.pi-button</code></article>
+          <article class="story pi-surface" data-story="button-primary"><h3>Primary</h3><p>The main action.</p><div class="story-preview"><button class="pi-button" data-variant="primary" type="button">Accept review</button></div><code class="story-code">data-variant="primary"</code></article>
+          <article class="story pi-surface" data-story="button-danger"><h3>Danger</h3><p>Destructive actions.</p><div class="story-preview"><button class="pi-button" data-variant="danger" type="button">Delete draft</button></div><code class="story-code">data-variant="danger"</code></article>
+          <article class="story pi-surface" data-story="button-disabled"><h3>Disabled</h3><p>Unavailable actions.</p><div class="story-preview"><button class="pi-button" type="button" disabled>Waiting for data</button></div><code class="story-code">disabled</code></article>
+        </div>
+      </section>
+
+      <section class="gallery-section" id="badges" aria-labelledby="badges-title">
+        <h2 id="badges-title">Badges</h2><p class="gallery-description">Labels communicate state alongside color.</p>
+        <div class="gallery-grid"><article class="story pi-surface" data-story="badges-all"><h3>All tones</h3><p>Neutral, success, warning, and danger.</p>
+          <div class="story-preview pi-inline"><span class="pi-badge">Draft</span><span class="pi-badge" data-tone="success">Ready</span><span class="pi-badge" data-tone="warning">Pending</span><span class="pi-badge" data-tone="danger">Failed</span></div>
+          <code class="story-code">.pi-badge · data-tone="success|warning|danger"</code></article></div>
+      </section>
+
+      <section class="gallery-section" id="notices" aria-labelledby="notices-title">
+        <h2 id="notices-title">Notices</h2><p class="gallery-description">Use live regions for messages that arrive after page load.</p>
+        <div class="gallery-grid">
+          <article class="story pi-surface" data-story="notice-info"><h3>Info</h3><p>Progress or guidance.</p><div class="story-preview"><p class="pi-notice" role="status">The trace is ready to inspect.</p></div><code class="story-code">.pi-notice</code></article>
+          <article class="story pi-surface" data-story="notice-warning"><h3>Warning</h3><p>Needs attention.</p><div class="story-preview"><p class="pi-notice" data-tone="warning" role="status">One annotation is incomplete.</p></div><code class="story-code">data-tone="warning"</code></article>
+          <article class="story pi-surface" data-story="notice-danger"><h3>Danger</h3><p>Name a recovery step.</p><div class="story-preview"><p class="pi-notice" data-tone="danger" role="alert">Could not save. Retry the request.</p></div><code class="story-code">data-tone="danger"</code></article>
+        </div>
+      </section>
+
+      <section class="gallery-section" id="empty-states" aria-labelledby="empty-states-title">
+        <h2 id="empty-states-title">Empty states</h2><p class="gallery-description">Explain what is absent and how to continue.</p>
+        <div class="gallery-grid"><article class="story pi-surface" data-story="empty-state"><h3>No selection</h3><p>A useful next step beats a blank panel.</p>
+          <div class="story-preview"><div class="pi-empty-state pi-surface">No review selected yet. Choose an item to begin.</div></div><code class="story-code">.pi-empty-state .pi-surface</code></article></div>
+      </section>
+      <footer class="gallery-footer">Built from the same tokens and CSS consumed by Mermaid and Journal Review MCP Apps.</footer>
+    </main>
+  </div>
   <script>
-    const button = document.querySelector('#theme-toggle');
-    button.addEventListener('click', () => {
+    const toggle = document.querySelector('#theme-toggle');
+    toggle.addEventListener('click', () => {
       const light = document.documentElement.dataset.piTheme !== 'light';
       document.documentElement.dataset.piTheme = light ? 'light' : 'dark';
-      button.textContent = light ? 'Toggle dark theme' : 'Toggle light theme';
+      toggle.setAttribute('aria-pressed', String(light));
+      toggle.textContent = light ? 'Switch to dark' : 'Switch to light';
     });
   </script>
 </body>
