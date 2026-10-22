@@ -430,6 +430,19 @@
     label: "{{ item.dest }}"
   notify: Restart host services
 
+- name: Create directory for voice-owned skills
+  ansible.builtin.file:
+    path: "{{ host_services_skills_runtime }}/skills/engineering/gitea-pr-review"
+    state: directory
+    mode: "0755"
+
+- name: Install Gitea PR review skill
+  ansible.builtin.copy:
+    src: "{{ voice_agent_root }}/skills/gitea-pr-review/SKILL.md"
+    dest: "{{ host_services_skills_runtime }}/skills/engineering/gitea-pr-review/SKILL.md"
+    mode: "0644"
+  notify: Restart host services
+
 - name: Install prepared host-service environments
   ansible.builtin.copy:
     src: "{{ voice_agent_root }}/deploy/host-env/{{ item.file }}"
