@@ -124,6 +124,13 @@ test("development image pins Babashka for the Clojure session-start hook", () =>
     /bb \/usr\/local\/libexec\/select-compose-images\.clj/);
 });
 
+test("development image provides the Gitea review CLI", () => {
+  assert.match(dockerfile, /^ARG TEA_VERSION=0\.15\.1$/m);
+  assert.match(dockerfile, /tea-\$\{TEA_VERSION\}-linux-/);
+  assert.match(dockerfile, /sha256sum --check --strict/);
+  assert.match(dockerfile, /install -m 0555 \/tmp\/tea \/usr\/local\/bin\/tea/);
+});
+
 test("Compose image preloads use the K3s agent/images folder convention", () => {
   assert.match(dockerJobAPI, /filepath\.Join\(staging, "agent", "images"\)/);
   assert.match(dockerJobAPI, /gondolin-preload:/);

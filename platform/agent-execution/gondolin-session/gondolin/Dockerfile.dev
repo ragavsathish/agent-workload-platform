@@ -10,6 +10,7 @@ FROM ${VOICE_RUNTIME_IMAGE}
 # image's browser for its bundled Playwright MCP tooling.
 ARG CLIENT_PLAYWRIGHT_VERSION=1.58.2
 ARG BABASHKA_VERSION=1.13.219
+ARG TEA_VERSION=0.15.1
 
 USER root
 COPY --from=flutter-toolchain /opt/flutter /opt/flutter
@@ -50,6 +51,17 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && tar -xzf /tmp/babashka.tar.gz -C /usr/local/bin bb \
     && chmod 0555 /usr/local/bin/bb \
     && rm /tmp/babashka.tar.gz \
+    && case "$(dpkg --print-architecture)" in \
+         arm64) tea_sha=0db109df6696bfe01f9203402f503404692404d4ea9c16a540ecaeecc8e6bab2 ;; \
+         amd64) tea_sha=aac99cc6e650a81ae7b5061f8c75bc0eade4509c828d97b6072e1f0a3bd24357 ;; \
+         *) exit 1 ;; \
+       esac \
+    && curl --cacert /tmp/build-ca-bundle.crt --fail --location --silent --show-error \
+         "https://dl.gitea.com/tea/${TEA_VERSION}/tea-${TEA_VERSION}-linux-$(dpkg --print-architecture)" \
+         --output /tmp/tea \
+    && echo "${tea_sha}  /tmp/tea" | sha256sum --check --strict \
+    && install -m 0555 /tmp/tea /usr/local/bin/tea \
+    && rm /tmp/tea \
     && case "$(dpkg --print-architecture)" in \
          arm64) compose_arch=aarch64; compose_sha=733ec76717ceb59052a9609b9dadfb523b2df8eab57a54212872d10a58078ea2 ;; \
          amd64) compose_arch=x86_64; compose_sha=40343e21ca777173e69cff5dbafeb37c6f81f3b0d57d9e597f036e95eb63e76a ;; \

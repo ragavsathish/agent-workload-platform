@@ -230,6 +230,21 @@ function runtimeInstructions(
   ].join("\n");
 }
 
+function taskGiteaBridge(): { guest: URL; upstream: URL; owner: string; token?: string } | undefined {
+  const endpoint = process.env.GITEA_ENDPOINT_URL;
+  if (!endpoint) return undefined;
+  const upstream = new URL(endpoint);
+  if (upstream.protocol !== "http:" || upstream.hostname !== "127.0.0.1" || !upstream.port
+    || upstream.pathname !== "/" || upstream.search || upstream.hash) {
+    throw new Error("GITEA_ENDPOINT_URL must be an HTTP loopback origin with an explicit port");
+  }
+  const guest = new URL(`http://gitea.local:${upstream.port}`);
+  const tokenFile = process.env.GITEA_REVIEW_TOKEN_FILE;
+  const token = tokenFile ? fs.readFileSync(tokenFile, "utf8").trim() : undefined;
+  if (tokenFile && !token) throw new Error("GITEA_REVIEW_TOKEN_FILE is empty");
+  return { guest, upstream, owner: process.env.GITEA_OWNER || "source-publisher", token };
+}
+
 export default function gondolinSessionExtension(pi: ExtensionAPI): void {
   const projectDirectory = path.resolve(process.cwd());
   let session: GondolinSession | undefined;
@@ -328,6 +343,7 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
       await checkpointActive();
       const configured = activeConfig();
       const devSession = configured.development.docker;
+      const gitea = devSession && configured.networkEnabled ? taskGiteaBridge() : undefined;
       sessionFile = context.sessionManager.getSessionFile();
       checkpointPath = sessionFile ? taskVmCheckpointPath(sessionFile) : undefined;
       lease = checkpointPath ? TaskVmLease.acquire(checkpointPath) : undefined;
@@ -355,7 +371,24 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
             : {}),
         },
         network: configured.networkEnabled
-          ? { allowedHosts: configured.allowedHosts }
+          ? {
+              allowedHosts: gitea
+                ? [...new Set([...configured.allowedHosts, gitea.guest.hostname])]
+                : configured.allowedHosts,
+              ...(gitea ? {
+                allowedInternalHosts: [gitea.upstream.hostname],
+                onRequest: (request: Request) => {
+                  const requested = new URL(request.url);
+                  if (requested.hostname !== gitea.guest.hostname || requested.port !== gitea.guest.port) {
+                    return request;
+                  }
+                  requested.protocol = gitea.upstream.protocol;
+                  requested.hostname = gitea.upstream.hostname;
+                  requested.port = gitea.upstream.port;
+                  return new Request(requested, request);
+                },
+              } : {}),
+            }
           : false,
         environment: {
           ...(devSession ? {
@@ -365,6 +398,7 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
             PUB_CACHE: "/var/cache/pub",
             PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright",
           } : {}),
+          ...(gitea ? { GITEA_BASE_URL: gitea.guest.origin, GITEA_OWNER: gitea.owner } : {}),
           ...configured.environment,
         },
         memory: configured.memory,
@@ -381,6 +415,10 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
                 configured.development.sessionStartHook,
               ]]
             : []),
+          ...(gitea?.token ? [[
+            "/usr/local/bin/tea", "login", "add", "--name", "local", "--url",
+            gitea.guest.origin, "--token", gitea.token, "--no-version-check",
+          ]] : []),
         ] : undefined,
         sessionLabel: devSession ? "pi-dev-worktree" : "pi-agent-workload",
         resumeCheckpointPath: checkpointPath,
