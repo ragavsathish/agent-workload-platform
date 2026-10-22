@@ -59,10 +59,11 @@ def main() -> None:
     if json.loads(inspected.stdout).get("present") is True:
         print(json.dumps({"artifactVersion": plan.artifact_version, "imageRef": plan.image_ref, "cached": True}))
         return
-    archive_dir = Path(os.getenv(
-        "GONDOLIN_IMAGE_HANDOFF_DIR",
-        str(installer.parents[3] / "gondolin-image-handoff"),
-    )).expanduser()
+    archive_dir = Path(
+        os.getenv("GONDOLIN_IMAGE_HANDOFF_DIR")
+        or os.getenv("GONDOLIN_IMAGE_BUILDER_HANDOFF")
+        or Path.home() / "Library/Application Support/PipecatEdge/gondolin-image-handoff"
+    ).expanduser()
     archive = archive_dir / f"{plan.artifact_version}.tar"
     if not archive.exists():
         actions = GiteaActions(endpoint, owner, dispatcher_token)
