@@ -322,12 +322,15 @@ describe('MCP App renderers', () => {
   test('mounts the dark Recogito reviewer without claiming unconfirmed acceptance', async () => {
     const journal = presentations.find(({ name }) => name === 'Journal review');
     await mount(journal);
-    const transcript = await commands.inspectMcpFrame({
-      title: journal.title,
-      selector: '#transcript',
-      attribute: 'data-recogito-ready',
+    let transcript;
+    await vi.waitFor(async () => {
+      transcript = await commands.inspectMcpFrame({
+        title: journal.title,
+        selector: '#transcript',
+        attribute: 'data-recogito-ready',
+      });
+      expect(transcript.attribute).toBe('true');
     });
-    expect(transcript.attribute).toBe('true');
     expect(transcript.text).toContain('annotate examples first');
 
     await commands.clickMcpFrame({ title: journal.title, selector: '#review-accept' });
