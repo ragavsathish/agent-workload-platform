@@ -138,6 +138,38 @@ def test_task_progress_requires_owner_identity_and_forwards_cursor(monkeypatch):
     }
 
 
+def test_task_artifact_download_requires_owner_and_returns_attachment(monkeypatch):
+    gateway = load_gateway(monkeypatch)
+    observed = {}
+
+    class Tasks:
+        def artifact(self, **kwargs):
+            observed.update(kwargs)
+            return b"workspace data", "workspace.zip", "application/zip"
+
+    monkeypatch.setattr(gateway, "service", lambda: Tasks())
+    client = TestClient(gateway.app)
+    path = "/v1/tasks/proposal-1/artifacts/workspace"
+    headers = {"Authorization": f"Bearer {'g' * 32}"}
+
+    assert client.get(path, params={"identity": "owner@example.com"}).status_code == 401
+    response = client.get(path, params={"identity": "owner@example.com"}, headers=headers)
+    assert response.status_code == 200
+    assert response.content == b"workspace data"
+    assert response.headers["content-disposition"] == 'attachment; filename="workspace.zip"'
+    assert response.headers["cache-control"] == "private, no-store"
+    assert observed == {
+        "identity": "owner@example.com",
+        "proposal_id": "proposal-1",
+        "name": "workspace",
+    }
+    assert client.get(
+        "/v1/tasks/proposal-1/artifacts/execution",
+        params={"identity": "owner@example.com"},
+        headers=headers,
+    ).status_code == 422
+
+
 def test_task_approval_passes_trace_context_to_the_durable_queue(monkeypatch):
     gateway = load_gateway(monkeypatch)
     observed = {}

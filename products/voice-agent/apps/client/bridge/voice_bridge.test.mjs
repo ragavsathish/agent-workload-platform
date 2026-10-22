@@ -48,6 +48,19 @@ test('speech promise waits for playback and stop releases it', async () => {
     await second;
     assert.equal(settled, true);
     assert.equal(audios[1].paused, true);
+
+    const opened = [];
+    window.open = (...args) => opened.push(args);
+    window.voiceBridge.openTaskArtifactUrl(
+      'https://pipecat-edge.tailf6d713.ts.net/api/tasks/11111111-1111-4111-8111-111111111111/artifacts/workspace',
+    );
+    assert.equal(opened.length, 1);
+    assert.throws(() => window.voiceBridge.openTaskArtifactUrl(
+      'http://pipecat-edge.tailf6d713.ts.net/api/tasks/11111111-1111-4111-8111-111111111111/artifacts/workspace',
+    ));
+    assert.throws(() => window.voiceBridge.openTaskArtifactUrl(
+      'https://pipecat-edge.tailf6d713.ts.net/api/tasks/11111111-1111-4111-8111-111111111111/artifacts/execution',
+    ));
   } finally {
     globalThis.fetch = originalFetch;
     globalThis.Audio = originalAudio;

@@ -265,31 +265,35 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final api = _FakeVoiceApi()
-      ..taskValues.add(AgentTask(
-        id: 'completed-1',
-        instruction: 'Inspect the deployment',
-        workspace: '/workspace',
-        planHash: 'plan-hash',
-        status: 'completed',
-        state: 'completed',
-        createdAt: DateTime.now(),
-        response: const VisualResponse(
-          spoken: 'I checked the stack because the deployment was failing. The health checks passed.',
-          presentation: {},
+      ..taskValues.add(
+        AgentTask(
+          id: 'completed-1',
+          instruction: 'Inspect the deployment',
+          workspace: '/workspace',
+          planHash: 'plan-hash',
+          status: 'completed',
+          state: 'completed',
+          createdAt: DateTime.now(),
+          response: const VisualResponse(
+            spoken: 'I checked the stack because the deployment was failing. The health checks passed.',
+            presentation: {},
+          ),
         ),
-      ))
+      )
       ..progressValues.addAll(const [
         TaskProgressEvent(id: 1, spoken: 'Reading compose.yaml.'),
         TaskProgressEvent(id: 2, spoken: 'Running docker compose ps.'),
       ]);
     final spoken = <String>[];
 
-    await tester.pumpWidget(MaterialApp(
-      home: TranscriptView(
-        api: api,
-        playSpeech: (text) async => spoken.add(text),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TranscriptView(
+          api: api,
+          playSpeech: (text) async => spoken.add(text),
+        ),
       ),
-    ));
+    );
     await tester.pump();
     await tester.tap(find.byKey(const Key('tasks-section')));
     await tester.pump();
@@ -301,6 +305,76 @@ void main() {
       'Running docker compose ps.',
       'I checked the stack because the deployment was failing. The health checks passed.',
     ]);
+  });
+
+  testWidgets('task card shows Tailscale HTTPS link for its allowed artifact', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1180, 820);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _FakeVoiceApi()
+      ..taskValues.addAll([
+        AgentTask(
+          id: '11111111-1111-4111-8111-111111111111',
+          instruction: 'Write a scratch file',
+          workspace: 'scratch',
+          planHash: 'scratch-hash',
+          status: 'completed',
+          state: 'completed',
+          createdAt: DateTime.now(),
+          artifacts: const ['workspace', 'execution'],
+        ),
+        AgentTask(
+          id: '22222222-2222-4222-8222-222222222222',
+          instruction: 'Edit a repository',
+          workspace: 'repository',
+          planHash: 'repo-hash',
+          status: 'completed',
+          state: 'completed',
+          createdAt: DateTime.now(),
+          artifacts: const ['patch', 'status', 'execution'],
+        ),
+      ]);
+
+    await tester.pumpWidget(MaterialApp(home: TranscriptView(api: api)));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('tasks-section')));
+    await tester.pump();
+    await tester.tap(find.text('Integrity & output').first);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(
+        const Key(
+          'task-artifact-11111111-1111-4111-8111-111111111111-workspace',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining(
+        'https://pipecat-edge.tailf6d713.ts.net/api/tasks/11111111-1111-4111-8111-111111111111/artifacts/workspace',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Download execution'), findsNothing);
+    await tester.ensureVisible(find.text('Integrity & output').last);
+    await tester.tap(find.text('Integrity & output').last);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(
+        const Key('task-artifact-22222222-2222-4222-8222-222222222222-patch'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining(
+        'https://pipecat-edge.tailf6d713.ts.net/api/tasks/22222222-2222-4222-8222-222222222222/artifacts/patch',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Download status'), findsNothing);
   });
 
   testWidgets('creates a durable task through the existing task API', (

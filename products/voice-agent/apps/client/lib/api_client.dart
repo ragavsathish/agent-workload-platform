@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'models.dart';
+import 'platform/embedded_navigation_policy.dart';
 
 class ApiException implements Exception {
   const ApiException(this.message);
@@ -22,6 +23,20 @@ class VoiceApi {
 
   /// Resolves non-JSON browser resources against the same API origin.
   Uri endpoint(String path) => _uri(path);
+
+  /// Owner-only download served over the configured Tailscale HTTPS origin.
+  Uri taskArtifactUrl(String taskId, String name) {
+    final origin = Uri.parse(defaultVoiceWorkspaceUrl);
+    if (origin.scheme != 'https' || !origin.host.endsWith('.ts.net')) {
+      throw const ApiException('Tailscale HTTPS URL is not configured.');
+    }
+    return Uri(
+      scheme: 'https',
+      host: origin.host,
+      port: origin.hasPort ? origin.port : null,
+      pathSegments: ['api', 'tasks', taskId, 'artifacts', name],
+    );
+  }
 
   Future<JsonMap> _json(
     String path, {

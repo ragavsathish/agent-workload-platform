@@ -496,6 +496,35 @@ async def owner_gateway_audio(request: Request, generation_id: str) -> bytes:
     return response.content
 
 
+async def owner_gateway_artifact(
+    request: Request, proposal_id: str, name: str
+) -> tuple[bytes, str, str]:
+    """Proxy an owner-scoped task download without exposing the gateway bearer."""
+    if name not in {"workspace", "patch"} or re.fullmatch(
+        r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", proposal_id
+    ) is None:
+        raise HTTPException(status_code=404, detail="task artifact is unavailable")
+    identity = validate_http_identity(request)
+    headers = {"Authorization": f"Bearer {required_env('AGENT_GATEWAY_TOKEN')}"}
+    url = (
+        f"{required_env('AGENT_GATEWAY_BASE_URL').rstrip('/')}/tasks/"
+        f"{proposal_id}/artifacts/{name}"
+    )
+    with telemetry.observe("task.artifact.proxy"):
+        inject(headers)
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0)) as client:
+            response = await client.get(url, headers=headers, params={"identity": identity})
+    if response.is_error:
+        raise HTTPException(status_code=response.status_code, detail="task artifact is unavailable")
+    if len(response.content) > 16_777_216:
+        raise HTTPException(status_code=502, detail="task artifact is too large")
+    return (
+        response.content,
+        response.headers.get("content-type", "application/octet-stream"),
+        response.headers.get("content-disposition", "attachment"),
+    )
+
+
 def task_spoken_text(view: object) -> str:
     if not isinstance(view, dict):
         raise HTTPException(status_code=502, detail="invalid task response")
@@ -1214,6 +1243,21 @@ if __name__ == "__main__":
                 query={"after": after},
             ),
             headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/api/tasks/{proposal_id}/artifacts/{name}")
+    async def browser_task_artifact(proposal_id: str, name: str, request: Request):
+        content, content_type, disposition = await owner_gateway_artifact(
+            request, proposal_id, name
+        )
+        return Response(
+            content=content,
+            media_type=content_type,
+            headers={
+                "Content-Disposition": disposition,
+                "Cache-Control": "private, no-store",
+                "X-Content-Type-Options": "nosniff",
+            },
         )
 
     @app.get("/api/tasks/{proposal_id}/speech")

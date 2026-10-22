@@ -16,6 +16,7 @@ from opentelemetry.trace import (
 
 from bot import (
     broker_sessions_request,
+    owner_gateway_artifact,
     owner_gateway_audio,
     owner_gateway_request,
     playwright_trace_upstream,
@@ -100,6 +101,47 @@ class PlaywrightTraceProxyTest(unittest.IsolatedAsyncioTestCase):
 
     def tearDown(self) -> None:
         self.environment.stop()
+
+    async def test_task_artifact_proxy_forwards_owner_identity_and_attachment(self):
+        observed = {}
+
+        async def handler(upstream_request: httpx.Request) -> httpx.Response:
+            observed["url"] = str(upstream_request.url)
+            observed["authorization"] = upstream_request.headers.get("authorization")
+            return httpx.Response(
+                200,
+                headers={
+                    "Content-Type": "application/zip",
+                    "Content-Disposition": 'attachment; filename="workspace.zip"',
+                },
+                content=b"zip",
+            )
+
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "AGENT_GATEWAY_BASE_URL": "http://gateway.test/v1",
+                    "AGENT_GATEWAY_TOKEN": "g" * 32,
+                },
+            ),
+            patch("bot.httpx.AsyncClient", return_value=client),
+        ):
+            content, content_type, disposition = await owner_gateway_artifact(
+                request("GET", identity="owner@example.com"),
+                "11111111-1111-4111-8111-111111111111",
+                "workspace",
+            )
+
+        self.assertEqual(content, b"zip")
+        self.assertEqual(content_type, "application/zip")
+        self.assertEqual(disposition, 'attachment; filename="workspace.zip"')
+        self.assertEqual(observed["authorization"], "Bearer " + "g" * 32)
+        self.assertEqual(
+            observed["url"],
+            "http://gateway.test/v1/tasks/11111111-1111-4111-8111-111111111111/artifacts/workspace?identity=owner%40example.com",
+        )
 
     async def test_proxy_streams_a_ranged_trace_from_the_host_service(self):
         observed: dict[str, str] = {}

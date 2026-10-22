@@ -29,7 +29,7 @@ from voice_agent.tasking.domain.workspaces import (
     resolve_workspace,
     validate_workspace_boundary,
 )
-from voice_agent.tasking.infrastructure.artifacts import ArtifactStore
+from voice_agent.tasking.infrastructure.artifacts import TASK_ARTIFACTS, ArtifactStore
 from voice_agent.tasking.infrastructure.config import Settings
 
 
@@ -241,6 +241,30 @@ class TaskService:
     def get(self, *, identity: str, proposal_id: str) -> dict[str, Any]:
         row = self._get_owned(identity, proposal_id)
         return self._view(row, include_token=True)
+
+    def artifact(
+        self, *, identity: str, proposal_id: str, name: str
+    ) -> tuple[bytes, str, str]:
+        """Read an artifact only after checking its proposal owner and result."""
+        row = self._get_owned(identity, proposal_id)
+        expected_name = "workspace" if row["workspace"] == SCRATCH_WORKSPACE else "patch"
+        if name != expected_name:
+            raise ProposalError("task artifact is unavailable")
+        task_id = str(row["task_id"] or "")
+        snapshot = self._task_result(task_id)
+        execution = snapshot.get("result") if isinstance(snapshot, dict) else None
+        artifacts = execution.get("artifacts") if isinstance(execution, dict) else None
+        if self.artifacts is None or not isinstance(artifacts, dict):
+            raise ProposalError("task artifact is unavailable")
+        if name not in TASK_ARTIFACTS:
+            raise ProposalError("task artifact is unavailable")
+        filename, _ = TASK_ARTIFACTS[name]
+        expected_uri = f"s3://{self.artifacts.bucket}/tasks/{task_id}/{filename}"
+        if artifacts.get(name) != expected_uri:
+            raise ProposalError("task artifact is unavailable")
+        return self.artifacts.get_task_artifact(
+            task_id=task_id, name=name, max_bytes=self.settings.max_artifact_bytes
+        )
 
     def approve(
         self,

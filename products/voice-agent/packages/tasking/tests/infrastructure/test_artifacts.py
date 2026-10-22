@@ -113,3 +113,24 @@ def test_scratch_result_saves_bounded_files_without_git(tmp_path: Path) -> None:
             task_id="task-2", workspace=workspace, execution={}, max_bytes=2
         )
     assert "tasks/task-2/workspace.zip" not in objects
+
+
+def test_task_artifact_reads_only_bounded_known_objects() -> None:
+    task_id = "11111111-1111-4111-8111-111111111111"
+
+    class Client:
+        def get_object(self, *, Bucket, Key):
+            assert Bucket == "test-bucket"
+            assert Key == f"tasks/{task_id}/workspace.zip"
+            return {"ContentLength": 3, "Body": io.BytesIO(b"zip")}
+
+    store = object.__new__(ArtifactStore)
+    store.bucket = "test-bucket"
+    store.client = Client()
+    assert store.get_task_artifact(task_id=task_id, name="workspace", max_bytes=3) == (
+        b"zip", "workspace.zip", "application/zip"
+    )
+    with pytest.raises(ValueError, match="allowed size"):
+        store.get_task_artifact(task_id=task_id, name="workspace", max_bytes=2)
+    with pytest.raises(ValueError, match="invalid"):
+        store.get_task_artifact(task_id="../other", name="workspace", max_bytes=3)

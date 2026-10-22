@@ -24,6 +24,10 @@ from voice_agent.tasking.domain.workspaces import SCRATCH_WORKSPACE
 
 _WORKSPACE_NAME = re.compile(r"[a-z0-9][a-z0-9._-]{0,127}")
 _UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+TASK_ARTIFACTS = {
+    "workspace": ("workspace.zip", "application/zip"),
+    "patch": ("changes.patch", "text/x-diff"),
+}
 
 
 def validate_workspace_name(name: str, allowed: tuple[str, ...]) -> str:
@@ -259,6 +263,23 @@ class ArtifactStore:
             )
             uris[label] = f"s3://{self.bucket}/{key}"
         return uris
+
+    def get_task_artifact(
+        self, *, task_id: str, name: str, max_bytes: int
+    ) -> tuple[bytes, str, str]:
+        """Read one known task artifact without accepting an S3 key from the caller."""
+        if not re.fullmatch(_UUID, task_id) or name not in TASK_ARTIFACTS:
+            raise ValueError("task artifact is invalid")
+        filename, content_type = TASK_ARTIFACTS[name]
+        key = f"tasks/{task_id}/{filename}"
+        response = self.client.get_object(Bucket=self.bucket, Key=key)
+        length = int(response.get("ContentLength", -1))
+        if length < 0 or length > max_bytes:
+            raise ValueError("task artifact is outside its allowed size")
+        content = response["Body"].read(max_bytes + 1)
+        if len(content) != length:
+            raise ValueError("task artifact read was incomplete")
+        return content, filename, content_type
 
     def put_song(self, *, generation_id: str, audio: bytes) -> dict[str, str]:
         """Store one immutable, browser-friendly song artifact."""

@@ -4,6 +4,9 @@ void openView(String view) =>
 void openExternalUrl(String url) =>
     throw UnsupportedError('External navigation is not installed yet.');
 
+void openTaskArtifactUrl(String url) =>
+    throw UnsupportedError('Artifact downloads are not installed yet.');
+
 Future<void> playSpeech(String spoken, {required String endpoint}) async =>
     throw UnsupportedError('Native speech playback is not installed yet.');
 

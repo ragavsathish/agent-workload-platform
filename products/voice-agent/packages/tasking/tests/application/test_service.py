@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 from voice_agent.tasking.application.service import (
+    ProposalError,
     TaskService,
     bounded_trace_context,
     persisted_plan_hash_is_valid,
@@ -30,6 +31,54 @@ def settings(tmp_path: Path) -> Settings:
         max_output_bytes=1_024,
         skills_dir=None,
     )
+
+
+@pytest.mark.parametrize(
+    ("workspace", "name", "filename"),
+    [("scratch", "workspace", "workspace.zip"), ("repository", "patch", "changes.patch")],
+)
+def test_artifact_requires_owned_task_and_declared_kind(
+    tmp_path: Path, monkeypatch, workspace: str, name: str, filename: str
+) -> None:
+    service = TaskService(settings(tmp_path))
+    task_id = "11111111-1111-4111-8111-111111111111"
+
+    class Store:
+        bucket = "agent-artifacts"
+
+        def get_task_artifact(self, **kwargs):
+            assert kwargs == {"task_id": task_id, "name": name, "max_bytes": 16_777_216}
+            return b"artifact", filename, "application/octet-stream"
+
+    service.artifacts = Store()
+
+    def get_owned(identity, proposal_id):
+        if identity != "owner@example.com":
+            raise ProposalError("proposal not found")
+        assert proposal_id == "proposal-1"
+        return {"workspace": workspace, "task_id": task_id}
+
+    monkeypatch.setattr(service, "_get_owned", get_owned)
+    artifact_uri = f"s3://agent-artifacts/tasks/{task_id}/{filename}"
+    monkeypatch.setattr(
+        service, "_task_result", lambda _: {"result": {"artifacts": {name: artifact_uri}}}
+    )
+
+    assert service.artifact(
+        identity="owner@example.com", proposal_id="proposal-1", name=name
+    )[0] == b"artifact"
+    with pytest.raises(ProposalError, match="proposal not found"):
+        service.artifact(identity="stranger@example.com", proposal_id="proposal-1", name=name)
+    other_name = "patch" if name == "workspace" else "workspace"
+    with pytest.raises(ProposalError, match="unavailable"):
+        service.artifact(
+            identity="owner@example.com", proposal_id="proposal-1", name=other_name
+        )
+    monkeypatch.setattr(
+        service, "_task_result", lambda _: {"result": {"artifacts": {name: "s3://wrong"}}}
+    )
+    with pytest.raises(ProposalError, match="unavailable"):
+        service.artifact(identity="owner@example.com", proposal_id="proposal-1", name=name)
 
 
 def test_digital_twin_turn_uses_a_retryable_idempotent_task(

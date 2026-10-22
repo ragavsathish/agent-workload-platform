@@ -510,6 +510,16 @@ window.voiceBridge = {
     }
     window.open(target.toString(), '_blank', 'noopener,noreferrer');
   },
+  openTaskArtifactUrl(url) {
+    const target = new URL(url);
+    if (target.protocol !== 'https:'
+      || !target.hostname.endsWith('.ts.net')
+      || target.username || target.password || target.search || target.hash
+      || !/^\/api\/tasks\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\/artifacts\/(workspace|patch)$/u.test(target.pathname)) {
+      throw new Error('Only Tailscale HTTPS task artifact downloads are allowed');
+    }
+    window.open(target.toString(), '_blank', 'noopener,noreferrer');
+  },
   async playSpeech(spoken, endpoint = '/api/pi-speech') {
     const generation = ++speechGeneration;
     if (currentAudio && currentAudioUrl && currentSpeech === spoken) {

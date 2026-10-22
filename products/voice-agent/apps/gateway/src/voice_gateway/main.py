@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 from uuid import uuid4
 
+from botocore.exceptions import ClientError
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi import Path as ApiPath
@@ -965,6 +966,36 @@ async def get_task_progress(
             )
         except ProposalError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/v1/tasks/{proposal_id}/artifacts/{name}")
+async def get_task_artifact(
+    proposal_id: str,
+    name: Annotated[str, ApiPath(pattern=r"^(workspace|patch)$")],
+    identity: str = Query(min_length=3, max_length=320),
+    _: None = Depends(authenticate),
+):
+    with telemetry.observe("task.artifact.read"):
+        try:
+            content, filename, content_type = await asyncio.to_thread(
+                service().artifact,
+                identity=normalized_identity(identity),
+                proposal_id=proposal_id,
+                name=name,
+            )
+        except ProposalError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ClientError, ValueError) as exc:
+            raise HTTPException(status_code=502, detail="task artifact is unavailable") from exc
+        return Response(
+            content=content,
+            media_type=content_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Cache-Control": "private, no-store",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
 
 
 @app.post("/v1/tasks/{proposal_id}/approve")

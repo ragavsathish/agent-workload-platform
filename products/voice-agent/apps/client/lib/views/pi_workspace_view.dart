@@ -611,6 +611,7 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
       onResume: _resumeSessionBusy ? null : _resumeSelectedSession,
     ),
     WorkspaceSection.tasks => _TaskBoard(
+      api: widget.api,
       tasks: _visibleTasks,
       busyTask: _taskBusy,
       listeningTaskId: _listeningTaskId,
@@ -1444,6 +1445,7 @@ class _Composer extends StatelessWidget {
 
 class _TaskBoard extends StatelessWidget {
   const _TaskBoard({
+    required this.api,
     required this.tasks,
     required this.busyTask,
     required this.listeningTaskId,
@@ -1456,6 +1458,7 @@ class _TaskBoard extends StatelessWidget {
     required this.onCreate,
   });
 
+  final VoiceApi api;
   final List<AgentTask> tasks;
   final String? busyTask;
   final String? listeningTaskId;
@@ -1523,6 +1526,7 @@ class _TaskBoard extends StatelessWidget {
             itemBuilder: (_, index) {
               final task = tasks[index];
               return _TaskCard(
+                api: api,
                 task: task,
                 busy: busyTask == task.id,
                 listening: listeningTaskId == task.id,
@@ -1544,6 +1548,7 @@ class _TaskBoard extends StatelessWidget {
 
 class _TaskCard extends StatelessWidget {
   const _TaskCard({
+    required this.api,
     required this.task,
     required this.busy,
     required this.listening,
@@ -1555,6 +1560,7 @@ class _TaskCard extends StatelessWidget {
     required this.onToggleNarration,
   });
 
+  final VoiceApi api;
   final AgentTask task;
   final bool busy;
   final bool listening;
@@ -1564,6 +1570,12 @@ class _TaskCard extends StatelessWidget {
   final VoidCallback onToggleDiagram;
   final VoidCallback onListen;
   final VoidCallback onToggleNarration;
+
+  String get _downloadArtifactName =>
+      task.workspace == 'scratch' ? 'workspace' : 'patch';
+
+  String get _downloadFilename =>
+      _downloadArtifactName == 'workspace' ? 'workspace.zip' : 'changes.patch';
 
   @override
   Widget build(BuildContext context) => Material(
@@ -1725,9 +1737,23 @@ class _TaskCard extends StatelessWidget {
               'Plan SHA-256: ${task.planHash}',
               style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
             ),
-            if (task.artifacts.isNotEmpty) ...[
+            if (task.artifacts.contains(_downloadArtifactName)) ...[
               const SizedBox(height: 7),
-              SelectableText('Artifacts: ${task.artifacts.join(', ')}'),
+              const Text('Task artifact · Tailscale HTTPS'),
+              TextButton.icon(
+                key: Key('task-artifact-${task.id}-$_downloadArtifactName'),
+                onPressed: () => ClientActions.openTaskArtifactUrl(
+                  api
+                      .taskArtifactUrl(task.id, _downloadArtifactName)
+                      .toString(),
+                ),
+                icon: const Icon(Icons.download_outlined, size: 15),
+                label: Text('Download $_downloadFilename'),
+              ),
+              SelectableText(
+                api.taskArtifactUrl(task.id, _downloadArtifactName).toString(),
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+              ),
             ],
             if (task.failure != null) ...[
               const SizedBox(height: 7),
