@@ -1198,6 +1198,24 @@ if __name__ == "__main__":
             headers={"Cache-Control": "no-store"},
         )
 
+    @app.get("/api/tasks/{proposal_id}/progress")
+    async def browser_task_progress(proposal_id: str, request: Request):
+        try:
+            after = int(request.query_params.get("after", "0"))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="invalid progress cursor") from exc
+        if after < 0:
+            raise HTTPException(status_code=400, detail="invalid progress cursor")
+        return JSONResponse(
+            await owner_gateway_request(
+                request,
+                "GET",
+                f"/tasks/{proposal_id}/progress",
+                query={"after": after},
+            ),
+            headers={"Cache-Control": "no-store"},
+        )
+
     @app.get("/api/tasks/{proposal_id}/speech")
     async def task_speech(proposal_id: str, request: Request):
         task = await owner_gateway_request(request, "GET", f"/tasks/{proposal_id}")

@@ -230,3 +230,15 @@ class AgentTask {
     );
   }
 }
+
+class TaskProgressEvent {
+  const TaskProgressEvent({required this.id, required this.spoken});
+
+  final int id;
+  final String spoken;
+
+  factory TaskProgressEvent.fromJson(JsonMap json) => TaskProgressEvent(
+    id: (json['id'] as num?)?.toInt() ?? 0,
+    spoken: '${json['spoken'] ?? ''}',
+  );
+}

@@ -946,6 +946,27 @@ async def get_task(
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@app.get("/v1/tasks/{proposal_id}/progress")
+async def get_task_progress(
+    proposal_id: str,
+    identity: str = Query(min_length=3, max_length=320),
+    after: int = Query(default=0, ge=0),
+    limit: int = Query(default=40, ge=1, le=100),
+    _: None = Depends(authenticate),
+):
+    with telemetry.observe("task.progress"):
+        try:
+            return await asyncio.to_thread(
+                service().progress,
+                identity=normalized_identity(identity),
+                proposal_id=proposal_id,
+                after=after,
+                limit=limit,
+            )
+        except ProposalError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @app.post("/v1/tasks/{proposal_id}/approve")
 async def approve(
     proposal_id: str,

@@ -94,6 +94,8 @@ assert os.environ["TRACEPARENT"] == "00-0123456789abcdef0123456789abcdef-0123456
 assert os.environ["GONDOLIN_EXECUTION_IMAGE_REF"] == "project-build:v1-v2-example"
 assert os.environ["PI_TASK_SKILLS_DIR"] == sys.argv[sys.argv.index("--skill") + 1]
 answer = {"spoken": "Done.", "presentation": {"kind": "status", "title": "Done", "nodes": [{"id": "done", "label": "Done"}], "edges": []}}
+print(json.dumps({"type": "turn_start"}), flush=True)
+print(json.dumps({"type": "tool_execution_start", "toolName": "read", "args": {"path": "/private"}}), flush=True)
 print(json.dumps({"type": "message_end", "message": {"role": "assistant", "content": [{"type": "text", "text": json.dumps(answer)}]}}))
 print(json.dumps({"type": "agent_settled"}))
 """,
@@ -113,16 +115,23 @@ print(json.dumps({"type": "agent_settled"}))
             pi_rpc_socket_dir=Path(rpc_directory),
         )
 
+        progress = []
         result = run_pi(
             configured,
             task_id="00000000-0000-0000-0000-000000000001",
             instruction="Work",
             workspace=tmp_path,
             image_ref="project-build:v1-v2-example",
+            on_progress=progress.append,
         )
 
     assert result["exit_code"] == 0
     assert result["response"]["spoken"] == "Done."
+    assert progress == [
+        "The agent has started working.",
+        "The agent is reading source files.",
+        "The agent has finished and is preparing the result.",
+    ]
 
 
 def test_durable_task_continues_the_queued_trace_context() -> None:
@@ -283,10 +292,11 @@ def test_repository_free_task_uses_fresh_scratch_vm_and_captures_files(
         def complete_step(self, _handle, state):
             return state
 
-    def fake_run_pi(_settings, *, task_id, instruction, workspace, image_ref):
+    def fake_run_pi(_settings, *, task_id, instruction, workspace, image_ref, on_progress):
         assert task_id == "task-1"
         assert instruction == "Explore the idea"
         assert image_ref == "default:image"
+        assert callable(on_progress)
         assert list(workspace.iterdir()) == []
         observed["workspace"] = workspace
         (workspace / "result.txt").write_text("done")
@@ -296,6 +306,9 @@ def test_repository_free_task_uses_fresh_scratch_vm_and_captures_files(
     monkeypatch.setattr("voice_worker.main.ArtifactStore", Artifacts)
     monkeypatch.setattr("voice_worker.main.validate_worker", lambda _settings: None)
     monkeypatch.setattr("voice_worker.main.run_pi", fake_run_pi)
+    monkeypatch.setattr(
+        "voice_worker.main.task_progress_publisher", lambda *_args: lambda _spoken: None
+    )
     configured = replace(
         settings(tmp_path, sandboxed=True),
         artifact_endpoint_url="http://s3.test",

@@ -8,12 +8,14 @@ import os
 import pwd
 import subprocess
 import tempfile
+import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, cast
 
+import psycopg
 from absurd_sdk import Absurd, TaskContext
 from opentelemetry.context import attach, detach
 from opentelemetry.propagate import extract, inject
@@ -29,6 +31,7 @@ from voice_agent.tasking.domain.song_generation import (
     manifest_from_pi_result,
     validate_song_manifest,
 )
+from voice_agent.tasking.domain.task_progress import narration_from_pi_record
 from voice_agent.tasking.domain.workspaces import is_scratch_workspace, resolve_workspace
 from voice_agent.tasking.infrastructure.ace_step import create_ace_step_renderer
 from voice_agent.tasking.infrastructure.artifacts import ArtifactStore
@@ -185,6 +188,7 @@ def run_pi(
     instruction: str,
     workspace: Path,
     image_ref: str | None = None,
+    on_progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     with telemetry.observe("agent-task.pi-rpc"):
         command = build_rpc_command(settings, task_id=task_id)
@@ -202,16 +206,43 @@ def run_pi(
         if tracestate := trace_carrier.get("tracestate"):
             process_environment["TRACESTATE"] = tracestate
         with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
-            completed = subprocess.run(
+            process = subprocess.Popen(
                 command,
                 cwd=workspace,
                 env=process_environment,
-                input=presentation_prompt(instruction).encode("utf-8"),
-                stdout=stdout_file,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
                 stderr=stderr_file,
-                timeout=settings.task_timeout_seconds + 10,
-                check=False,
             )
+            deadline = settings.task_timeout_seconds + 10
+            timed_out = threading.Event()
+
+            def stop_on_timeout() -> None:
+                if process.poll() is None:
+                    timed_out.set()
+                    process.kill()
+
+            timer = threading.Timer(deadline, stop_on_timeout)
+            timer.start()
+            try:
+                assert process.stdin is not None and process.stdout is not None
+                process.stdin.write(presentation_prompt(instruction).encode("utf-8"))
+                process.stdin.close()
+                for line in process.stdout:
+                    stdout_file.write(line)
+                    narration = narration_from_pi_record(line)
+                    if narration and on_progress:
+                        on_progress(narration)
+                exit_code = process.wait()
+            finally:
+                timer.cancel()
+                if process.poll() is None:
+                    process.kill()
+                    process.wait()
+                if process.stdout is not None:
+                    process.stdout.close()
+            if timed_out.is_set():
+                raise subprocess.TimeoutExpired(command, deadline)
 
             def tail(file) -> str:
                 file.seek(0, os.SEEK_END)
@@ -219,14 +250,14 @@ def run_pi(
                 return file.read().decode("utf-8", errors="replace")
 
             stderr = tail(stderr_file)
-            if completed.returncode != 0:
+            if exit_code != 0:
                 raise RuntimeError(
-                    f"Pi RPC host exited with {completed.returncode}: {stderr[-2000:]}"
+                    f"Pi RPC host exited with {exit_code}: {stderr[-2000:]}"
                 )
             stdout_file.seek(0)
             response = parse_pi_event_stream(stdout_file)
     return {
-        "exit_code": completed.returncode,
+        "exit_code": exit_code,
         "response": {
             "text": response.text,
             "spoken": response.spoken,
@@ -234,6 +265,33 @@ def run_pi(
             "resourceUri": response.resource_uri,
         },
     }
+
+
+def task_progress_publisher(database_url: str, task_id: str) -> Callable[[str], None]:
+    """Persist a small owner-readable progress feed without task content."""
+    emitted = 0
+    last_spoken = ""
+    last_at = 0.0
+
+    def publish(spoken: str) -> None:
+        nonlocal emitted, last_spoken, last_at
+        now = time.monotonic()
+        if emitted >= 100 or (spoken == last_spoken and now - last_at < 8):
+            return
+        try:
+            with psycopg.connect(database_url) as conn:
+                conn.execute(
+                    "INSERT INTO voice_task_progress (task_id, spoken) VALUES (%s, %s)",
+                    (task_id, spoken),
+                )
+        except psycopg.Error:
+            logger.warning("Unable to store task progress", exc_info=True)
+            return
+        emitted += 1
+        last_spoken = spoken
+        last_at = now
+
+    return publish
 
 
 def run_digital_twin(settings: Settings, payload: dict[str, Any]) -> dict[str, Any]:
@@ -453,6 +511,7 @@ def create_worker(settings: Settings) -> Absurd:
 
     def run_agent_task(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
         task_id = str(ctx.task_id)
+        progress = task_progress_publisher(settings.database_url, task_id)
         run_handle = ctx.begin_step("run-pi")
         if run_handle.done:
             return cast(dict[str, Any], run_handle.state)
@@ -476,6 +535,7 @@ def create_worker(settings: Settings) -> Absurd:
             with tempfile.TemporaryDirectory(
                 prefix=f"task-{task_id}-", dir=settings.worker_scratch_root
             ) as temporary:
+                progress("Preparing the task workspace.")
                 workspace = Path(temporary)
                 reconciliation = checkpoint_pi_intent()
                 if reconciliation:
@@ -486,6 +546,7 @@ def create_worker(settings: Settings) -> Absurd:
                     instruction=str(params["instruction"]),
                     workspace=workspace,
                     image_ref=settings.scratch_image_ref or None,
+                    on_progress=progress,
                 )
                 if artifacts:
                     result["artifacts"] = artifacts.capture_scratch_result(
@@ -495,6 +556,7 @@ def create_worker(settings: Settings) -> Absurd:
                         max_bytes=settings.max_artifact_bytes,
                     )
         elif artifacts:
+            progress("Preparing the task workspace and image.")
             with artifacts.materialize_workspace(
                 str(params["workspace"]), settings.worker_scratch_root
             ) as workspace:
@@ -515,6 +577,7 @@ def create_worker(settings: Settings) -> Absurd:
                     instruction=str(params["instruction"]),
                     workspace=workspace,
                     image_ref=image_ref,
+                    on_progress=progress,
                 )
                 result["artifacts"] = artifacts.capture_result(
                     task_id=task_id,
@@ -523,6 +586,7 @@ def create_worker(settings: Settings) -> Absurd:
                     max_bytes=settings.max_artifact_bytes,
                 )
         else:
+            progress("Preparing the task workspace and image.")
             workspace = ctx.step(
                 "prepare-workspace",
                 lambda: str(
@@ -546,6 +610,7 @@ def create_worker(settings: Settings) -> Absurd:
                 instruction=str(params["instruction"]),
                 workspace=Path(workspace),
                 image_ref=image_ref,
+                on_progress=progress,
             )
         return ctx.complete_step(run_handle, result)
 

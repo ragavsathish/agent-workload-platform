@@ -34,6 +34,9 @@ external JSPromise<JSAny?> _playSpeech(JSString spoken, JSString endpoint);
 @JS('voiceBridge.playUrl')
 external JSPromise<JSAny?> _playUrl(JSString url);
 
+@JS('voiceBridge.stopSpeech')
+external void _stopSpeech();
+
 abstract final class BrowserBridge {
   static Future<void> startVoice() async => _startVoice().toDart;
 
@@ -63,4 +66,6 @@ abstract final class BrowserBridge {
   }) async => _playSpeech(spoken.toJS, endpoint.toJS).toDart;
 
   static Future<void> playUrl(String url) async => _playUrl(url.toJS).toDart;
+
+  static void stopSpeech() => _stopSpeech();
 }

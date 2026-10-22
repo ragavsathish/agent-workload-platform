@@ -125,6 +125,7 @@ let clientPromise;
 let currentAudio;
 let currentAudioUrl;
 let currentSpeech;
+let speechGeneration = 0;
 let botAudio;
 
 const waitForElement = async (elementId) => {
@@ -483,6 +484,7 @@ window.voiceBridge = {
     window.open(target.toString(), '_blank', 'noopener,noreferrer');
   },
   async playSpeech(spoken, endpoint = '/api/pi-speech') {
+    const generation = ++speechGeneration;
     if (currentAudio && currentAudioUrl && currentSpeech === spoken) {
       currentAudio.currentTime = 0;
       await currentAudio.play();
@@ -494,12 +496,22 @@ window.voiceBridge = {
       body: JSON.stringify({ spoken }),
     });
     if (!response.ok) throw new Error('Speech request failed');
+    if (generation !== speechGeneration) return;
     const url = URL.createObjectURL(await response.blob());
+    if (generation !== speechGeneration) {
+      URL.revokeObjectURL(url);
+      return;
+    }
     replaceCurrentAudio(new Audio(url), { objectUrl: url, spoken });
     await currentAudio.play();
   },
   async playUrl(url) {
+    speechGeneration += 1;
     replaceCurrentAudio(new Audio(url));
     await currentAudio.play();
+  },
+  stopSpeech() {
+    speechGeneration += 1;
+    replaceCurrentAudio(undefined);
   },
 };

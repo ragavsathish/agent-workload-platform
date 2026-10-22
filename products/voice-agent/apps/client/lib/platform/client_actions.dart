@@ -11,4 +11,6 @@ abstract final class ClientActions {
       platform.playSpeech(spoken, endpoint: endpoint);
 
   static Future<void> playUrl(String url) => platform.playUrl(url);
+
+  static void stopSpeech() => platform.stopSpeech();
 }

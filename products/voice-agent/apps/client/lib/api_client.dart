@@ -122,6 +122,26 @@ class VoiceApi {
     ),
   );
 
+  Future<List<TaskProgressEvent>> taskProgress(
+    String id, {
+    int after = 0,
+  }) async {
+    final response = await _client.get(
+      _uri('/api/tasks/${Uri.encodeComponent(id)}/progress?after=$after'),
+      headers: {'Cache-Control': 'no-store'},
+    );
+    if (response.statusCode != 200) {
+      throw const ApiException('Task progress is unavailable.');
+    }
+    final body = jsonDecode(response.body);
+    if (body is! List) {
+      throw const ApiException('Task progress returned an invalid response.');
+    }
+    return body
+        .map((value) => TaskProgressEvent.fromJson(asMap(value)))
+        .toList(growable: false);
+  }
+
   Future<void> taskAction(String id, String action) async => _json(
     '/api/tasks/${Uri.encodeComponent(id)}/$action',
     method: 'POST',

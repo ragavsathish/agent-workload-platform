@@ -53,6 +53,12 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
   String? _error;
   String? _playbackNotice;
   String? _taskBusy;
+  String? _listeningTaskId;
+  String? _latestTaskProgress;
+  int _progressCursor = 0;
+  int _narrationGeneration = 0;
+  bool _progressPolling = false;
+  DateTime? _lastProgressSpeech;
 
   @override
   void initState() {
@@ -82,6 +88,7 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
     _taskTimer?.cancel();
     _contextTimer?.cancel();
     _sessionTimer?.cancel();
+    ClientActions.stopSpeech();
     _message.dispose();
     _scroll.dispose();
     super.dispose();
@@ -116,10 +123,94 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
   Future<void> _pollTasks() async {
     try {
       final next = await widget.api.tasks();
-      if (mounted) setState(() => _tasks = next);
+      if (!mounted) return;
+      setState(() => _tasks = next);
+      final listening = next
+          .where((task) => task.id == _listeningTaskId)
+          .firstOrNull;
+      if (listening != null && !listening.isActive) {
+        _narrationGeneration += 1;
+        ClientActions.stopSpeech();
+        setState(() => _listeningTaskId = null);
+        if (listening.response case final response?) {
+          unawaited(_playSpeech(response.spoken));
+        }
+      } else if (_section == WorkspaceSection.tasks &&
+          _listeningTaskId != null) {
+        unawaited(_pollTaskProgress());
+      }
     } on Object catch (error) {
       if (mounted) setState(() => _error = '$error');
     }
+  }
+
+  Future<void> _pollTaskProgress() async {
+    final taskId = _listeningTaskId;
+    final generation = _narrationGeneration;
+    if (taskId == null ||
+        _progressPolling ||
+        _section != WorkspaceSection.tasks) {
+      return;
+    }
+    if (_lastProgressSpeech case final last?) {
+      if (DateTime.now().difference(last) < const Duration(seconds: 6)) return;
+    }
+    _progressPolling = true;
+    try {
+      final events = await widget.api.taskProgress(
+        taskId,
+        after: _progressCursor,
+      );
+      if (!mounted ||
+          taskId != _listeningTaskId ||
+          generation != _narrationGeneration ||
+          events.isEmpty) {
+        return;
+      }
+      final latest = events.last;
+      if (latest.id <= _progressCursor || latest.spoken.isEmpty) return;
+      setState(() {
+        _progressCursor = latest.id;
+        _latestTaskProgress = latest.spoken;
+        _lastProgressSpeech = DateTime.now();
+      });
+      await _playSpeech(latest.spoken);
+    } on Object catch (error) {
+      if (mounted && taskId == _listeningTaskId) {
+        setState(
+          () => _playbackNotice = 'Task narration is unavailable: $error',
+        );
+      }
+    } finally {
+      _progressPolling = false;
+    }
+  }
+
+  void _toggleTaskNarration(AgentTask task) {
+    _narrationGeneration += 1;
+    if (_listeningTaskId == task.id) {
+      ClientActions.stopSpeech();
+      setState(() => _listeningTaskId = null);
+      return;
+    }
+    ClientActions.stopSpeech();
+    setState(() {
+      _listeningTaskId = task.id;
+      _latestTaskProgress = null;
+      _progressCursor = 0;
+      _lastProgressSpeech = null;
+      _playbackNotice = null;
+    });
+    unawaited(_pollTaskProgress());
+  }
+
+  void _changeSection(WorkspaceSection section) {
+    if (section != WorkspaceSection.tasks && _listeningTaskId != null) {
+      _narrationGeneration += 1;
+      ClientActions.stopSpeech();
+      _listeningTaskId = null;
+    }
+    setState(() => _section = section);
   }
 
   Future<void> _pollContext() async {
@@ -440,7 +531,7 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
               section: _section,
               taskCount: _visibleTasks.length,
               desktop: desktop,
-              onSection: (value) => setState(() => _section = value),
+              onSection: _changeSection,
               onCreateTask: _taskBusy == 'new' ? null : _createTask,
               onHistory: _showSessionHistory,
               onNewSession: _newSessionBusy || _sending || _stopping
@@ -471,8 +562,7 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
                             sessions: _sessions,
                             selectedSessionId: _selectedSession?.id,
                             tasks: _visibleTasks,
-                            onSection: (value) =>
-                                setState(() => _section = value),
+                            onSection: _changeSection,
                             onSession: _openSession,
                           ),
                         ),
@@ -512,12 +602,15 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
     WorkspaceSection.tasks => _TaskBoard(
       tasks: _visibleTasks,
       busyTask: _taskBusy,
+      listeningTaskId: _listeningTaskId,
+      latestTaskProgress: _latestTaskProgress,
       expanded: _expanded,
       onToggleDiagram: (id) => setState(
         () => _expanded.contains(id) ? _expanded.remove(id) : _expanded.add(id),
       ),
       onAction: _act,
       onListen: _playTask,
+      onToggleNarration: _toggleTaskNarration,
       onCreate: _taskBusy == 'new' ? null : _createTask,
     ),
   };
@@ -1342,19 +1435,25 @@ class _TaskBoard extends StatelessWidget {
   const _TaskBoard({
     required this.tasks,
     required this.busyTask,
+    required this.listeningTaskId,
+    required this.latestTaskProgress,
     required this.expanded,
     required this.onToggleDiagram,
     required this.onAction,
     required this.onListen,
+    required this.onToggleNarration,
     required this.onCreate,
   });
 
   final List<AgentTask> tasks;
   final String? busyTask;
+  final String? listeningTaskId;
+  final String? latestTaskProgress;
   final Set<String> expanded;
   final ValueChanged<String> onToggleDiagram;
   final Future<void> Function(AgentTask task, String action) onAction;
   final Future<void> Function(AgentTask task) onListen;
+  final ValueChanged<AgentTask> onToggleNarration;
   final VoidCallback? onCreate;
 
   @override
@@ -1415,10 +1514,15 @@ class _TaskBoard extends StatelessWidget {
               return _TaskCard(
                 task: task,
                 busy: busyTask == task.id,
+                listening: listeningTaskId == task.id,
+                latestProgress: listeningTaskId == task.id
+                    ? latestTaskProgress
+                    : null,
                 diagramExpanded: expanded.contains('task:${task.id}'),
                 onToggleDiagram: () => onToggleDiagram('task:${task.id}'),
                 onAction: (action) => onAction(task, action),
                 onListen: () => onListen(task),
+                onToggleNarration: () => onToggleNarration(task),
               );
             },
           ),
@@ -1431,18 +1535,24 @@ class _TaskCard extends StatelessWidget {
   const _TaskCard({
     required this.task,
     required this.busy,
+    required this.listening,
+    required this.latestProgress,
     required this.diagramExpanded,
     required this.onToggleDiagram,
     required this.onAction,
     required this.onListen,
+    required this.onToggleNarration,
   });
 
   final AgentTask task;
   final bool busy;
+  final bool listening;
+  final String? latestProgress;
   final bool diagramExpanded;
   final ValueChanged<String> onAction;
   final VoidCallback onToggleDiagram;
   final VoidCallback onListen;
+  final VoidCallback onToggleNarration;
 
   @override
   Widget build(BuildContext context) => Material(
@@ -1522,6 +1632,27 @@ class _TaskCard extends StatelessWidget {
                       ),
                   ],
                 ),
+              ],
+              if (task.isActive) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  key: Key('task-narration-${task.id}'),
+                  onPressed: onToggleNarration,
+                  icon: Icon(
+                    listening ? Icons.stop_rounded : Icons.volume_up_outlined,
+                    size: 16,
+                  ),
+                  label: Text(
+                    listening ? 'Stop narration' : 'Listen to progress',
+                  ),
+                ),
+                if (listening && latestProgress != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    latestProgress!,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
               ],
               if (task.response != null) ...[
                 const SizedBox(height: 15),

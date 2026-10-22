@@ -81,6 +81,39 @@ void main() {
     expect(find.byKey(const Key('task-pending-1')), findsOneWidget);
   });
 
+  testWidgets('task progress is spoken only after Listen is pressed', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1180, 820);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _FakeVoiceApi()..taskValues.add(_pendingTask);
+    final spoken = <String>[];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TranscriptView(
+          api: api,
+          playSpeech: (text) async => spoken.add(text),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('tasks-section')));
+    await tester.pump();
+    expect(spoken, isEmpty);
+
+    await tester.tap(find.byKey(const Key('task-narration-pending-1')));
+    await tester.pump();
+    expect(spoken, ['The agent is reading source files.']);
+    expect(find.text('Stop narration'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('task-narration-pending-1')));
+    await tester.pump();
+    expect(find.text('Listen to progress'), findsOneWidget);
+  });
+
   testWidgets('creates a durable task through the existing task API', (
     tester,
   ) async {
@@ -117,6 +150,19 @@ class _FakeVoiceApi extends VoiceApi {
 
   @override
   Future<List<AgentTask>> tasks() async => List.of(taskValues);
+
+  @override
+  Future<List<TaskProgressEvent>> taskProgress(
+    String id, {
+    int after = 0,
+  }) async => after == 0
+      ? [
+          const TaskProgressEvent(
+            id: 1,
+            spoken: 'The agent is reading source files.',
+          ),
+        ]
+      : [];
 
   @override
   Future<ContextUsage> context() async => const ContextUsage(

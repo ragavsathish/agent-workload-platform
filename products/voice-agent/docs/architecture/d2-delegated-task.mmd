@@ -5,6 +5,7 @@ sequenceDiagram
     participant Voice as Pi Voice Service
     participant Edge as Voice Edge
     participant Gateway as Agent Gateway
+    participant Broker as Inference Broker
     participant Store as S3 Workspace / Result Store
     participant Queue as PostgreSQL / Absurd
     participant Worker as Pi Task Worker
@@ -41,6 +42,21 @@ sequenceDiagram
     Worker->>Model: Run stateless Pi task-agent loop
     Worker->>Tools: Execute isolated workspace or integration tools
     Tools-->>Worker: Bounded tool result
+    loop While Pi runs
+        Worker->>Queue: Persist short progress phrase from event type and tool name
+        opt User selected Listen to progress in task view
+            Browser->>Edge: Poll progress after last event ID
+            Edge->>Gateway: Read owner-scoped progress
+            Gateway->>Queue: Fetch bounded progress events
+            Queue-->>Gateway: Progress IDs and safe spoken phrases
+            Gateway-->>Edge: Bounded progress feed
+            Edge-->>Browser: Progress IDs and safe spoken phrases
+            Browser->>Edge: Request speech for latest phrase
+            Edge->>Broker: Synthesize WAV
+            Broker-->>Edge: WAV audio
+            Edge-->>Browser: Play narrated progress
+        end
+    end
     Model-->>Worker: Final spoken and Mermaid response
     Worker->>Store: Upload bounded patch, status, and execution result
     Worker->>Queue: Checkpoint terminal result

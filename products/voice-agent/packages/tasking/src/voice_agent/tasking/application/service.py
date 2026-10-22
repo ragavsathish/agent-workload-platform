@@ -378,6 +378,41 @@ class TaskService:
             else {"state": "pending", "result": None, "failure": None}
         )
 
+    def progress(
+        self, *, identity: str, proposal_id: str, after: int = 0, limit: int = 40
+    ) -> list[dict[str, object]]:
+        """Read only narrated events for a proposal owned by this identity."""
+        row = self._get_owned(identity, proposal_id)
+        if not row["task_id"]:
+            return []
+        with (
+            psycopg.connect(self.settings.database_url) as conn,
+            conn.cursor(row_factory=dict_row) as cursor,
+        ):
+            if after == 0:
+                cursor.execute(
+                    """SELECT id, spoken, created_at FROM voice_task_progress
+                       WHERE task_id = %s ORDER BY id DESC LIMIT %s""",
+                    (row["task_id"], limit),
+                )
+            else:
+                cursor.execute(
+                    """SELECT id, spoken, created_at FROM voice_task_progress
+                       WHERE task_id = %s AND id > %s ORDER BY id LIMIT %s""",
+                    (row["task_id"], after, limit),
+                )
+            rows = cursor.fetchall()
+            if after == 0:
+                rows.reverse()
+            return [
+                {
+                    "id": result["id"],
+                    "spoken": result["spoken"],
+                    "created_at": result["created_at"].isoformat(),
+                }
+                for result in rows
+            ]
+
     def _view(self, row: dict[str, Any], *, include_token: bool) -> dict[str, Any]:
         album = album_by_key(row["session_album_key"])
         token = None

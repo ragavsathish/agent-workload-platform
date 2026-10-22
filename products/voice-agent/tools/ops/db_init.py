@@ -41,12 +41,13 @@ def main() -> None:
         if queue not in existing_queues:
             absurdctl("create-queue", queue)
 
-    migration = (ROOT / "packages/tasking/migrations/001_tasking.sql").read_text(encoding="utf-8")
+    migrations = ROOT / "packages/tasking/migrations"
     habitat_password = (
         (ROOT / "deploy/secrets/habitat-database-password").read_text(encoding="utf-8").strip()
     )
     with psycopg.connect(database_url) as connection:
-        connection.execute(sql.SQL(cast(LiteralString, migration)))
+        for migration in sorted(migrations.glob("*.sql")):
+            connection.execute(sql.SQL(cast(LiteralString, migration.read_text(encoding="utf-8"))))
         exists = connection.execute(
             "SELECT 1 FROM pg_roles WHERE rolname = 'habitat_operator'"
         ).fetchone()

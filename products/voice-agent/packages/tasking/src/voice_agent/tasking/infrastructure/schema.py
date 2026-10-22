@@ -6,6 +6,7 @@ from typing import LiteralString, cast
 import psycopg
 from dotenv import load_dotenv
 from psycopg import sql
+
 from voice_agent.tasking.infrastructure.config import Settings
 
 
@@ -14,10 +15,11 @@ def main() -> None:
     settings = Settings.from_env()
     if not settings.database_url:
         raise SystemExit("DATABASE_URL is required")
-    ddl = (Path(__file__).resolve().parents[4] / "migrations" / "001_tasking.sql").read_text()
+    migrations = Path(__file__).resolve().parents[4] / "migrations"
     with psycopg.connect(settings.database_url) as conn:
-        conn.execute(sql.SQL(cast(LiteralString, ddl)))
-    print("Installed voice task proposal schema")
+        for migration in sorted(migrations.glob("*.sql")):
+            conn.execute(sql.SQL(cast(LiteralString, migration.read_text())))
+    print("Installed voice task schema")
 
 
 if __name__ == "__main__":

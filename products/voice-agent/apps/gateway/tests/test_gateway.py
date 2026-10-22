@@ -110,6 +110,34 @@ def test_tasks_can_be_queried_by_exact_session_name(monkeypatch):
     }
 
 
+def test_task_progress_requires_owner_identity_and_forwards_cursor(monkeypatch):
+    gateway = load_gateway(monkeypatch)
+    observed = {}
+
+    class Tasks:
+        def progress(self, **kwargs):
+            observed.update(kwargs)
+            return [{"id": 7, "spoken": "The agent is reading source files."}]
+
+    monkeypatch.setattr(gateway, "service", lambda: Tasks())
+    client = TestClient(gateway.app)
+    path = "/v1/tasks/proposal-1/progress"
+    headers = {"Authorization": f"Bearer {'g' * 32}"}
+
+    assert client.get(path, params={"identity": "owner@example.com"}).status_code == 401
+    response = client.get(
+        path, params={"identity": "owner@example.com", "after": 6}, headers=headers
+    )
+    assert response.status_code == 200
+    assert response.json()[0]["id"] == 7
+    assert observed == {
+        "identity": "owner@example.com",
+        "proposal_id": "proposal-1",
+        "after": 6,
+        "limit": 40,
+    }
+
+
 def test_task_approval_passes_trace_context_to_the_durable_queue(monkeypatch):
     gateway = load_gateway(monkeypatch)
     observed = {}

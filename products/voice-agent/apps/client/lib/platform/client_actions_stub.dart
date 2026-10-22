@@ -9,3 +9,5 @@ Future<void> playSpeech(String spoken, {required String endpoint}) async =>
 
 Future<void> playUrl(String url) async =>
     throw UnsupportedError('Native audio playback is not installed yet.');
+
+void stopSpeech() {}
