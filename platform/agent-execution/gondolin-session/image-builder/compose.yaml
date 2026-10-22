@@ -2,6 +2,7 @@ services:
   docker-job-api:
     profiles: [host-api]
     image: agent-docker-job-api:local
+    restart: unless-stopped
     build:
       context: .
       dockerfile: Dockerfile.api
