@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 const dockerfile = fs.readFileSync(new URL("./Dockerfile.dev", import.meta.url), "utf8");
@@ -46,6 +48,58 @@ test("development image pins Mermaid CLI and the repository vendor revisions", (
     assert.match(dockerfile, new RegExp(`^ARG ${argument}=${revision}$`, "m"));
   }
   assert.match(stackHook, /link-vendor-sources! "\/workspace" "\/opt\/vendor"/);
+});
+
+test("vendor image sources remain usable without breaking Git submodule diffs", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gondolin-vendor-"));
+  try {
+    const workspace = path.join(root, "workspace");
+    const imageVendor = path.join(root, "image-vendor");
+    fs.mkdirSync(path.join(workspace, "vendor"), { recursive: true });
+    execFileSync("git", ["-C", workspace, "init", "-q"]);
+    fs.writeFileSync(path.join(workspace, "README.md"), "before\n");
+    execFileSync("git", ["-C", workspace, "add", "README.md"]);
+    for (const name of ["excalidraw-mcp", "mermaid-to-excalidraw"]) {
+      const source = path.join(imageVendor, name);
+      fs.mkdirSync(path.join(source, "node_modules"), { recursive: true });
+      fs.mkdirSync(path.join(source, ".git"));
+      fs.writeFileSync(path.join(source, "package.json"), `{"name":"${name}"}\n`);
+      execFileSync("git", ["-C", workspace, "update-index", "--add", "--cacheinfo",
+        `160000,${"a".repeat(40)},vendor/${name}`]);
+    }
+    execFileSync("git", ["-C", workspace, "-c", "user.name=Test", "-c",
+      "user.email=test@example.invalid", "commit", "-qm", "baseline"]);
+    fs.symlinkSync(path.join(imageVendor, "excalidraw-mcp"),
+      path.join(workspace, "vendor", "excalidraw-mcp"));
+    fs.mkdirSync(path.join(workspace, "vendor", "mermaid-to-excalidraw"));
+    const hook = new URL("../../../../.pi/hooks/start-dev-stack.clj", import.meta.url);
+    const linkVendor = `(load-file ${JSON.stringify(hook.pathname)})\n` +
+      "(start-dev-stack/link-vendor-sources! (System/getenv \"TEST_WORKSPACE\") " +
+      "(System/getenv \"TEST_IMAGE_VENDOR\"))";
+    const hookOptions = {
+      env: { ...process.env, TEST_WORKSPACE: workspace, TEST_IMAGE_VENDOR: imageVendor },
+    };
+    execFileSync("bb", ["-e", linkVendor], hookOptions);
+    execFileSync("bb", ["-e", linkVendor], hookOptions);
+    fs.writeFileSync(path.join(workspace, "README.md"), "after\n");
+    for (const name of ["excalidraw-mcp", "mermaid-to-excalidraw"]) {
+      const destination = path.join(workspace, "vendor", name);
+      assert.ok(fs.statSync(destination).isDirectory());
+      assert.equal(fs.lstatSync(destination).isSymbolicLink(), false);
+      assert.ok(fs.lstatSync(path.join(destination, "package.json")).isSymbolicLink());
+      assert.ok(fs.lstatSync(path.join(destination, "node_modules")).isSymbolicLink());
+      assert.equal(fs.existsSync(path.join(destination, ".git")), false);
+    }
+    execFileSync("git", ["-C", workspace, "add", "--intent-to-add", "--all"]);
+    const patch = execFileSync("git", ["-C", workspace, "diff", "--binary", "HEAD"],
+      { encoding: "utf8" });
+    assert.match(patch, /\+after/);
+    assert.doesNotMatch(patch, /Subproject commit/);
+    assert.match(execFileSync("git", ["-C", workspace, "status", "--short"],
+      { encoding: "utf8" }), /README\.md/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("Docker development VMs use QEMU and require OverlayFS before starting overlay2", () => {

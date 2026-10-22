@@ -43,11 +43,23 @@
       (when (Files/isDirectory source (make-array LinkOption 0))
         (Files/createDirectories (.getParent destination)
                                  (make-array java.nio.file.attribute.FileAttribute 0))
-        (when (empty-directory? destination)
-          (Files/delete destination))
+        ;; A Git submodule is a gitlink. Git diff fails if its path is a symlink,
+        ;; so link the image's entries inside a real directory instead.
+        (when (Files/isSymbolicLink destination)
+          (if (= source (Files/readSymbolicLink destination))
+            (Files/delete destination)
+            (throw (ex-info "Vendor submodule path is an unexpected symlink"
+                            {:path (str destination)}))))
         (when-not (Files/exists destination (into-array LinkOption [LinkOption/NOFOLLOW_LINKS]))
-          (Files/createSymbolicLink destination source
-                                    (make-array java.nio.file.attribute.FileAttribute 0)))))))
+          (Files/createDirectories destination
+                                   (make-array java.nio.file.attribute.FileAttribute 0)))
+        (when (empty-directory? destination)
+          (with-open [entries (Files/list source)]
+            (doseq [entry (iterator-seq (.iterator entries))
+                    :when (not= ".git" (str (.getFileName entry)))]
+              (Files/createSymbolicLink (.resolve destination (.getFileName entry))
+                                        entry
+                                        (make-array java.nio.file.attribute.FileAttribute 0)))))))))
 
 (defn run-command
   ([argv] (run-command argv {}))
