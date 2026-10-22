@@ -1,8 +1,10 @@
-"""Bounded, content-free narration of observable Pi task events."""
+"""Bounded narration of observable Pi task actions."""
 
 from __future__ import annotations
 
 import json
+import re
+from pathlib import PurePath
 
 TOOL_NARRATION = {
     "read": "The agent is reading source files.",
@@ -11,9 +13,39 @@ TOOL_NARRATION = {
     "bash": "The agent is running a workspace command.",
 }
 
+SENSITIVE = re.compile(
+    r"(?i)(secret|token|password|passphrase|authorization|bearer|api[_-]?key|"
+    r"private[_-]?key|credential|[a-z0-9_-]{32,})"
+)
+
+
+def _safe_detail(value: object, *, max_length: int = 160) -> str | None:
+    if not isinstance(value, str) or not value.strip() or "\n" in value or "\r" in value:
+        return None
+    detail = " ".join(value.split())
+    if len(detail) > max_length or SENSITIVE.search(detail):
+        return None
+    return detail
+
+
+def _tool_narration(tool: str, args: object) -> str:
+    fallback = TOOL_NARRATION.get(tool, "The agent is using a task tool.")
+    if not isinstance(args, dict):
+        return fallback
+    if tool == "bash":
+        command = _safe_detail(args.get("command"))
+        return f"The agent is running: {command}." if command else fallback
+    if tool in {"read", "write", "edit"}:
+        path = args.get("path")
+        name = _safe_detail(PurePath(path).name) if isinstance(path, str) else None
+        if name:
+            action = {"read": "reading", "write": "writing", "edit": "editing"}[tool]
+            return f"The agent is {action} {name}."
+    return fallback
+
 
 def narration_from_pi_record(line: bytes) -> str | None:
-    """Use only event kinds and tool names; never expose model reasoning or arguments."""
+    """Describe task actions without exposing reasoning or sensitive arguments."""
     try:
         event = json.loads(line)
     except (json.JSONDecodeError, UnicodeDecodeError):
@@ -29,7 +61,7 @@ def narration_from_pi_record(line: bytes) -> str | None:
         tool = event.get("toolName")
         if not isinstance(tool, str):
             return None
-        return TOOL_NARRATION.get(tool, "The agent is using a task tool.")
+        return _tool_narration(tool, event.get("args"))
     if kind == "tool_execution_end" and event.get("isError") is True:
         return "A task tool reported an error; the agent is checking what happened."
     return None

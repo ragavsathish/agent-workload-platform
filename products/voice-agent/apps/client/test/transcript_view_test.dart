@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -129,6 +131,178 @@ void main() {
     expect(find.text('Listen to agent'), findsOneWidget);
   });
 
+  testWidgets('Listen speaks each queued task action in order', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1180, 820);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _FakeVoiceApi()
+      ..taskValues.add(_pendingTask)
+      ..progressValues.addAll(const [
+        TaskProgressEvent(id: 1, spoken: 'The agent started.'),
+        TaskProgressEvent(id: 2, spoken: 'Reading README.md.'),
+        TaskProgressEvent(id: 3, spoken: 'Running git status --short.'),
+      ]);
+    final spoken = <String>[];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TranscriptView(
+          api: api,
+          playSpeech: (text) async => spoken.add(text),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('tasks-section')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('task-narration-pending-1')));
+    await tester.pump();
+
+    expect(spoken, [
+      'The agent started.',
+      'Reading README.md.',
+      'Running git status --short.',
+    ]);
+  });
+
+  testWidgets('task completion waits for queued narration', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1180, 820);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _FakeVoiceApi()
+      ..taskValues.add(_pendingTask)
+      ..progressValues.addAll(const [
+        TaskProgressEvent(id: 1, spoken: 'Reading source.'),
+        TaskProgressEvent(id: 2, spoken: 'Running tests.'),
+      ]);
+    final firstSpeech = Completer<void>();
+    final secondSpeech = Completer<void>();
+    final spoken = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TranscriptView(
+          api: api,
+          playSpeech: (text) {
+            spoken.add(text);
+            if (text == 'Reading source.') return firstSpeech.future;
+            if (text == 'Running tests.') return secondSpeech.future;
+            return Future.value();
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('tasks-section')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('task-narration-pending-1')));
+    await tester.pump();
+    expect(spoken, ['Reading source.']);
+
+    api.taskValues[0] = AgentTask(
+      id: _pendingTask.id,
+      instruction: _pendingTask.instruction,
+      workspace: _pendingTask.workspace,
+      planHash: _pendingTask.planHash,
+      status: 'completed',
+      state: 'completed',
+      createdAt: _pendingTask.createdAt,
+      response: const VisualResponse(
+        spoken: 'Task finished.',
+        presentation: {},
+      ),
+    );
+    await tester.pump(const Duration(seconds: 4));
+    expect(spoken, ['Reading source.']);
+    firstSpeech.complete();
+    await tester.pump();
+    expect(spoken, ['Reading source.', 'Running tests.']);
+    secondSpeech.complete();
+    await tester.pump();
+    expect(spoken, ['Reading source.', 'Running tests.', 'Task finished.']);
+  });
+
+  testWidgets('Listen drains progress beyond one API page', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1180, 820);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _FakeVoiceApi()
+      ..taskValues.add(_pendingTask)
+      ..progressValues.addAll(
+        List.generate(
+          41,
+          (index) =>
+              TaskProgressEvent(id: index + 1, spoken: 'Action ${index + 1}.'),
+        ),
+      );
+    final spoken = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TranscriptView(
+          api: api,
+          playSpeech: (text) async => spoken.add(text),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('tasks-section')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('task-narration-pending-1')));
+    await tester.pump();
+
+    expect(spoken, hasLength(41));
+    expect(spoken.first, 'Action 1.');
+    expect(spoken.last, 'Action 41.');
+  });
+
+  testWidgets('completed task can replay its actions and rationale', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1180, 820);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _FakeVoiceApi()
+      ..taskValues.add(AgentTask(
+        id: 'completed-1',
+        instruction: 'Inspect the deployment',
+        workspace: '/workspace',
+        planHash: 'plan-hash',
+        status: 'completed',
+        state: 'completed',
+        createdAt: DateTime.now(),
+        response: const VisualResponse(
+          spoken: 'I checked the stack because the deployment was failing. The health checks passed.',
+          presentation: {},
+        ),
+      ))
+      ..progressValues.addAll(const [
+        TaskProgressEvent(id: 1, spoken: 'Reading compose.yaml.'),
+        TaskProgressEvent(id: 2, spoken: 'Running docker compose ps.'),
+      ]);
+    final spoken = <String>[];
+
+    await tester.pumpWidget(MaterialApp(
+      home: TranscriptView(
+        api: api,
+        playSpeech: (text) async => spoken.add(text),
+      ),
+    ));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('tasks-section')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('task-narration-completed-1')));
+    await tester.pump();
+
+    expect(spoken, [
+      'Reading compose.yaml.',
+      'Running docker compose ps.',
+      'I checked the stack because the deployment was failing. The health checks passed.',
+    ]);
+  });
+
   testWidgets('creates a durable task through the existing task API', (
     tester,
   ) async {
@@ -158,6 +332,7 @@ class _FakeVoiceApi extends VoiceApi {
   final List<String> sentMessages = [];
   final List<String> createdTasks = [];
   final List<AgentTask> taskValues = [];
+  final List<TaskProgressEvent> progressValues = [];
 
   @override
   Future<TranscriptSnapshot> transcript() async =>
@@ -170,7 +345,9 @@ class _FakeVoiceApi extends VoiceApi {
   Future<List<TaskProgressEvent>> taskProgress(
     String id, {
     int after = 0,
-  }) async => after == 0
+  }) async => progressValues.isNotEmpty
+      ? progressValues.where((event) => event.id > after).take(40).toList()
+      : after == 0
       ? [
           const TaskProgressEvent(
             id: 1,

@@ -125,6 +125,7 @@ let clientPromise;
 let currentAudio;
 let currentAudioUrl;
 let currentSpeech;
+let completeCurrentSpeech;
 let speechGeneration = 0;
 let botAudio;
 
@@ -214,11 +215,37 @@ const stopBotTrack = (track, participant) => {
 };
 
 const replaceCurrentAudio = (audio, { objectUrl, spoken } = {}) => {
+  completeCurrentSpeech?.();
   currentAudio?.pause();
   if (currentAudioUrl) URL.revokeObjectURL(currentAudioUrl);
   currentAudio = audio;
   currentAudioUrl = objectUrl;
   currentSpeech = spoken;
+};
+
+const playCurrentSpeech = async (audio) => {
+  completeCurrentSpeech?.();
+  const finished = new Promise((resolve, reject) => {
+    const complete = (error) => {
+      audio.removeEventListener('ended', onEnded);
+      audio.removeEventListener('error', onError);
+      if (completeCurrentSpeech === complete) completeCurrentSpeech = undefined;
+      if (error) reject(error);
+      else resolve();
+    };
+    const onEnded = () => complete();
+    const onError = () => complete(new Error('Audio playback failed'));
+    audio.addEventListener('ended', onEnded, { once: true });
+    audio.addEventListener('error', onError, { once: true });
+    completeCurrentSpeech = complete;
+  });
+  try {
+    await audio.play();
+    await finished;
+  } catch (error) {
+    completeCurrentSpeech?.();
+    throw error;
+  }
 };
 
 const ensureClient = async () => {
@@ -487,7 +514,7 @@ window.voiceBridge = {
     const generation = ++speechGeneration;
     if (currentAudio && currentAudioUrl && currentSpeech === spoken) {
       currentAudio.currentTime = 0;
-      await currentAudio.play();
+      await playCurrentSpeech(currentAudio);
       return;
     }
     const response = await fetch(endpoint, {
@@ -503,7 +530,7 @@ window.voiceBridge = {
       return;
     }
     replaceCurrentAudio(new Audio(url), { objectUrl: url, spoken });
-    await currentAudio.play();
+    await playCurrentSpeech(currentAudio);
   },
   async playUrl(url) {
     speechGeneration += 1;

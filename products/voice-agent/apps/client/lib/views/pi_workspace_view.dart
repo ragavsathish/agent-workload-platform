@@ -58,7 +58,6 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
   int _progressCursor = 0;
   int _narrationGeneration = 0;
   bool _progressPolling = false;
-  DateTime? _lastProgressSpeech;
 
   @override
   void initState() {
@@ -129,12 +128,7 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
           .where((task) => task.id == _listeningTaskId)
           .firstOrNull;
       if (listening != null && !listening.isActive) {
-        _narrationGeneration += 1;
-        ClientActions.stopSpeech();
-        setState(() => _listeningTaskId = null);
-        if (listening.response case final response?) {
-          unawaited(_playSpeech(response.spoken));
-        }
+        await _pollTaskProgress();
       } else if (_section == WorkspaceSection.tasks &&
           _listeningTaskId != null) {
         unawaited(_pollTaskProgress());
@@ -152,29 +146,35 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
         _section != WorkspaceSection.tasks) {
       return;
     }
-    if (_lastProgressSpeech case final last?) {
-      if (DateTime.now().difference(last) < const Duration(seconds: 6)) return;
-    }
     _progressPolling = true;
     try {
-      final events = await widget.api.taskProgress(
-        taskId,
-        after: _progressCursor,
-      );
-      if (!mounted ||
-          taskId != _listeningTaskId ||
-          generation != _narrationGeneration ||
-          events.isEmpty) {
-        return;
+      while (mounted &&
+          taskId == _listeningTaskId &&
+          generation == _narrationGeneration) {
+        final events = await widget.api.taskProgress(
+          taskId,
+          after: _progressCursor,
+        );
+        if (events.isEmpty) break;
+        var advanced = false;
+        for (final event in events) {
+          if (!mounted ||
+              taskId != _listeningTaskId ||
+              generation != _narrationGeneration) {
+            return;
+          }
+          if (event.id <= _progressCursor) continue;
+          advanced = true;
+          setState(() {
+            _progressCursor = event.id;
+            if (event.spoken.isNotEmpty) _latestTaskProgress = event.spoken;
+          });
+          if (event.spoken.isNotEmpty) await _playSpeech(event.spoken);
+        }
+        if (!advanced) break;
+        final task = _tasks.where((item) => item.id == taskId).firstOrNull;
+        if (events.length < 40 && (task == null || task.isActive)) break;
       }
-      final latest = events.last;
-      if (latest.id <= _progressCursor || latest.spoken.isEmpty) return;
-      setState(() {
-        _progressCursor = latest.id;
-        _latestTaskProgress = latest.spoken;
-        _lastProgressSpeech = DateTime.now();
-      });
-      await _playSpeech(latest.spoken);
     } on Object catch (error) {
       if (mounted && taskId == _listeningTaskId) {
         setState(
@@ -183,6 +183,18 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
       }
     } finally {
       _progressPolling = false;
+      final task = _tasks.where((item) => item.id == taskId).firstOrNull;
+      if (task != null && !task.isActive) _finishTaskNarration(task);
+    }
+  }
+
+  void _finishTaskNarration(AgentTask task) {
+    if (!mounted || _listeningTaskId != task.id) return;
+    _narrationGeneration += 1;
+    ClientActions.stopSpeech();
+    setState(() => _listeningTaskId = null);
+    if (task.response case final response?) {
+      unawaited(_playSpeech(response.spoken));
     }
   }
 
@@ -198,7 +210,6 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
       _listeningTaskId = task.id;
       _latestTaskProgress = null;
       _progressCursor = 0;
-      _lastProgressSpeech = null;
       _playbackNotice = null;
     });
     unawaited(_pollTaskProgress());
@@ -1610,7 +1621,8 @@ class _TaskCard extends StatelessWidget {
               ),
               if (task.sessionArtist != null ||
                   task.sessionSpotifyUrl != null ||
-                  task.isActive) ...[
+                  task.isActive ||
+                  task.response != null) ...[
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 10,
@@ -1631,7 +1643,7 @@ class _TaskCard extends StatelessWidget {
                         icon: const Icon(Icons.open_in_new_rounded, size: 15),
                         label: const Text('Listen on Spotify'),
                       ),
-                    if (task.isActive)
+                    if (task.isActive || task.response != null)
                       OutlinedButton.icon(
                         key: Key('task-narration-${task.id}'),
                         onPressed: onToggleNarration,

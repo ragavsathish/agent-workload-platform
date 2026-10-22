@@ -19,7 +19,11 @@ PRESENTATION_INSTRUCTION = """
 
 When the work is complete, make your final assistant message exactly one JSON object
 with fields "spoken" and "presentation". "spoken" must be a concise, precise summary
-suitable for text-to-speech. "presentation" must contain "kind" ("flow" or "status"),
+suitable for text-to-speech. Give a useful account of the work in four to eight
+sentences: the goal, the main steps and relevant safe commands, why you chose the approach,
+what the checks showed, and any remaining uncertainty. Describe observable
+decisions and evidence without quoting private reasoning or internal scratch work.
+"presentation" must contain "kind" ("flow" or "status"),
 a short "title", "nodes" with unique "id" and "label" strings, and "edges" with
 "from", "to", and optional "label" strings. When the user explicitly requests a
 rich, editable, or Excalidraw diagram, use kind "excalidraw" with a title and at

@@ -268,7 +268,7 @@ def run_pi(
 
 
 def task_progress_publisher(database_url: str, task_id: str) -> Callable[[str], None]:
-    """Persist a small owner-readable progress feed without task content."""
+    """Persist a bounded owner-readable feed of safe task action summaries."""
     emitted = 0
     last_spoken = ""
     last_at = 0.0

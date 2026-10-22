@@ -392,7 +392,7 @@ class TaskService:
             if after == 0:
                 cursor.execute(
                     """SELECT id, spoken, created_at FROM voice_task_progress
-                       WHERE task_id = %s ORDER BY id DESC LIMIT %s""",
+                       WHERE task_id = %s ORDER BY id LIMIT %s""",
                     (row["task_id"], limit),
                 )
             else:
@@ -402,8 +402,6 @@ class TaskService:
                     (row["task_id"], after, limit),
                 )
             rows = cursor.fetchall()
-            if after == 0:
-                rows.reverse()
             return [
                 {
                     "id": result["id"],
