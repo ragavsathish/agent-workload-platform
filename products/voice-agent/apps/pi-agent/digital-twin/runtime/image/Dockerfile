@@ -2,14 +2,15 @@
 
 FROM alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0
 
-RUN --mount=type=secret,id=gondolin_mitm_ca \
-    SSL_CERT_FILE=/run/secrets/gondolin_mitm_ca \
+RUN --mount=type=secret,id=gondolin_mitm_ca,required=false \
     apk add --no-cache \
-      ca-certificates=20260909-r0 \
+      ca-certificates \
       nodejs=24.18.1-r0 \
-    && install -m 0644 /run/secrets/gondolin_mitm_ca \
-      /usr/local/share/ca-certificates/gondolin-mitm.crt \
-    && update-ca-certificates
+    && if [ -f /run/secrets/gondolin_mitm_ca ]; then \
+         install -m 0644 /run/secrets/gondolin_mitm_ca \
+           /usr/local/share/ca-certificates/gondolin-mitm.crt; \
+         update-ca-certificates; \
+       fi
 
 WORKDIR /app
 COPY processor.mjs /app/processor.mjs
