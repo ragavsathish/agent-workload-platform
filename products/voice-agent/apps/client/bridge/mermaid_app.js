@@ -1,6 +1,7 @@
-import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
+import { App } from '@modelcontextprotocol/ext-apps';
 import mermaid from 'mermaid';
 import '../design_system/elements.css';
+import { connectFirstPartyMcpApp } from '../design_system/mcp-app-runtime.js';
 
 const MAX_NODES = 24;
 const MAX_EDGES = 48;
@@ -101,6 +102,4 @@ app.ontoolresult = ({ structuredContent }) => void renderPresentation(structured
 app.onteardown = async () => ({});
 app.onerror = (error) => console.error('[mermaid-app]', error);
 
-void app.connect(new PostMessageTransport(window.parent, window.parent)).catch(
-  (error) => console.error('[mermaid-app]', error),
-);
+connectFirstPartyMcpApp(app, '[mermaid-app]');

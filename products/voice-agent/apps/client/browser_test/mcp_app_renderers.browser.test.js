@@ -221,6 +221,22 @@ afterEach(() => {
 });
 
 describe('MCP App renderers', () => {
+  test('first-party View receives the light host theme', async () => {
+    const originalUrl = window.location.href;
+    window.history.replaceState({}, '', '?theme=light');
+    try {
+      await mount(presentations[0]);
+      const rendered = await commands.inspectMcpFrame({
+        title: presentations[0].title,
+        selector: 'html',
+        attribute: 'data-pi-theme',
+      });
+      expect(rendered.attribute).toBe('light');
+    } finally {
+      window.history.replaceState({}, '', originalUrl);
+    }
+  });
+
   for (const presentation of presentations) {
     test(`renders ${presentation.name} inside the least-privilege sandbox`, async () => {
       const iframe = await mount(presentation);

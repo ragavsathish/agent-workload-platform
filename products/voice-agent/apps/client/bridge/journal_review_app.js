@@ -1,7 +1,8 @@
-import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
+import { App } from '@modelcontextprotocol/ext-apps';
 import { createTextAnnotator } from '@recogito/text-annotator';
 import '@recogito/text-annotator/text-annotator.css';
 import '../design_system/elements.css';
+import { connectFirstPartyMcpApp } from '../design_system/mcp-app-runtime.js';
 import '../journal_review_app/theme.css';
 
 const root = document.querySelector('#app');
@@ -301,6 +302,4 @@ app.onteardown = async () => {
 };
 app.onerror = (error) => console.error('[journal-review-app]', error);
 
-void app.connect(new PostMessageTransport(window.parent, window.parent)).catch(
-  (error) => console.error('[journal-review-app]', error),
-);
+connectFirstPartyMcpApp(app, '[journal-review-app]');

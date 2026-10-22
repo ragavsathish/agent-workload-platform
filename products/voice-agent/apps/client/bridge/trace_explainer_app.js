@@ -1,5 +1,6 @@
-import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
+import { App } from '@modelcontextprotocol/ext-apps';
 import '../design_system/elements.css';
+import { connectFirstPartyMcpApp } from '../design_system/mcp-app-runtime.js';
 
 const MAX_TEXT = 500;
 const TRACE_ID = /^[a-f0-9]{32}$/u;
@@ -269,6 +270,4 @@ app.onteardown = async () => {
 };
 app.onerror = (error) => console.error('[playwright-trace-viewer-app]', error);
 
-void app.connect(new PostMessageTransport(window.parent, window.parent)).catch(
-  (error) => console.error('[playwright-trace-viewer-app]', error),
-);
+connectFirstPartyMcpApp(app, '[playwright-trace-viewer-app]');

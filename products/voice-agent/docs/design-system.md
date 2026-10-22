@@ -6,7 +6,21 @@
 
 The Flutter host is a native Flutter UI, not React. First-party opaque-origin MCP App iframes are Mermaid, Marp, Journal Review (plain DOM plus Recogito), and Trace Explainer (plain DOM). Journal Review and Trace Explainer are also packaged by their respective MCP TypeScript services. Excalidraw is the separately built, vendor `vendor/excalidraw-mcp` React integration. Grafana's trace app and Recogito are vendor/official integrations; do not bulk-restyle them. There is no Vue app on this path.
 
-The host passes its MCP `hostContext.theme` and puts the selected theme in the first-party iframe URL. Each iframe embeds its own generated tokens, UX elements, and Source Code Pro WOFF2 data, so no parent CSS, CDN, same-origin permission, credential, tool, or task-action access is needed. Both app CSPs allow only hashed scripts and local data fonts. CSS only paints; it does not enlarge the existing sandbox (`allow-scripts`) or bridge allowlist. The CSS also has a system-preference fallback for standalone specimens. Theme changes currently take effect on the next mount; an app that needs live changes should apply its received host-context theme to `document.documentElement.dataset.piTheme`.
+The host passes its MCP `hostContext.theme` and puts the selected theme in the first-party iframe URL for the first paint. Each iframe embeds its own generated tokens, UX elements, and Source Code Pro WOFF2 data, so no parent CSS, CDN, same-origin permission, credential, tool, or task-action access is needed. The app CSPs allow only hashed scripts and local data fonts. CSS only paints; it does not enlarge the existing sandbox (`allow-scripts`) or bridge allowlist. The CSS also has a system-preference fallback for standalone specimens. `design_system/mcp-app-runtime.js` applies the authoritative theme after the MCP handshake and on later host-context notifications. The current host sets theme at mount time; it does not yet expose a live theme switch.
+
+## Microfrontend contract
+
+Each first-party MCP App is a separately rendered View behind the host's `ui://` resource registry. The host owns the sandbox, display mode, capability allowlist, and initial context. The View owns its rendering, state, and tool-result handling. Views do not read the host DOM or share a live CSS runtime. This follows the [MCP Apps host/View model](https://github.com/modelcontextprotocol/ext-apps/blob/main/docs/overview.md) and its [host-context change pattern](https://github.com/modelcontextprotocol/ext-apps/blob/main/docs/patterns.md).
+
+| Module | Owner | Interface |
+|---|---|---|
+| Host bridge | `bridge/voice_bridge.js` | `ui://` registration, sandboxed iframe, MCP handshake, bounded host capabilities |
+| Design system | `design_system/tokens.json`, `elements.css`, fonts | Versioned semantic tokens and CSS class contract, bundled into each View |
+| Runtime adapter | `design_system/mcp-app-runtime.js` | One connection call; initial and updated host theme |
+| Build module | `tool/mcp-app-html.mjs` | One self-contained HTML artifact with inlined JS/CSS/font and matching CSP hashes |
+| Individual View | `bridge/*_app.js` and app template | Validate input, render app-specific content, handle tool events and teardown |
+
+Build-time sharing keeps each View deployable as a self-contained resource. A new first-party View imports `elements.css`, calls `connectFirstPartyMcpApp` after registering its handlers, uses `buildMcpAppHtml` for packaging, and registers its `ui://` resource in the host. Keep app-specific layouts and tool permissions local to that View. Vendor Views are integrated through the host registry without rewriting their internals.
 
 ## Typeface
 
@@ -49,7 +63,7 @@ Journal Review uses the shared surfaces, badges, actions, kicker, and typeface w
 
 ## Framework use
 
-**Plain HTML/CSS:** bundle `elements.css` in the app build, then use its classes and `var(--pi-color-surface)`. This is required for opaque iframes. When inlining into self-contained HTML, configure `.woff2` as an esbuild `dataurl` asset and permit `font-src data:` in that iframe's CSP.
+**Plain HTML/CSS:** import `elements.css` in the View entry point, then use its classes and `var(--pi-color-surface)`. The shared build module handles the `.woff2` data URL and inline assets for opaque iframes; the template must permit `font-src data:` in its CSP.
 
 **Dart/Flutter:** import `lib/design_tokens.dart` and use `PiDesignTokens.fontFamily`, accent, spacing, radius, and touch target in `ThemeData`/widgets. Declare the local TTFs in `pubspec.yaml`. CSS is not shared with Flutter; JSON values and generated Dart are.
 
@@ -59,10 +73,12 @@ Journal Review uses the shared surfaces, badges, actions, kicker, and typeface w
 
 ## Packaging, migration, and validation
 
-Client build commands regenerate first. The Journal Review and Trace Explainer MCP packages bundle their self-contained HTML from the client entry points. Preserve **two separate quoted CSP hash sources** when changing the inline bootstrap or app script. Open `apps/client/design_system/specimen.html` directly in a browser for the component gallery. It shows every shared element and variant on one page, with section navigation, a dark/light theme toggle, labeled fields, progress, and an interactive native dialog.
+Client build commands regenerate first. The Journal Review and Trace Explainer MCP packages bundle their self-contained HTML from the client entry points through the same build module. The build module inserts the early theme bootstrap and hashes the exact inline script bytes; the template supplies **two separate quoted CSP hash sources**. Open `apps/client/design_system/specimen.html` directly in a browser for the component gallery. It shows every shared element and variant on one page, with section navigation, a dark/light theme toggle, labeled fields, progress, and an interactive native dialog.
 
 Remaining work: align Marp's generated slide palette separately from its frame, and review first-party Excalidraw wrapper styling only if vendor updates permit. Never patch Grafana/Recogito vendor internals. Run `npm run test:design-tokens`, the relevant MCP App build, then browser rendering tests.
 
 ## Validation recorded
 
 In the restored task VM: `node tool/design-tokens.test.mjs`, `npm run build:mermaid`, `npm run build:journal-review`, and `npm run build:excalidraw` passed. The generated Mermaid and Journal HTML contains the local Source Code Pro font data and shared UX CSS. `npm run test:browser` passed **12/12** after repairing the two CSP hash sources. `./tool/flutterw analyze` reported one pre-existing unused import warning in `patrol_test/live_edge_web_test.dart` and no errors from these changes.
+
+After aligning the first-party Views through the shared build and runtime modules, `npm run test:browser` passed **13/13** iframe tests plus three focused build/runtime checks. The standalone Journal Review and Trace Explainer MCP packages built successfully; their HTML artifact hashes matched the corresponding client builds.
