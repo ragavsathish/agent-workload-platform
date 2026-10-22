@@ -39,8 +39,9 @@ A five-VM attempt was stopped before any Patrol command completed. It exceeded
 the configured 384 MiB swap-growth ceiling: the 5-second sample showed 1,481
 MiB growth and final growth was 1,509 MiB. This run began with only 821 MiB of
 free swap while other Gondolin VMs were active. The stop used SIGINT; none of
-the five sessions saved a guest checkpoint. The retained host workspaces and
-raw result are in `artifacts/benchmarks/patrol-concurrent-5vm-2026-10-20T093556Z/`.
+the five sessions saved a guest checkpoint. The raw result and per-VM logs are
+in `artifacts/benchmarks/patrol-concurrent-5vm-2026-10-20T093556Z/`; the
+temporary workspace copies were removed during cleanup.
 
 The three-VM sessions were then resumed concurrently in fresh Pi processes.
 All three guest commands passed. Each Pi process took about 13.13 seconds for
