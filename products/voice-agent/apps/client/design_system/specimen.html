@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en" data-pi-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pi MCP App design system</title>
+  <link rel="stylesheet" href="elements.css">
+  <style>
+    body { margin: 0; padding: var(--pi-space-6); background: var(--pi-color-canvas); color: var(--pi-color-text); font-size: var(--pi-font-body); line-height: var(--pi-font-line); }
+    main { max-width: 52rem; margin: auto; }
+    .specimen { padding: var(--pi-space-6); }
+    .specimen + .specimen { margin-top: var(--pi-space-4); }
+    .swatches { display: grid; grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr)); gap: var(--pi-space-2); }
+    .swatch { padding: var(--pi-space-3); border: 1px solid var(--pi-color-border); border-radius: var(--pi-radius-md); background: var(--pi-color-surface-raised); }
+  </style>
+</head>
+<body>
+  <main class="pi-stack">
+    <header class="pi-inline">
+      <div>
+        <p class="pi-kicker">Pi Voice · MCP Apps · tokens 1.1.0</p>
+        <h1>Design system specimen</h1>
+      </div>
+      <button class="pi-button" type="button" id="theme-toggle">Toggle light theme</button>
+    </header>
+    <section class="pi-surface specimen pi-stack" aria-labelledby="actions-title">
+      <h2 id="actions-title" class="pi-section-title">Actions and status</h2>
+      <div class="pi-inline">
+        <button class="pi-button" data-variant="primary" type="button">Primary action</button>
+        <button class="pi-button" type="button">Secondary action</button>
+        <button class="pi-button" data-variant="danger" type="button">Destructive action</button>
+        <button class="pi-button" type="button" disabled>Unavailable</button>
+      </div>
+      <div class="pi-inline" aria-label="Example statuses">
+        <span class="pi-badge" data-tone="success">Ready</span>
+        <span class="pi-badge" data-tone="warning">Pending</span>
+        <span class="pi-badge" data-tone="danger">Failed</span>
+      </div>
+      <p class="pi-notice" role="status">A neutral status message explains what happened.</p>
+      <p class="pi-notice" data-tone="danger" role="alert">An error message names the recovery step.</p>
+    </section>
+    <section class="pi-surface specimen pi-stack" aria-labelledby="typography-title">
+      <h2 id="typography-title" class="pi-section-title">Typography and empty state</h2>
+      <p>Source Code Pro is bundled locally for the host and each first-party MCP App iframe. <em>Italic</em> and <strong>semibold</strong> are available.</p>
+      <div class="pi-empty-state pi-surface">No review selected yet. Choose an item to begin.</div>
+      <div class="swatches" aria-label="Semantic surfaces">
+        <div class="swatch">Canvas and surface</div>
+        <div class="swatch">Focused controls</div>
+        <div class="swatch">Responsive layout</div>
+      </div>
+    </section>
+  </main>
+  <script>
+    const button = document.querySelector('#theme-toggle');
+    button.addEventListener('click', () => {
+      const light = document.documentElement.dataset.piTheme !== 'light';
+      document.documentElement.dataset.piTheme = light ? 'light' : 'dark';
+      button.textContent = light ? 'Toggle dark theme' : 'Toggle light theme';
+    });
+  </script>
+</body>
+</html>

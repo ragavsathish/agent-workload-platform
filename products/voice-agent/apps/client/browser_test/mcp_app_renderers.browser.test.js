@@ -225,7 +225,8 @@ describe('MCP App renderers', () => {
     test(`renders ${presentation.name} inside the least-privilege sandbox`, async () => {
       const iframe = await mount(presentation);
       expect(iframe.title).toBe(presentation.title);
-      expect(iframe.getAttribute('src')).toBe(presentation.src);
+      const themed = !['ui://excalidraw/mcp-app.html', 'ui://grafana/trace.html'].includes(presentation.uri);
+      expect(iframe.getAttribute('src')).toBe(themed ? `${presentation.src}?theme=dark` : presentation.src);
       expect(iframe.getAttribute('sandbox')).toBe('allow-scripts');
       expect(iframe.getAttribute('sandbox')).not.toContain('allow-same-origin');
       expect(iframe.getAttribute('allow')).toBe(

@@ -1,6 +1,7 @@
 import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
 import { createTextAnnotator } from '@recogito/text-annotator';
 import '@recogito/text-annotator/text-annotator.css';
+import '../design_system/elements.css';
 import '../journal_review_app/theme.css';
 
 const root = document.querySelector('#app');
@@ -132,7 +133,7 @@ const toolbar = (status) => {
     ['empty', 'No entry', 'empty'],
   ];
   for (const [id, label, outcome] of actions) {
-    const button = element('button', { id: `review-${id}`, type: 'button', className: `action action-${id}` }, label);
+    const button = element('button', { id: `review-${id}`, type: 'button', className: `pi-button action action-${id}`, 'data-variant': id === 'accept' ? 'primary' : id === 'reject' ? 'danger' : 'default' }, label);
     button.addEventListener('click', () => {
       const instruction = outcome === 'accepted'
         ? 'Accept the active journal suggestion and move to the next review item.'
@@ -152,16 +153,16 @@ const toolbar = (status) => {
 
 const suggestionPanel = (presentation, status) => {
   const suggestion = presentation.suggestion;
-  const panel = element('section', { className: 'suggestion-panel', 'aria-labelledby': 'suggestion-title' });
+  const panel = element('section', { className: 'pi-surface suggestion-panel', 'aria-labelledby': 'suggestion-title' });
   const heading = element('div', { className: 'panel-heading' });
   heading.append(
     element('div', {}, 'AI SUGGESTION'),
-    element('span', { id: 'review-state', 'data-outcome': presentation.outcome }, presentation.outcome),
+    element('span', { id: 'review-state', className: 'pi-badge', 'data-outcome': presentation.outcome }, presentation.outcome),
   );
   const title = element('h2', { id: 'suggestion-title' }, suggestion.statement);
   const meta = element('div', { className: 'suggestion-meta' });
   meta.append(
-    element('span', { className: 'type-chip' }, suggestion.type),
+    element('span', { className: 'pi-badge type-chip' }, suggestion.type),
     element('span', {}, `${Math.round(suggestion.confidence * 100)}% confidence`),
   );
   const topics = element('div', { className: 'topics', 'aria-label': 'Topics' });
@@ -182,7 +183,7 @@ const suggestionPanel = (presentation, status) => {
 };
 
 const transcriptPanel = (presentation, status) => {
-  const panel = element('section', { className: 'transcript-panel', 'aria-labelledby': 'transcript-title' });
+  const panel = element('section', { className: 'pi-surface transcript-panel', 'aria-labelledby': 'transcript-title' });
   const heading = element('div', { className: 'panel-heading' });
   heading.append(
     element('div', { id: 'transcript-title' }, 'TRANSCRIPT EVIDENCE'),
@@ -253,11 +254,11 @@ const render = (value) => {
     const header = element('header', { className: 'app-header' });
     const heading = element('div');
     heading.append(
-      element('p', { className: 'eyebrow' }, 'COGNITIVE JOURNAL · HUMAN REVIEW'),
+      element('p', { className: 'pi-kicker eyebrow' }, 'COGNITIVE JOURNAL · HUMAN REVIEW'),
       element('h1', {}, current.title),
       element('p', { className: 'source' }, current.source),
     );
-    const progress = element('div', { className: 'progress' });
+    const progress = element('div', { className: 'pi-surface progress' });
     progress.append(
       element('strong', {}, `${current.progress.current} / ${current.progress.total}`),
       element('span', {}, `${current.progress.reviewed} reviewed`),

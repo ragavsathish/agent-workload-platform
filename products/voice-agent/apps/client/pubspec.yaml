@@ -26,6 +26,16 @@ dev_dependencies:
   test_api: any
 flutter:
   uses-material-design: true
+  assets:
+    - design_system/fonts/LICENSE.md
+    - design_system/fonts/SOURCE.md
+  fonts:
+    - family: Source Code Pro
+      fonts:
+        - asset: design_system/fonts/SourceCodePro-Regular.ttf
+          weight: 400
+        - asset: design_system/fonts/SourceCodePro-Semibold.ttf
+          weight: 600
 
 patrol:
   app_name: Pi Voice

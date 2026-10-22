@@ -5,9 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src '__MCP_APP_SCRIPT_HASH__'; style-src 'unsafe-inline'; connect-src 'none'"
+      content="default-src 'none'; script-src '__MCP_APP_BOOTSTRAP_HASH__' '__MCP_APP_SCRIPT_HASH__'; style-src 'unsafe-inline'; font-src data:; connect-src 'none'"
     >
     <title>Journal Review</title>
+    <script>document.documentElement.dataset.piTheme = new URLSearchParams(location.search).get('theme') || '';</script>
     <style>__MCP_APP_CSS__</style>
   </head>
   <body>

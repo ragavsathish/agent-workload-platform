@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
 
+import 'design_tokens.dart';
+
 abstract final class PiColors {
-  static const background = Color(0xFF080B0E);
-  static const surface = Color(0xFF10151A);
-  static const surfaceRaised = Color(0xFF151B20);
-  static const border = Color(0xFF283038);
-  static const text = Color(0xFFE7EDF2);
-  static const muted = Color(0xFF7F8B95);
-  static const green = Color(0xFF56E39F);
-  static const blue = Color(0xFF72B7EF);
-  static const purple = Color(0xFFC792EA);
-  static const orange = Color(0xFFFFB86C);
-  static const danger = Color(0xFFFF6B78);
+  static const background = PiDesignTokens.canvas;
+  static const surface = PiDesignTokens.surface;
+  static const surfaceRaised = PiDesignTokens.surfaceRaised;
+  static const border = PiDesignTokens.border;
+  static const text = PiDesignTokens.text;
+  static const muted = PiDesignTokens.textMuted;
+  static const green = PiDesignTokens.accent;
+  static const blue = PiDesignTokens.info;
+  static const purple = Color(
+    0xFFC792EA,
+  ); // Syntax/status accent; not an action color.
+  static const orange = PiDesignTokens.warning;
+  static const danger = PiDesignTokens.danger;
 }
 
 ThemeData buildTheme() => ThemeData(
@@ -23,7 +27,7 @@ ThemeData buildTheme() => ThemeData(
     surface: PiColors.surface,
     error: PiColors.danger,
   ),
-  fontFamily: 'Inter',
+  fontFamily: PiDesignTokens.fontFamily,
   textTheme: const TextTheme(
     displaySmall: TextStyle(
       fontSize: 32,
@@ -59,7 +63,7 @@ ThemeData buildTheme() => ThemeData(
     fillColor: PiColors.surfaceRaised,
     hintStyle: const TextStyle(color: PiColors.muted),
     border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(PiDesignTokens.radiusMd),
       borderSide: const BorderSide(color: PiColors.border),
     ),
     enabledBorder: OutlineInputBorder(
@@ -75,15 +79,17 @@ ThemeData buildTheme() => ThemeData(
     style: ElevatedButton.styleFrom(
       backgroundColor: PiColors.green,
       foregroundColor: PiColors.background,
-      minimumSize: const Size(0, 44),
+      minimumSize: const Size(0, PiDesignTokens.touchTarget),
       visualDensity: VisualDensity.standard,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
       textStyle: const TextStyle(
-        fontFamily: 'monospace',
+        fontFamily: PiDesignTokens.fontFamily,
         fontSize: 12,
         fontWeight: FontWeight.w700,
       ),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(PiDesignTokens.radiusMd),
+      ),
     ),
   ),
   outlinedButtonTheme: OutlinedButtonThemeData(
@@ -94,11 +100,13 @@ ThemeData buildTheme() => ThemeData(
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
       side: const BorderSide(color: PiColors.border),
       textStyle: const TextStyle(
-        fontFamily: 'monospace',
+        fontFamily: PiDesignTokens.fontFamily,
         fontSize: 11,
         fontWeight: FontWeight.w600,
       ),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(PiDesignTokens.radiusSm),
+      ),
     ),
   ),
   dividerColor: PiColors.border,
@@ -119,7 +127,7 @@ class SurfaceCard extends StatelessWidget {
     decoration: BoxDecoration(
       color: PiColors.surface,
       border: Border.all(color: PiColors.border),
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(PiDesignTokens.radiusLg),
       boxShadow: const [
         BoxShadow(
           color: Color(0x2B000000),
@@ -141,7 +149,7 @@ class Eyebrow extends StatelessWidget {
     text.toUpperCase(),
     style: const TextStyle(
       color: PiColors.green,
-      fontFamily: 'monospace',
+      fontFamily: PiDesignTokens.fontFamily,
       fontSize: 11,
       fontWeight: FontWeight.w700,
       letterSpacing: 1.8,

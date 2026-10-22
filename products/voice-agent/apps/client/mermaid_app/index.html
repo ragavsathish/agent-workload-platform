@@ -5,22 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src '__MCP_APP_SCRIPT_HASH__'; style-src 'unsafe-inline'; img-src data:; font-src 'self'; connect-src 'none'"
+      content="default-src 'none'; script-src '__MCP_APP_BOOTSTRAP_HASH__' '__MCP_APP_SCRIPT_HASH__'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'"
     >
     <title>Mermaid App</title>
-    <style>
-      :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
+    <script>document.documentElement.dataset.piTheme = new URLSearchParams(location.search).get('theme') || '';</script>
+    <style>__MCP_APP_CSS__
       * { box-sizing: border-box; }
-      html, body { margin: 0; min-height: 100%; background: #0c1216; color: #eef6f2; }
-      #app { min-height: 100%; padding: 14px; display: grid; gap: 12px; align-content: start; }
-      h1 { margin: 0; font-size: 14px; font-weight: 650; color: #eef6f2; }
+      html, body { margin: 0; min-height: 100%; background: var(--pi-color-canvas); color: var(--pi-color-text); }
+      #app { min-height: 100%; padding: var(--pi-space-4); }
+      h1 { margin: 0; font-size: var(--pi-font-body); font-weight: 650; }
       .diagram { min-height: 120px; display: grid; place-items: center; overflow: auto; touch-action: pan-x pan-y pinch-zoom; }
       .diagram svg { display: block; max-width: 100%; height: auto; }
-      .error { margin: auto; color: #ff778a; }
+      .error { margin: auto; }
     </style>
   </head>
   <body>
-    <main id="app" aria-live="polite"></main>
+    <main id="app" class="pi-stack" aria-live="polite"></main>
     <script>__MCP_APP_SCRIPT__</script>
   </body>
 </html>

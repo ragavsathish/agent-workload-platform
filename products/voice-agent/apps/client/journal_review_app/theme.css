@@ -1,17 +1,16 @@
 :root {
-  color-scheme: dark;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --bg: #070b0f;
-  --surface: #0d141a;
-  --surface-raised: #111b22;
-  --line: #22313a;
-  --line-bright: #34505b;
-  --text: #edf7f3;
-  --muted: #8ca0a8;
-  --mint: #55d6a7;
-  --mint-dark: #173d32;
-  --amber: #f5b84c;
-  --red: #ff7d8f;
+  font-family: var(--pi-font-sans);
+  --bg: var(--pi-color-canvas);
+  --surface: var(--pi-color-surface);
+  --surface-raised: var(--pi-color-surface-raised);
+  --line: var(--pi-color-border);
+  --line-bright: var(--pi-color-border-strong);
+  --text: var(--pi-color-text);
+  --muted: var(--pi-color-text-muted);
+  --mint: var(--pi-color-accent);
+  --mint-dark: color-mix(in srgb, var(--pi-color-accent) 24%, var(--pi-color-surface));
+  --amber: var(--pi-color-warning);
+  --red: var(--pi-color-danger);
   background: var(--bg);
 }
 
@@ -25,15 +24,15 @@ button { font: inherit; }
 .eyebrow { margin: 0 0 5px; color: var(--mint); font-size: 10px; font-weight: 850; letter-spacing: .17em; }
 h1 { margin: 0; font-size: clamp(20px, 3.2vw, 31px); line-height: 1.08; letter-spacing: -.025em; }
 .source { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
-.progress { display: grid; min-width: 98px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); text-align: right; }
+.progress { display: grid; min-width: 98px; padding: 9px 12px; text-align: right; }
 .progress strong { font-size: 16px; }
 .progress span { color: var(--muted); font-size: 10px; }
 
 .review-workspace { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(310px, .75fr); gap: 10px; min-height: 510px; }
-.transcript-panel, .suggestion-panel { min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.transcript-panel, .suggestion-panel { min-width: 0; overflow: hidden; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 42px; padding: 0 16px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 10px; font-weight: 750; letter-spacing: .11em; }
-#transcript { min-height: 460px; padding: clamp(20px, 4vw, 48px); outline: none; color: #d9e5e2; font-family: ui-serif, Georgia, serif; font-size: clamp(17px, 2.2vw, 23px); line-height: 1.75; white-space: pre-wrap; }
-#transcript:focus-visible { box-shadow: inset 0 0 0 2px var(--mint); }
+#transcript { min-height: 460px; padding: clamp(20px, 4vw, 48px); outline: none; color: var(--pi-color-text); font-family: var(--pi-font-sans); font-size: clamp(17px, 2.2vw, 23px); line-height: 1.75; white-space: pre-wrap; }
+#transcript:focus-visible { outline: var(--pi-size-focus) solid var(--pi-color-focus); outline-offset: -3px; box-shadow: none; }
 
 .suggestion-panel { padding-bottom: 16px; background: linear-gradient(160deg, #111b22 0%, #0b1217 100%); }
 .suggestion-panel .panel-heading { margin-bottom: 20px; }
@@ -46,8 +45,8 @@ h1 { margin: 0; font-size: clamp(20px, 3.2vw, 31px); line-height: 1.08; letter-s
 .type-chip { border-color: #2c705c; color: #8ee5c2; text-transform: uppercase; }
 #selected-evidence { margin: 20px 18px; padding: 12px 14px; border: 0; border-left: 2px solid var(--amber); border-radius: 0 8px 8px 0; background: #181a18; color: #e9dfc6; font-size: 13px; line-height: 1.55; }
 .review-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; padding: 0 18px; }
-.action { min-height: 38px; padding: 8px 10px; border: 1px solid var(--line-bright); border-radius: 9px; background: #142028; color: var(--text); cursor: pointer; }
-.action:hover, .action:focus-visible { border-color: var(--mint); outline: none; transform: translateY(-1px); }
+.action { padding: 8px 10px; }
+.action:hover { transform: translateY(-1px); }
 .action-accept { grid-column: 1 / -1; border-color: #2e866c; background: #1a4c3e; color: #c5ffe9; font-weight: 750; }
 .action-reject { color: #ffb3bd; }
 .voice-handoff { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 0 9px; margin: 16px 18px 0; padding: 12px; border: 1px solid #2b4450; border-radius: 10px; background: #0b141a; }

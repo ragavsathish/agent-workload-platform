@@ -1,5 +1,6 @@
 import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
 import mermaid from 'mermaid';
+import '../design_system/elements.css';
 
 const MAX_NODES = 24;
 const MAX_EDGES = 48;
@@ -70,9 +71,10 @@ const renderPresentation = async (value) => {
     const { svg, bindFunctions } = await mermaid.render(id, source);
     root.replaceChildren();
     const title = document.createElement('h1');
+    title.className = 'pi-section-title';
     title.textContent = normalizedText(presentation.title, 'Pi response');
     const diagram = document.createElement('div');
-    diagram.className = 'diagram';
+    diagram.className = 'diagram pi-surface';
     diagram.setAttribute('role', 'img');
     diagram.setAttribute('aria-label', title.textContent);
     diagram.innerHTML = svg;
@@ -81,7 +83,8 @@ const renderPresentation = async (value) => {
   } catch (error) {
     root.replaceChildren();
     const message = document.createElement('p');
-    message.className = 'error';
+    message.className = 'error pi-notice';
+    message.dataset.tone = 'danger';
     message.textContent = 'Diagram unavailable';
     root.append(message);
     console.error('[mermaid-app]', error);

@@ -321,6 +321,7 @@ window.voiceBridge = {
       target.replaceChildren(iframe);
 
       const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+      const hostTheme = new URLSearchParams(window.location.search).get('theme') === 'light' ? 'light' : 'dark';
       const bridge = new AppBridge(
         null,
         { name: 'Pi Voice', version: '0.1.0' },
@@ -338,7 +339,7 @@ window.voiceBridge = {
         },
         {
           hostContext: {
-            theme: 'dark',
+            theme: hostTheme,
             displayMode: 'inline',
             availableDisplayModes: resourceUri === 'ui://excalidraw/mcp-app.html'
               || resourceUri === 'ui://playwright-trace-viewer/main.html'
@@ -438,6 +439,9 @@ window.voiceBridge = {
         iframeSource.searchParams.set('prototype', '1');
         const selectedVariant = new URLSearchParams(window.location.search).get('variant');
         if (selectedVariant) iframeSource.searchParams.set('variant', selectedVariant);
+      }
+      if (resourceUri !== 'ui://excalidraw/mcp-app.html' && resourceUri !== 'ui://grafana/trace.html') {
+        iframeSource.searchParams.set('theme', hostTheme);
       }
       iframe.src = `${iframeSource.pathname}${iframeSource.search}`;
       await connection;
