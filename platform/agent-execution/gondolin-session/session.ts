@@ -195,7 +195,9 @@ export class GondolinSession {
   }
 
   async codingTools(): Promise<ReturnType<typeof createGondolinCodingTools>> {
-    return createGondolinCodingTools(await this.ensureVm());
+    const workspace = this.options.mounts?.["/workspace"];
+    const hostWorkspace = typeof workspace === "string" ? workspace : workspace?.hostPath;
+    return createGondolinCodingTools(await this.ensureVm(), hostWorkspace);
   }
 
   async bashOperations(localCwd: string): Promise<BashOperations> {

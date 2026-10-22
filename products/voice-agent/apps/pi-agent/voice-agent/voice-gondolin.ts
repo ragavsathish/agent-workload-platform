@@ -79,6 +79,7 @@ export function createVoiceGondolinConfig(options: VoiceGondolinOptions): Gondol
       },
     },
     environment: {
+      PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
       AWS_ACCESS_KEY_ID: options.s3MockAccessKey,
       AWS_SECRET_ACCESS_KEY: options.s3MockSecretKey,
       AWS_DEFAULT_REGION: "us-east-1",
