@@ -48,6 +48,7 @@ host_services_runtime_directories:
 host_services_secure_directories:
   - .staging
   - runtime-home
+  - secrets
   - gondolin-metrics
   - wassette-components
 

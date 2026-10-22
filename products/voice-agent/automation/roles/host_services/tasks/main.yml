@@ -128,6 +128,21 @@
     mode: "0700"
   loop: "{{ host_services_secure_directories }}"
 
+- name: Inspect Gitea review token
+  ansible.builtin.stat:
+    path: "{{ voice_agent_root }}/deploy/secrets/gitea-agent-token"
+  register: host_services_gitea_review_token
+  no_log: true
+
+- name: Install Gitea review token for the worker
+  ansible.builtin.copy:
+    src: "{{ voice_agent_root }}/deploy/secrets/gitea-agent-token"
+    dest: "{{ host_services_runtime_dir }}/secrets/gitea-agent-token"
+    mode: "0600"
+  when: host_services_gitea_review_token.stat.isreg | default(false)
+  no_log: true
+  notify: Restart host services
+
 - name: Install the Pi RPC supervisor
   ansible.builtin.copy:
     src: "{{ host_services_pi_rpc_artifact }}"
