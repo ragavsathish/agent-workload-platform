@@ -539,6 +539,7 @@ test("voice Gondolin exposes allowlisted loopback services including raw Oxigrap
   });
   assert.equal(GUEST_S3MOCK_ENDPOINT, "http://s3mock.local:9090");
   assert.equal(config.environment.S3_ENDPOINT_URL, GUEST_S3MOCK_ENDPOINT);
+  assert.match(config.environment.PATH, /(?:^|:)\/usr\/local\/bin(?:$|:)/);
   assert.equal(config.environment.S3_BUCKET, "agent-artifacts");
   assert.equal(config.environment.GITEA_BASE_URL, GUEST_GITEA_ENDPOINT);
   assert.equal(config.environment.GITEA_OWNER, "source-publisher");

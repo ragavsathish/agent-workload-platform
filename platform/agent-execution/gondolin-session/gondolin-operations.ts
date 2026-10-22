@@ -60,21 +60,22 @@ function createUserBashCwdResolver(hostWorkspace: string): ResolveWorkingDirecto
   };
 }
 
-function readOperations(files: GuestFiles): ReadOperations {
+function readOperations(files: GuestFiles, resolvePath: ResolveWorkingDirectory): ReadOperations {
   return {
-    readFile: async (filePath) => files.readFile(filePath),
-    access: async (filePath) => files.access(filePath),
+    readFile: async (filePath) => files.readFile(resolvePath(filePath)),
+    access: async (filePath) => files.access(resolvePath(filePath)),
     detectImageMimeType: async (filePath) => imageMimeType(filePath),
   };
 }
 
-function writeOperations(files: GuestFiles): WriteOperations {
+function writeOperations(files: GuestFiles, resolvePath: ResolveWorkingDirectory): WriteOperations {
   return {
     writeFile: async (filePath, content) => {
-      await files.mkdir(path.posix.dirname(filePath), { recursive: true });
-      await files.writeFile(filePath, content, { encoding: "utf8" });
+      const guestPath = resolvePath(filePath);
+      await files.mkdir(path.posix.dirname(guestPath), { recursive: true });
+      await files.writeFile(guestPath, content, { encoding: "utf8" });
     },
-    mkdir: async (directory) => files.mkdir(directory, { recursive: true }),
+    mkdir: async (directory) => files.mkdir(resolvePath(directory), { recursive: true }),
   };
 }
 
@@ -120,14 +121,17 @@ function bashOperations(
   };
 }
 
-function composeToolOperations(vm: VM): ToolOperations {
-  const read = readOperations(vm.fs);
-  const write = writeOperations(vm.fs);
+function composeToolOperations(vm: VM, hostWorkspace?: string): ToolOperations {
+  const resolvePath = hostWorkspace
+    ? createUserBashCwdResolver(hostWorkspace)
+    : (value: string) => value;
+  const read = readOperations(vm.fs, resolvePath);
+  const write = writeOperations(vm.fs, resolvePath);
   return {
     read,
     write,
     edit: editOperations(read, write),
-    bash: bashOperations(vm, (cwd) => cwd),
+    bash: bashOperations(vm, resolvePath),
   };
 }
 
@@ -135,8 +139,8 @@ export function createGondolinBashOperations(vm: VM, localCwd: string): BashOper
   return bashOperations(vm, createUserBashCwdResolver(localCwd));
 }
 
-export function createGondolinCodingTools(vm: VM): ReturnType<typeof createCodingTools> {
-  const operations = composeToolOperations(vm);
+export function createGondolinCodingTools(vm: VM, hostWorkspace?: string): ReturnType<typeof createCodingTools> {
+  const operations = composeToolOperations(vm, hostWorkspace);
   return createCodingTools(guestWorkspace, {
     read: { operations: operations.read },
     bash: {
