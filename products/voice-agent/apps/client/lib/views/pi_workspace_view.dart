@@ -1609,7 +1609,8 @@ class _TaskCard extends StatelessWidget {
                 ],
               ),
               if (task.sessionArtist != null ||
-                  task.sessionSpotifyUrl != null) ...[
+                  task.sessionSpotifyUrl != null ||
+                  task.isActive) ...[
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 10,
@@ -1630,29 +1631,29 @@ class _TaskCard extends StatelessWidget {
                         icon: const Icon(Icons.open_in_new_rounded, size: 15),
                         label: const Text('Listen on Spotify'),
                       ),
+                    if (task.isActive)
+                      OutlinedButton.icon(
+                        key: Key('task-narration-${task.id}'),
+                        onPressed: onToggleNarration,
+                        icon: Icon(
+                          listening
+                              ? Icons.stop_rounded
+                              : Icons.volume_up_outlined,
+                          size: 16,
+                        ),
+                        label: Text(
+                          listening ? 'Stop listening' : 'Listen to agent',
+                        ),
+                      ),
                   ],
                 ),
               ],
-              if (task.isActive) ...[
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  key: Key('task-narration-${task.id}'),
-                  onPressed: onToggleNarration,
-                  icon: Icon(
-                    listening ? Icons.stop_rounded : Icons.volume_up_outlined,
-                    size: 16,
-                  ),
-                  label: Text(
-                    listening ? 'Stop narration' : 'Listen to progress',
-                  ),
+              if (listening && latestProgress != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  latestProgress!,
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
-                if (listening && latestProgress != null) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    latestProgress!,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
               ],
               if (task.response != null) ...[
                 const SizedBox(height: 15),

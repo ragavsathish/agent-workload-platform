@@ -60,6 +60,21 @@ void main() {
     expect(find.text('Kind of Blue'), findsWidgets);
     expect(find.text('Miles Davis'), findsOneWidget);
     expect(find.byKey(const Key('task-spotify-pending-1')), findsOneWidget);
+    expect(find.text('Listen to agent'), findsOneWidget);
+    final spotifyWraps = find.ancestor(
+      of: find.byKey(const Key('task-spotify-pending-1')),
+      matching: find.byType(Wrap),
+    );
+    final narrationWraps = find.ancestor(
+      of: find.byKey(const Key('task-narration-pending-1')),
+      matching: find.byType(Wrap),
+    );
+    expect(
+      spotifyWraps.evaluate().toSet().intersection(
+        narrationWraps.evaluate().toSet(),
+      ),
+      isNotEmpty,
+    );
     expect(find.text('Waiting for approval · now'), findsOneWidget);
   });
 
@@ -107,11 +122,11 @@ void main() {
     await tester.tap(find.byKey(const Key('task-narration-pending-1')));
     await tester.pump();
     expect(spoken, ['The agent is reading source files.']);
-    expect(find.text('Stop narration'), findsOneWidget);
+    expect(find.text('Stop listening'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('task-narration-pending-1')));
     await tester.pump();
-    expect(find.text('Listen to progress'), findsOneWidget);
+    expect(find.text('Listen to agent'), findsOneWidget);
   });
 
   testWidgets('creates a durable task through the existing task API', (
