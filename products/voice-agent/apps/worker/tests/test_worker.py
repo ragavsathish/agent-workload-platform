@@ -21,7 +21,37 @@ from voice_worker.main import (
     run_song_render,
     run_worker,
     scratch_root_reaches_account_home,
+    task_progress_publisher,
 )
+
+
+def test_task_progress_keeps_later_updates_after_a_fast_burst(monkeypatch) -> None:
+    stored: list[str] = []
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def execute(self, _query, values):
+            stored.append(values[1])
+
+    monkeypatch.setattr("voice_worker.main.psycopg.connect", lambda _url: Connection())
+    publish = task_progress_publisher("postgresql://test", "task-id")
+    for index in range(101):
+        publish(f"Action {index}.")
+
+    assert len(stored) == 101
+    assert stored[-1] == "Action 100."
+    publish("The agent has started working.")
+    publish("The agent is reading source files.")
+    publish("The agent has started working.")
+    assert stored[-2:] == [
+        "The agent has started working.",
+        "The agent is reading source files.",
+    ]
 
 
 def settings(tmp_path: Path, *, sandboxed: bool) -> Settings:

@@ -5,9 +5,38 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:voice_agent_client/api_client.dart';
 import 'package:voice_agent_client/models.dart';
+import 'package:voice_agent_client/views/pi_workspace_view.dart';
 import 'package:voice_agent_client/views/transcript_view.dart';
 
 void main() {
+  test('progress burst becomes a concise spoken update', () {
+    final summary = summarizeTaskProgress(const [
+      TaskProgressEvent(id: 1, spoken: 'The agent has started working.'),
+      TaskProgressEvent(
+        id: 2,
+        spoken: 'The agent is running a workspace command.',
+      ),
+      TaskProgressEvent(id: 3, spoken: 'The agent is reading SKILL.md.'),
+      TaskProgressEvent(
+        id: 4,
+        spoken: 'The agent is running a workspace command.',
+      ),
+      TaskProgressEvent(
+        id: 5,
+        spoken: 'A task tool reported an error; the agent is checking what happened.',
+      ),
+      TaskProgressEvent(
+        id: 6,
+        spoken: 'The agent is running: git diff main...HEAD.',
+      ),
+    ]);
+    expect(summary, contains('6 updates'));
+    expect(summary, contains('2 workspace commands'));
+    expect(summary, contains('1 tool error'));
+    expect(summary, contains('reading SKILL.md'));
+    expect(summary, contains('git diff main...HEAD'));
+  });
+
   testWidgets(
     'successful chat is not reported as failed when autoplay is blocked',
     (tester) async {
@@ -131,7 +160,9 @@ void main() {
     expect(find.text('Listen to agent'), findsOneWidget);
   });
 
-  testWidgets('Listen speaks each queued task action in order', (tester) async {
+  testWidgets('Listen batches queued task actions into one summary', (
+    tester,
+  ) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(1180, 820);
     addTearDown(tester.view.resetPhysicalSize);
@@ -160,10 +191,52 @@ void main() {
     await tester.pump();
 
     expect(spoken, [
-      'The agent started.',
-      'Reading README.md.',
-      'Running git status --short.',
+      'The agent started. Reading README.md. Running git status --short.',
     ]);
+  });
+
+  testWidgets('Listen keeps fetching progress while speech is playing', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1180, 820);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _FakeVoiceApi()
+      ..taskValues.add(_pendingTask)
+      ..progressValues.add(
+        const TaskProgressEvent(id: 1, spoken: 'Reading the PR diff.'),
+      );
+    final firstSpeech = Completer<void>();
+    final spoken = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TranscriptView(
+          api: api,
+          playSpeech: (text) {
+            spoken.add(text);
+            return spoken.length == 1 ? firstSpeech.future : Future.value();
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('tasks-section')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('task-narration-pending-1')));
+    await tester.pump();
+    expect(spoken, ['Reading the PR diff.']);
+
+    api.progressValues.add(
+      const TaskProgressEvent(id: 2, spoken: 'Running the checks.'),
+    );
+    await tester.pump(const Duration(seconds: 4));
+    expect(api.progressAfter, contains(1));
+    expect(spoken, ['Reading the PR diff.']);
+
+    firstSpeech.complete();
+    await tester.pump();
+    expect(spoken, contains('Running the checks.'));
   });
 
   testWidgets('task completion waits for queued narration', (tester) async {
@@ -173,10 +246,9 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final api = _FakeVoiceApi()
       ..taskValues.add(_pendingTask)
-      ..progressValues.addAll(const [
-        TaskProgressEvent(id: 1, spoken: 'Reading source.'),
-        TaskProgressEvent(id: 2, spoken: 'Running tests.'),
-      ]);
+      ..progressValues.add(
+        const TaskProgressEvent(id: 1, spoken: 'Reading source.'),
+      );
     final firstSpeech = Completer<void>();
     final secondSpeech = Completer<void>();
     final spoken = <String>[];
@@ -200,6 +272,9 @@ void main() {
     await tester.pump();
     expect(spoken, ['Reading source.']);
 
+    api.progressValues.add(
+      const TaskProgressEvent(id: 2, spoken: 'Running tests.'),
+    );
     api.taskValues[0] = AgentTask(
       id: _pendingTask.id,
       instruction: _pendingTask.instruction,
@@ -215,6 +290,7 @@ void main() {
     );
     await tester.pump(const Duration(seconds: 4));
     expect(spoken, ['Reading source.']);
+    expect(api.progressAfter, contains(1));
     firstSpeech.complete();
     await tester.pump();
     expect(spoken, ['Reading source.', 'Running tests.']);
@@ -252,9 +328,10 @@ void main() {
     await tester.tap(find.byKey(const Key('task-narration-pending-1')));
     await tester.pump();
 
-    expect(spoken, hasLength(41));
-    expect(spoken.first, 'Action 1.');
-    expect(spoken.last, 'Action 41.');
+    expect(api.progressAfter, contains(40));
+    expect(spoken, hasLength(1));
+    expect(spoken.single, contains('41 updates'));
+    expect(spoken.single, contains('Action 41.'));
   });
 
   testWidgets('completed task can replay its actions and rationale', (
@@ -301,8 +378,7 @@ void main() {
     await tester.pump();
 
     expect(spoken, [
-      'Reading compose.yaml.',
-      'Running docker compose ps.',
+      'Reading compose.yaml. Running docker compose ps.',
       'I checked the stack because the deployment was failing. The health checks passed.',
     ]);
   });
@@ -407,6 +483,7 @@ class _FakeVoiceApi extends VoiceApi {
   final List<String> createdTasks = [];
   final List<AgentTask> taskValues = [];
   final List<TaskProgressEvent> progressValues = [];
+  final List<int> progressAfter = [];
 
   @override
   Future<TranscriptSnapshot> transcript() async =>
@@ -419,16 +496,19 @@ class _FakeVoiceApi extends VoiceApi {
   Future<List<TaskProgressEvent>> taskProgress(
     String id, {
     int after = 0,
-  }) async => progressValues.isNotEmpty
-      ? progressValues.where((event) => event.id > after).take(40).toList()
-      : after == 0
-      ? [
-          const TaskProgressEvent(
-            id: 1,
-            spoken: 'The agent is reading source files.',
-          ),
-        ]
-      : [];
+  }) async {
+    progressAfter.add(after);
+    return progressValues.isNotEmpty
+        ? progressValues.where((event) => event.id > after).take(40).toList()
+        : after == 0
+        ? [
+            const TaskProgressEvent(
+              id: 1,
+              spoken: 'The agent is reading source files.',
+            ),
+          ]
+        : [];
+  }
 
   @override
   Future<ContextUsage> context() async => const ContextUsage(

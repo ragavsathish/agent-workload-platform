@@ -43,6 +43,7 @@ logger = logging.getLogger(__name__)
 
 
 DATABASE_RETRY_DELAY_SECONDS = 2.0
+MAX_TASK_PROGRESS_EVENTS = 2_000
 
 
 type RenderSong = Callable[[SongManifest], bytes]
@@ -272,11 +273,14 @@ def task_progress_publisher(database_url: str, task_id: str) -> Callable[[str], 
     emitted = 0
     last_spoken = ""
     last_at = 0.0
+    started = False
 
     def publish(spoken: str) -> None:
-        nonlocal emitted, last_spoken, last_at
+        nonlocal emitted, last_spoken, last_at, started
         now = time.monotonic()
-        if emitted >= 100 or (spoken == last_spoken and now - last_at < 8):
+        if emitted >= MAX_TASK_PROGRESS_EVENTS or (spoken == last_spoken and now - last_at < 8):
+            return
+        if spoken == "The agent has started working." and started:
             return
         try:
             with psycopg.connect(database_url) as conn:
@@ -290,6 +294,8 @@ def task_progress_publisher(database_url: str, task_id: str) -> Callable[[str], 
         emitted += 1
         last_spoken = spoken
         last_at = now
+        if spoken == "The agent has started working.":
+            started = True
 
     return publish
 

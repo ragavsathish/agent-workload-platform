@@ -11,6 +11,52 @@ import '../widgets/mcp_app_view.dart';
 
 enum WorkspaceSection { conversation, tasks }
 
+String summarizeTaskProgress(List<TaskProgressEvent> events) {
+  final updates = events
+      .map((event) => event.spoken.trim())
+      .where((spoken) => spoken.isNotEmpty)
+      .toList();
+  if (updates.isEmpty) return '';
+  if (updates.length == 1) return updates.single;
+
+  var commands = 0;
+  var errors = 0;
+  final details = <String>[];
+  for (final spoken in updates) {
+    if (spoken == 'The agent has started working.') continue;
+    if (spoken == 'The agent is running a workspace command.') {
+      commands += 1;
+      continue;
+    }
+    if (spoken ==
+        'A task tool reported an error; the agent is checking what happened.') {
+      errors += 1;
+      continue;
+    }
+    if (details.isEmpty || details.last != spoken) details.add(spoken);
+  }
+  final summary = <String>[];
+  if (updates.length > 3) {
+    summary.add('The agent made ${updates.length} updates.');
+  }
+  if (commands > 0) {
+    summary.add(
+      'It ran $commands workspace ${commands == 1 ? 'command' : 'commands'}.',
+    );
+  }
+  if (errors > 0) {
+    summary.add(
+      'It is checking $errors tool ${errors == 1 ? 'error' : 'errors'}.',
+    );
+  }
+  if (details.isNotEmpty) {
+    summary.addAll(
+      details.length > 3 ? details.sublist(details.length - 3) : details,
+    );
+  }
+  return summary.isEmpty ? updates.last : summary.join(' ');
+}
+
 /// Pi Web-inspired session workspace for typed conversation and durable work.
 ///
 /// This surface deliberately knows nothing about microphone state. VoiceView
@@ -57,7 +103,9 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
   String? _latestTaskProgress;
   int _progressCursor = 0;
   int _narrationGeneration = 0;
-  bool _progressPolling = false;
+  int? _progressPollingGeneration;
+  int? _narrationPlayingGeneration;
+  final List<TaskProgressEvent> _pendingTaskNarration = [];
 
   @override
   void initState() {
@@ -142,11 +190,11 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
     final taskId = _listeningTaskId;
     final generation = _narrationGeneration;
     if (taskId == null ||
-        _progressPolling ||
+        _progressPollingGeneration == generation ||
         _section != WorkspaceSection.tasks) {
       return;
     }
-    _progressPolling = true;
+    _progressPollingGeneration = generation;
     try {
       while (mounted &&
           taskId == _listeningTaskId &&
@@ -155,23 +203,20 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
           taskId,
           after: _progressCursor,
         );
-        if (events.isEmpty) break;
-        var advanced = false;
-        for (final event in events) {
-          if (!mounted ||
-              taskId != _listeningTaskId ||
-              generation != _narrationGeneration) {
-            return;
-          }
-          if (event.id <= _progressCursor) continue;
-          advanced = true;
-          setState(() {
-            _progressCursor = event.id;
-            if (event.spoken.isNotEmpty) _latestTaskProgress = event.spoken;
-          });
-          if (event.spoken.isNotEmpty) await _playSpeech(event.spoken);
+        if (!mounted ||
+            taskId != _listeningTaskId ||
+            generation != _narrationGeneration) {
+          return;
         }
-        if (!advanced) break;
+        if (events.isEmpty) break;
+        final fresh = events
+            .where((event) => event.id > _progressCursor)
+            .toList();
+        if (fresh.isEmpty) break;
+        _pendingTaskNarration.addAll(
+          fresh.where((event) => event.spoken.isNotEmpty),
+        );
+        setState(() => _progressCursor = fresh.last.id);
         final task = _tasks.where((item) => item.id == taskId).firstOrNull;
         if (events.length < 40 && (task == null || task.isActive)) break;
       }
@@ -182,16 +227,90 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
         );
       }
     } finally {
-      _progressPolling = false;
+      if (_progressPollingGeneration == generation) {
+        _progressPollingGeneration = null;
+      }
+      if (mounted &&
+          taskId == _listeningTaskId &&
+          generation == _narrationGeneration &&
+          _pendingTaskNarration.isNotEmpty) {
+        unawaited(_drainTaskNarration());
+      }
       final task = _tasks.where((item) => item.id == taskId).firstOrNull;
       if (task != null && !task.isActive) _finishTaskNarration(task);
     }
   }
 
+  Future<void> _drainTaskNarration() async {
+    final taskId = _listeningTaskId;
+    final generation = _narrationGeneration;
+    if (taskId == null ||
+        _narrationPlayingGeneration == generation ||
+        _pendingTaskNarration.isEmpty) {
+      return;
+    }
+    _narrationPlayingGeneration = generation;
+    try {
+      while (mounted &&
+          taskId == _listeningTaskId &&
+          generation == _narrationGeneration &&
+          _pendingTaskNarration.isNotEmpty) {
+        final batch = List<TaskProgressEvent>.of(_pendingTaskNarration);
+        _pendingTaskNarration.clear();
+        final spoken = summarizeTaskProgress(batch);
+        if (spoken.isEmpty) continue;
+        setState(() => _latestTaskProgress = spoken);
+        if (!await _playTaskNarrationSpeech(spoken)) {
+          if (mounted &&
+              taskId == _listeningTaskId &&
+              generation == _narrationGeneration) {
+            _narrationGeneration += 1;
+            setState(() => _listeningTaskId = null);
+          }
+          return;
+        }
+      }
+    } finally {
+      if (_narrationPlayingGeneration == generation) {
+        _narrationPlayingGeneration = null;
+      }
+      final task = _tasks.where((item) => item.id == taskId).firstOrNull;
+      if (task != null && !task.isActive) _finishTaskNarration(task);
+    }
+  }
+
+  Future<bool> _playTaskNarrationSpeech(String spoken) async {
+    try {
+      if (widget.playSpeech case final playSpeech?) {
+        await playSpeech(spoken);
+      } else {
+        await ClientActions.playSpeech(
+          spoken,
+          endpoint: widget.api.endpoint('/api/pi-speech').toString(),
+        );
+      }
+      if (mounted) setState(() => _playbackNotice = null);
+      return true;
+    } on Object {
+      if (mounted) {
+        setState(
+          () => _playbackNotice =
+              'Task audio was blocked. Tap Listen to replay the updates.',
+        );
+      }
+      return false;
+    }
+  }
+
   void _finishTaskNarration(AgentTask task) {
-    if (!mounted || _listeningTaskId != task.id) return;
+    if (!mounted ||
+        _listeningTaskId != task.id ||
+        _progressPollingGeneration == _narrationGeneration ||
+        _narrationPlayingGeneration == _narrationGeneration ||
+        _pendingTaskNarration.isNotEmpty) {
+      return;
+    }
     _narrationGeneration += 1;
-    ClientActions.stopSpeech();
     setState(() => _listeningTaskId = null);
     if (task.response case final response?) {
       unawaited(_playSpeech(response.spoken));
@@ -202,10 +321,12 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
     _narrationGeneration += 1;
     if (_listeningTaskId == task.id) {
       ClientActions.stopSpeech();
+      _pendingTaskNarration.clear();
       setState(() => _listeningTaskId = null);
       return;
     }
     ClientActions.stopSpeech();
+    _pendingTaskNarration.clear();
     setState(() {
       _listeningTaskId = task.id;
       _latestTaskProgress = null;
@@ -219,6 +340,7 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
     if (section != WorkspaceSection.tasks && _listeningTaskId != null) {
       _narrationGeneration += 1;
       ClientActions.stopSpeech();
+      _pendingTaskNarration.clear();
       _listeningTaskId = null;
     }
     setState(() => _section = section);
