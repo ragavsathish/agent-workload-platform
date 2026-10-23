@@ -54,6 +54,7 @@ const COLORS: Record<string, string> = {
 };
 
 export const AudioDiagnosticsView = () => {
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [sessions, setSessions] = useState<AudioDiagnosticSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -61,6 +62,15 @@ export const AudioDiagnosticsView = () => {
   const [sessionMetrics, setSessionMetrics] = useState<SessionMetrics | null>(null);
   const [metricsError, setMetricsError] = useState('');
   const [micSettings, setMicSettings] = useState<Record<string, unknown> | null>(null);
+
+  const toggleTheme = () => {
+    const nextTheme = theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.piTheme = nextTheme;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute(
+      'content', getComputedStyle(document.documentElement).getPropertyValue('--pi-color-canvas').trim(),
+    );
+    setTheme(nextTheme);
+  };
 
   useEffect(() => {
     const refreshMic = () => {
@@ -130,6 +140,9 @@ export const AudioDiagnosticsView = () => {
         </div>
         <div className="header-actions pi-toolbar">
           <a href="/">Voice</a>
+          <button className="pi-button" type="button" aria-pressed={theme === 'light'} onClick={toggleTheme}>
+            Switch to {theme === 'dark' ? 'light' : 'dark'}
+          </button>
           <button className="pi-button" type="button" onClick={() => void refresh()}>Refresh</button>
         </div>
       </header>
