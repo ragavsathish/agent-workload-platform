@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,7 +12,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (transport roundTripperFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return transport(request)
+}
 
 func TestBuildLogStreamsNewOutputWithoutRepeatingIt(t *testing.T) {
 	h := newTestHandler(t)
@@ -106,5 +114,41 @@ func TestImageBuildContextUploadUsesAuthenticatedStream(t *testing.T) {
 	defer server.Close()
 	if err := uploadImageBuildContext(server.URL+"/v1", "test-token", jobID, file, int64(len(contents))); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestImageBuildStatusRetriesTemporaryAPIError(t *testing.T) {
+	const jobID = "123e4567-e89b-12d3-a456-426614174000"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/jobs/"+jobID || r.Header.Get("Authorization") != "Bearer test-token" {
+			t.Errorf("unexpected status request: %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"id":"`+jobID+`","status":"succeeded","result":{"handoff":"/image-handoff/test.tar"}}`)
+	}))
+	defer server.Close()
+	client := server.Client()
+	upstream := client.Transport
+	requests := 0
+	client.Transport = roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		requests++
+		if requests == 1 {
+			return nil, &net.DNSError{Err: "i/o timeout", Name: "compose-cache.local", IsTimeout: true}
+		}
+		return upstream.RoundTrip(request)
+	})
+	var output bytes.Buffer
+	sleeps := 0
+	result, err := pollImageBuildJob(client, server.URL+"/v1", "test-token", jobID, &output, func(duration time.Duration) {
+		if duration != 5*time.Second {
+			t.Errorf("unexpected retry interval: %s", duration)
+		}
+		sleeps++
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if requests != 2 || sleeps != 1 || result.Handoff != "/image-handoff/test.tar" || !strings.Contains(output.String(), "temporarily unavailable") {
+		t.Fatalf("unexpected polling result: requests=%d sleeps=%d output=%q", requests, sleeps, output.String())
 	}
 }

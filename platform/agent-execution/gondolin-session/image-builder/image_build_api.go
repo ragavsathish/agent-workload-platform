@@ -265,35 +265,54 @@ func runImageBuildViaAPI(args []string, output io.Writer) error {
 			return err
 		}
 	}
+	result, err := pollImageBuildJob(client, composePullAPI, token, job.ID, output, time.Sleep)
+	if err != nil {
+		return err
+	}
+	data, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile("/output/result.json", append(data, '\n'), 0600); err != nil {
+		return err
+	}
+	fmt.Fprintf(output, "Image build handoff ready: %s\n", result.Handoff)
+	return nil
+}
+
+func pollImageBuildJob(client *http.Client, endpoint, token, jobID string, output io.Writer, sleep func(time.Duration)) (*BuildResult, error) {
 	var seen int64
+	statusFailures := 0
 	for attempt := 0; attempt < 1440; attempt++ {
-		if err := composePullAPIRequest(client, composePullAPI, token, http.MethodGet, "/jobs/"+job.ID, nil, &job); err != nil {
-			return fmt.Errorf("read host image-build status: %w", err)
+		var job Job
+		if err := composePullAPIRequest(client, endpoint, token, http.MethodGet, "/jobs/"+jobID, nil, &job); err != nil {
+			statusFailures++
+			if statusFailures >= 12 {
+				return nil, fmt.Errorf("read host image-build status after %d attempts: %w", statusFailures, err)
+			}
+			if statusFailures == 1 {
+				fmt.Fprintln(output, "Host image-build status temporarily unavailable; retrying")
+			}
+			sleep(5 * time.Second)
+			continue
 		}
+		statusFailures = 0
 		seen = printNewProgress(job, seen, output)
 		switch job.Status {
 		case "succeeded":
 			if job.Result == nil {
-				return errors.New("host build completed without a result manifest")
+				return nil, errors.New("host build completed without a result manifest")
 			}
-			data, err := json.Marshal(job.Result)
-			if err != nil {
-				return err
-			}
-			if err := os.WriteFile("/output/result.json", append(data, '\n'), 0600); err != nil {
-				return err
-			}
-			fmt.Fprintf(output, "Image build handoff ready: %s\n", job.Result.Handoff)
-			return nil
+			return job.Result, nil
 		case "failed":
-			return fmt.Errorf("host image build failed: %s", job.Error)
+			return nil, fmt.Errorf("host image build failed: %s", job.Error)
 		case "awaiting-context", "queued", "running":
-			time.Sleep(5 * time.Second)
+			sleep(5 * time.Second)
 		default:
-			return fmt.Errorf("unexpected host image-build status: %s", job.Status)
+			return nil, fmt.Errorf("unexpected host image-build status: %s", job.Status)
 		}
 	}
-	return errors.New("timed out waiting for host image build (120 minutes)")
+	return nil, errors.New("timed out waiting for host image build (120 minutes)")
 }
 
 func printNewProgress(job Job, seen int64, output io.Writer) int64 {
