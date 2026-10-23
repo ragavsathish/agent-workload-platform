@@ -1,216 +1,56 @@
-:root {
-  color-scheme: dark;
-  background: #080b0e;
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-}
-
 * { box-sizing: border-box; }
-body { margin: 0; background: #080b0e; }
+body { margin: 0; background: var(--pi-color-canvas); color: var(--pi-color-text); }
 button, a { font: inherit; }
-
-.audio-diagnostics-page {
-  width: 100%;
-  min-height: 100vh;
-  padding: clamp(1rem, 4vw, 3rem);
-  background: radial-gradient(circle at 50% -15%, rgb(42 128 91 / 18%), transparent 38rem), #090b0d;
-  color: #e7edf2;
-}
-
-.audio-diagnostics-header,
-.audio-session-list,
-.live-diagnostic,
-.mic-settings,
-.audio-diagnostics-footer {
-  width: min(100%, 72rem);
-  margin-inline: auto;
-}
-
-.audio-diagnostics-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-.eyebrow {
-  margin: 0;
-  color: #56e39f;
-  font: 700 0.7rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
-  letter-spacing: 0.16em;
-}
-
-.audio-diagnostics-header h1 {
-  margin: 0.35rem 0 0.45rem;
-  font-size: clamp(1.35rem, 4vw, 2rem);
-}
-
-.audio-diagnostics-header p:not(.eyebrow) {
-  max-width: 42rem;
-  margin: 0;
-  color: #89949f;
-  line-height: 1.5;
-}
-
-.header-actions { display: flex; gap: 0.5rem; }
-.header-actions a,
-.header-actions button,
-.audio-session-load,
-.audio-waveform-controls button {
-  border: 1px solid #365044;
-  border-radius: 7px;
-  padding: 0.55rem 0.8rem;
-  background: #14271f;
-  color: #b9f5d6;
-  cursor: pointer;
-  text-decoration: none;
-}
-
-.audio-session-list { display: grid; gap: 1rem; }
-
-.live-diagnostic,
-.mic-settings,
-.audio-session-card {
-  border: 1px solid #283038;
-  border-radius: 14px;
-  padding: 1rem;
-  background: rgb(16 21 26 / 94%);
-}
-
-.live-diagnostic { margin-bottom: 1rem; }
-.mic-settings { margin-bottom: 1rem; }
-.mic-settings h2 { margin: 0 0 0.5rem; font-size: 0.9rem; }
-.mic-settings p { margin: 0.3rem 0; color: #aab5be; font-size: 0.75rem; line-height: 1.5; }
-.live-diagnostic > header,
-.audio-session-card > header,
-.audio-session-card > header > div,
-.audio-variant-header {
-  display: flex;
-  align-items: center;
-}
-
-.live-diagnostic > header,
-.audio-session-card > header,
-.audio-variant-header { justify-content: space-between; gap: 1rem; }
-
-.live-diagnostic h2,
-.diagnostic-chart h3 {
-  margin: 0.25rem 0 0;
-  color: #e7edf2;
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-
-.live-diagnostic > header > span {
-  color: #71e9ad;
-  font: 0.7rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-.live-waveform { height: 5.5rem; margin-top: 0.75rem; background: #0b0f12; }
-.audio-session-card { padding: clamp(0.85rem, 2vw, 1.25rem); }
-.audio-session-card > header { margin-bottom: 1rem; }
-.audio-session-card > header > div { flex-wrap: wrap; gap: 0.65rem; }
-.audio-session-number {
-  color: #71e9ad;
-  font: 650 0.75rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.audio-session-card time,
-.audio-session-duration { color: #7f8b95; font-size: 0.75rem; }
-
-.audio-variant-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem;
-}
-.audio-variant {
-  min-width: 0;
-  border: 1px solid #222b32;
-  border-radius: 9px;
-  padding: 0.75rem;
-  background: #0b0f12;
-}
-.audio-variant-header { margin-bottom: 0.65rem; }
-.audio-variant strong { font-size: 0.78rem; }
-.audio-variant-header span {
-  border-radius: 999px;
-  padding: 0.2rem 0.4rem;
-  background: #194a37;
-  color: #8cf5c1;
-  font-size: 0.58rem;
-  text-transform: uppercase;
-}
-
+.audio-diagnostics-page { min-height: 100vh; padding: clamp(var(--pi-space-4), 4vw, 3rem); background: var(--pi-color-canvas); }
+.audio-diagnostics-header, .audio-session-list, .live-diagnostic, .mic-settings, .audio-diagnostics-footer { width: min(100%, 72rem); margin-inline: auto; }
+.audio-diagnostics-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--pi-space-4); margin-bottom: var(--pi-space-6); }
+.audio-diagnostics-header h1 { margin: var(--pi-space-2) 0; font-size: var(--pi-font-title); }
+.audio-diagnostics-header p:not(.pi-kicker) { max-width: 42rem; margin: 0; color: var(--pi-color-text-muted); line-height: var(--pi-font-line); }
+.header-actions a { display: inline-flex; align-items: center; min-height: var(--pi-size-touch); padding: var(--pi-space-2) var(--pi-space-4); border: 1px solid var(--pi-color-border-strong); border-radius: var(--pi-radius-md); color: var(--pi-color-text); text-decoration: none; }
+.header-actions a:hover { border-color: var(--pi-color-accent); }
+.header-actions a:focus-visible { outline: var(--pi-size-focus) solid var(--pi-color-focus); outline-offset: 2px; }
+.audio-session-list { display: grid; gap: var(--pi-space-4); }
+.live-diagnostic, .mic-settings, .audio-session-card { padding: var(--pi-space-4); }
+.live-diagnostic, .mic-settings { margin-bottom: var(--pi-space-4); }
+.mic-settings p { margin: var(--pi-space-2) 0 0; color: var(--pi-color-text-muted); font-size: var(--pi-font-small); line-height: var(--pi-font-line); }
+.live-diagnostic > header, .audio-session-card > header, .audio-session-card > header > div, .audio-variant-header { display: flex; align-items: center; }
+.live-diagnostic > header, .audio-session-card > header, .audio-variant-header { justify-content: space-between; gap: var(--pi-space-4); }
+.live-diagnostic h2 { margin: var(--pi-space-1) 0 0; font-size: var(--pi-font-body); }
+.live-diagnostic > header > span { color: var(--pi-color-accent); font-size: var(--pi-font-small); }
+.live-waveform { height: 5.5rem; margin-top: var(--pi-space-3); background: var(--pi-color-surface-raised); }
+.audio-session-card > header { margin-bottom: var(--pi-space-4); }
+.audio-session-card > header > div { flex-wrap: wrap; gap: var(--pi-space-3); }
+.audio-session-number { color: var(--pi-color-accent); font-size: var(--pi-font-small); font-weight: 650; text-transform: uppercase; }
+.audio-session-card time, .audio-session-duration { color: var(--pi-color-text-muted); font-size: var(--pi-font-small); }
+.audio-variant-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--pi-space-3); }
+.audio-variant { min-width: 0; padding: var(--pi-space-3); background: var(--pi-color-surface-raised); }
+.audio-variant-header { margin-bottom: var(--pi-space-3); }
+.audio-variant strong { font-size: var(--pi-font-small); }
 .audio-waveform { min-width: 0; }
 .audio-waveform-track { position: relative; }
-.audio-event-marker {
-  position: absolute;
-  top: 0;
-  z-index: 2;
-  width: 3px;
-  height: 72px;
-  padding: 0;
-  border: 0;
-  background: #ffbd76;
-  cursor: pointer;
-}
-.audio-event-interruption,
-.audio-event-empty_user_turn { background: #ff8e7c; }
-.audio-event-marker:hover,
-.audio-event-marker:focus-visible { width: 7px; outline: 1px solid white; }
-.audio-spectrogram { min-height: 7rem; overflow: hidden; background: #080b0e; }
-.audio-spectrogram > div { background: #080b0e !important; }
-.audio-waveform-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-}
-.audio-waveform-controls button { padding: 0.48rem 0.7rem; }
-.audio-waveform-controls button:disabled { cursor: wait; opacity: 0.45; }
-.audio-waveform-controls span {
-  color: #7f8b95;
-  font: 0.65rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-.diagnostic-chart-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
-  margin-top: 1rem;
-}
-.diagnostic-chart { min-width: 0; border-top: 1px solid #273039; padding-top: 0.8rem; }
+.audio-event-marker { position: absolute; top: 0; z-index: 2; width: 3px; height: 72px; padding: 0; border: 0; background: var(--pi-color-warning); cursor: pointer; }
+.audio-event-interruption, .audio-event-empty_user_turn { background: var(--pi-color-danger); }
+.audio-event-marker:hover, .audio-event-marker:focus-visible { width: 7px; outline: var(--pi-size-focus) solid var(--pi-color-focus); }
+.audio-spectrogram { min-height: 7rem; overflow: hidden; background: var(--pi-color-canvas); }
+.audio-spectrogram > div { background: var(--pi-color-canvas) !important; }
+.audio-waveform-controls { display: flex; align-items: center; justify-content: space-between; gap: var(--pi-space-2); margin-top: var(--pi-space-2); }
+.audio-waveform-controls span { color: var(--pi-color-text-muted); font-size: var(--pi-font-small); }
+.diagnostic-chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--pi-space-3); margin-top: var(--pi-space-4); }
+.diagnostic-chart { min-width: 0; border-top: 1px solid var(--pi-color-border); padding-top: var(--pi-space-3); }
 .diagnostic-chart:last-child { grid-column: 1 / -1; }
-.diagnostic-chart-canvas { height: 15rem; margin-top: 0.65rem; }
-.diagnostic-events { grid-column: 1 / -1; border-top: 1px solid #273039; }
-.diagnostic-events h3 { font-size: 0.85rem; }
-.diagnostic-events p { color: #89949f; font-size: 0.72rem; }
-.diagnostic-events ol { max-height: 14rem; overflow: auto; padding-left: 1.5rem; font: 0.72rem/1.7 ui-monospace, monospace; }
-.diagnostic-events time { color: #ffbd76; }
-.diagnostic-events button { border: 0; background: transparent; color: #cbd4dc; cursor: pointer; text-align: left; }
-.diagnostic-events button:hover { color: white; text-decoration: underline; }
-
-.audio-session-warning,
-.audio-diagnostics-error,
-.audio-diagnostics-empty { color: #ffbd76; font-size: 0.76rem; }
-.audio-diagnostics-empty,
-.audio-diagnostics-error {
-  width: min(100%, 72rem);
-  margin: 3rem auto;
-  text-align: center;
-}
-.audio-diagnostics-footer {
-  margin-top: 1rem;
-  color: #65717b;
-  font-size: 0.68rem;
-  text-align: center;
-}
-
+.diagnostic-chart-canvas { height: 15rem; margin-top: var(--pi-space-3); }
+.diagnostic-events { grid-column: 1 / -1; border-top: 1px solid var(--pi-color-border); }
+.diagnostic-events p { color: var(--pi-color-text-muted); font-size: var(--pi-font-small); }
+.diagnostic-events ol { max-height: 14rem; overflow: auto; padding-left: var(--pi-space-6); font-size: var(--pi-font-small); line-height: var(--pi-font-line); }
+.diagnostic-events time { color: var(--pi-color-warning); }
+.diagnostic-events button { border: 0; background: transparent; color: var(--pi-color-text); cursor: pointer; text-align: left; }
+.diagnostic-events button:hover { color: var(--pi-color-accent); text-decoration: underline; }
+.diagnostic-events button:focus-visible { outline: var(--pi-size-focus) solid var(--pi-color-focus); }
+.audio-session-warning { margin-top: var(--pi-space-4); }
+.audio-diagnostics-error, .audio-diagnostics-empty { width: min(100%, 72rem); margin: var(--pi-space-6) auto; }
+.audio-diagnostics-footer { margin-top: var(--pi-space-4); color: var(--pi-color-text-muted); font-size: var(--pi-font-small); text-align: center; }
 @media (max-width: 760px) {
-  .audio-variant-grid,
-  .diagnostic-chart-grid { grid-template-columns: 1fr; }
+  .audio-variant-grid, .diagnostic-chart-grid { grid-template-columns: 1fr; }
   .audio-diagnostics-header { align-items: stretch; flex-direction: column; }
   .header-actions { align-self: flex-start; }
   .diagnostic-chart:last-child { grid-column: auto; }

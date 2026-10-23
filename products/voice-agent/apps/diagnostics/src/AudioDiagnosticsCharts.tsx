@@ -44,7 +44,7 @@ const average = (values: number[] | undefined): number | null =>
 
 const ChartFrame = ({ title, children }: { title: string; children: ReactNode }) => (
   <section className="diagnostic-chart">
-    <h3>{title}</h3>
+    <h3 className="pi-section-title">{title}</h3>
     <div className="diagnostic-chart-canvas">{children}</div>
   </section>
 );
@@ -89,10 +89,10 @@ export const LiveAudioDiagnostics = () => {
   }, [refresh]);
 
   return (
-    <section className="live-diagnostic" aria-live="polite">
+    <section className="live-diagnostic pi-surface" aria-live="polite">
       <header>
         <div>
-          <p className="eyebrow">LIVE INPUT</p>
+          <p className="pi-kicker">LIVE INPUT</p>
           <h2>{active ? 'Microphone envelope' : 'Waiting for a conversation'}</h2>
         </div>
         {latency !== null && <span>{latency.toFixed(1)} ms {filterLabel}</span>}
@@ -102,8 +102,8 @@ export const LiveAudioDiagnostics = () => {
           <LineChart data={waveform} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
             <YAxis domain={[-1, 1]} hide />
             <XAxis dataKey="index" hide />
-            <Line dataKey="max" stroke="#56e39f" dot={false} isAnimationActive={false} />
-            <Line dataKey="min" stroke="#56e39f" dot={false} isAnimationActive={false} />
+            <Line dataKey="max" stroke="var(--pi-color-accent)" dot={false} isAnimationActive={false} />
+            <Line dataKey="min" stroke="var(--pi-color-accent)" dot={false} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -143,10 +143,10 @@ export const AudioDiagnosticsCharts = ({
     }));
   }, [points]);
 
-  if (!points.length) return <p className="audio-diagnostics-empty">Loading diagnostics…</p>;
+  if (!points.length) return <p className="audio-diagnostics-empty pi-empty-state">Loading diagnostics…</p>;
 
   const filterLabel = selectedFilter === 'rnnoise' ? 'RNNoise' : 'VoxLock';
-  const filterColor = selectedFilter === 'rnnoise' ? '#72b7ef' : '#56e39f';
+  const filterColor = selectedFilter === 'rnnoise' ? 'var(--pi-color-info)' : 'var(--pi-color-accent)';
   const energyKey = `${selectedFilter}Dbfs`;
   const suppressionKey = `${selectedFilter}SuppressionDb`;
   const latencyKey = `${selectedFilter}LatencyMs`;
@@ -154,17 +154,17 @@ export const AudioDiagnosticsCharts = ({
     && ['vad_speech_started', 'interruption', 'empty_user_turn', 'transcript_emitted',
       'bot_speech_started', 'bot_speech_stopped'].includes(event.kind));
   const eventColor = (kind: string) => kind === 'interruption' || kind === 'empty_user_turn'
-    ? '#ff8e7c' : kind === 'transcript_emitted' ? '#72b7ef'
-      : kind.startsWith('bot_speech') ? '#c792ea' : '#ffbd76';
+    ? 'var(--pi-color-danger)' : kind === 'transcript_emitted' ? 'var(--pi-color-accent)'
+      : kind.startsWith('bot_speech') ? 'var(--pi-color-info)' : 'var(--pi-color-warning)';
 
   const lineChart = (lines: ReactNode) => (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={chartPoints}>
-        <CartesianGrid stroke="#273039" vertical={false} />
+        <CartesianGrid stroke="var(--pi-color-border)" vertical={false} />
         <XAxis dataKey="timeSeconds" type="number" domain={['dataMin', 'dataMax']}
-          tick={{ fill: '#89949f', fontSize: 11 }} unit="s" />
-        <YAxis tick={{ fill: '#89949f', fontSize: 11 }} width={48} />
-        <Tooltip />
+          tick={{ fill: 'var(--pi-color-text-muted)', fontSize: 11 }} unit="s" />
+        <YAxis tick={{ fill: 'var(--pi-color-text-muted)', fontSize: 11 }} width={48} />
+        <Tooltip contentStyle={{ background: "var(--pi-color-surface-raised)", border: "1px solid var(--pi-color-border)", borderRadius: "var(--pi-radius-md)", color: "var(--pi-color-text)" }} />
         <Legend />
         {markers.map((event, index) => (
           <ReferenceLine key={`${event.kind}-${index}`} x={event.timeSeconds}
@@ -179,26 +179,26 @@ export const AudioDiagnosticsCharts = ({
     <div className="diagnostic-chart-grid">
       <ChartFrame title="Input and output energy · dBFS">
         {lineChart(<>
-          <Line name="Raw" dataKey="rawDbfs" stroke="#89949f" dot={false} isAnimationActive={false} />
+          <Line name="Raw" dataKey="rawDbfs" stroke="var(--pi-color-text-muted)" dot={false} isAnimationActive={false} />
           <Line name={filterLabel} dataKey={energyKey} stroke={filterColor} dot={false} isAnimationActive={false} />
         </>)}
       </ChartFrame>
       {vadSamples.length > 0 && <ChartFrame title="Silero decision · confidence and volume">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartVadSamples}>
-            <CartesianGrid stroke="#273039" vertical={false} />
+            <CartesianGrid stroke="var(--pi-color-border)" vertical={false} />
             <XAxis dataKey="timeSeconds" type="number" domain={['dataMin', 'dataMax']}
-              tick={{ fill: '#89949f', fontSize: 11 }} unit="s" />
-            <YAxis domain={[0, 1]} tick={{ fill: '#89949f', fontSize: 11 }} width={48} />
-            <Tooltip /><Legend />
-            <ReferenceLine y={0.7} stroke="#c792ea" strokeDasharray="4 4" />
-            <ReferenceLine y={0.6} stroke="#56e39f" strokeDasharray="4 4" />
+              tick={{ fill: 'var(--pi-color-text-muted)', fontSize: 11 }} unit="s" />
+            <YAxis domain={[0, 1]} tick={{ fill: 'var(--pi-color-text-muted)', fontSize: 11 }} width={48} />
+            <Tooltip contentStyle={{ background: "var(--pi-color-surface-raised)", border: "1px solid var(--pi-color-border)", borderRadius: "var(--pi-radius-md)", color: "var(--pi-color-text)" }} /><Legend />
+            <ReferenceLine y={0.7} stroke="var(--pi-color-info)" strokeDasharray="4 4" />
+            <ReferenceLine y={0.6} stroke="var(--pi-color-accent)" strokeDasharray="4 4" />
             {markers.map((event, index) => (
               <ReferenceLine key={`${event.kind}-${index}`} x={event.timeSeconds}
                 stroke={eventColor(event.kind)} strokeDasharray="3 3" />
             ))}
-            <Line name="Confidence" dataKey="confidence" stroke="#c792ea" dot={false} isAnimationActive={false} />
-            <Line name="Smoothed volume" dataKey="volume" stroke="#56e39f" dot={false} isAnimationActive={false} />
+            <Line name="Confidence" dataKey="confidence" stroke="var(--pi-color-info)" dot={false} isAnimationActive={false} />
+            <Line name="Smoothed volume" dataKey="volume" stroke="var(--pi-color-accent)" dot={false} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
       </ChartFrame>}
@@ -215,18 +215,18 @@ export const AudioDiagnosticsCharts = ({
       {selectedFilter === 'voxlock' && <>
         <ChartFrame title="LSTM-state RMS activity">
           {lineChart(<>
-            <Line name="Hidden state" dataKey="lstmHiddenActivity" stroke="#c792ea" dot={false} isAnimationActive={false} />
-            <Line name="Cell state" dataKey="lstmCellActivity" stroke="#ffb86c" dot={false} isAnimationActive={false} />
+            <Line name="Hidden state" dataKey="lstmHiddenActivity" stroke="var(--pi-color-info)" dot={false} isAnimationActive={false} />
+            <Line name="Cell state" dataKey="lstmCellActivity" stroke="var(--pi-color-warning)" dot={false} isAnimationActive={false} />
           </>)}
         </ChartFrame>
         <ChartFrame title="Mean predicted complex-mask magnitude · model band">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={maskProfile}>
-              <CartesianGrid stroke="#273039" vertical={false} />
-              <XAxis dataKey="band" tick={{ fill: '#89949f', fontSize: 11 }} />
-              <YAxis tick={{ fill: '#89949f', fontSize: 11 }} width={48} />
-              <Tooltip />
-              <Bar dataKey="magnitude" name="Mask magnitude" fill="#56e39f" isAnimationActive={false} />
+              <CartesianGrid stroke="var(--pi-color-border)" vertical={false} />
+              <XAxis dataKey="band" tick={{ fill: 'var(--pi-color-text-muted)', fontSize: 11 }} />
+              <YAxis tick={{ fill: 'var(--pi-color-text-muted)', fontSize: 11 }} width={48} />
+              <Tooltip contentStyle={{ background: "var(--pi-color-surface-raised)", border: "1px solid var(--pi-color-border)", borderRadius: "var(--pi-radius-md)", color: "var(--pi-color-text)" }} />
+              <Bar dataKey="magnitude" name="Mask magnitude" fill="var(--pi-color-accent)" isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
         </ChartFrame>

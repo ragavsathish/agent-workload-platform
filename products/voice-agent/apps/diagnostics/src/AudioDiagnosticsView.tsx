@@ -48,9 +48,9 @@ const LABELS: Record<string, string> = {
 };
 
 const COLORS: Record<string, string> = {
-  raw: '#73808a',
-  voxlock: '#56e39f',
-  rnnoise: '#72b7ef',
+  raw: '--pi-color-text-muted',
+  voxlock: '--pi-color-accent',
+  rnnoise: '--pi-color-info',
 };
 
 export const AudioDiagnosticsView = () => {
@@ -124,34 +124,34 @@ export const AudioDiagnosticsView = () => {
     <main className="audio-diagnostics-page">
       <header className="audio-diagnostics-header">
         <div>
-          <p className="eyebrow">INPUT DIAGNOSTICS</p>
+          <p className="pi-kicker">INPUT DIAGNOSTICS</p>
           <h1>Last five conversations</h1>
           <p>Replay microphone input before and after the selected server-side filter.</p>
         </div>
-        <div className="header-actions">
+        <div className="header-actions pi-toolbar">
           <a href="/">Voice</a>
-          <button type="button" onClick={() => void refresh()}>Refresh</button>
+          <button className="pi-button" type="button" onClick={() => void refresh()}>Refresh</button>
         </div>
       </header>
 
-      {error && <p className="audio-diagnostics-error" role="alert">{error}</p>}
+      {error && <p className="audio-diagnostics-error pi-notice" data-tone="danger" role="alert">{error}</p>}
       <LiveAudioDiagnostics />
-      <section className="mic-settings">
-        <h2>Browser microphone processing</h2>
+      <section className="mic-settings pi-surface">
+        <h2 className="pi-section-title">Browser microphone processing</h2>
         {micSettings ? <p>
           Echo cancellation: {String(micSettings.echoCancellation ?? 'unknown')} · Noise suppression: {String(micSettings.noiseSuppression ?? 'unknown')} · Automatic gain: {String(micSettings.autoGainControl ?? 'unknown')} · Sample rate: {String(micSettings.sampleRate ?? 'unknown')} Hz · Channels: {String(micSettings.channelCount ?? 'unknown')}
         </p> : <p>Start a conversation in this browser to capture the applied microphone settings.</p>}
         <p>These settings are held in this browser and may differ from a previous conversation or another device.</p>
       </section>
       <section className="audio-session-list" aria-live="polite">
-        {loading && <p className="audio-diagnostics-empty">Loading replays…</p>}
+        {loading && <p className="audio-diagnostics-empty pi-empty-state">Loading replays…</p>}
         {!loading && sessions.length === 0 && !error && (
-          <p className="audio-diagnostics-empty">
+          <p className="audio-diagnostics-empty pi-empty-state">
             No completed conversations yet. End a voice conversation to save its replay.
           </p>
         )}
         {sessions.map((session, index) => (
-          <article className="audio-session-card" key={session.id}>
+          <article className="audio-session-card pi-surface" key={session.id}>
             <header>
               <div>
                 <span className="audio-session-number">Session {index + 1}</span>
@@ -161,7 +161,7 @@ export const AudioDiagnosticsView = () => {
             </header>
             {selectedSession !== session.id ? (
               <button
-                className="audio-session-load"
+                className="audio-session-load pi-button"
                 type="button"
                 onClick={() => setSelectedSession(session.id)}
               >
@@ -172,14 +172,14 @@ export const AudioDiagnosticsView = () => {
                 {session.variants
                   .filter((variant) => variant === 'raw' || variant === session.selectedFilter)
                   .map((variant) => (
-                  <section className="audio-variant" key={variant}>
+                  <section className="audio-variant pi-surface" key={variant}>
                     <div className="audio-variant-header">
                       <strong>{LABELS[variant] ?? variant}</strong>
-                      {variant === session.selectedFilter && <span>Live path</span>}
+                      {variant === session.selectedFilter && <span className="pi-badge" data-tone="success">Live path</span>}
                     </div>
                     <AudioWaveform
                       label={LABELS[variant] ?? variant}
-                      color={COLORS[variant] ?? '#73808a'}
+                      color={COLORS[variant] ?? '--pi-color-text-muted'}
                       showSpectrogram={variant === 'raw' || variant === 'voxlock'}
                       events={sessionMetrics?.events}
                       url={`/api/audio-diagnostics/${encodeURIComponent(session.id)}/${encodeURIComponent(variant)}.wav`}
@@ -194,9 +194,9 @@ export const AudioDiagnosticsView = () => {
                 selectedFilter={session.selectedFilter}
               />
             )}
-            {selectedSession === session.id && metricsError && <p className="audio-session-warning">{metricsError}</p>}
+            {selectedSession === session.id && metricsError && <p className="audio-session-warning pi-notice" data-tone="warning">{metricsError}</p>}
             {(session.droppedChunks > 0 || session.truncated) && (
-              <p className="audio-session-warning">
+              <p className="audio-session-warning pi-notice" data-tone="warning">
                 {session.droppedChunks > 0 && `${session.droppedChunks} chunks were not recorded. `}
                 {session.truncated && 'Recording reached the configured duration limit.'}
               </p>

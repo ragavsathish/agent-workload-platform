@@ -35,9 +35,9 @@ export const AudioWaveform = ({ label, url, color, showSpectrogram = false, even
       <WavesurferPlayer
         url={url}
         height={72}
-        waveColor={color}
-        progressColor="#eef7f2"
-        cursorColor="#56e39f"
+        waveColor={getComputedStyle(document.documentElement).getPropertyValue(color).trim()}
+        progressColor={getComputedStyle(document.documentElement).getPropertyValue('--pi-color-text').trim()}
+        cursorColor={getComputedStyle(document.documentElement).getPropertyValue('--pi-color-accent').trim()}
         cursorWidth={1}
         barWidth={2}
         barGap={2}
@@ -84,6 +84,7 @@ export const AudioWaveform = ({ label, url, color, showSpectrogram = false, even
       {showSpectrogram && <div className="audio-spectrogram" ref={spectrogramContainer} />}
       <div className="audio-waveform-controls">
         <button
+          className="pi-button"
           type="button"
           disabled={!ready || error}
           aria-label={`${playing ? 'Pause' : 'Play'} ${label}`}
