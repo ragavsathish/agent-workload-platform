@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams, VADState
 
@@ -21,7 +22,10 @@ class DiagnosticSileroVADAnalyzer(SileroVADAnalyzer):
         return self._processed_frames / self.sample_rate if self.sample_rate else 0.0
 
     def voice_confidence(self, buffer: bytes) -> float:
-        self._last_confidence = super().voice_confidence(buffer)
+        # Silero's ONNX wrapper returns a one-element ndarray in Pipecat 1.12.0,
+        # despite the analyzer contract being a float. Keep the value scalar so
+        # diagnostics can record it and the base analyzer can compare it safely.
+        self._last_confidence = float(np.asarray(super().voice_confidence(buffer)).item())
         return self._last_confidence
 
     def _get_smoothed_volume(self, audio: bytes) -> float:

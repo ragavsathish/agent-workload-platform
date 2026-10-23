@@ -32,6 +32,7 @@ class DiagnosticVADTest(unittest.TestCase):
         asyncio.run(run())
 
         self.assertEqual(input_filter.record_vad_sample.call_count, 4)
+        self.assertEqual(input_filter.record_vad_sample.call_args_list[0].args[1], 0.9)
         self.assertEqual(
             [call.args for call in input_filter.record_event.call_args_list],
             [("vad_speech_started", 0.064), ("vad_speech_stopped", 0.128)],
