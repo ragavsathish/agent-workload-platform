@@ -42,13 +42,13 @@ http:
   routers:
     tailnet-oxigraph-query:
       entryPoints: [tailnet]
-      rule: "HeaderRegexp(`Tailscale-User-Login`, `.+`) && Path(`/oxigraph/query`)"
+      rule: "HeaderRegexp(`Tailscale-User-Login`, `.+`) && Path(`/oxigraph/query`) && Method(`POST`)"
       priority: 500
       middlewares: [tailnet-loopback-only, oxigraph-prefix]
       service: oxigraph
     local-oxigraph-query:
       entryPoints: [local]
-      rule: "Path(`/oxigraph/query`)"
+      rule: "Path(`/oxigraph/query`) && Method(`POST`)"
       priority: 500
       middlewares: [oxigraph-prefix]
       service: oxigraph
