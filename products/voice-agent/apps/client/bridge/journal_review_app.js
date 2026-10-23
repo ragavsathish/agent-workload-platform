@@ -283,14 +283,14 @@ const render = (value) => {
     root.replaceChildren();
     root.className = `variant-${selectedVariant.toLowerCase()}`;
 
-    const header = element('header', { className: 'app-header' });
-    const heading = element('div');
+    const header = element('header', { className: 'app-header pi-app-header' });
+    const heading = element('div', { className: 'pi-app-header__identity' });
     heading.append(
       element('p', { className: 'pi-kicker eyebrow' }, 'COGNITIVE JOURNAL · HUMAN REVIEW'),
-      element('h1', {}, current.title),
-      element('p', { className: 'source' }, current.source),
+      element('h1', { className: 'pi-app-header__title' }, current.title),
+      element('p', { className: 'source pi-app-header__subtitle' }, current.source),
     );
-    const progress = element('div', { className: 'pi-surface progress' });
+    const progress = element('div', { className: 'pi-surface progress pi-app-header__actions' });
     progress.append(
       element('strong', {}, `${current.progress.current} / ${current.progress.total}`),
       element('span', {}, `${current.progress.reviewed} reviewed`),

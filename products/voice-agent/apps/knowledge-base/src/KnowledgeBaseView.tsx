@@ -381,16 +381,18 @@ export const KnowledgeBaseView = () => {
 
   return (
     <main className="knowledge-page">
-      <header className="knowledge-topbar">
-        <a className="knowledge-brand" href="/" aria-label="Pi Voice home">
-          <span className="knowledge-brand-mark">P</span>
-          <span>PI / PERSONAL KNOWLEDGE</span>
+      <header className="knowledge-topbar pi-app-header">
+        <a className="knowledge-brand pi-app-header__identity" href="/" aria-label="Pi Voice home">
+          <span className="knowledge-brand-mark pi-app-header__mark">P</span>
+          <span>PI / KNOWLEDGE</span>
         </a>
-        <div className="knowledge-top-actions">
-          <a className="knowledge-page-link" href="/diagnostics/">Input diagnostics</a>
+        <div className="knowledge-top-actions pi-app-header__actions">
+          <nav className="pi-app-header__nav" aria-label="Primary navigation">
+            <a href="/diagnostics/" aria-label="Input diagnostics"><span className="pi-icon" data-pi-icon="audio" aria-hidden="true" />Input diagnostics</a>
+          </nav>
           <span className="local-state"><span aria-hidden="true" />{connection === 'live' ? 'Live Oxigraph' : connection === 'loading' ? 'Connecting…' : connection === 'error' ? 'Connection error' : 'Sample data'}</span>
           <button className="pi-button" type="button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}>
-            {theme === 'dark' ? '☼ Light' : '◐ Dark'}
+            <span className="pi-icon" data-pi-icon={theme === 'dark' ? 'theme-light' : 'theme-dark'} aria-hidden="true" />{theme === 'dark' ? 'Light' : 'Dark'}
           </button>
         </div>
       </header>

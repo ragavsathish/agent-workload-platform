@@ -1,0 +1,21 @@
+/* Generated from design_system/icons.json; do not edit. v1.0.0 */
+@font-face {
+  font-family: 'Pi Material Icons';
+  src: url('./fonts/PiMaterialIcons.otf') format('opentype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
+.pi-icon { display: inline-grid; flex: none; width: var(--pi-size-icon); height: var(--pi-size-icon); place-items: center; font-family: 'Pi Material Icons'; font-size: var(--pi-size-icon); font-style: normal; font-weight: 400; line-height: 1; font-feature-settings: 'liga'; -webkit-font-smoothing: antialiased; }
+.pi-icon[data-pi-icon='mic']::before { content: '\f8bd'; }
+.pi-icon[data-pi-icon='audio']::before { content: '\f7bd'; }
+.pi-icon[data-pi-icon='chat']::before { content: '\f62f'; }
+.pi-icon[data-pi-icon='system']::before { content: '\ee36'; }
+.pi-icon[data-pi-icon='knowledge']::before { content: '\f0616'; }
+.pi-icon[data-pi-icon='history']::before { content: '\f7ef'; }
+.pi-icon[data-pi-icon='tasks']::before { content: '\f021a'; }
+.pi-icon[data-pi-icon='new-session']::before { content: '\ee41'; }
+.pi-icon[data-pi-icon='add']::before { content: '\f537'; }
+.pi-icon[data-pi-icon='theme-light']::before { content: '\f162'; }
+.pi-icon[data-pi-icon='theme-dark']::before { content: '\ef9f'; }
+.pi-icon svg { display: block; width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }

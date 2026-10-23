@@ -18,6 +18,11 @@ const resolveHostTheme = () => {
   return systemColorScheme?.matches ? 'dark' : 'light';
 };
 
+const updateBrowserThemeColor = () => {
+  const color = resolveHostTheme() === 'dark' ? '#080B0E' : '#F7F9FA';
+  window.document.querySelector('meta[name="theme-color"]')?.setAttribute('content', color);
+};
+
 const updateMountedMcpAppThemes = () => {
   const theme = resolveHostTheme();
   for (const { bridge } of activeMcpAppHosts) bridge.setHostContext({ theme });
@@ -26,8 +31,14 @@ const updateMountedMcpAppThemes = () => {
 systemColorScheme?.addEventListener?.('change', () => {
   try {
     const preference = window.localStorage.getItem('pi-voice-theme');
-    if (preference !== 'light' && preference !== 'dark') updateMountedMcpAppThemes();
-  } catch { updateMountedMcpAppThemes(); }
+    if (preference !== 'light' && preference !== 'dark') {
+      updateBrowserThemeColor();
+      updateMountedMcpAppThemes();
+    }
+  } catch {
+    updateBrowserThemeColor();
+    updateMountedMcpAppThemes();
+  }
 });
 const excalidrawCameraSizes = [
   { width: 400, height: 300 },
@@ -559,6 +570,7 @@ window.voiceBridge = {
       const theme = ['light', 'dark'].includes(saved) ? saved : 'system';
       if (theme === 'system') delete window.document.documentElement.dataset.piTheme;
       else window.document.documentElement.dataset.piTheme = theme;
+      updateBrowserThemeColor();
       return theme;
     } catch (_) {
       return 'system';
@@ -575,6 +587,7 @@ window.voiceBridge = {
     }
     if (theme === 'system') delete window.document.documentElement.dataset.piTheme;
     else window.document.documentElement.dataset.piTheme = theme;
+    updateBrowserThemeColor();
     updateMountedMcpAppThemes();
   },
   openExternalUrl(url) {

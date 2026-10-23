@@ -6,7 +6,7 @@
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="Private Pi voice workspace">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#07100e">
+  <meta name="theme-color" content="#F7F9FA">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -14,7 +14,75 @@
   <title>Pi Voice</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="manifest.json">
-  <style>html,body{margin:0;min-height:100%;background:#07100e}</style>
+  <style>
+    :root {
+      color-scheme: light;
+      --pi-shell-background: #F7F9FA;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-pi-theme]) {
+        color-scheme: dark;
+        --pi-shell-background: #080B0E;
+      }
+    }
+    :root[data-pi-theme="light"] {
+      color-scheme: light;
+      --pi-shell-background: #F7F9FA;
+    }
+    :root[data-pi-theme="dark"] {
+      color-scheme: dark;
+      --pi-shell-background: #080B0E;
+    }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--pi-shell-background);
+    }
+  </style>
+  <script id="pi-theme-bootstrap">
+    (() => {
+      const root = window.document.documentElement;
+      let preference = 'system';
+      try {
+        const saved = window.localStorage.getItem('pi-voice-theme');
+        if (saved === 'light' || saved === 'dark') preference = saved;
+      } catch (_) {
+        // System preference remains available when storage is unavailable.
+      }
+      if (preference === 'system') delete root.dataset.piTheme;
+      else root.dataset.piTheme = preference;
+
+      const systemDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches === true;
+      const effectiveTheme = preference === 'system'
+        ? (systemDark ? 'dark' : 'light')
+        : preference;
+      window.document.querySelector('meta[name="theme-color"]')?.setAttribute(
+        'content', effectiveTheme === 'dark' ? '#080B0E' : '#F7F9FA',
+      );
+    })();
+  </script>
+  <script id="pi-mobile-viewport-sync">
+    (() => {
+      const recheckViewport = () => {
+        const viewport = window.visualViewport;
+        const flutterView = window.document.querySelector('flutter-view');
+        if (!viewport || !flutterView) return;
+
+        const renderedHeight = Number.parseFloat(flutterView.style.height);
+        if (!Number.isFinite(renderedHeight) || Math.abs(renderedHeight - viewport.height) < 1) {
+          return;
+        }
+
+        // iOS Safari can settle its visible viewport after Flutter's first
+        // measurement without delivering the resize event Flutter listens for.
+        viewport.dispatchEvent(new Event('resize'));
+      };
+
+      window.addEventListener('flutter-first-frame', () => {
+        for (const delay of [100, 500, 1000]) setTimeout(recheckViewport, delay);
+      }, { once: true });
+    })();
+  </script>
   <script>
     // A bounded, local-only performance profile for improving the product UX.
     // No transcript, audio, diagram source, URL, or free-form error is recorded.

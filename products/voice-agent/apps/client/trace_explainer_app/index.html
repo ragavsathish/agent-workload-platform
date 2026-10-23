@@ -17,9 +17,9 @@
       button { font: inherit; }
       #app { width: 100%; max-width: 1440px; margin: 0 auto; }
       header { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 54px; margin-bottom: 8px; }
-      #eyebrow { margin: 0 0 2px; color: var(--pi-color-accent); font-size: 10px; font-weight: 800; letter-spacing: .15em; }
-      h1 { margin: 0; font-size: clamp(17px, 3vw, 23px); line-height: 1.2; }
-      #summary { margin: 3px 0 0; color: var(--pi-color-text-muted); font-size: 12px; }
+      #eyebrow { display: none; }
+      h1 { margin: 0; font-size: var(--pi-font-body); line-height: var(--pi-font-line); }
+      #summary { margin: 2px 0 0; color: var(--pi-color-text-muted); font-size: var(--pi-font-small); }
       #fullscreen { flex: none; padding: 8px 11px; }
       #metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-bottom: 8px; }
       .metric { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 9px 11px; border: 1px solid var(--pi-color-border); border-radius: var(--pi-radius-md); background: var(--pi-color-surface); }

@@ -4,9 +4,12 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../api_client.dart';
+import '../design_icons.dart';
+import '../design_tokens.dart';
 import '../models.dart';
 import '../platform/client_actions.dart';
 import '../theme.dart';
+import '../widgets/pi_app_header.dart';
 import '../widgets/mcp_app_view.dart';
 
 enum WorkspaceSection { conversation, tasks }
@@ -799,11 +802,7 @@ class _WorkspaceHeader extends StatelessWidget {
   final VoidCallback onNavigateHome;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: EdgeInsets.fromLTRB(desktop ? 22 : 16, 14, desktop ? 22 : 16, 12),
-    decoration: BoxDecoration(
-      border: Border(bottom: BorderSide(color: PiColors.of(context).border)),
-    ),
+  Widget build(BuildContext context) => PiAppHeader(
     child: Row(
       children: [
         Tooltip(
@@ -839,17 +838,33 @@ class _WorkspaceHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                section == WorkspaceSection.conversation
-                    ? 'Voice orchestrator'
-                    : 'Task workspace',
+                desktop
+                    ? section == WorkspaceSection.conversation
+                          ? 'Voice orchestrator'
+                          : 'Task workspace'
+                    : section == WorkspaceSection.conversation
+                    ? 'Voice'
+                    : 'Tasks',
+                key: const Key('workspace-title'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                softWrap: false,
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               Text(
                 historicalTitle != null
-                    ? 'Read-only history · $historicalTitle'
+                    ? desktop
+                          ? 'Read-only history · $historicalTitle'
+                          : 'History · $historicalTitle'
                     : live
-                    ? 'Connected to Pi session'
+                    ? desktop
+                          ? 'Connected to Pi session'
+                          : 'Connected'
                     : 'Reconnecting…',
+                key: const Key('workspace-status'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                softWrap: false,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
@@ -860,7 +875,7 @@ class _WorkspaceHeader extends StatelessWidget {
             key: const Key('new-voice-session'),
             tooltip: 'New Voice Session',
             onPressed: onNewSession,
-            icon: const Icon(Icons.add_comment_outlined, size: 19),
+            icon: const PiHeaderIcon(PiHeaderIcons.newSession),
           ),
         if (!desktop) const SizedBox(width: 7),
         if (!desktop)
@@ -868,7 +883,7 @@ class _WorkspaceHeader extends StatelessWidget {
             key: const Key('session-history'),
             tooltip: 'Voice session history',
             onPressed: onHistory,
-            icon: const Icon(Icons.history_rounded, size: 19),
+            icon: const PiHeaderIcon(PiHeaderIcons.history),
           ),
         if (!desktop) const ThemeToggleButton(),
         if (desktop) const SizedBox(width: 9),
@@ -891,9 +906,9 @@ class _WorkspaceHeader extends StatelessWidget {
               label: Text('$taskCount'),
               child: Icon(
                 section == WorkspaceSection.conversation
-                    ? Icons.task_alt_rounded
-                    : Icons.chat_bubble_outline_rounded,
-                size: 19,
+                    ? PiHeaderIcons.tasks
+                    : PiHeaderIcons.chat,
+                size: PiDesignTokens.iconSize,
               ),
             ),
           ),
@@ -913,14 +928,14 @@ class _WorkspaceHeader extends StatelessWidget {
           OutlinedButton.icon(
             key: const Key('new-voice-session'),
             onPressed: onNewSession,
-            icon: const Icon(Icons.add_comment_outlined, size: 17),
+            icon: const PiHeaderIcon(PiHeaderIcons.newSession),
             label: const Text('New session'),
           ),
           const SizedBox(width: 9),
           OutlinedButton.icon(
             key: const Key('new-task'),
             onPressed: onCreateTask,
-            icon: const Icon(Icons.add_rounded, size: 17),
+            icon: const PiHeaderIcon(PiHeaderIcons.add),
             label: const Text('New task'),
           ),
         ],

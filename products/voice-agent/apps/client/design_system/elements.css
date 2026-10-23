@@ -1,4 +1,5 @@
 @import './tokens.css';
+@import './icons.css';
 
 @font-face {
   font-family: 'Source Code Pro';
@@ -17,6 +18,36 @@
 }
 
 :root { font-family: var(--pi-font-sans); }
+
+/* Cross-framework app header geometry. Flutter reads the matching values from
+   generated PiDesignTokens; React and plain DOM use these CSS classes. */
+.pi-app-header {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--pi-header-gap);
+  min-height: var(--pi-header-height);
+  padding-inline: var(--pi-header-padding-inline);
+  border-bottom: 1px solid var(--pi-color-border);
+}
+.pi-app-header__identity { display: flex; align-items: center; gap: var(--pi-header-gap); min-width: 0; }
+.pi-app-header__mark { display: grid; flex: none; width: var(--pi-header-mark); height: var(--pi-header-mark); place-items: center; }
+.pi-app-header__title { display: block; min-width: 0; margin: 0; overflow: hidden; color: var(--pi-color-text); font-size: var(--pi-font-body); font-weight: 600; line-height: var(--pi-font-line); text-overflow: ellipsis; white-space: nowrap; }
+.pi-app-header__subtitle { display: block; min-width: 0; margin: 2px 0 0; overflow: hidden; color: var(--pi-color-text-muted); font-size: var(--pi-font-small); line-height: var(--pi-font-line); text-overflow: ellipsis; white-space: nowrap; }
+.pi-app-header__actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--pi-space-2); min-width: 0; }
+.pi-app-header__actions .pi-button { display: inline-flex; align-items: center; justify-content: center; gap: var(--pi-space-2); white-space: nowrap; }
+.pi-app-header__nav { display: flex; align-items: center; gap: var(--pi-space-2); min-width: 0; }
+.pi-app-header__nav a { display: inline-flex; align-items: center; min-height: var(--pi-size-touch); padding-inline: var(--pi-space-3); border-radius: var(--pi-radius-md); color: var(--pi-color-text-muted); text-decoration: none; }
+.pi-app-header__nav a { white-space: nowrap; }
+.pi-app-header__nav a:hover, .pi-app-header__nav a[aria-current='page'] { background: var(--pi-color-surface-raised); color: var(--pi-color-text); }
+.pi-app-header__nav a:focus-visible { outline: var(--pi-size-focus) solid var(--pi-color-focus); outline-offset: 2px; }
+.pi-app-header__actions .pi-icon-button { width: var(--pi-size-touch); height: var(--pi-size-touch); }
+@media (max-width: 600px) {
+  .pi-app-header { min-height: var(--pi-header-mobile-height); padding-inline: var(--pi-header-mobile-padding-inline); gap: var(--pi-space-2); }
+  .pi-app-header__identity { gap: var(--pi-space-2); }
+  .pi-app-header__actions { gap: var(--pi-space-1); }
+}
 
 .pi-stack { display: grid; gap: var(--pi-space-3); align-content: start; }
 .pi-inline { display: flex; align-items: center; flex-wrap: wrap; gap: var(--pi-space-2); }

@@ -1,4 +1,4 @@
-/* Generated from design_system/tokens.json; do not edit. v1.1.0 */
+/* Generated from design_system/tokens.json; do not edit. v1.2.0 */
 :root, [data-pi-theme="dark"] {
   color-scheme: dark;
   --pi-color-canvas: #080B0E;
@@ -38,6 +38,13 @@
   --pi-size-touch: 44px;
   --pi-size-content: 1480px;
   --pi-size-focus: 3px;
+  --pi-size-icon: 20px;
+  --pi-header-height: 64px;
+  --pi-header-mobile-height: 56px;
+  --pi-header-padding-inline: 16px;
+  --pi-header-mobile-padding-inline: 12px;
+  --pi-header-mark: 44px;
+  --pi-header-gap: 12px;
   --pi-motion-fast: 120ms;
   --pi-motion-standard: 180ms;
   --pi-motion-easing: ease-out;

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'design_icons.dart';
 import 'design_tokens.dart';
 
 @immutable
@@ -266,7 +267,10 @@ class ThemeToggleButton extends StatelessWidget {
       onPressed: scope == null
           ? null
           : () => scope.onChange(isDark ? ThemeMode.light : ThemeMode.dark),
-      icon: Icon(isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
+      icon: Icon(
+        isDark ? PiHeaderIcons.themeLight : PiHeaderIcons.themeDark,
+        size: PiDesignTokens.iconSize,
+      ),
     );
   }
 }

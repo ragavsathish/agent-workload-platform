@@ -1,0 +1,16 @@
+{
+  "version": "1.0.0",
+  "icons": {
+    "mic": { "codePoint": "0xf8bd", "flutterName": "mic_rounded" },
+    "audio": { "codePoint": "0xf7bd", "flutterName": "graphic_eq_rounded" },
+    "chat": { "codePoint": "0xf62f", "flutterName": "chat_bubble_outline_rounded" },
+    "system": { "codePoint": "0xee36", "flutterName": "account_tree_outlined" },
+    "knowledge": { "codePoint": "0xf0616", "flutterName": "hub_outlined" },
+    "history": { "codePoint": "0xf7ef", "flutterName": "history_rounded" },
+    "tasks": { "codePoint": "0xf021a", "flutterName": "task_alt_rounded" },
+    "new-session": { "codePoint": "0xee41", "flutterName": "add_comment_outlined" },
+    "add": { "codePoint": "0xf537", "flutterName": "add_rounded" },
+    "theme-light": { "codePoint": "0xf162", "flutterName": "light_mode_outlined" },
+    "theme-dark": { "codePoint": "0xef9f", "flutterName": "dark_mode_outlined" }
+  }
+}

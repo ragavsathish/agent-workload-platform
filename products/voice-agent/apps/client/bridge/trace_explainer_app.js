@@ -151,12 +151,12 @@ const render = (value) => {
     const presentation = safePresentation(value);
     root.replaceChildren();
 
-    const header = element('header');
-    const heading = element('div');
+    const header = element('header', { className: 'pi-app-header' });
+    const heading = element('div', { className: 'pi-app-header__identity' });
     heading.append(
       element('p', { id: 'eyebrow' }, 'PLAYWRIGHT TRACE'),
-      element('h1', {}, presentation.title),
-      element('p', { id: 'summary' }, presentation.summary),
+      element('h1', { className: 'pi-app-header__title' }, presentation.title),
+      element('p', { id: 'summary', className: 'pi-app-header__subtitle' }, presentation.summary),
     );
     const fullscreen = element('button', { id: 'fullscreen', class: 'pi-button', type: 'button' }, 'Open fullscreen');
     fullscreen.addEventListener('click', async () => {
@@ -166,7 +166,9 @@ const render = (value) => {
         console.error('[playwright-trace-viewer-app]', error);
       }
     });
-    header.append(heading, fullscreen);
+    const headerActions = element('div', { className: 'pi-app-header__actions' });
+    headerActions.append(fullscreen);
+    header.append(heading, headerActions);
 
     const metrics = element('section', { id: 'metrics', 'aria-label': 'Trace summary' });
     for (const [label, value, tone] of [

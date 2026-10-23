@@ -39,9 +39,16 @@ void main() {
     await tester.pump();
 
     final composer = tester.getRect(find.byKey(const Key('message-pi')));
+    final title = tester.widget<Text>(find.byKey(const Key('workspace-title')));
     expect(composer.width, greaterThan(0));
     expect(composer.height, greaterThan(0));
     expect(composer.bottom, lessThanOrEqualTo(844));
+    expect(title.data, 'Voice');
+    expect(title.maxLines, 1);
+    expect(
+      tester.getSize(find.byKey(const Key('workspace-status'))).height,
+      lessThan(24),
+    );
   });
 
   test('progress burst becomes a concise spoken update', () {

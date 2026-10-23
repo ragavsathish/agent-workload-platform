@@ -20,10 +20,12 @@ body { padding: 12px; }
 button { font: inherit; }
 #app { width: 100%; max-width: 1480px; min-height: calc(100vh - 24px); margin: 0 auto; padding-bottom: 62px; }
 
-.app-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; min-height: 78px; padding: 4px 2px 14px; }
+.app-header { width: 100%; }
 .eyebrow { margin: 0 0 5px; color: var(--mint); font-size: 10px; font-weight: 850; letter-spacing: .17em; }
 h1 { margin: 0; font-size: clamp(20px, 3.2vw, 31px); line-height: 1.08; letter-spacing: -.025em; }
-.source { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+.app-header h1 { font-size: var(--pi-font-body); line-height: var(--pi-font-line); letter-spacing: 0; }
+.app-header .eyebrow { display: none; }
+.source { margin: 2px 0 0; color: var(--muted); font-size: var(--pi-font-small); }
 .progress { display: grid; min-width: 98px; padding: 9px 12px; text-align: right; }
 .progress strong { font-size: 16px; }
 .progress span { color: var(--muted); font-size: 10px; }
@@ -84,7 +86,6 @@ footer { display: flex; justify-content: space-between; gap: 12px; padding: 9px 
 @media (max-width: 720px) {
   body { padding: 7px; }
   #app { min-height: calc(100vh - 14px); }
-  .app-header { align-items: center; min-height: 66px; }
   .progress { min-width: 76px; }
   .review-workspace, .variant-c .review-workspace { display: flex; flex-direction: column; }
   .transcript-panel { order: 1; }

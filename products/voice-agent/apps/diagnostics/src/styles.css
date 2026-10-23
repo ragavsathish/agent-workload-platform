@@ -3,12 +3,12 @@ body { margin: 0; background: var(--pi-color-canvas); color: var(--pi-color-text
 button, a { font: inherit; }
 .audio-diagnostics-page { min-height: 100vh; padding: clamp(var(--pi-space-4), 4vw, 3rem); background: var(--pi-color-canvas); }
 .audio-diagnostics-header, .audio-session-list, .live-diagnostic, .mic-settings, .audio-diagnostics-footer { width: min(100%, 72rem); margin-inline: auto; }
-.audio-diagnostics-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--pi-space-4); margin-bottom: var(--pi-space-6); }
-.audio-diagnostics-header h1 { margin: var(--pi-space-2) 0; font-size: var(--pi-font-title); }
-.audio-diagnostics-header p:not(.pi-kicker) { max-width: 42rem; margin: 0; color: var(--pi-color-text-muted); line-height: var(--pi-font-line); }
-.header-actions a { display: inline-flex; align-items: center; min-height: var(--pi-size-touch); padding: var(--pi-space-2) var(--pi-space-4); border: 1px solid var(--pi-color-border-strong); border-radius: var(--pi-radius-md); color: var(--pi-color-text); text-decoration: none; }
-.header-actions a:hover { border-color: var(--pi-color-accent); }
-.header-actions a:focus-visible { outline: var(--pi-size-focus) solid var(--pi-color-focus); outline-offset: 2px; }
+.audio-diagnostics-header { margin-bottom: var(--pi-space-3); }
+.audio-diagnostics-heading { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--pi-space-1) var(--pi-space-3); }
+.audio-diagnostics-heading .pi-kicker { grid-column: 1 / -1; font-size: 9px; }
+.audio-diagnostics-header h1 { min-width: 0; margin: 0; overflow: hidden; font-size: 16px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.audio-diagnostics-intro { width: min(100%, 72rem); margin: 0 auto var(--pi-space-6); color: var(--pi-color-text-muted); line-height: var(--pi-font-line); }
+.header-actions { display: flex; align-items: center; gap: var(--pi-space-2); }
 .audio-session-list { display: grid; gap: var(--pi-space-4); }
 .live-diagnostic, .mic-settings, .audio-session-card { padding: var(--pi-space-4); }
 .live-diagnostic, .mic-settings { margin-bottom: var(--pi-space-4); }
@@ -51,7 +51,10 @@ button, a { font: inherit; }
 .audio-diagnostics-footer { margin-top: var(--pi-space-4); color: var(--pi-color-text-muted); font-size: var(--pi-font-small); text-align: center; }
 @media (max-width: 760px) {
   .audio-variant-grid, .diagnostic-chart-grid { grid-template-columns: 1fr; }
-  .audio-diagnostics-header { align-items: stretch; flex-direction: column; }
-  .header-actions { align-self: flex-start; }
+  .audio-diagnostics-header { align-items: center; }
+  .audio-diagnostics-header .pi-app-header__actions { justify-content: flex-end; }
+  .audio-diagnostics-header .pi-app-header__nav a { padding-inline: var(--pi-space-2); font-size: 0; }
+  .audio-diagnostics-header .header-actions .pi-button { white-space: nowrap; padding-inline: var(--pi-space-2); }
+  .audio-diagnostics-intro { font-size: var(--pi-font-small); }
   .diagnostic-chart:last-child { grid-column: auto; }
 }

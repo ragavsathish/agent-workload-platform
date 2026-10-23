@@ -57,14 +57,14 @@
       <p class="pi-kicker">Pi Voice · MCP Apps</p>
       <div class="pi-stack">
         <a href="#foundations">Foundations</a><a href="#typography">Typography</a><a href="#layout">Layout</a>
-        <a href="#surfaces">Surfaces</a><a href="#buttons">Buttons</a><a href="#fields">Fields</a>
+        <a href="#surfaces">Surfaces</a><a href="#buttons">Buttons</a><a href="#fields">Fields</a><a href="#headers">Headers</a>
         <a href="#navigation">Navigation</a><a href="#badges">Badges</a><a href="#feedback">Feedback</a>
         <a href="#notices">Notices</a><a href="#dialogs">Dialogs</a><a href="#empty-states">Empty states</a>
       </div>
     </nav>
     <main class="gallery-main">
       <header class="gallery-header">
-        <div><p class="pi-kicker">Tokens 1.1.0 · Component gallery</p><h1>One page, every shared element</h1>
+        <div><p class="pi-kicker">Tokens 1.2.0 · Component gallery</p><h1>One page, every shared element</h1>
           <p class="gallery-intro">The actual <code>elements.css</code> used by first-party MCP Apps. Every variant is visible; switch themes to check both palettes.</p></div>
         <button class="pi-button" type="button" id="theme-toggle" aria-pressed="false">Switch to light</button>
       </header>
@@ -126,6 +126,27 @@
             <div class="story-preview pi-field"><label class="pi-label" for="story-error">Repository URL</label><input class="pi-input" id="story-error" type="url" value="not-a-url" aria-invalid="true" aria-describedby="story-error-message"><span class="pi-error" id="story-error-message">Enter a valid URL.</span></div><code class="story-code">aria-invalid="true" · aria-describedby</code></article>
           <article class="story pi-surface" data-story="field-disabled"><h3>Disabled</h3><p>Unavailable input remains labeled.</p>
             <div class="story-preview pi-field"><label class="pi-label" for="story-disabled">Workspace</label><input class="pi-input" id="story-disabled" type="text" value="Current workspace" disabled></div><code class="story-code">.pi-input:disabled</code></article>
+        </div>
+      </section>
+
+      <section class="gallery-section" id="headers" aria-labelledby="headers-title">
+        <h2 id="headers-title">App headers</h2><p class="gallery-description">React, plain DOM, and Flutter share the same 64px desktop / 56px mobile header geometry, 44px targets, and slot order.</p>
+        <div class="gallery-grid">
+          <article class="story pi-surface" data-story="app-header"><h3>Identity, navigation, actions</h3><p>Keep the product identity together, destinations in a navigation landmark, and page actions at the trailing edge.</p>
+            <div class="story-preview">
+              <header class="pi-app-header" style="padding-inline: 8px">
+                <a class="pi-app-header__identity" href="#headers" style="color: inherit; text-decoration: none">
+                  <span class="pi-app-header__mark" style="border: 1px solid var(--pi-color-accent); border-radius: 9px; color: var(--pi-color-accent)">P</span>
+                  <span><strong class="pi-app-header__title">Pi Voice</strong><span class="pi-app-header__subtitle">Connected to Pi session</span></span>
+                </a>
+                <div class="pi-app-header__actions">
+                  <nav class="pi-app-header__nav" aria-label="Example primary navigation"><a href="#navigation" aria-current="page">Voice</a><a href="#navigation">Journal</a></nav>
+                  <button class="pi-button pi-icon-button" type="button" aria-label="Switch theme"><span class="pi-icon" data-pi-icon="theme-light" aria-hidden="true"></span></button>
+                </div>
+              </header>
+            </div>
+            <code class="story-code">.pi-app-header · .pi-app-header__identity · .pi-app-header__nav · .pi-app-header__actions</code>
+          </article>
         </div>
       </section>
 

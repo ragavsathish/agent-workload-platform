@@ -3,11 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../api_client.dart';
+import '../design_icons.dart';
+import '../design_tokens.dart';
 import '../models.dart';
 import '../platform/client_actions.dart';
 import '../platform/voice_session.dart';
 import '../theme.dart';
 import '../ux_telemetry.dart';
+import '../widgets/pi_app_header.dart';
 import '../widgets/mcp_app_view.dart';
 
 enum VoicePhase { ready, starting, listening, muted, thinking, speaking }
@@ -470,80 +473,93 @@ class _Header extends StatelessWidget {
         OutlinedButton.icon(
           key: const Key('open-audio-diagnostics'),
           onPressed: () => ClientActions.openView('audio-diagnostics'),
-          icon: const Icon(Icons.graphic_eq_rounded, size: 15),
+          icon: const PiHeaderIcon(PiHeaderIcons.audio),
           label: const Text('Replays'),
         ),
         OutlinedButton.icon(
           key: const Key('open-system-health'),
           onPressed: () => ClientActions.openView('system-health'),
-          icon: const Icon(Icons.account_tree_outlined, size: 15),
+          icon: const PiHeaderIcon(PiHeaderIcons.system),
           label: const Text('System'),
         ),
         OutlinedButton.icon(
           key: const Key('open-transcript'),
           onPressed: () => ClientActions.openView('transcript'),
-          icon: const Icon(Icons.chat_bubble_outline_rounded, size: 15),
+          icon: const PiHeaderIcon(PiHeaderIcons.chat),
           label: const Text('Chat'),
         ),
         OutlinedButton.icon(
           key: const Key('open-knowledge-base'),
           onPressed: () => ClientActions.openView('knowledge-base'),
-          icon: const Icon(Icons.hub_outlined, size: 15),
+          icon: const PiHeaderIcon(PiHeaderIcons.knowledge),
           label: const Text('Knowledge'),
         ),
       ],
     );
     return LayoutBuilder(
-      builder: (context, constraints) => constraints.maxWidth < 600
-          ? Row(
-              children: [
-                const _BrandMark(),
-                const SizedBox(width: 9),
-                const Text(
-                  'Pi Voice',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                ),
-                const Spacer(),
-                _VoiceState(
-                  stateLabel,
-                  compact: true,
-                  showLabel: constraints.maxWidth >= 400,
-                ),
-                const SizedBox(width: 2),
-                _HeaderIconButton(
-                  key: const Key('open-audio-diagnostics'),
-                  tooltip: 'Replays',
-                  icon: Icons.graphic_eq_rounded,
-                  onPressed: () => ClientActions.openView('audio-diagnostics'),
-                ),
-                _HeaderIconButton(
-                  key: const Key('open-system-health'),
-                  tooltip: 'System health',
-                  icon: Icons.account_tree_outlined,
-                  onPressed: () => ClientActions.openView('system-health'),
-                ),
-                _HeaderIconButton(
-                  key: const Key('open-transcript'),
-                  tooltip: 'Chat',
-                  icon: Icons.chat_bubble_outline_rounded,
-                  onPressed: () => ClientActions.openView('transcript'),
-                ),
-                _HeaderIconButton(
-                  key: const Key('open-knowledge-base'),
-                  tooltip: 'Knowledge',
-                  icon: Icons.hub_outlined,
-                  onPressed: () => ClientActions.openView('knowledge-base'),
-                ),
-              ],
-            )
-          : Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                desktopBrand,
-                const SizedBox(width: 16),
-                Flexible(child: desktopActions),
-              ],
-            ),
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 600;
+        return PiAppHeader(
+          identity: compact
+              ? Row(
+                  children: [
+                    const _BrandMark(),
+                    const SizedBox(width: 9),
+                    const Flexible(
+                      child: Text(
+                        'Pi Voice',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    _VoiceState(
+                      stateLabel,
+                      compact: true,
+                      showLabel: constraints.maxWidth >= 400,
+                    ),
+                  ],
+                )
+              : desktopBrand,
+          actions: compact
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(width: 2),
+                    _HeaderIconButton(
+                      key: const Key('open-audio-diagnostics'),
+                      tooltip: 'Replays',
+                      icon: PiHeaderIcons.audio,
+                      onPressed: () =>
+                          ClientActions.openView('audio-diagnostics'),
+                    ),
+                    _HeaderIconButton(
+                      key: const Key('open-system-health'),
+                      tooltip: 'System health',
+                      icon: PiHeaderIcons.system,
+                      onPressed: () => ClientActions.openView('system-health'),
+                    ),
+                    _HeaderIconButton(
+                      key: const Key('open-transcript'),
+                      tooltip: 'Chat',
+                      icon: PiHeaderIcons.chat,
+                      onPressed: () => ClientActions.openView('transcript'),
+                    ),
+                    _HeaderIconButton(
+                      key: const Key('open-knowledge-base'),
+                      tooltip: 'Knowledge',
+                      icon: PiHeaderIcons.knowledge,
+                      onPressed: () => ClientActions.openView('knowledge-base'),
+                    ),
+                  ],
+                )
+              : Flexible(child: desktopActions),
+        );
+      },
     );
   }
 }
@@ -563,7 +579,7 @@ class _HeaderIconButton extends StatelessWidget {
   Widget build(BuildContext context) => IconButton(
     tooltip: tooltip,
     onPressed: onPressed,
-    icon: Icon(icon, size: 18),
+    icon: PiHeaderIcon(icon),
     constraints: const BoxConstraints.tightFor(width: 44, height: 44),
     style: IconButton.styleFrom(
       foregroundColor: PiColors.of(context).text,
@@ -580,8 +596,8 @@ class _BrandMark extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = PiColors.of(context);
     return Container(
-      width: 32,
-      height: 32,
+      width: PiDesignTokens.headerMark,
+      height: PiDesignTokens.headerMark,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: colors.surfaceRaised,

@@ -132,21 +132,26 @@ export const AudioDiagnosticsView = () => {
 
   return (
     <main className="audio-diagnostics-page">
-      <header className="audio-diagnostics-header">
-        <div>
+      <header className="audio-diagnostics-header pi-app-header">
+        <div className="audio-diagnostics-heading pi-app-header__identity">
           <p className="pi-kicker">INPUT DIAGNOSTICS</p>
-          <h1>Last five conversations</h1>
-          <p>Replay microphone input before and after the selected server-side filter.</p>
+          <h1>Replays</h1>
         </div>
-        <div className="header-actions pi-toolbar">
-          <a href="/">Voice</a>
-          <a href="/knowledge/">Journal &amp; Knowledge</a>
-          <button className="pi-button" type="button" aria-pressed={theme === 'light'} onClick={toggleTheme}>
-            Switch to {theme === 'dark' ? 'light' : 'dark'}
-          </button>
-          <button className="pi-button" type="button" onClick={() => void refresh()}>Refresh</button>
+        <div className="pi-app-header__actions">
+          <nav className="pi-app-header__nav" aria-label="Primary navigation">
+            <a href="/" aria-label="Voice assistant"><span className="pi-icon" data-pi-icon="mic" aria-hidden="true" />Voice</a>
+            <a href="/knowledge/" aria-label="Journal and knowledge"><span className="pi-icon" data-pi-icon="knowledge" aria-hidden="true" />Journal &amp; Knowledge</a>
+          </nav>
+          <div className="header-actions">
+            <button className="pi-button" type="button" aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} aria-pressed={theme === 'light'} onClick={toggleTheme}>
+              <span className="pi-icon" data-pi-icon={theme === 'dark' ? 'theme-light' : 'theme-dark'} aria-hidden="true" />{theme === 'dark' ? 'Light' : 'Dark'}
+            </button>
+            <button className="pi-button" type="button" onClick={() => void refresh()}>Refresh</button>
+          </div>
         </div>
       </header>
+
+      <p className="audio-diagnostics-intro">Replay microphone input before and after the selected server-side filter.</p>
 
       {error && <p className="audio-diagnostics-error pi-notice" data-tone="danger" role="alert">{error}</p>}
       <LiveAudioDiagnostics />

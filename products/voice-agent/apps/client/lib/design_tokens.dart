@@ -1,8 +1,8 @@
-// Generated from design_system/tokens.json; do not edit. v1.1.0
+// Generated from design_system/tokens.json; do not edit. v1.2.0
 import 'package:flutter/material.dart';
 
 abstract final class PiDesignTokens {
-  static const version = '1.1.0';
+  static const version = '1.2.0';
   static const fontFamily = 'Source Code Pro';
   static const canvas = Color(0xFF080B0E);
   static const surface = Color(0xFF10151A);
@@ -39,5 +39,8 @@ abstract final class PiDesignTokens {
       space5 = 20.0,
       space6 = 24.0;
   static const radiusSm = 6.0, radiusMd = 9.0, radiusLg = 14.0;
-  static const touchTarget = 44.0;
+  static const touchTarget = 44.0, iconSize = 20.0;
+  static const headerHeight = 64.0, headerMobileHeight = 56.0;
+  static const headerPaddingInline = 16.0, headerMobilePaddingInline = 12.0;
+  static const headerMark = 44.0, headerGap = 12.0;
 }
