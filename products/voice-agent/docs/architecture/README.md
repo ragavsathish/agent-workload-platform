@@ -201,11 +201,11 @@ Wassette in separate native subprocesses with declared network and environment p
 is not inside a Gondolin VM: the Pi Voice Service and each Pi task session reach it over stdio, while
 native file, shell, and browser tools remain routed into their corresponding Gondolin VM.
 
-The persistent voice VM receives writable runtime state at `/workspace` and read-only reusable
-skills at `/skills`. Source code is not mounted from the host. Deployment mirrors committed refs to
-a rootless Gitea container backed by named volumes. The VM receives anonymous clone access to that
-single synthetic HTTP origin, but no publisher credential; ignored files, local secrets, and
-uncommitted host changes are therefore outside the voice agent's boundary.
+The persistent voice VM shallow-clones committed `main` from Gitea into its local `/workspace`.
+Its sole host mount is reusable skills, read-only at `/skills`. The host-side voice runtime
+directory still stores session state outside the VM. Uncommitted and ignored host files are
+not present in the clone. Deployment mirrors committed refs to a rootless Gitea container
+backed by named volumes. The VM has no publisher credential.
 
 OTel exports metrics and traces only. Application log export is disabled, Docker logging is disabled
 for content-bearing services, and voice content is deliberately excluded from telemetry. VoxLock's

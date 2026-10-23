@@ -16,10 +16,9 @@ export const GUEST_PROMETHEUS_ENDPOINT = "http://prometheus.local:9091";
 export type VoiceGondolinOptions = {
   giteaEndpointUrl: string;
   giteaOwner: string;
+  giteaRepository: string;
   giteaToken: string;
   imagePath: string;
-  localCwd: string;
-  oxigraphCliDir: string;
   oxigraphUrl: string;
   prometheusEndpointUrl: string;
   skillsDir: string;
@@ -46,6 +45,11 @@ function guestOrigin(value: string, upstream: URL): URL {
 }
 
 export function createVoiceGondolinConfig(options: VoiceGondolinOptions): GondolinSessionOptions {
+  for (const [label, value] of [["owner", options.giteaOwner], ["repository", options.giteaRepository]]) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(value)) {
+      throw new Error(`Invalid Gitea ${label} for voice workspace`);
+    }
+  }
   const s3Upstream = loopbackOrigin(options.s3MockEndpointUrl, "S3Mock");
   const giteaUpstream = loopbackOrigin(options.giteaEndpointUrl, "Gitea");
   const prometheusUpstream = loopbackOrigin(options.prometheusEndpointUrl, "Prometheus");
@@ -59,10 +63,9 @@ export function createVoiceGondolinConfig(options: VoiceGondolinOptions): Gondol
 
   return {
     imagePath: options.imagePath,
+    mountOutput: false,
     mounts: {
-      [GUEST_WORKSPACE]: options.localCwd,
       [GUEST_SKILLS]: { hostPath: options.skillsDir, readonly: true },
-      [GUEST_OXIGRAPH_CLI]: { hostPath: options.oxigraphCliDir, readonly: true },
     },
     network: {
       allowedHosts: [],
@@ -97,18 +100,17 @@ export function createVoiceGondolinConfig(options: VoiceGondolinOptions): Gondol
       // sandbox helper in the deployed image: https://github.com/earendil-works/gondolin/issues/167
       qemuIdlePauseMs: 0,
     },
-    startupCommands: [[
-      "/usr/local/bin/tea",
-      "login",
-      "add",
-      "--name",
-      "local",
-      "--url",
-      routes[1].guest.origin,
-      "--token",
-      options.giteaToken,
-      "--no-version-check",
-    ]],
+    startupCommands: [
+      [
+        "/usr/local/bin/tea", "login", "add", "--name", "local", "--url",
+        routes[1].guest.origin, "--token", options.giteaToken, "--no-version-check",
+      ],
+      [
+        "/usr/bin/git", "clone", "--depth", "1", "--single-branch", "--branch", "main",
+        `${routes[1].guest.origin}/${options.giteaOwner}/${options.giteaRepository}.git`,
+        GUEST_WORKSPACE,
+      ],
+    ],
     memory: "2G",
     cpus: 2,
     sessionLabel: options.sessionLabel ?? "pi-voice",
@@ -123,9 +125,6 @@ export async function createVoiceGondolinSession(
   }
   if (!existsSync(options.skillsDir)) {
     throw new Error(`Missing skills directory: ${options.skillsDir}`);
-  }
-  if (!existsSync(options.oxigraphCliDir)) {
-    throw new Error(`Missing Oxigraph CLI directory: ${options.oxigraphCliDir}`);
   }
   const session = new GondolinSession(createVoiceGondolinConfig(options));
   await session.start();

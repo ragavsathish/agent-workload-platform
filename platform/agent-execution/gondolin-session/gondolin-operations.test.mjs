@@ -65,3 +65,66 @@ test("Pi coding tools translate the host workspace into the guest mount", async 
   );
   assert.deepEqual(invoked.find((entry) => entry.kind === "write")?.path, "/workspace/notes.txt");
 });
+
+test("Pi voice tools map a separate runtime cwd to the read-only Git mount", async () => {
+  const invocations = [];
+  const vm = {
+    exec(command, options) {
+      invocations.push({ kind: "exec", path: options.cwd });
+      const process = Promise.resolve({ exitCode: options.cwd === "/workspace" ? 0 : 127 });
+      process.output = async function* output() {};
+      return process;
+    },
+    fs: {
+      access: async () => {},
+      readFile: async (path) => {
+        invocations.push({ kind: "read", path });
+        return Buffer.from("ok");
+      },
+    },
+  };
+  const tools = createGondolinCodingTools(vm, "/host/Documents/git", "/host/voice-runtime");
+  const context = { cwd: "/host/voice-runtime" };
+
+  const bash = await tools.find((tool) => tool.name === "bash").execute(
+    "bash-call", { command: "pwd" }, undefined, undefined, context,
+  );
+  assert.notEqual(bash.isError, true);
+  assert.equal(invocations.find((entry) => entry.kind === "exec")?.path, "/workspace");
+
+  await tools.find((tool) => tool.name === "read").execute(
+    "read-call", { path: "/host/Documents/git/project/README.md" }, undefined, undefined, context,
+  );
+  assert.equal(invocations.find((entry) => entry.kind === "read")?.path, "/workspace/project/README.md");
+});
+
+test("Pi voice tools use a guest-local workspace without a host Git mount", async () => {
+  const invocations = [];
+  const vm = {
+    exec(command, options) {
+      invocations.push({ kind: "exec", path: options.cwd });
+      const process = Promise.resolve({ exitCode: 0 });
+      process.output = async function* output() {};
+      return process;
+    },
+    fs: {
+      access: async () => {},
+      readFile: async (path) => {
+        invocations.push({ kind: "read", path });
+        return Buffer.from("ok");
+      },
+    },
+  };
+  const tools = createGondolinCodingTools(vm, undefined, "/host/voice-runtime");
+  const context = { cwd: "/host/voice-runtime" };
+  await tools.find((tool) => tool.name === "bash").execute(
+    "bash-call", { command: "pwd" }, undefined, undefined, context,
+  );
+  await tools.find((tool) => tool.name === "read").execute(
+    "read-call", { path: "README.md" }, undefined, undefined, context,
+  );
+  assert.deepEqual(invocations, [
+    { kind: "exec", path: "/workspace" },
+    { kind: "read", path: "/workspace/README.md" },
+  ]);
+});

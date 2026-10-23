@@ -15,11 +15,11 @@ export type ServiceSettings = {
   cwd: string;
   giteaEndpointUrl: string;
   giteaOwner: string;
+  giteaRepository: string;
   giteaToken: string;
   grafanaMcpToken: string;
   grafanaMcpUrl: string;
   gondolinAssets: string;
-  oxigraphCliDir: string;
   oxigraphUrl: string;
   listenHost: string;
   listenPort: number;
@@ -117,11 +117,11 @@ export async function loadSettings(
     cwd,
     giteaEndpointUrl: httpUrl(requiredEnv(env, "GITEA_ENDPOINT_URL"), "GITEA_ENDPOINT_URL"),
     giteaOwner: requiredEnv(env, "GITEA_OWNER"),
+    giteaRepository: env.PI_VOICE_GITEA_REPOSITORY?.trim() || "agent-workload-platform",
     giteaToken: requiredEnv(env, "GITEA_TOKEN"),
     grafanaMcpToken: requiredEnv(env, "GRAFANA_MCP_SERVER_TOKEN"),
     grafanaMcpUrl: httpUrl(requiredEnv(env, "GRAFANA_MCP_URL"), "GRAFANA_MCP_URL"),
     gondolinAssets: resolve(requiredEnv(env, "GONDOLIN_BROWSER_ASSETS")),
-    oxigraphCliDir: resolve(requiredEnv(env, "PI_VOICE_OXIGRAPH_CLI_DIR")),
     oxigraphUrl: httpUrl(
       env.OXIGRAPH_URL || "http://127.0.0.1:7878",
       "OXIGRAPH_URL",

@@ -49,6 +49,7 @@ function memoryBytes(value: string): number {
 export type GondolinSessionOptions = {
   imagePath: string;
   mounts?: Record<string, string | { hostPath: string; readonly?: boolean }>;
+  mountOutput?: boolean;
   network: false | CreateHttpHooksOptions;
   environment?: Record<string, string>;
   dns?: VMOptions["dns"];
@@ -194,10 +195,10 @@ export class GondolinSession {
     return new GondolinMcpTransport(() => this.ensureVm(), PLAYWRIGHT_MCP_COMMAND);
   }
 
-  async codingTools(): Promise<ReturnType<typeof createGondolinCodingTools>> {
+  async codingTools(localCwd?: string): Promise<ReturnType<typeof createGondolinCodingTools>> {
     const workspace = this.options.mounts?.["/workspace"];
     const hostWorkspace = typeof workspace === "string" ? workspace : workspace?.hostPath;
-    return createGondolinCodingTools(await this.ensureVm(), hostWorkspace);
+    return createGondolinCodingTools(await this.ensureVm(), hostWorkspace, localCwd);
   }
 
   async bashOperations(localCwd: string): Promise<BashOperations> {
@@ -279,7 +280,7 @@ export class GondolinSession {
       ? undefined
       : createHttpHooks(this.options.network);
     const mounts = Object.fromEntries(
-      Object.entries({ "/output": this.outputDirectory, ...this.options.mounts })
+      Object.entries({ ...(this.options.mountOutput === false ? {} : { "/output": this.outputDirectory }), ...this.options.mounts })
         .map(([guestPath, mount]) => {
           const spec: { hostPath: string; readonly?: boolean } =
             typeof mount === "string" ? { hostPath: mount } : mount;

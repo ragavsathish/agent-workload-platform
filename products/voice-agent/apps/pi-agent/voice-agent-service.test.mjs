@@ -423,10 +423,9 @@ test("persistent voice VM disables broken macOS QEMU idle resume", () => {
   const options = createVoiceGondolinConfig({
     giteaEndpointUrl: "http://127.0.0.1:3001",
     giteaOwner: "source-publisher",
+    giteaRepository: "agent-workload-platform",
     giteaToken: "read-only-token",
     imagePath: "/host/assets",
-    localCwd: "/host/workspace",
-    oxigraphCliDir: "/host/cli",
     oxigraphUrl: "http://127.0.0.1:7878",
     prometheusEndpointUrl: "http://127.0.0.1:9091",
     skillsDir: "/host/skills",
@@ -505,24 +504,17 @@ test("Pi discovers only mounted Voice skills and exposes guest-readable paths", 
   }
 });
 
-test("Gondolin mounts writable runtime state plus read-only skills and CLI", async () => {
+test("voice Gondolin mounts only skills and clones committed source into guest storage", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi-voice-mount-test-"));
-  const workspace = join(root, "workspace");
   const skills = join(root, "skills");
-  const cli = join(root, "cli");
   try {
-    await Promise.all([
-      mkdir(workspace),
-      mkdir(skills),
-      mkdir(cli),
-    ]);
-    const mounts = createVoiceGondolinConfig({
+    await mkdir(skills);
+    const config = createVoiceGondolinConfig({
       giteaEndpointUrl: "http://127.0.0.1:3001",
       giteaOwner: "source-publisher",
+      giteaRepository: "agent-workload-platform",
       giteaToken: "read-only-token",
       imagePath: join(root, "assets"),
-      localCwd: workspace,
-      oxigraphCliDir: cli,
       oxigraphUrl: "http://127.0.0.1:7878",
       prometheusEndpointUrl: "http://127.0.0.1:9091",
       skillsDir: skills,
@@ -530,11 +522,14 @@ test("Gondolin mounts writable runtime state plus read-only skills and CLI", asy
       s3MockBucket: "agent-artifacts",
       s3MockEndpointUrl: "http://127.0.0.1:9090",
       s3MockSecretKey: "local-test",
-    }).mounts;
-    assert.equal(mounts["/workspace"], workspace);
-    assert.deepEqual(mounts["/skills"], { hostPath: skills, readonly: true });
-    assert.deepEqual(mounts[GUEST_OXIGRAPH_CLI], { hostPath: cli, readonly: true });
-    assert.deepEqual(Object.keys(mounts).sort(), ["/opt/awp/bin", "/skills", "/workspace"]);
+    });
+    assert.deepEqual(config.mounts, { "/skills": { hostPath: skills, readonly: true } });
+    assert.equal(config.mountOutput, false);
+    assert.deepEqual(config.startupCommands[1], [
+      "/usr/bin/git", "clone", "--depth", "1", "--single-branch", "--branch", "main",
+      "http://gitea.local:3001/source-publisher/agent-workload-platform.git", "/workspace",
+    ]);
+    assert.equal(GUEST_OXIGRAPH_CLI, "/opt/awp/bin");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -544,10 +539,9 @@ test("voice Gondolin exposes allowlisted loopback services including raw Oxigrap
   const config = createVoiceGondolinConfig({
     giteaEndpointUrl: "http://127.0.0.1:3001",
     giteaOwner: "source-publisher",
+    giteaRepository: "agent-workload-platform",
     giteaToken: "read-only-token",
     imagePath: "/host/assets",
-    localCwd: "/host/workspace",
-    oxigraphCliDir: "/host/cli",
     oxigraphUrl: "http://127.0.0.1:7878",
     prometheusEndpointUrl: "http://127.0.0.1:9091",
     skillsDir: "/host/skills",
@@ -593,10 +587,9 @@ test("voice Gondolin exposes allowlisted loopback services including raw Oxigrap
     () => createVoiceGondolinConfig({
       giteaEndpointUrl: "http://127.0.0.1:3001",
       giteaOwner: "source-publisher",
+      giteaRepository: "agent-workload-platform",
       giteaToken: "read-only-token",
       imagePath: "/host/assets",
-      localCwd: "/host/workspace",
-      oxigraphCliDir: "/host/cli",
       oxigraphUrl: "http://127.0.0.1:7878",
       skillsDir: "/host/skills",
       s3MockAccessKey: "local-test",

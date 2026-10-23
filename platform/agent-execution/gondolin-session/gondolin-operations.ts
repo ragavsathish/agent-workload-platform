@@ -52,11 +52,16 @@ function isInside(root: string, value: string): boolean {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
-/** Translate only Pi's host-side `!` command cwd into the mounted guest workspace. */
-function createUserBashCwdResolver(hostWorkspace: string): ResolveWorkingDirectory {
+/** Translate Pi's host-side runtime cwd into the guest workspace. */
+function createUserBashCwdResolver(hostWorkspace: string, localCwd?: string): ResolveWorkingDirectory {
   return (cwd) => {
-    if (!isInside(hostWorkspace, cwd)) return path.posix.resolve("/", cwd);
-    return path.posix.resolve(guestWorkspace, path.relative(hostWorkspace, cwd));
+    if (isInside(hostWorkspace, cwd)) {
+      return path.posix.resolve(guestWorkspace, path.relative(hostWorkspace, cwd));
+    }
+    if (localCwd && isInside(localCwd, cwd)) {
+      return path.posix.resolve(guestWorkspace, path.relative(localCwd, cwd));
+    }
+    return path.posix.resolve("/", cwd);
   };
 }
 
@@ -121,9 +126,9 @@ function bashOperations(
   };
 }
 
-function composeToolOperations(vm: VM, hostWorkspace?: string): ToolOperations {
-  const resolvePath = hostWorkspace
-    ? createUserBashCwdResolver(hostWorkspace)
+function composeToolOperations(vm: VM, hostWorkspace?: string, localCwd?: string): ToolOperations {
+  const resolvePath = hostWorkspace || localCwd
+    ? createUserBashCwdResolver(hostWorkspace ?? localCwd!, localCwd)
     : (value: string) => value;
   const read = readOperations(vm.fs, resolvePath);
   const write = writeOperations(vm.fs, resolvePath);
@@ -139,8 +144,8 @@ export function createGondolinBashOperations(vm: VM, localCwd: string): BashOper
   return bashOperations(vm, createUserBashCwdResolver(localCwd));
 }
 
-export function createGondolinCodingTools(vm: VM, hostWorkspace?: string): ReturnType<typeof createCodingTools> {
-  const operations = composeToolOperations(vm, hostWorkspace);
+export function createGondolinCodingTools(vm: VM, hostWorkspace?: string, localCwd?: string): ReturnType<typeof createCodingTools> {
+  const operations = composeToolOperations(vm, hostWorkspace, localCwd);
   return createCodingTools(guestWorkspace, {
     read: { operations: operations.read },
     bash: {

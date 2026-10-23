@@ -173,10 +173,9 @@ export class VoiceAgent {
     const gondolin = await createVoiceGondolinSession({
       giteaEndpointUrl: settings.giteaEndpointUrl,
       giteaOwner: settings.giteaOwner,
+      giteaRepository: settings.giteaRepository,
       giteaToken: settings.giteaToken,
       imagePath: settings.gondolinAssets,
-      localCwd: settings.cwd,
-      oxigraphCliDir: settings.oxigraphCliDir,
       oxigraphUrl: settings.oxigraphUrl,
       prometheusEndpointUrl: settings.prometheusEndpointUrl,
       skillsDir: settings.skillsDir,
@@ -186,7 +185,7 @@ export class VoiceAgent {
       s3MockSecretKey: settings.s3MockSecretKey,
       sessionLabel: "pi-voice",
     });
-    const gondolinTools = await gondolin.codingTools();
+    const gondolinTools = await gondolin.codingTools(settings.cwd);
     const persistedSession = openVoiceSessionManager(settings.cwd, settings.sessionDir);
     const entries = persistedSession.getEntries();
     const persistedUsage = getLastAssistantUsage(entries);

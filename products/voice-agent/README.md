@@ -86,8 +86,9 @@ ownership and planned extractions are documented in
   and update access through `/opt/awp/bin/oxigraph`. This is an explicit YOLO-mode capability: it is
   not reachable from the LAN or tailnet, but agent-issued SPARQL can mutate the complete RDF store.
 - The Pi worker runs on macOS, but Pi's standard `read`, `write`, `edit`, and
-  `bash` tools are backed by a Gondolin micro-VM with only the immutable task
-  workspace mounted at `/workspace`; browser and permission-scoped Wassette
+  `bash` tools are backed by Gondolin micro-VMs. Durable tasks mount their task
+  workspace at `/workspace`; the persistent voice VM shallow-clones committed source
+  from Gitea into its local `/workspace`. Browser and permission-scoped Wassette
   tools are additional capabilities.
 - Durable delegation is deliberately **YOLO voice submission** for now: the Pi
   Voice Service may create and immediately queue a task when the owner asks for
@@ -332,11 +333,14 @@ Set `VOICE_LLM_BACKEND=pi` in `apps/edge/.env` to select the alternate
 Pi voice uses a dedicated long-running Node service built on Pi's `createAgentSession()` SDK. The
 service keeps conversation state between turns, reconciles a restarted or reset Pipecat transcript,
 and consumes tasking and read-only personal-knowledge tools from Wassette. Its native
-read, write, edit, and bash operations run only inside the persistent Gondolin Voice Workspace;
-reusable skills are mounted read-only at `/skills`. Committed source is published to the private,
-loopback-only Gitea service during `make start`; the VM may anonymously clone that public-in-Gitea
-mirror into `/workspace`, but receives no publisher credential. No host Git directory is mounted, so
-ignored files, local secrets, and uncommitted changes are not exposed. It disables discovered
+read, write, edit, and bash operations run only inside the persistent Gondolin voice VM.
+On VM startup, the service shallow-clones `main` from its private Gitea mirror into the
+guest-local `/workspace` (repository name: `PI_VOICE_GITEA_REPOSITORY`, default
+`agent-workload-platform`). Reusable skills are the only host mount, read-only at `/skills`.
+The clone is writable inside the VM and contains committed source at VM startup; host
+uncommitted changes and later commits require a new clone or explicit Git refresh. Gitea
+receives committed refs during `make start`; the VM receives no publisher credential.
+The service disables discovered
 host extensions, prompt templates, themes, and context files. The service explicitly registers
 Wassette through Pi's native MCP extension as a deferred tool provider; `tool_search` discovers
 tools from the configured component directory without adding every schema to each turn, and the
