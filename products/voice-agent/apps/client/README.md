@@ -168,9 +168,11 @@ Flutter's generated JavaScript remains in the same output as the fallback for
 browsers without compatible WasmGC support.
 
 React input diagnostics live separately in `../diagnostics` and are served at
-`/diagnostics/`. System-to-code evidence, C4 views, and live operational health
-are consolidated in Grafana at `/metrics/`; neither surface is part of this
-Flutter application.
+`/diagnostics/`. The standalone Journal & Knowledge explorer lives in
+`../knowledge-base` and is served at `/knowledge/`. Both React pages use the
+shared design-system tokens and components without loading the Flutter runtime.
+System-to-code evidence, C4 views, and live operational health are consolidated
+in Grafana at `/metrics/`; those dashboards are separate from the Flutter app.
 
 ## Pi workspace UX
 

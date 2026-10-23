@@ -10,7 +10,7 @@ WASM_ACTIONS := setup build check install clean
 .PHONY: automation-blackbox-voice automation-observability
 .PHONY: login status grafana-password grafana-mcp-token warm-models benchmark-mlx publish-workspace
 .PHONY: blackbox-voice blackbox-e2e blackbox-personal-knowledge blackbox-remote-session
-.PHONY: playwright-voice playwright-diagnostics playwright-grafana playwright-readme-demo playwright-tailnet-voice
+.PHONY: playwright-voice playwright-diagnostics playwright-knowledge-base playwright-grafana playwright-readme-demo playwright-tailnet-voice
 .PHONY: playwright-tailnet-diagnostics host-preflight install-host-services
 .PHONY: native-start native-stop native-restart native-status
 .PHONY: config-init config-check
@@ -65,6 +65,7 @@ setup: automation-setup wasm-setup
 	cd apps/client && npm ci
 	cd ../../vendor/excalidraw-mcp && pnpm install --frozen-lockfile --ignore-scripts --ignore-workspace --config.node-linker=isolated
 	cd apps/diagnostics && npm ci
+	cd apps/knowledge-base && npm ci
 	pnpm --dir ../.. --filter @agent-workload-platform/voice-pi-agent install
 	cp -n deploy/.env.example deploy/.env || true
 	cp -n apps/edge/.env.example apps/edge/.env || true
@@ -77,6 +78,7 @@ setup: automation-setup wasm-setup
 build: wasm-build grafana-c4-dashboard
 	cd apps/client && npm run build
 	cd apps/diagnostics && npm run build
+	cd apps/knowledge-base && VITE_OXIGRAPH_QUERY_URL=/oxigraph/query npm run build
 	$(COMPOSE) build
 
 up:
@@ -99,6 +101,8 @@ deployment-prepare: config-check
 	npm --prefix apps/client run build
 	npm --prefix apps/diagnostics ci
 	npm --prefix apps/diagnostics run build
+	npm --prefix apps/knowledge-base ci
+	VITE_OXIGRAPH_QUERY_URL=/oxigraph/query npm --prefix apps/knowledge-base run build
 	$(MAKE) grafana-c4-dashboard
 	cp -n apps/edge/.env.example apps/edge/.env || true
 
@@ -238,6 +242,9 @@ playwright-voice:
 
 playwright-diagnostics:
 	tests/e2e/run-playwright-local diagnostics
+
+playwright-knowledge-base:
+	tests/e2e/run-playwright-local knowledge-base
 
 playwright-grafana:
 	$(MAKE) automation-playwright PLAYWRIGHT_PROJECT=grafana
@@ -415,6 +422,8 @@ check: require-babashka wasm-check automation-check
 	cd apps/client && npm run build
 	cd apps/diagnostics && npm run lint
 	cd apps/diagnostics && npm run build
+	cd apps/knowledge-base && npm run lint
+	cd apps/knowledge-base && npm run build
 	$(MAKE) grafana-c4-dashboard
 	$(COMPOSE) config --quiet
 	for script in deploy/habitat/*.sh deploy/observability/*.sh; do sh -n "$$script"; done

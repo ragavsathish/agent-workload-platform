@@ -1,6 +1,8 @@
 import request from "request";
+import journalQueryRequest from "journal-query";
 import type {
   Fact,
+  JournalEntry,
   QueryResponse,
   Scope,
 } from "voice:personal-knowledge/types@0.1.0";
@@ -61,5 +63,9 @@ export function queryPersonalKnowledge(
   if (normalizedQuery) {
     parameters.push(`query=${encodeURIComponent(normalizedQuery)}`);
   }
-  return validPayload(request(`/digital-twin?${parameters.join("&")}`));
+  return validPayload(request(`/digital-twin?${parameters.join("&")}`, ""));
+}
+
+export function queryJournal(): JournalEntry[] {
+  return journalQueryRequest();
 }

@@ -37,6 +37,7 @@ COPY apps/edge/presentation_response.py ./
 COPY packages/telemetry/src ./src
 COPY apps/client/build/web ./client-dist
 COPY apps/diagnostics/dist ./client-dist/diagnostics
+COPY apps/knowledge-base/dist ./client-dist/knowledge
 
 USER 65532:65532
 EXPOSE 7860

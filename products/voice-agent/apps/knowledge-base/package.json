@@ -1,0 +1,27 @@
+{
+  "name": "@agent-workload-platform/knowledge-base",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "prebuild": "make -C ../../components/personal-knowledge-ts browser",
+    "prelint": "make -C ../../components/personal-knowledge-ts browser",
+    "build": "tsc --project tsconfig.json && vite build",
+    "lint": "tsc --project tsconfig.json",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "cytoscape": "^3.33.1",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@types/cytoscape": "^3.21.9",
+    "@types/node": "^25.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^6.0.0",
+    "typescript": "^6.0.0",
+    "vite": "^8.0.0"
+  }
+}

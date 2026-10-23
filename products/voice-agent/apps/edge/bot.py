@@ -1098,6 +1098,12 @@ if __name__ == "__main__":
             StaticFiles(directory=client_dist / "diagnostics", html=True),
             name="diagnostics",
         )
+    if (client_dist / "knowledge").is_dir():
+        app.mount(
+            "/knowledge",
+            StaticFiles(directory=client_dist / "knowledge", html=True),
+            name="knowledge",
+        )
 
     def register_browser_asset(asset_name: str, media_type: str | None = None) -> None:
         """Expose one generated Flutter root asset without shadowing Pipecat routes."""

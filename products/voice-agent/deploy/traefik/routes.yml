@@ -21,6 +21,10 @@ http:
       stripPrefix:
         prefixes:
           - /git
+    oxigraph-prefix:
+      stripPrefix:
+        prefixes:
+          - /oxigraph
     git-encoded-paths:
       encodedCharacters:
         allowEncodedSlash: true
@@ -36,6 +40,18 @@ http:
         permanent: true
 
   routers:
+    tailnet-oxigraph-query:
+      entryPoints: [tailnet]
+      rule: "HeaderRegexp(`Tailscale-User-Login`, `.+`) && Path(`/oxigraph/query`)"
+      priority: 500
+      middlewares: [tailnet-loopback-only, oxigraph-prefix]
+      service: oxigraph
+    local-oxigraph-query:
+      entryPoints: [local]
+      rule: "Path(`/oxigraph/query`)"
+      priority: 500
+      middlewares: [oxigraph-prefix]
+      service: oxigraph
     queue:
       entryPoints: [tailnet]
       rule: "HeaderRegexp(`Tailscale-User-Login`, `.+`) && PathPrefix(`/queue`)"
@@ -96,3 +112,7 @@ http:
       loadBalancer:
         servers:
           - url: http://habitat:7890
+    oxigraph:
+      loadBalancer:
+        servers:
+          - url: http://172.30.91.2:7878

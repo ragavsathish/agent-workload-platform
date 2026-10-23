@@ -3,6 +3,8 @@ SHELL := /bin/bash
 .DELETE_ON_ERROR:
 
 WASM := dist/personal-knowledge.wasm
+CORE_WASM := dist/personal-knowledge-core.wasm
+BROWSER_WASM := ../../apps/knowledge-base/public/knowledge-wasm/personal-knowledge-browser.wasm
 WASSETTE ?= $(HOME)/.local/bin/wassette
 WAC ?= wac
 WAC_VERSION := 0.10.1
@@ -10,9 +12,10 @@ COMPONENT_DIR ?= $(HOME)/Library/Application Support/PipecatEdge/wassette-compon
 COMPONENT_ID := personal-knowledge
 WIT_DOCS_INJECT_REV := 129ce9bd741d0c458c6478c8ed23d753cc06fb46
 DOCS_BUILDER_IMAGE := rust@sha256:e90e846de4124376164ddfbaab4b0774c7bdeef5e738866295e5a90a34a307a2
-SOURCES := package.json package-lock.json Cargo.toml Cargo.lock tsconfig.core.json scripts/clean.mjs src/core/index.ts src/core/root-imports.d.ts src/gateway-http/lib.rs wit/world.wit wit/deps/wasi-cli-0.2.0/package.wit
+CORE_SOURCES := package.json package-lock.json tsconfig.core.json scripts/clean.mjs src/core/index.ts src/core/root-imports.d.ts wit/world.wit
+SOURCES := $(CORE_SOURCES) Cargo.toml Cargo.lock core/Cargo.toml core/journal.rq core/src/lib.rs src/gateway-http/lib.rs wit/deps/wasi-cli-0.2.0/package.wit
 
-.PHONY: setup toolchain build check install clean
+.PHONY: setup toolchain build browser check install clean
 
 setup: toolchain node_modules/.package-lock.json
 
@@ -25,8 +28,10 @@ toolchain:
 node_modules/.package-lock.json: package.json package-lock.json
 	npm ci
 
-$(WASM): $(SOURCES) | toolchain node_modules/.package-lock.json
+$(CORE_WASM): $(CORE_SOURCES) | toolchain node_modules/.package-lock.json
 	PATH="$$(dirname "$(WAC)"):$$PATH" npm run build
+
+$(WASM): $(CORE_WASM) $(SOURCES) | toolchain node_modules/.package-lock.json
 	cargo build --locked --release --target wasm32-wasip2
 	install -m 600 target/wasm32-wasip2/release/voice_personal_knowledge_gateway_http.wasm dist/gateway-http.wasm
 	"$(WAC)" plug dist/personal-knowledge-core.wasm --plug dist/gateway-http.wasm -o "$(WASM)"
@@ -42,6 +47,15 @@ $(WASM): $(SOURCES) | toolchain node_modules/.package-lock.json
 	@shasum -a 256 "$(WASM)"
 
 build: $(WASM)
+
+$(BROWSER_WASM): Cargo.toml Cargo.lock core/Cargo.toml core/journal.rq core/src/lib.rs
+	cargo build --locked --release -p personal-knowledge-core --target wasm32-unknown-unknown
+	mkdir -p ../../apps/knowledge-base/public/knowledge-wasm
+	cp target/wasm32-unknown-unknown/release/personal_knowledge_core.wasm "$@"
+
+browser: $(BROWSER_WASM)
+	rm -rf ../../apps/knowledge-base/src/generated-wasm
+	rm -rf ../../apps/knowledge-base/public/wasi
 
 check: build
 	npm run typecheck
@@ -59,7 +73,9 @@ install: build
 	@"$(WASSETTE)" component unload --component-dir "$(COMPONENT_DIR)" "$(COMPONENT_ID)" >/dev/null 2>&1 || true
 	"$(WASSETTE)" component load --component-dir "$(COMPONENT_DIR)" "file://$(CURDIR)/$(WASM)"
 	"$(WASSETTE)" permission grant network --component-dir "$(COMPONENT_DIR)" "$(COMPONENT_ID)" 127.0.0.1:9444
+	"$(WASSETTE)" permission grant network --component-dir "$(COMPONENT_DIR)" "$(COMPONENT_ID)" 127.0.0.1:7878
 	"$(WASSETTE)" permission grant environment-variable --component-dir "$(COMPONENT_DIR)" "$(COMPONENT_ID)" KNOWLEDGE_GATEWAY_BASE_URL
 	"$(WASSETTE)" permission grant environment-variable --component-dir "$(COMPONENT_DIR)" "$(COMPONENT_ID)" KNOWLEDGE_GATEWAY_TOKEN
 	"$(WASSETTE)" permission grant environment-variable --component-dir "$(COMPONENT_DIR)" "$(COMPONENT_ID)" KNOWLEDGE_IDENTITY
+	"$(WASSETTE)" permission grant environment-variable --component-dir "$(COMPONENT_DIR)" "$(COMPONENT_ID)" OXIGRAPH_QUERY_URL
 	"$(WASSETTE)" inspect --component-dir "$(COMPONENT_DIR)" "$(COMPONENT_ID)"

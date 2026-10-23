@@ -1,0 +1,21 @@
+PREFIX schema: <https://schema.org/>
+PREFIX awp: <urn:awp:digital-twin:predicate:>
+
+SELECT ?id ?kind ?text ?createdAt ?sourceId ?sourceLabel ?transcript ?topic WHERE {
+  GRAPH <urn:awp:digital-twin:graph:journal> {
+    ?entry a schema:CreativeWork ;
+      schema:additionalType ?kind ;
+      schema:text ?text ;
+      schema:dateCreated ?createdAt ;
+      schema:isBasedOn ?source .
+    BIND(STRAFTER(STR(?entry), "urn:awp:digital-twin:journal:") AS ?id)
+    BIND(STRAFTER(STR(?source), "urn:awp:digital-twin:journal:") AS ?sourceId)
+    OPTIONAL { ?entry schema:keywords ?topic }
+    OPTIONAL { ?entry awp:status ?status }
+    FILTER(!BOUND(?status) || ?status != "deleted")
+    OPTIONAL { ?source schema:identifier ?sourceLabel }
+    OPTIONAL { ?source schema:text ?transcript }
+  }
+}
+ORDER BY DESC(?createdAt) ?id ?topic
+LIMIT 1000

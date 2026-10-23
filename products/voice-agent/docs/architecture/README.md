@@ -43,6 +43,8 @@ Android runners compile the same Dart UI behind a platform-neutral voice-session
 Pipecat adapters remain planned rather than represented as deployed containers. Conversation,
 chat/task, responsive state, and voice controls remain in Dart. Input diagnostics is a separate
 React bundle at `/diagnostics/`; it uses Recharts and WaveSurfer without loading the Flutter runtime.
+The standalone Journal & Knowledge explorer is another React bundle at `/knowledge/`; it uses the
+shared design system and loads Cytoscape only when the map view is opened.
 Grafana provisions the **C4 Operational Heat Map** dashboard. At build time,
 `deploy/observability/generate-c4-heatmap.clj` reads the authoritative Mermaid and evidence sources
 and calls the deterministic `deploy/observability/c4-dashboard.clj` compiler directly to generate
@@ -142,6 +144,7 @@ access to proposal records, and Habitat has no direct host port.
 | Browser Voice Client components | `apps/client/lib/main.dart`; `views/voice_view.dart`; `views/pi_workspace_view.dart`; `widgets/mcp_app_view_web.dart`; `platform/voice_session_web.dart`; `bridge/voice_bridge.js`; `bridge/mermaid_app.js`; the lazy Excalidraw app is built from `vendor/excalidraw-mcp` by `tool/build-excalidraw-app.mjs` |
 | Mobile Client foundation | `apps/client/ios/`; `apps/client/android/`; `apps/client/lib/platform/voice_session.dart`; native adapters are not implemented yet |
 | Input Diagnostics | `apps/diagnostics/`; React bundle emitted to `apps/diagnostics/dist/` |
+| Journal & Knowledge | `apps/knowledge-base/`; React and Cytoscape bundle emitted to `apps/knowledge-base/dist/` |
 | Engineering Evidence and C4 Explorer | `deploy/observability/generate-c4-heatmap.clj`; `deploy/observability/c4-dashboard.clj`; provisioned Grafana dashboard generated from these Mermaid sources |
 | Grafana MCP | Official pinned `grafana/mcp-grafana` Compose service; Viewer service account; authenticated loopback streamable HTTP; PromQL tools and Tempo trace MCP App |
 | Tailnet Ingress | `deploy/compose.yml`; `tools/ops/login.py` |

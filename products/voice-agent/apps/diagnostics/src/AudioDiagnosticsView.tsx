@@ -140,6 +140,7 @@ export const AudioDiagnosticsView = () => {
         </div>
         <div className="header-actions pi-toolbar">
           <a href="/">Voice</a>
+          <a href="/knowledge/">Journal &amp; Knowledge</a>
           <button className="pi-button" type="button" aria-pressed={theme === 'light'} onClick={toggleTheme}>
             Switch to {theme === 'dark' ? 'light' : 'dark'}
           </button>

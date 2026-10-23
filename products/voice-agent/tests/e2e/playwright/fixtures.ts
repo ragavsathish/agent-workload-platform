@@ -2,7 +2,7 @@ import { test as base, expect } from 'playwright/test';
 
 const test = base.extend({
   browserEvidence: [async ({ page }, use, testInfo) => {
-    const evidence = { consoleErrors: [], pageErrors: [], requestFailures: [] };
+    const evidence = { consoleErrors: [], pageErrors: [], requestFailures: [], httpErrors: [] };
     page.on('console', (message) => {
       if (message.type() === 'error') evidence.consoleErrors.push(message.text());
     });
@@ -14,6 +14,11 @@ const test = base.extend({
         url: request.url(),
         error: request.failure()?.errorText || 'unknown failure',
       });
+    });
+    page.on('response', (response) => {
+      if (response.status() >= 400) {
+        evidence.httpErrors.push({ status: response.status(), url: response.url() });
+      }
     });
     await use(evidence);
     await testInfo.attach('browser-evidence', {
@@ -44,6 +49,7 @@ const expectCleanBrowser = (evidence) => {
   expect(consoleErrors, 'browser console errors').toEqual([]);
   expect(evidence.pageErrors, 'uncaught browser errors').toEqual([]);
   expect(evidence.requestFailures, 'unexpected request failures').toEqual([]);
+  expect(evidence.httpErrors, 'unexpected HTTP error responses').toEqual([]);
 };
 
 export { test, expect, enableFlutterSemantics, fetchJson, expectCleanBrowser };

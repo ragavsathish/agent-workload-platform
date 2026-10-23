@@ -171,7 +171,11 @@ services:
         condition: service_completed_successfully
     volumes: [oxigraph-data:/data]
     ports: ["127.0.0.1:7878:7878"]
-    networks: [data, oxigraph-host]
+    networks:
+      data:
+      oxigraph-host:
+      oxigraph-tailnet:
+        ipv4_address: 172.30.91.2
     user: "65532:65532"
     read_only: true
     tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=32m"]
@@ -464,6 +468,8 @@ services:
     networks:
       control:
         ipv4_address: 172.30.90.2
+      oxigraph-tailnet:
+        ipv4_address: 172.30.91.3
     read_only: true
     tmpfs:
       - "/tmp:rw,noexec,nosuid,nodev,size=64m"
@@ -584,6 +590,11 @@ networks:
   mcp-access:
   host-access:
   oxigraph-host:
+  oxigraph-tailnet:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.91.0/29
 
 secrets:
   broker-token:

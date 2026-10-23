@@ -57,6 +57,13 @@ module.exports = defineConfig({
       },
     },
     {
+      name: 'knowledge-base',
+      testMatch: /knowledge-base\.spec\.ts/,
+      use: {
+        viewport: { width: 1440, height: 1000 },
+      },
+    },
+    {
       name: 'grafana',
       testMatch: /grafana\.spec\.ts/,
       use: {

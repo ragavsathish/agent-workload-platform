@@ -73,7 +73,7 @@ def read_response(process: subprocess.Popen[str], request_id: int) -> dict[str, 
     raise RuntimeError(f"Wassette did not answer MCP request {request_id}")
 
 
-def invoke_personal_knowledge(query: str) -> dict[str, Any]:
+def invoke_tool(name: str, arguments: dict[str, Any]) -> Any:
     token = (ROOT / "deploy/secrets/digital-twin-reader-token").read_text(
         encoding="utf-8"
     ).strip()
@@ -81,6 +81,7 @@ def invoke_personal_knowledge(query: str) -> dict[str, Any]:
         env_file.write('KNOWLEDGE_GATEWAY_BASE_URL="http://127.0.0.1:9444/v1"\n')
         env_file.write(f'KNOWLEDGE_GATEWAY_TOKEN="{token}"\n')
         env_file.write(f'KNOWLEDGE_IDENTITY="{configured_identity()}"\n')
+        env_file.write('OXIGRAPH_QUERY_URL="http://127.0.0.1:7878/query"\n')
         env_path = Path(env_file.name)
     env_path.chmod(0o600)
     process = subprocess.Popen(
@@ -124,8 +125,8 @@ def invoke_personal_knowledge(query: str) -> dict[str, Any]:
             "id": 2,
             "method": "tools/call",
             "params": {
-                "name": "query-personal-knowledge",
-                "arguments": {"scope": "journal", "query": query},
+                "name": name,
+                "arguments": arguments,
             },
         }) + "\n")
         process.stdin.flush()
@@ -152,26 +153,53 @@ def main() -> None:
     )
     fixture_id = uuid.uuid4().hex
     source = f"urn:awp:digital-twin:test:search-regression:{fixture_id}"
+    journal_source = f"urn:awp:digital-twin:journal:source-{fixture_id}"
+    journal_entry = f"urn:awp:digital-twin:journal:note-{fixture_id}"
     sparql_update(
         "PREFIX schema: <https://schema.org/>\n"
         f"INSERT DATA {{ GRAPH <{JOURNAL_GRAPH}> {{\n"
         f"  <{source}> a schema:CreativeWork ;\n"
         '    schema:additionalType "learning" ;\n'
         '    schema:text "Understanding the structure of reasoning in language models" .\n'
+        f"  <{journal_source}> schema:identifier \"MCP journal regression {fixture_id}\" ;\n"
+        '    schema:text "The original transcript for the MCP journal regression fixture." .\n'
+        f"  <{journal_entry}> a schema:CreativeWork ;\n"
+        '    schema:additionalType "idea" ;\n'
+        '    schema:text "A journal entry returned by the personal knowledge MCP tool." ;\n'
+        '    schema:dateCreated "2026-10-23T10:00:00Z" ;\n'
+        f"    schema:isBasedOn <{journal_source}> ;\n"
+        '    schema:keywords "MCP regression" .\n'
         "} }"
     )
     try:
-        result = invoke_personal_knowledge("Soheil Feizi reasoning language models")
+        result = invoke_tool(
+            "query-personal-knowledge",
+            {"scope": "journal", "query": "Soheil Feizi reasoning language models"},
+        )
         sources = {fact["source"] for fact in result["facts"]}
         if source not in sources:
             raise AssertionError(
                 "broad natural-language query did not return the relevant knowledge fact"
             )
         print("PASS Wassette returned a relevant Oxigraph fact despite unmatched query terms")
+
+        entries = invoke_tool("query-journal", {})
+        entry = next((item for item in entries if item["id"] == f"note-{fixture_id}"), None)
+        if entry is None:
+            raise AssertionError("query-journal did not return the seeded journal entry")
+        source_label = entry.get("source-label", entry.get("sourceLabel"))
+        if source_label != f"MCP journal regression {fixture_id}":
+            raise AssertionError("query-journal did not return the source label")
+        if entry["transcript"] != "The original transcript for the MCP journal regression fixture.":
+            raise AssertionError("query-journal did not return the source transcript")
+        if entry["topics"] != ["MCP regression"]:
+            raise AssertionError("query-journal did not return the entry topics")
+        print("PASS Wassette query-journal returned the journal entry, source transcript, and topic")
     finally:
-        sparql_update(
-            f"DELETE WHERE {{ GRAPH <{JOURNAL_GRAPH}> {{ <{source}> ?predicate ?object }} }}"
-        )
+        for subject in (source, journal_source, journal_entry):
+            sparql_update(
+                f"DELETE WHERE {{ GRAPH <{JOURNAL_GRAPH}> {{ <{subject}> ?predicate ?object }} }}"
+            )
 
 
 if __name__ == "__main__":

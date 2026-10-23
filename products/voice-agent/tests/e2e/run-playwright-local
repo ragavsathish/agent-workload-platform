@@ -3,9 +3,9 @@ set -euo pipefail
 
 project="${1:-}"
 case "$project" in
-  voice|diagnostics|readme-demo) ;;
+  voice|diagnostics|knowledge-base|readme-demo) ;;
   *)
-    echo "Usage: $0 voice|diagnostics|readme-demo" >&2
+    echo "Usage: $0 voice|diagnostics|knowledge-base|readme-demo" >&2
     exit 2
     ;;
 esac
