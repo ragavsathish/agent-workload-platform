@@ -51,10 +51,14 @@ test('speech promise waits for playback and stop releases it', async () => {
 
     const opened = [];
     window.open = (...args) => opened.push(args);
+    window.voiceBridge.openView('knowledge-base');
+    assert.equal(opened.at(-1)[0], '/knowledge/');
+    assert.equal(opened.at(-1)[2], 'noopener,noreferrer');
     window.voiceBridge.openTaskArtifactUrl(
       'https://pipecat-edge.tailf6d713.ts.net/api/tasks/11111111-1111-4111-8111-111111111111/artifacts/workspace',
     );
-    assert.equal(opened.length, 1);
+    assert.equal(opened.length, 2);
+    assert.match(opened.at(-1)[0], /\/api\/tasks\/11111111-1111-4111-8111-111111111111\/artifacts\/workspace$/u);
     assert.throws(() => window.voiceBridge.openTaskArtifactUrl(
       'http://pipecat-edge.tailf6d713.ts.net/api/tasks/11111111-1111-4111-8111-111111111111/artifacts/workspace',
     ));

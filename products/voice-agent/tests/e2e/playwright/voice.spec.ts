@@ -14,7 +14,7 @@ test('keeps the primary voice controls usable on a phone viewport', async ({
   await page.goto('/', { waitUntil: 'networkidle' });
   await enableFlutterSemantics(page);
 
-  for (const name of ['Replays', 'System health', 'Chat', 'Start conversation']) {
+  for (const name of ['Replays', 'System health', 'Chat', 'Knowledge', 'Start conversation']) {
     const button = page.getByRole('button', { name, exact: true });
     await expect(button).toBeVisible();
     const box = await button.boundingBox();
@@ -38,6 +38,21 @@ test('keeps the primary voice controls usable on a phone viewport', async ({
     contentType: 'image/png',
   });
   expectCleanBrowser(browserEvidence);
+});
+
+test('opens journal knowledge from Pi home and returns through the Pi logo', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await enableFlutterSemantics(page);
+
+  const knowledgePagePromise = page.waitForEvent('popup');
+  await page.getByRole('button', { name: 'Knowledge', exact: true }).click();
+  const knowledgePage = await knowledgePagePromise;
+  await expect(knowledgePage).toHaveURL(/\/knowledge\/$/);
+  await expect(knowledgePage.getByRole('heading', { name: 'Journal & knowledge' })).toBeVisible();
+
+  await knowledgePage.locator('a.knowledge-brand').click();
+  await expect(knowledgePage).toHaveURL(/\/$/);
+  await expect(knowledgePage).toHaveTitle('Pi Voice');
 });
 
 test('renders the official Grafana trace MCP App inside voice chat', async ({

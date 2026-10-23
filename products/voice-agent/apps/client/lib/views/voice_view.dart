@@ -483,6 +483,12 @@ class _Header extends StatelessWidget {
           icon: const Icon(Icons.chat_bubble_outline_rounded, size: 15),
           label: const Text('Chat'),
         ),
+        OutlinedButton.icon(
+          key: const Key('open-knowledge-base'),
+          onPressed: () => ClientActions.openView('knowledge-base'),
+          icon: const Icon(Icons.hub_outlined, size: 15),
+          label: const Text('Knowledge'),
+        ),
       ],
     );
     return LayoutBuilder(
@@ -519,6 +525,12 @@ class _Header extends StatelessWidget {
                   tooltip: 'Chat',
                   icon: Icons.chat_bubble_outline_rounded,
                   onPressed: () => ClientActions.openView('transcript'),
+                ),
+                _HeaderIconButton(
+                  key: const Key('open-knowledge-base'),
+                  tooltip: 'Knowledge',
+                  icon: Icons.hub_outlined,
+                  onPressed: () => ClientActions.openView('knowledge-base'),
                 ),
               ],
             )

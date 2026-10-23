@@ -515,7 +515,9 @@ window.voiceBridge = {
       ? '/diagnostics/'
       : view === 'system-health'
         ? '/metrics/d/voice-c4-heatmap/c4-operational-heat-map'
-      : `/?view=${encodeURIComponent(view)}`;
+        : view === 'knowledge-base'
+          ? '/knowledge/'
+          : `/?view=${encodeURIComponent(view)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   },
   openExternalUrl(url) {

@@ -56,6 +56,7 @@ void main() {
       ),
     );
     expect(find.byKey(const Key('open-system-health')), findsOneWidget);
+    expect(find.byKey(const Key('open-knowledge-base')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('start-conversation')));
     await tester.pump();
