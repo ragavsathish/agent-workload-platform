@@ -5,6 +5,7 @@ import { configureTelemetry } from "@agent-workload-platform/otel";
 
 import { VoiceAgent } from "./voice-agent/voice-agent.js";
 import { loadSettings } from "./voice-agent/voice-config.js";
+import { TaskNarrator } from "./voice-agent/task-narrator.js";
 import {
   closeVoiceHttpServer,
   createVoiceHttpServer,
@@ -14,9 +15,11 @@ import {
 export async function main(): Promise<void> {
   const settings = await loadSettings();
   const agent = await VoiceAgent.create(settings);
+  const narrator = await TaskNarrator.create(settings);
   const telemetry = configureTelemetry("pipecat-pi-voice");
   const server = createVoiceHttpServer({
     agent,
+    narrator,
     serviceToken: settings.serviceToken,
     telemetry,
   });

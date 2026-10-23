@@ -157,6 +157,23 @@ class VoiceApi {
         .toList(growable: false);
   }
 
+  Future<String> narrateTaskProgress(
+    String id, {
+    required int after,
+    required int through,
+  }) async {
+    final body = await _json(
+      '/api/tasks/${Uri.encodeComponent(id)}/narration',
+      method: 'POST',
+      body: {'after': after, 'through': through},
+    );
+    final spoken = body['spoken'];
+    if (spoken is! String) {
+      throw const ApiException('Task narration returned an invalid response.');
+    }
+    return spoken;
+  }
+
   Future<void> taskAction(String id, String action) async => _json(
     '/api/tasks/${Uri.encodeComponent(id)}/$action',
     method: 'POST',

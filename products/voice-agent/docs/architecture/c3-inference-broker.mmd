@@ -15,6 +15,7 @@ flowchart LR
         TTS_API["Component<br/><b>Speech Endpoint</b><br/>validates text, voice, speed, and PCM format"]
         TTS["Component<br/><b>Kokoro TTS Adapter</b><br/>cached MLX synthesis and 24 kHz PCM"]
         PI_ADAPTER["Component<br/><b>Pi Protocol Adapter</b><br/>OpenAI stream to native Pi SSE"]
+        NARRATION["Component<br/><b>Task Narration Proxy</b><br/>bounded events to separate tool-free Pi session"]
         CONTEXT["Component<br/><b>Pi Projection Proxy</b><br/>transcript, context, and compaction only"]
         FALLBACK["Component<br/><b>Fallback LLM Proxy</b><br/>fixed model and allowlisted tool schema"]
         TELEMETRY["Component<br/><b>Inference Telemetry</b><br/>content-free latency and outcome signals"]
@@ -22,6 +23,7 @@ flowchart LR
         GUARD --> STT_API --> SLOT --> STT --> NORMALIZE
         GUARD --> TTS_API --> SLOT --> TTS
         GUARD --> PI_ADAPTER
+        GUARD --> NARRATION
         GUARD --> CONTEXT
         GUARD --> FALLBACK
         STT_API -.-> TELEMETRY
@@ -33,6 +35,7 @@ flowchart LR
     STT -->|"loads"| MODELS
     TTS -->|"loads"| MODELS
     PI_ADAPTER -->|"SSE turn stream"| PI
+    NARRATION -->|"private recap request"| PI
     CONTEXT -->|"bounded owner projections"| PI
     FALLBACK -->|"streamed fixed-model completion"| OLLAMA
     NORMALIZE -->|"transcript text"| EDGE
@@ -42,6 +45,6 @@ flowchart LR
     classDef component fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
     classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
-    class GUARD,SLOT,STT_API,STT,NORMALIZE,TTS_API,TTS,PI_ADAPTER,CONTEXT,FALLBACK,TELEMETRY component;
+    class GUARD,SLOT,STT_API,STT,NORMALIZE,TTS_API,TTS,PI_ADAPTER,NARRATION,CONTEXT,FALLBACK,TELEMETRY component;
     class EDGE,PI,OLLAMA,OTEL external;
     class MODELS data;

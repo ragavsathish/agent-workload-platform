@@ -113,10 +113,12 @@ through its explicit `--skill` option, and Gondolin mounts the same directory re
 For optional task narration, the worker projects Pi event types and tool names into short fixed
 progress phrases while the run is active. It stores those phrases in PostgreSQL; the gateway returns
 them only for the owning identity. The browser polls this bounded feed only after the user presses
-Listen to agent. Polling continues while audio plays; the browser queues new events and speaks a
-short summary of each accumulated batch, including recent actions and error counts. The edge
-synthesizes each summary through the inference broker. Pi's reasoning text, sensitive tool arguments,
-and raw output do not enter the progress feed.
+Listen to agent. Polling continues while audio plays; the browser queues new events in batches of
+at most 40. For each batch, the edge re-reads the owner's progress from the gateway and asks a
+separate in-memory, tool-free Pi session for a short plain-language recap. The task Pi session and
+the persistent voice conversation remain independent. If narration fails, the browser speaks its
+deterministic event summary. The edge synthesizes each recap through the inference broker. Pi's
+reasoning text, sensitive tool arguments, and raw output do not enter the progress feed.
 The scratch root stays outside the account home because Pi discovers `.agents/skills` in workspace
 ancestors; a home-rooted scratch task can otherwise follow the owner's skill symlinks into protected
 `Documents` paths before its first RPC response.

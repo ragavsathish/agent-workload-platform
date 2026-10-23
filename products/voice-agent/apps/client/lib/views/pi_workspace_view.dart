@@ -254,9 +254,25 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
           taskId == _listeningTaskId &&
           generation == _narrationGeneration &&
           _pendingTaskNarration.isNotEmpty) {
-        final batch = List<TaskProgressEvent>.of(_pendingTaskNarration);
-        _pendingTaskNarration.clear();
-        final spoken = summarizeTaskProgress(batch);
+        final batch = _pendingTaskNarration.take(40).toList();
+        _pendingTaskNarration.removeRange(0, batch.length);
+        final fallback = summarizeTaskProgress(batch);
+        if (fallback.isEmpty) continue;
+        String spoken;
+        try {
+          spoken = await widget.api.narrateTaskProgress(
+            taskId,
+            after: batch.first.id - 1,
+            through: batch.last.id,
+          );
+        } on Object {
+          spoken = fallback;
+        }
+        if (!mounted ||
+            taskId != _listeningTaskId ||
+            generation != _narrationGeneration) {
+          return;
+        }
         if (spoken.isEmpty) continue;
         setState(() => _latestTaskProgress = spoken);
         if (!await _playTaskNarrationSpeech(spoken)) {

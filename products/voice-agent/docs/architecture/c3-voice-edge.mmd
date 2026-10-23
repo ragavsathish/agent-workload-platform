@@ -9,6 +9,7 @@ flowchart TB
         direction TB
         HTTP["Component<br/><b>Owner HTTP Boundary</b><br/>origin and exact tailnet-identity checks"]
         API["Component<br/><b>Browser API</b><br/>features, tasks, transcript, context, diagnostics"]
+        NARRATION["Component<br/><b>Task Narration Adapter</b><br/>re-reads owner progress and requests a Pi recap"]
         TRANSPORT["Component<br/><b>SmallWebRTC Transport</b><br/>bidirectional 16/24 kHz audio"]
         FILTER["Component<br/><b>Input Filter and Recorder</b><br/>one selected filter plus bounded replay"]
         TURN["Component<br/><b>Turn Detector</b><br/>Silero VAD and Smart Turn v3"]
@@ -20,6 +21,7 @@ flowchart TB
         TELEMETRY["Component<br/><b>Pipecat Telemetry Bridge</b><br/>turn, speaking, latency, service, and error signals"]
 
         HTTP --> API
+        API -->|"owner narration request"| NARRATION
         TRANSPORT --> FILTER --> TURN --> STT --> CONTEXT --> LLM --> VISUAL --> TTS --> TRANSPORT
         TURN -.->|"lifecycle events"| TELEMETRY
         STT -.->|"service metrics"| TELEMETRY
@@ -30,6 +32,8 @@ flowchart TB
     BROWSER -->|"signaling, microphone audio, owner APIs"| HTTP
     HTTP -->|"authorized signaling"| TRANSPORT
     API -->|"task commands and queries"| GATEWAY
+    NARRATION -->|"owner task and progress"| GATEWAY
+    NARRATION -->|"bounded events; spoken recap"| BROKER
     API -->|"context, transcript, speech"| BROKER
     FILTER -->|"bounded session audio and metrics"| STORE
     STT -->|"WAV"| BROKER
@@ -41,6 +45,6 @@ flowchart TB
     classDef component fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
     classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
-    class HTTP,API,TRANSPORT,FILTER,TURN,STT,CONTEXT,LLM,VISUAL,TTS,TELEMETRY component;
+    class HTTP,API,NARRATION,TRANSPORT,FILTER,TURN,STT,CONTEXT,LLM,VISUAL,TTS,TELEMETRY component;
     class BROWSER,BROKER,GATEWAY,OTEL external;
     class STORE data;

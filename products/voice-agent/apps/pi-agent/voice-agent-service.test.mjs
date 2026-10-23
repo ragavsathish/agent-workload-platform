@@ -25,7 +25,8 @@ import {
   restorePublicTranscript,
 } from "./dist/voice-agent/public-transcript.js";
 import { parseVoiceTurn } from "./dist/voice-agent/conversation.js";
-import { matchVoiceRoute } from "./dist/voice-agent/voice-http-server.js";
+import { matchVoiceRoute, parseNarrationRequest } from "./dist/voice-agent/voice-http-server.js";
+import { narrationPrompt } from "./dist/voice-agent/task-narrator.js";
 import {
   createVoiceGondolinConfig,
   GUEST_GITEA_ENDPOINT,
@@ -250,7 +251,23 @@ test("voice HTTP routes parse into typed commands", () => {
     matchVoiceRoute("POST", "/v1/tasks/detach"),
     { kind: "detach-task" },
   );
+  assert.deepEqual(
+    matchVoiceRoute("POST", "/v1/tasks/narration"),
+    { kind: "task-narration" },
+  );
   assert.deepEqual(matchVoiceRoute("DELETE", "/v1/turn"), { kind: "not-found" });
+});
+
+test("narration uses bounded task events in a separate prompt", () => {
+  const request = parseNarrationRequest({
+    taskId: "00000000-0000-0000-0000-000000000001",
+    instruction: "Review the pull request",
+    events: ["The agent is reading README.md.", "The agent is running: git diff."],
+  });
+  assert.match(narrationPrompt(request), /Review the pull request/u);
+  assert.match(narrationPrompt(request), /2\. The agent is running: git diff\./u);
+  assert.throws(() => parseNarrationRequest({ ...request, events: [] }), /invalid narration/u);
+  assert.throws(() => parseNarrationRequest({ ...request, events: Array(41).fill("x") }), /invalid narration/u);
 });
 
 test("voice Pi exposes one task-session attachment tool", async () => {

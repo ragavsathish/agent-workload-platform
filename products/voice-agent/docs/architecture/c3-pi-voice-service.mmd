@@ -1,5 +1,5 @@
 flowchart LR
-    BROKER[External container<br/><b>Inference Broker</b><br/>turn, transcript, and context API caller]
+    BROKER[External container<br/><b>Inference Broker</b><br/>turn, transcript, context, and narration API caller]
     PROVIDER[External system<br/><b>Model Provider</b>]
     GATEWAY[External container<br/><b>Agent Gateway</b><br/>task lifecycle and personal knowledge]
     VM[External container<br/><b>Voice Tool Sandbox</b><br/>Gondolin VM]
@@ -12,6 +12,7 @@ flowchart LR
         HTTP["Component<br/><b>Private HTTP API</b><br/>bearer auth, bounded body, JSON and SSE"]
         QUEUE["Component<br/><b>Turn Coordinator</b><br/>serializes turns and compaction; aborts on timeout"]
         SESSION["Component<br/><b>Agent Session</b><br/>persistent Pi context and streamed model events"]
+        NARRATOR["Component<br/><b>Task Narrator</b><br/>separate in-memory Pi session with no tools or context files"]
         MODEL["Component<br/><b>Model Runtime</b><br/>host credentials with model network disabled"]
         SKILLS["Component<br/><b>Skill Resource Loader</b><br/>discovers trusted read-only SKILL.md resources"]
         WORKSPACE["Component<br/><b>Gondolin Workspace Adapter</b><br/>creates VM-backed read, write, edit, and bash tools"]
@@ -23,6 +24,8 @@ flowchart LR
         PERSIST["Component<br/><b>Session Manager</b><br/>loads and persists the voice session branch"]
 
         HTTP --> QUEUE --> SESSION
+        HTTP -->|"bounded progress events"| NARRATOR
+        MODEL --> NARRATOR
         MODEL --> SESSION
         SKILLS --> SESSION
         WORKSPACE --> SESSION
@@ -35,6 +38,7 @@ flowchart LR
 
     BROKER -->|"private turn and projection HTTP"| HTTP
     SESSION -->|"model requests"| PROVIDER
+    NARRATOR -->|"recap model request"| PROVIDER
     WORKSPACE -->|"VM lifecycle and tools"| VM
     MCP -->|"MCP over stdio<br/>configured component directory"| WASSETTE
     GRAFANA_MCP -->|"read-only MCP calls"| GRAFANA
@@ -47,6 +51,6 @@ flowchart LR
     classDef component fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
     classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
-    class HTTP,QUEUE,SESSION,MODEL,SKILLS,WORKSPACE,SEARCH,MCP,GRAFANA_MCP,TRANSCRIPT,USAGE,PERSIST component;
+    class HTTP,QUEUE,SESSION,NARRATOR,MODEL,SKILLS,WORKSPACE,SEARCH,MCP,GRAFANA_MCP,TRANSCRIPT,USAGE,PERSIST component;
     class BROKER,PROVIDER,GATEWAY,VM,WASSETTE,GRAFANA external;
     class STATE data;

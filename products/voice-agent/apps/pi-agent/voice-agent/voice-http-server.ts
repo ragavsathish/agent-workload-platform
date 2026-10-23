@@ -8,6 +8,7 @@ import {
 import type { PublicContextUsage } from "./voice-agent.js";
 import type { PublicTranscriptSnapshot } from "./public-transcript.js";
 import type { PublicSessionSummary } from "./voice-sessions.js";
+import type { NarrationRequest, TaskNarrator } from "./task-narrator.js";
 
 type VoiceAgentPort = {
   transcriptSnapshot(): PublicTranscriptSnapshot;
@@ -38,6 +39,7 @@ type VoiceRoute =
   | { kind: "compact" }
   | { kind: "abort" }
   | { kind: "detach-task" }
+  | { kind: "task-narration" }
   | { kind: "turn"; stream: boolean }
   | { kind: "not-found" };
 
@@ -52,6 +54,7 @@ export function matchVoiceRoute(method = "", url = ""): VoiceRoute {
   if (method === "POST" && url === "/v1/context/compact") return { kind: "compact" };
   if (method === "POST" && url === "/v1/turn/abort") return { kind: "abort" };
   if (method === "POST" && url === "/v1/tasks/detach") return { kind: "detach-task" };
+  if (method === "POST" && url === "/v1/tasks/narration") return { kind: "task-narration" };
   if (method === "POST" && (url === "/v1/turn" || url === "/v1/turn/stream")) {
     return { kind: "turn", stream: url.endsWith("/stream") };
   }
@@ -76,6 +79,22 @@ async function readBody(request: IncomingMessage): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
+export function parseNarrationRequest(body: unknown): NarrationRequest {
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("invalid narration request");
+  const value = body as Record<string, unknown>;
+  if (
+    typeof value.taskId !== "string"
+    || !/^[0-9a-f-]{36}$/u.test(value.taskId)
+    || typeof value.instruction !== "string"
+    || value.instruction.length > 1_500
+    || !Array.isArray(value.events)
+    || value.events.length < 1
+    || value.events.length > 40
+    || !value.events.every((event) => typeof event === "string" && event.length > 0 && event.length <= 250)
+  ) throw new Error("invalid narration request");
+  return value as NarrationRequest;
+}
+
 function sendJson(
   response: ServerResponse,
   status: number,
@@ -95,10 +114,11 @@ function errorMessage(error: unknown, fallback: string): string {
 
 export function createVoiceHttpServer(options: {
   agent: VoiceAgentPort;
+  narrator: Pick<TaskNarrator, "summarize">;
   serviceToken: string;
   telemetry: TelemetryPort;
 }): Server {
-  const { agent, serviceToken, telemetry } = options;
+  const { agent, narrator, serviceToken, telemetry } = options;
   return createServer(async (request, response) => {
     if (request.headers.authorization !== `Bearer ${serviceToken}`) {
       sendJson(response, 401, { detail: "invalid Pi voice credential" });
@@ -126,6 +146,17 @@ export function createVoiceHttpServer(options: {
     if (route.kind === "detach-task") {
       await agent.detachTaskSession();
       return sendJson(response, 200, { status: "detached" });
+    }
+    if (route.kind === "task-narration") {
+      try {
+        const body = parseNarrationRequest(await readBody(request));
+        const spoken = await telemetry.observe("pi.task-narration", () => narrator.summarize(body));
+        return sendJson(response, 200, { spoken });
+      } catch (error) {
+        return sendJson(response, 502, {
+          detail: errorMessage(error, "Pi task narration failed"),
+        });
+      }
     }
     if (route.kind === "new-session" || route.kind === "resume-session") {
       try {

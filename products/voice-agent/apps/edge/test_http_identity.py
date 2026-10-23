@@ -21,9 +21,57 @@ from bot import (
     owner_gateway_request,
     playwright_trace_upstream,
     proxy_playwright_trace,
+    summarize_owned_task_progress,
     validate_http_identity,
     validate_ingress_identity,
 )
+
+
+class TaskNarrationTest(unittest.IsolatedAsyncioTestCase):
+    async def test_summarizer_gets_only_owner_scoped_progress(self):
+        calls = []
+
+        async def gateway(_request, method, path, *, query=None):
+            calls.append((method, path, query))
+            if path.endswith("/progress"):
+                return [
+                    {"id": 1, "spoken": "The agent has started working."},
+                    {"id": 2, "spoken": "The agent is reading README.md."},
+                    {"id": 3, "spoken": "The agent is running a workspace command."},
+                    {"id": 4, "spoken": "The agent is running: git diff."},
+                ]
+            return {"instruction": "Review the pull request"}
+
+        async def narrator(task_id, instruction, events):
+            calls.append((task_id, instruction, events))
+            return "The agent is reading the project guidance and reviewing the changes."
+
+        with (
+            patch("bot.owner_gateway_request", gateway),
+            patch("bot.broker_task_narration", narrator),
+        ):
+            spoken = await summarize_owned_task_progress(
+                request("POST", identity="owner@example.com"), "task-1", 0, 4
+            )
+
+        self.assertIn("reviewing the changes", spoken)
+        self.assertEqual(calls[0], ("GET", "/tasks/task-1", None))
+        self.assertEqual(calls[1], ("GET", "/tasks/task-1/progress", {"after": 0}))
+        self.assertEqual(calls[2][2], [
+            "The agent is reading README.md.",
+            "The agent is running: git diff.",
+        ])
+
+    async def test_summarizer_rejects_missing_end_cursor(self):
+        async def gateway(_request, _method, path, *, query=None):
+            return [] if path.endswith("/progress") else {"instruction": "Review"}
+
+        with patch("bot.owner_gateway_request", gateway):
+            with self.assertRaises(HTTPException) as raised:
+                await summarize_owned_task_progress(
+                    request("POST", identity="owner@example.com"), "task-1", 0, 3
+                )
+        self.assertEqual(raised.exception.status_code, 409)
 
 
 def request(

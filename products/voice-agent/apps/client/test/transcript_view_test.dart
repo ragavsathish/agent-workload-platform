@@ -205,6 +205,71 @@ void main() {
     ]);
   });
 
+  testWidgets('Listen speaks the separate Pi recap instead of commands', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1180, 820);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _FakeVoiceApi()
+      ..taskValues.add(_pendingTask)
+      ..progressValues.addAll(const [
+        TaskProgressEvent(id: 1, spoken: 'The agent is reading README.md.'),
+        TaskProgressEvent(id: 2, spoken: 'The agent is running: git diff.'),
+      ])
+      ..narrationOverride =
+          'The agent is checking the project guidance and reviewing the changes.';
+    final spoken = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TranscriptView(
+          api: api,
+          playSpeech: (text) async => spoken.add(text),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('tasks-section')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('task-narration-pending-1')));
+    await tester.pump();
+
+    expect(api.narratedRanges, [(0, 2)]);
+    expect(spoken, [api.narrationOverride]);
+  });
+
+  testWidgets('Listen falls back when the narrator is unavailable', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1180, 820);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _FakeVoiceApi()
+      ..taskValues.add(_pendingTask)
+      ..progressValues.add(
+        const TaskProgressEvent(id: 1, spoken: 'Reading the PR diff.'),
+      )
+      ..narrationFails = true;
+    final spoken = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TranscriptView(
+          api: api,
+          playSpeech: (text) async => spoken.add(text),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('tasks-section')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('task-narration-pending-1')));
+    await tester.pump();
+
+    expect(spoken, ['Reading the PR diff.']);
+  });
+
   testWidgets('Listen keeps fetching progress while speech is playing', (
     tester,
   ) async {
@@ -339,9 +404,9 @@ void main() {
     await tester.pump();
 
     expect(api.progressAfter, contains(40));
-    expect(spoken, hasLength(1));
-    expect(spoken.single, isNot(contains('updates')));
-    expect(spoken.single, contains('Action 41.'));
+    expect(api.narratedRanges, [(0, 40), (40, 41)]);
+    expect(spoken, hasLength(2));
+    expect(spoken.last, contains('Action 41.'));
   });
 
   testWidgets('completed task can replay its actions and rationale', (
@@ -494,6 +559,9 @@ class _FakeVoiceApi extends VoiceApi {
   final List<AgentTask> taskValues = [];
   final List<TaskProgressEvent> progressValues = [];
   final List<int> progressAfter = [];
+  final List<(int, int)> narratedRanges = [];
+  String? narrationOverride;
+  bool narrationFails = false;
 
   @override
   Future<TranscriptSnapshot> transcript() async =>
@@ -518,6 +586,23 @@ class _FakeVoiceApi extends VoiceApi {
             ),
           ]
         : [];
+  }
+
+  @override
+  Future<String> narrateTaskProgress(
+    String id, {
+    required int after,
+    required int through,
+  }) async {
+    narratedRanges.add((after, through));
+    if (narrationFails) throw const ApiException('Narrator unavailable');
+    if (narrationOverride case final override?) return override;
+    if (progressValues.isEmpty) return 'The agent is reading source files.';
+    return summarizeTaskProgress(
+      progressValues
+          .where((event) => event.id > after && event.id <= through)
+          .toList(),
+    );
   }
 
   @override

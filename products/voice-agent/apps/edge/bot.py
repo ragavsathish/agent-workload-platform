@@ -568,6 +568,68 @@ async def broker_speech(spoken: str) -> bytes:
     return pcm_wave(response.content)
 
 
+async def broker_task_narration(task_id: str, instruction: str, events: list[str]) -> str:
+    """Summarize owner-visible progress through a separate, tool-free Pi session."""
+    headers = {"Authorization": f"Bearer {required_env('INFERENCE_BROKER_TOKEN')}"}
+    with telemetry.observe("browser.task.narration"):
+        async with httpx.AsyncClient(timeout=httpx.Timeout(55.0, connect=5.0)) as client:
+            try:
+                response = await client.post(
+                    f"{required_env('INFERENCE_BROKER_BASE_URL').rstrip('/')}/pi/tasks/narration",
+                    headers=headers,
+                    json={"taskId": task_id, "instruction": instruction[:1_500], "events": events},
+                )
+            except httpx.HTTPError as exc:
+                raise HTTPException(status_code=502, detail="Pi narration is unavailable") from exc
+    if response.is_error:
+        raise HTTPException(status_code=502, detail="Pi narration is unavailable")
+    try:
+        spoken = response.json()["spoken"]
+    except (ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(status_code=502, detail="invalid Pi narration") from exc
+    if not isinstance(spoken, str) or not spoken.strip() or len(spoken) > 500:
+        raise HTTPException(status_code=502, detail="invalid Pi narration")
+    return spoken.strip()
+
+
+async def summarize_owned_task_progress(
+    request: Request, proposal_id: str, after: int, through: int
+) -> str:
+    """Read one owner-scoped progress page before invoking the narrator."""
+    if after < 0 or through <= after:
+        raise HTTPException(status_code=400, detail="invalid narration cursor")
+    task = await owner_gateway_request(request, "GET", f"/tasks/{proposal_id}")
+    progress = await owner_gateway_request(
+        request, "GET", f"/tasks/{proposal_id}/progress", query={"after": after}
+    )
+    if not isinstance(task, dict) or not isinstance(progress, list):
+        raise HTTPException(status_code=502, detail="invalid task progress")
+    selected = [
+        item for item in progress
+        if isinstance(item, dict)
+        and isinstance(item.get("id"), int)
+        and after < item["id"] <= through
+    ]
+    if not selected or selected[-1]["id"] != through:
+        raise HTTPException(status_code=409, detail="task progress changed")
+    events = [
+        item["spoken"] for item in selected
+        if isinstance(item.get("spoken"), str)
+        and item["spoken"] != "The agent has started working."
+    ]
+    if any(event != "The agent is running a workspace command." for event in events):
+        events = [
+            event for event in events
+            if event != "The agent is running a workspace command."
+        ]
+    if not events:
+        return ""
+    instruction = task.get("instruction")
+    if not isinstance(instruction, str):
+        raise HTTPException(status_code=502, detail="invalid task instruction")
+    return await broker_task_narration(proposal_id, instruction, events)
+
+
 async def run_bot(transport: BaseTransport, identity: str):
     broker_url = required_env("INFERENCE_BROKER_BASE_URL")
     broker_token = required_env("INFERENCE_BROKER_TOKEN")
@@ -1242,6 +1304,21 @@ if __name__ == "__main__":
                 f"/tasks/{proposal_id}/progress",
                 query={"after": after},
             ),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/tasks/{proposal_id}/narration")
+    async def browser_task_narration(proposal_id: str, request: Request):
+        try:
+            body = await request.json()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="invalid narration request") from exc
+        after = body.get("after") if isinstance(body, dict) else None
+        through = body.get("through") if isinstance(body, dict) else None
+        if type(after) is not int or type(through) is not int:
+            raise HTTPException(status_code=400, detail="invalid narration cursor")
+        return JSONResponse(
+            {"spoken": await summarize_owned_task_progress(request, proposal_id, after, through)},
             headers={"Cache-Control": "no-store"},
         )
 

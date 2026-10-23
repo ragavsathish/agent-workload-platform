@@ -25,6 +25,7 @@ from fastapi.responses import Response, StreamingResponse
 from loguru import logger
 from pydantic import BaseModel, Field
 from voice_agent.shared.telemetry import configure_telemetry
+
 from voice_agent.speech.application.transcription import inference_slot, transcribe_audio
 from voice_agent.speech.infrastructure.mlx_tts import synthesize_pcm
 from voice_agent.speech.infrastructure.parakeet_stt import load_model
@@ -76,6 +77,12 @@ class SpeechRequest(BaseModel):
     voice: str = Field(max_length=64)
     response_format: str = "pcm"
     speed: float | None = Field(default=None, ge=0.5, le=2.0)
+
+
+class TaskNarrationRequest(BaseModel):
+    taskId: str = Field(pattern=r"^[0-9a-f-]{36}$")
+    instruction: str = Field(max_length=1_500)
+    events: list[str] = Field(min_length=1, max_length=40)
 
 
 @asynccontextmanager
@@ -377,6 +384,35 @@ async def pi_chat(request: Request, _: None = Depends(authenticate)) -> Streamin
             ),
             media_type="application/json",
         )
+
+
+@app.post("/v1/pi/tasks/narration")
+async def pi_task_narration(
+    body: TaskNarrationRequest, request: Request, _: None = Depends(authenticate)
+) -> dict[str, str]:
+    """Ask a tool-free Pi session to narrate bounded task progress."""
+    if any(not event or len(event) > 250 for event in body.events):
+        raise HTTPException(status_code=400, detail="invalid task progress")
+    with telemetry.observe("inference.pi.task-narration"):
+        client: httpx.AsyncClient = request.app.state.http
+        try:
+            response = await client.post(
+                f"{_pi_service_url()}/v1/tasks/narration",
+                json=body.model_dump(),
+                headers={"Authorization": f"Bearer {BROKER_TOKEN}"},
+                timeout=50.0,
+            )
+        except httpx.HTTPError as exc:
+            raise HTTPException(status_code=502, detail="Pi narration is unavailable") from exc
+    if response.status_code != 200:
+        raise HTTPException(status_code=502, detail="Pi narration failed")
+    try:
+        spoken = response.json()["spoken"]
+    except (ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(status_code=502, detail="invalid Pi narration") from exc
+    if not isinstance(spoken, str) or not spoken.strip() or len(spoken) > 500:
+        raise HTTPException(status_code=502, detail="invalid Pi narration")
+    return {"spoken": spoken.strip()}
 
 
 @app.get("/v1/pi/transcript", response_model=None)
