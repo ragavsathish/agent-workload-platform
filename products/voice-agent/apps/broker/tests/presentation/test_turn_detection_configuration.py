@@ -19,6 +19,8 @@ def test_edge_uses_plain_smart_turn_with_recommended_vad_threshold() -> None:
     assert "FilterIncompleteUserTurnStrategies" not in edge
     assert "UserTurnStrategies(" in edge
     assert "VADParams(stop_secs=0.2)" in edge
+    assert "empty_user_turn=None" in edge
+    assert 'telemetry.record("pipecat.user_turn.empty")' in edge
 
 
 def test_deployment_has_no_speaker_verification_configuration() -> None:

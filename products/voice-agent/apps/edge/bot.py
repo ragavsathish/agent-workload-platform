@@ -878,6 +878,10 @@ async def run_bot(transport: BaseTransport, identity: str):
         context,
         user_params=LLMUserAggregatorParams(
             vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.2)),
+            # VAD can mistake quiet background audio for a user turn. If STT
+            # returns no text, do not send Pipecat's synthetic "please repeat"
+            # developer message to the conversational agent.
+            empty_user_turn=None,
             user_turn_strategies=UserTurnStrategies(
                 stop=[
                     TurnAnalyzerUserTurnStopStrategy(
@@ -900,6 +904,8 @@ async def run_bot(transport: BaseTransport, identity: str):
     @user_aggregator.event_handler("on_user_turn_stopped")
     async def on_user_turn_stopped(_aggregator, _strategy, _message):
         telemetry.record("pipecat.user_turn.stopped")
+        if not _message.content.strip():
+            telemetry.record("pipecat.user_turn.empty")
 
     @user_aggregator.event_handler("on_user_turn_stop_timeout")
     async def on_user_turn_stop_timeout(_aggregator):

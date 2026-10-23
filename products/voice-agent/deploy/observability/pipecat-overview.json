@@ -125,7 +125,8 @@
         {"editorMode": "code", "expr": "sum(rate(pipecat_operation_total{app_operation=\"pipecat.speech.user_speech_started\"}[$__rate_interval]))", "legendFormat": "speech detected", "range": true, "refId": "A"},
         {"editorMode": "code", "expr": "sum(rate(pipecat_operation_total{app_operation=\"pipecat.user_turn.transcript_emitted\"}[$__rate_interval]))", "legendFormat": "transcript emitted", "range": true, "refId": "B"},
         {"editorMode": "code", "expr": "sum(rate(pipecat_operation_total{app_operation=\"pipecat.speech.bot_speech_started\"}[$__rate_interval]))", "legendFormat": "reply audio", "range": true, "refId": "C"},
-        {"editorMode": "code", "expr": "sum(rate(pipecat_operation_total{app_operation=\"pipecat.speech.interruption\"}[$__rate_interval]))", "legendFormat": "interruptions", "range": true, "refId": "D"}
+        {"editorMode": "code", "expr": "sum(rate(pipecat_operation_total{app_operation=\"pipecat.speech.interruption\"}[$__rate_interval]))", "legendFormat": "interruptions", "range": true, "refId": "D"},
+        {"editorMode": "code", "expr": "sum(rate(pipecat_operation_total{app_operation=\"pipecat.user_turn.empty\"}[$__rate_interval]))", "legendFormat": "empty turns", "range": true, "refId": "E"}
       ],
       "title": "Conversation activity",
       "type": "timeseries"
