@@ -15,15 +15,22 @@ const inspectMcpFrame = async ({ frame }, options) => {
   const appFrame = await mcpFrame(frame, options.title);
   const content = appFrame.locator(options.selector);
   await content.waitFor({ state: 'visible' });
-  await appFrame.waitForFunction(
-    () => document.getAnimations().every((animation) => animation.playState === 'finished'),
-  );
+  if (!options.skipAnimations) {
+    await appFrame.waitForFunction(
+      () => document.getAnimations().every((animation) => animation.playState === 'finished'),
+    );
+  }
   const text = await content.textContent();
   const mathCount = options.mathSelector
     ? await appFrame.locator(options.mathSelector).count()
     : 0;
   const attribute = options.attribute
     ? await content.getAttribute(options.attribute)
+    : undefined;
+  const computedStyles = options.computedStyles
+    ? await content.evaluate((element, properties) => Object.fromEntries(
+      properties.map((property) => [property, getComputedStyle(element).getPropertyValue(property)]),
+    ), options.computedStyles)
     : undefined;
   let fit;
   if (options.measureDeck) {
@@ -38,7 +45,7 @@ const inspectMcpFrame = async ({ frame }, options) => {
       };
     });
   }
-  return { text, mathCount, fit, attribute };
+  return { text, mathCount, fit, attribute, computedStyles };
 };
 
 const clickMcpFrame = async ({ frame }, options) => {

@@ -111,22 +111,22 @@ class _McpAppViewState extends State<McpAppView> {
           height: 72,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: PiColors.surfaceRaised,
-            border: Border.all(color: PiColors.border),
+            color: PiColors.of(context).surfaceRaised,
+            border: Border.all(color: PiColors.of(context).border),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
+              Icon(
                 Icons.widgets_outlined,
                 size: 17,
-                color: PiColors.muted,
+                color: PiColors.of(context).muted,
               ),
               const SizedBox(width: 8),
-              const Text(
+              Text(
                 'Visual unavailable',
-                style: TextStyle(color: PiColors.muted),
+                style: TextStyle(color: PiColors.of(context).muted),
               ),
               const SizedBox(width: 6),
               TextButton(onPressed: _mount, child: const Text('Retry')),

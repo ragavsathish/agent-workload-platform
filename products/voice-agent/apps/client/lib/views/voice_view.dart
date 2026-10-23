@@ -219,6 +219,7 @@ class _VoiceViewState extends State<VoiceView> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
+    final colors = PiColors.of(context);
     final width = size.width;
     final mobile = width < 600;
     final horizontal = width >= 900
@@ -251,7 +252,7 @@ class _VoiceViewState extends State<VoiceView> {
                     child: Text(
                       _error!,
                       key: const Key('voice-error'),
-                      style: const TextStyle(color: PiColors.danger),
+                      style: TextStyle(color: PiColors.of(context).danger),
                     ),
                   ),
                 SizedBox(height: mobile ? 8 : 12),
@@ -263,19 +264,19 @@ class _VoiceViewState extends State<VoiceView> {
                     mobile ? 8 : 12,
                   ),
                   decoration: BoxDecoration(
-                    border: Border.all(color: const Color(0xFF252E35)),
+                    border: Border.all(color: colors.border),
                     borderRadius: BorderRadius.circular(18),
-                    gradient: const LinearGradient(
+                    gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [Color(0xFF11171C), Color(0xFF0A0E12)],
+                      colors: [colors.surface, colors.background],
                     ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (mobile)
-                        const Row(
+                        Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Expanded(
@@ -290,7 +291,7 @@ class _VoiceViewState extends State<VoiceView> {
                             Text(
                               'MCP APP',
                               style: TextStyle(
-                                color: PiColors.muted,
+                                color: PiColors.of(context).muted,
                                 fontFamily: 'monospace',
                                 fontSize: 9,
                                 letterSpacing: 1,
@@ -357,13 +358,16 @@ class _ConversationMapPlaceholder extends StatelessWidget {
       key: const Key('conversation-map-placeholder'),
       height: height,
       width: double.infinity,
-      child: const CustomPaint(painter: _ConversationMapPainter()),
+      child: CustomPaint(
+        painter: _ConversationMapPainter(PiColors.of(context)),
+      ),
     ),
   );
 }
 
 class _ConversationMapPainter extends CustomPainter {
-  const _ConversationMapPainter();
+  const _ConversationMapPainter(this.colors);
+  final PiColors colors;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -374,12 +378,12 @@ class _ConversationMapPainter extends CustomPainter {
     final startY = ((size.height - totalHeight) / 2).clamp(14.0, 80.0);
     final left = (size.width - boxWidth) / 2;
     final border = Paint()
-      ..color = const Color(0xFF66716D)
+      ..color = colors.borderStrong
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
-    final fill = Paint()..color = const Color(0xFF171D1C);
+    final fill = Paint()..color = colors.surfaceRaised;
     final connector = Paint()
-      ..color = const Color(0xFF82958C)
+      ..color = colors.muted
       ..strokeWidth = 1.4
       ..style = PaintingStyle.stroke;
 
@@ -394,11 +398,7 @@ class _ConversationMapPainter extends CustomPainter {
       final text = TextPainter(
         text: TextSpan(
           text: labels[index],
-          style: const TextStyle(
-            color: Color(0xFFDDE6E1),
-            fontSize: 14,
-            height: 1.25,
-          ),
+          style: TextStyle(color: colors.text, fontSize: 14, height: 1.25),
         ),
         textAlign: TextAlign.center,
         textDirection: TextDirection.ltr,
@@ -429,7 +429,8 @@ class _ConversationMapPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _ConversationMapPainter oldDelegate) =>
+      oldDelegate.colors != colors;
 }
 
 class _Header extends StatelessWidget {
@@ -438,7 +439,7 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const desktopBrand = Row(
+    final desktopBrand = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         _BrandMark(),
@@ -453,7 +454,7 @@ class _Header extends StatelessWidget {
             SizedBox(height: 2),
             Text(
               'Private coding workspace',
-              style: TextStyle(color: Color(0xFF697681), fontSize: 10.5),
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
         ),
@@ -465,6 +466,7 @@ class _Header extends StatelessWidget {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         _VoiceState(stateLabel),
+        const ThemeToggleButton(),
         OutlinedButton.icon(
           key: const Key('open-audio-diagnostics'),
           onPressed: () => ClientActions.openView('audio-diagnostics'),
@@ -564,8 +566,8 @@ class _HeaderIconButton extends StatelessWidget {
     icon: Icon(icon, size: 18),
     constraints: const BoxConstraints.tightFor(width: 44, height: 44),
     style: IconButton.styleFrom(
-      foregroundColor: PiColors.text,
-      side: const BorderSide(color: PiColors.border),
+      foregroundColor: PiColors.of(context).text,
+      side: BorderSide(color: PiColors.of(context).border),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
     ),
   );
@@ -575,25 +577,28 @@ class _BrandMark extends StatelessWidget {
   const _BrandMark();
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: 32,
-    height: 32,
-    alignment: Alignment.center,
-    decoration: BoxDecoration(
-      color: const Color(0xFF123426),
-      border: Border.all(color: const Color(0xFF32654F)),
-      borderRadius: BorderRadius.circular(9),
-    ),
-    child: const Text(
-      'P',
-      style: TextStyle(
-        color: Color(0xFF7CF1BA),
-        fontFamily: 'monospace',
-        fontSize: 13,
-        fontWeight: FontWeight.w700,
+  Widget build(BuildContext context) {
+    final colors = PiColors.of(context);
+    return Container(
+      width: 32,
+      height: 32,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: colors.surfaceRaised,
+        border: Border.all(color: colors.green.withValues(alpha: .55)),
+        borderRadius: BorderRadius.circular(9),
       ),
-    ),
-  );
+      child: Text(
+        'P',
+        style: TextStyle(
+          color: colors.green,
+          fontFamily: 'monospace',
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
 }
 
 class _VoiceState extends StatelessWidget {
@@ -604,11 +609,12 @@ class _VoiceState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = PiColors.of(context);
     final color = switch (label) {
-      'Listening' || 'Speaking' => PiColors.green,
-      'Thinking…' => PiColors.blue,
-      'Muted' || 'Starting…' => PiColors.orange,
-      _ => const Color(0xFF65717B),
+      'Listening' || 'Speaking' => PiColors.of(context).green,
+      'Thinking…' => PiColors.of(context).blue,
+      'Muted' || 'Starting…' => PiColors.of(context).orange,
+      _ => colors.muted,
     };
     return Semantics(
       key: const Key('voice-state'),
@@ -639,8 +645,8 @@ class _VoiceState extends StatelessWidget {
                 compact && label == 'Starting…'
                     ? 'STARTING'
                     : label.toUpperCase(),
-                style: const TextStyle(
-                  color: Color(0xFF89949F),
+                style: TextStyle(
+                  color: colors.muted,
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
                   letterSpacing: .9,
@@ -679,6 +685,7 @@ class _ConversationDock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
+    final colors = PiColors.of(context);
     final mobile = width < 600;
     final contextText = contextUsage?.tokens == null
         ? '—'
@@ -718,19 +725,20 @@ class _ConversationDock extends StatelessWidget {
       decoration: BoxDecoration(
         border: mobile
             ? null
-            : const Border(left: BorderSide(color: PiColors.border)),
+            : Border(left: BorderSide(color: PiColors.of(context).border)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (mobile) const ThemeToggleButton(),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (!mobile)
-                const Text(
+                Text(
                   'CONTEXT',
                   style: TextStyle(
-                    color: PiColors.muted,
+                    color: PiColors.of(context).muted,
                     fontSize: 10,
                     letterSpacing: 1.4,
                   ),
@@ -797,8 +805,8 @@ class _ConversationDock extends StatelessWidget {
                     key: const Key('end-conversation'),
                     onPressed: onStop,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF351B1F),
-                      foregroundColor: const Color(0xFFFFB4B8),
+                      backgroundColor: colors.danger.withValues(alpha: .14),
+                      foregroundColor: colors.danger,
                     ),
                     icon: const Icon(Icons.stop_rounded, size: 17),
                     label: const Text('End'),
@@ -809,8 +817,8 @@ class _ConversationDock extends StatelessWidget {
                   key: const Key('end-conversation'),
                   onPressed: onStop,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF351B1F),
-                    foregroundColor: const Color(0xFFFFB4B8),
+                    backgroundColor: colors.danger.withValues(alpha: .14),
+                    foregroundColor: colors.danger,
                   ),
                   icon: const Icon(Icons.stop_rounded, size: 17),
                   label: const Text('End conversation'),
@@ -896,43 +904,47 @@ class _PiActivityState extends State<_PiActivity>
   }
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: _controller,
-    builder: (_, child) => CustomPaint(
-      painter: _ActivityPainter(widget.phase, _controller.value),
-      child: child,
-    ),
-    child: Container(
-      width: widget.compact ? 36 : 48,
-      height: widget.compact ? 36 : 48,
-      alignment: Alignment.center,
+  Widget build(BuildContext context) {
+    final colors = PiColors.of(context);
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (_, child) => CustomPaint(
+        painter: _ActivityPainter(widget.phase, _controller.value, colors),
+        child: child,
+      ),
       child: Container(
-        width: 21,
-        height: 21,
+        width: widget.compact ? 36 : 48,
+        height: widget.compact ? 36 : 48,
         alignment: Alignment.center,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: const Color(0xFF10251D),
-          border: Border.all(color: const Color(0x6B72EFB6)),
-        ),
-        child: const Text(
-          'P',
-          style: TextStyle(
-            color: Color(0xFFA4F7CF),
-            fontFamily: 'monospace',
-            fontSize: 9,
-            fontWeight: FontWeight.w700,
+        child: Container(
+          width: 21,
+          height: 21,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: colors.surfaceRaised,
+            border: Border.all(color: colors.green.withValues(alpha: .5)),
+          ),
+          child: Text(
+            'P',
+            style: TextStyle(
+              color: colors.green,
+              fontFamily: 'monospace',
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _ActivityPainter extends CustomPainter {
-  const _ActivityPainter(this.phase, this.progress);
+  const _ActivityPainter(this.phase, this.progress, this.colors);
   final VoicePhase phase;
   final double progress;
+  final PiColors colors;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -949,11 +961,7 @@ class _ActivityPainter extends CustomPainter {
       final inner = 16.0;
       final outer = inner + 3 + pulse * 4;
       final paint = Paint()
-        ..color = Color.lerp(
-          const Color(0xFF426558),
-          const Color(0xFF72EFB6),
-          pulse,
-        )!
+        ..color = Color.lerp(colors.borderStrong, colors.green, pulse)!
         ..strokeWidth = 1.8
         ..strokeCap = StrokeCap.round;
       canvas.drawLine(
@@ -966,5 +974,7 @@ class _ActivityPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _ActivityPainter oldDelegate) =>
-      oldDelegate.phase != phase || oldDelegate.progress != progress;
+      oldDelegate.phase != phase ||
+      oldDelegate.progress != progress ||
+      oldDelegate.colors != colors;
 }

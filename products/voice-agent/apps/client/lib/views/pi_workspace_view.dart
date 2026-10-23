@@ -61,10 +61,16 @@ String summarizeTaskProgress(List<TaskProgressEvent> events) {
 /// This surface deliberately knows nothing about microphone state. VoiceView
 /// remains the only owner of the live voice transport and controls.
 class PiWorkspaceView extends StatefulWidget {
-  const PiWorkspaceView({required this.api, this.playSpeech, super.key});
+  const PiWorkspaceView({
+    required this.api,
+    this.playSpeech,
+    this.onNavigateHome,
+    super.key,
+  });
 
   final VoiceApi api;
   final Future<void> Function(String spoken)? playSpeech;
+  final VoidCallback? onNavigateHome;
 
   @override
   State<PiWorkspaceView> createState() => _PiWorkspaceViewState();
@@ -685,6 +691,8 @@ class _PiWorkspaceViewState extends State<PiWorkspaceView> {
               onNewSession: _newSessionBusy || _sending || _stopping
                   ? null
                   : _newVoiceSession,
+              onNavigateHome:
+                  widget.onNavigateHome ?? ClientActions.navigateHome,
             ),
             if (_error != null)
               _NoticeBanner(
@@ -776,6 +784,7 @@ class _WorkspaceHeader extends StatelessWidget {
     required this.onCreateTask,
     required this.onHistory,
     required this.onNewSession,
+    required this.onNavigateHome,
   });
 
   final bool live;
@@ -787,29 +796,40 @@ class _WorkspaceHeader extends StatelessWidget {
   final VoidCallback? onCreateTask;
   final VoidCallback onHistory;
   final VoidCallback? onNewSession;
+  final VoidCallback onNavigateHome;
 
   @override
   Widget build(BuildContext context) => Container(
     padding: EdgeInsets.fromLTRB(desktop ? 22 : 16, 14, desktop ? 22 : 16, 12),
-    decoration: const BoxDecoration(
-      border: Border(bottom: BorderSide(color: PiColors.border)),
+    decoration: BoxDecoration(
+      border: Border(bottom: BorderSide(color: PiColors.of(context).border)),
     ),
     child: Row(
       children: [
-        Container(
-          width: 34,
-          height: 34,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: PiColors.green.withValues(alpha: .13),
-            border: Border.all(color: PiColors.green.withValues(alpha: .5)),
+        Tooltip(
+          message: 'Pi Voice home',
+          child: InkWell(
+            key: const Key('workspace-home'),
+            onTap: onNavigateHome,
             borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Text(
-            'P',
-            style: TextStyle(
-              color: PiColors.green,
-              fontWeight: FontWeight.w700,
+            child: Container(
+              width: 44,
+              height: 44,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: PiColors.of(context).green.withValues(alpha: .13),
+                border: Border.all(
+                  color: PiColors.of(context).green.withValues(alpha: .5),
+                ),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                'P',
+                style: TextStyle(
+                  color: PiColors.of(context).green,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ),
         ),
@@ -850,6 +870,9 @@ class _WorkspaceHeader extends StatelessWidget {
             onPressed: onHistory,
             icon: const Icon(Icons.history_rounded, size: 19),
           ),
+        if (!desktop) const ThemeToggleButton(),
+        if (desktop) const SizedBox(width: 9),
+        if (desktop) const ThemeToggleButton(),
         if (!desktop) const SizedBox(width: 7),
         if (!desktop)
           IconButton.outlined(
@@ -879,7 +902,9 @@ class _WorkspaceHeader extends StatelessWidget {
           width: 8,
           height: 8,
           decoration: BoxDecoration(
-            color: live ? PiColors.green : PiColors.orange,
+            color: live
+                ? PiColors.of(context).green
+                : PiColors.of(context).orange,
             shape: BoxShape.circle,
           ),
         ),
@@ -923,7 +948,7 @@ class _WorkspaceSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ColoredBox(
-    color: const Color(0xFF0B0F12),
+    color: PiColors.of(context).background,
     child: ListView(
       padding: const EdgeInsets.fromLTRB(12, 14, 12, 20),
       children: [
@@ -1025,8 +1050,8 @@ class _SidebarLabel extends StatelessWidget {
     padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
     child: Text(
       text,
-      style: const TextStyle(
-        color: PiColors.muted,
+      style: TextStyle(
+        color: PiColors.of(context).muted,
         fontSize: 10,
         fontWeight: FontWeight.w700,
         letterSpacing: 1.3,
@@ -1053,7 +1078,7 @@ class _SidebarRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Material(
-    color: selected ? PiColors.surfaceRaised : Colors.transparent,
+    color: selected ? PiColors.of(context).surfaceRaised : Colors.transparent,
     borderRadius: BorderRadius.circular(10),
     child: InkWell(
       onTap: onTap,
@@ -1065,7 +1090,9 @@ class _SidebarRow extends StatelessWidget {
             Icon(
               icon,
               size: 18,
-              color: selected ? PiColors.green : PiColors.muted,
+              color: selected
+                  ? PiColors.of(context).green
+                  : PiColors.of(context).muted,
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -1130,16 +1157,18 @@ class _ConversationPane extends StatelessWidget {
           key: const Key('read-only-history'),
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-          decoration: const BoxDecoration(
-            color: PiColors.surface,
-            border: Border(bottom: BorderSide(color: PiColors.border)),
+          decoration: BoxDecoration(
+            color: PiColors.of(context).surface,
+            border: Border(
+              bottom: BorderSide(color: PiColors.of(context).border),
+            ),
           ),
           child: Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.lock_clock_outlined,
                 size: 17,
-                color: PiColors.muted,
+                color: PiColors.of(context).muted,
               ),
               const SizedBox(width: 9),
               Expanded(
@@ -1226,10 +1255,13 @@ class _EmptyConversation extends StatelessWidget {
               height: 54,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: PiColors.green.withValues(alpha: .1),
+                color: PiColors.of(context).green.withValues(alpha: .1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.forum_outlined, color: PiColors.green),
+              child: Icon(
+                Icons.forum_outlined,
+                color: PiColors.of(context).green,
+              ),
             ),
             const SizedBox(height: 18),
             Text(
@@ -1237,10 +1269,10 @@ class _EmptyConversation extends StatelessWidget {
               style: Theme.of(context).textTheme.headlineMedium,
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Voice and typed messages share this persistent orchestrator session.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: PiColors.muted),
+              style: TextStyle(color: PiColors.of(context).muted),
             ),
           ],
         ),
@@ -1284,12 +1316,12 @@ class _MessageRow extends StatelessWidget {
         padding: EdgeInsets.all(isUser ? 14 : 16),
         decoration: BoxDecoration(
           color: isUser
-              ? PiColors.blue.withValues(alpha: .13)
-              : PiColors.surface,
+              ? PiColors.of(context).blue.withValues(alpha: .13)
+              : PiColors.of(context).surface,
           border: Border.all(
             color: isUser
-                ? PiColors.blue.withValues(alpha: .32)
-                : PiColors.border,
+                ? PiColors.of(context).blue.withValues(alpha: .32)
+                : PiColors.of(context).border,
           ),
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(15),
@@ -1311,14 +1343,14 @@ class _MessageRow extends StatelessWidget {
               ),
               body,
               style: entry.role == 'tool'
-                  ? const TextStyle(
+                  ? TextStyle(
                       fontFamily: 'monospace',
-                      color: PiColors.muted,
+                      color: PiColors.of(context).muted,
                     )
                   : TextStyle(
                       color: entry.status == 'running'
-                          ? PiColors.green
-                          : PiColors.text,
+                          ? PiColors.of(context).green
+                          : PiColors.of(context).text,
                       height: 1.5,
                     ),
             ),
@@ -1371,10 +1403,10 @@ class _ToolActivityRow extends StatelessWidget {
     final failed = entry.status == 'failed';
     final running = entry.status == 'running';
     final color = failed
-        ? PiColors.danger
+        ? PiColors.of(context).danger
         : running
-        ? PiColors.orange
-        : PiColors.green;
+        ? PiColors.of(context).orange
+        : PiColors.of(context).green;
     final status = failed
         ? 'Failed'
         : running
@@ -1449,8 +1481,8 @@ class _MessageMeta extends StatelessWidget {
       children: [
         Text(
           entry.role == 'assistant' ? 'Pi' : entry.role,
-          style: const TextStyle(
-            color: PiColors.green,
+          style: TextStyle(
+            color: PiColors.of(context).green,
             fontSize: 11,
             fontWeight: FontWeight.w700,
           ),
@@ -1493,9 +1525,9 @@ class _Composer extends StatelessWidget {
         : '${formatTokens(tokens)} / ${formatTokens(window)}';
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-      decoration: const BoxDecoration(
-        color: PiColors.background,
-        border: Border(top: BorderSide(color: PiColors.border)),
+      decoration: BoxDecoration(
+        color: PiColors.of(context).background,
+        border: Border(top: BorderSide(color: PiColors.of(context).border)),
       ),
       child: Center(
         child: ConstrainedBox(
@@ -1626,9 +1658,9 @@ class _TaskBoard extends StatelessWidget {
                       style: Theme.of(context).textTheme.headlineMedium,
                     ),
                     const SizedBox(height: 4),
-                    const Text(
+                    Text(
                       'Review work proposed by Pi and follow execution to its output.',
-                      style: TextStyle(color: PiColors.muted),
+                      style: TextStyle(color: PiColors.of(context).muted),
                     ),
                   ],
                 ),
@@ -1645,12 +1677,12 @@ class _TaskBoard extends StatelessWidget {
         ),
       ),
       if (tasks.isEmpty)
-        const SliverFillRemaining(
+        SliverFillRemaining(
           hasScrollBody: false,
           child: Center(
             child: Text(
               'No durable tasks yet.',
-              style: TextStyle(color: PiColors.muted),
+              style: TextStyle(color: PiColors.of(context).muted),
             ),
           ),
         )
@@ -1717,11 +1749,11 @@ class _TaskCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Material(
     key: Key('task-${task.id}'),
-    color: PiColors.surface,
+    color: PiColors.of(context).surface,
     clipBehavior: Clip.antiAlias,
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(14),
-      side: const BorderSide(color: PiColors.border),
+      side: BorderSide(color: PiColors.of(context).border),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1937,7 +1969,7 @@ class _StateDot extends StatelessWidget {
     width: 8,
     height: 8,
     decoration: BoxDecoration(
-      color: _stateColor(state),
+      color: _stateColor(context, state),
       shape: BoxShape.circle,
     ),
   );
@@ -1951,13 +1983,13 @@ class _StatusChip extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
     decoration: BoxDecoration(
-      color: _stateColor(state).withValues(alpha: .1),
+      color: _stateColor(context, state).withValues(alpha: .1),
       borderRadius: BorderRadius.circular(20),
     ),
     child: Text(
       state.toUpperCase(),
       style: TextStyle(
-        color: _stateColor(state),
+        color: _stateColor(context, state),
         fontSize: 9,
         fontWeight: FontWeight.w700,
         letterSpacing: .6,
@@ -2031,14 +2063,19 @@ class _NoticeBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     width: double.infinity,
-    color: (danger ? PiColors.danger : PiColors.blue).withValues(alpha: .11),
+    color: (danger ? PiColors.of(context).danger : PiColors.of(context).blue)
+        .withValues(alpha: .11),
     padding: const EdgeInsets.only(left: 16, right: 6),
     child: Row(
       children: [
         Expanded(
           child: Text(
             text,
-            style: TextStyle(color: danger ? PiColors.danger : PiColors.blue),
+            style: TextStyle(
+              color: danger
+                  ? PiColors.of(context).danger
+                  : PiColors.of(context).blue,
+            ),
           ),
         ),
         IconButton(
@@ -2051,12 +2088,12 @@ class _NoticeBanner extends StatelessWidget {
   );
 }
 
-Color _stateColor(String state) => switch (state) {
-  'completed' || 'succeeded' => PiColors.green,
-  'running' => PiColors.blue,
-  'pending' || 'approved' || 'sleeping' => PiColors.orange,
-  'cancelled' || 'failed' => PiColors.danger,
-  _ => PiColors.muted,
+Color _stateColor(BuildContext context, String state) => switch (state) {
+  'completed' || 'succeeded' => PiColors.of(context).green,
+  'running' => PiColors.of(context).blue,
+  'pending' || 'approved' || 'sleeping' => PiColors.of(context).orange,
+  'cancelled' || 'failed' => PiColors.of(context).danger,
+  _ => PiColors.of(context).muted,
 };
 
 String _stateLabel(AgentTask task) => switch (task.state) {

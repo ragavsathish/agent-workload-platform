@@ -9,6 +9,7 @@ void main() {
     $,
   ) async {
     await $.platform.web.resizeWindow(size: const Size(390, 844));
+    web.window.localStorage.setItem('pi-voice-theme', 'dark');
     web.window.history.replaceState(null, '', '/?view=transcript');
     await $.pumpWidgetAndSettle(const app.VoiceAgentApp());
     expect(
@@ -17,6 +18,12 @@ void main() {
       reason:
           'A restored large mobile transcript must open at its latest entry.',
     );
+    await $(const Key('message-pi')).waitUntilVisible();
+    await $(const Key('theme-toggle')).tap();
+    await $(const Key('theme-toggle')).tap();
+    await $(const Key('message-pi')).tap();
+    await $(const Key('message-pi')).enterText('Initial mobile composer check');
+    await $(const Key('message-pi')).enterText('');
     await $.platform.web.resizeWindow(size: const Size(1440, 1000));
 
     await _observeWorkspace($);

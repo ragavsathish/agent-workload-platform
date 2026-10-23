@@ -25,6 +25,15 @@ external JSPromise<JSString> _mountMcpApp(
 @JS('voiceBridge.openView')
 external void _openView(JSString view);
 
+@JS('voiceBridge.navigateHome')
+external void _navigateHome();
+
+@JS('voiceBridge.getThemePreference')
+external JSString _getThemePreference();
+
+@JS('voiceBridge.setThemePreference')
+external void _setThemePreference(JSString theme);
+
 @JS('voiceBridge.openExternalUrl')
 external void _openExternalUrl(JSString url);
 
@@ -60,6 +69,13 @@ abstract final class BrowserBridge {
   ).toDart).toDart;
 
   static void openView(String view) => _openView(view.toJS);
+
+  static void navigateHome() => _navigateHome();
+
+  static String getThemePreference() => _getThemePreference().toDart;
+
+  static void setThemePreference(String theme) =>
+      _setThemePreference(theme.toJS);
 
   static void openExternalUrl(String url) => _openExternalUrl(url.toJS);
 

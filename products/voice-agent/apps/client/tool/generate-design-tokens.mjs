@@ -27,6 +27,10 @@ ${cssFor(input.themes.light)}
 `;
 const dartColor = (hex) => `Color(0xFF${hex.slice(1)})`;
 const dark = input.themes.dark.color;
+const light = input.themes.light.color;
+const dartPalette = (prefix, colors) => Object.entries(colors)
+  .map(([name, value]) => `  static const ${prefix}${name[0].toUpperCase()}${name.slice(1)} = ${dartColor(value)};`)
+  .join('\n');
 const dart = `// Generated from design_system/tokens.json; do not edit. v${input.version}
 import 'package:flutter/material.dart';
 
@@ -47,6 +51,7 @@ abstract final class PiDesignTokens {
   static const warning = ${dartColor(dark.warning)};
   static const danger = ${dartColor(dark.danger)};
   static const focus = ${dartColor(dark.focus)};
+${dartPalette('light', light)}
   static const space1 = 4.0,
       space2 = 8.0,
       space3 = 12.0,

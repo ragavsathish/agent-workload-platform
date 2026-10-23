@@ -2,7 +2,33 @@ import { AppBridge, PostMessageTransport } from '@modelcontextprotocol/ext-apps/
 
 const events = [];
 const mcpAppHosts = new WeakMap();
+const activeMcpAppHosts = new Set();
 const mcpAppMountQueues = new WeakMap();
+const systemColorScheme = window.matchMedia?.('(prefers-color-scheme: dark)');
+
+const resolveHostTheme = () => {
+  try {
+    const preference = window.localStorage.getItem('pi-voice-theme');
+    if (preference === 'light' || preference === 'dark') return preference;
+  } catch { /* Use the URL or system preference when storage is unavailable. */ }
+  const documentTheme = window.document.documentElement.dataset.piTheme;
+  if (documentTheme === 'light' || documentTheme === 'dark') return documentTheme;
+  const urlTheme = new URLSearchParams(window.location.search).get('theme');
+  if (urlTheme === 'light' || urlTheme === 'dark') return urlTheme;
+  return systemColorScheme?.matches ? 'dark' : 'light';
+};
+
+const updateMountedMcpAppThemes = () => {
+  const theme = resolveHostTheme();
+  for (const { bridge } of activeMcpAppHosts) bridge.setHostContext({ theme });
+};
+
+systemColorScheme?.addEventListener?.('change', () => {
+  try {
+    const preference = window.localStorage.getItem('pi-voice-theme');
+    if (preference !== 'light' && preference !== 'dark') updateMountedMcpAppThemes();
+  } catch { updateMountedMcpAppThemes(); }
+});
 const excalidrawCameraSizes = [
   { width: 400, height: 300 },
   { width: 600, height: 450 },
@@ -343,6 +369,7 @@ window.voiceBridge = {
 
       const previous = mcpAppHosts.get(target);
       if (previous) {
+        activeMcpAppHosts.delete(previous);
         await settleWithin(previous.bridge.teardownResource({}));
         await settleWithin(previous.bridge.close());
       }
@@ -364,7 +391,7 @@ window.voiceBridge = {
       target.replaceChildren(iframe);
 
       const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
-      const hostTheme = new URLSearchParams(window.location.search).get('theme') === 'light' ? 'light' : 'dark';
+      const hostTheme = resolveHostTheme();
       const bridge = new AppBridge(
         null,
         { name: 'Pi Voice', version: '0.1.0' },
@@ -488,7 +515,9 @@ window.voiceBridge = {
       }
       iframe.src = `${iframeSource.pathname}${iframeSource.search}`;
       await connection;
-      mcpAppHosts.set(target, { bridge, iframe });
+      const mountedHost = { bridge, iframe };
+      mcpAppHosts.set(target, mountedHost);
+      activeMcpAppHosts.add(mountedHost);
       return JSON.stringify({ ok: true });
     } catch (error) {
       target.textContent = 'Visual unavailable';
@@ -503,6 +532,7 @@ window.voiceBridge = {
     if (!target) return JSON.stringify({ ok: true });
     const host = mcpAppHosts.get(target);
     if (host) {
+      activeMcpAppHosts.delete(host);
       await settleWithin(host.bridge.teardownResource({}));
       await settleWithin(host.bridge.close());
       mcpAppHosts.delete(target);
@@ -519,6 +549,33 @@ window.voiceBridge = {
           ? '/knowledge/'
           : `/?view=${encodeURIComponent(view)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
+  },
+  navigateHome() {
+    window.location.assign('/');
+  },
+  getThemePreference() {
+    try {
+      const saved = window.localStorage.getItem('pi-voice-theme');
+      const theme = ['light', 'dark'].includes(saved) ? saved : 'system';
+      if (theme === 'system') delete window.document.documentElement.dataset.piTheme;
+      else window.document.documentElement.dataset.piTheme = theme;
+      return theme;
+    } catch (_) {
+      return 'system';
+    }
+  },
+  setThemePreference(theme) {
+    if (!['system', 'light', 'dark'].includes(theme)) {
+      throw new Error('Unsupported theme preference');
+    }
+    try {
+      window.localStorage.setItem('pi-voice-theme', theme);
+    } catch (_) {
+      // Theme changes remain available for this page when storage is disabled.
+    }
+    if (theme === 'system') delete window.document.documentElement.dataset.piTheme;
+    else window.document.documentElement.dataset.piTheme = theme;
+    updateMountedMcpAppThemes();
   },
   openExternalUrl(url) {
     const target = new URL(url);

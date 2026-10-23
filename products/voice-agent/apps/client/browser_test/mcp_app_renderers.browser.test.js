@@ -213,17 +213,21 @@ beforeAll(async () => {
 
 beforeEach(() => {
   document.body.replaceChildren();
+  window.localStorage.setItem('pi-voice-theme', 'dark');
   makeHost();
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await window.voiceBridge.unmountMcpApp(hostId);
   document.body.replaceChildren();
 });
 
 describe('MCP App renderers', () => {
-  test('first-party View receives the light host theme', async () => {
+  test('first-party View receives the saved light theme without a theme URL parameter', async () => {
     const originalUrl = window.location.href;
-    window.history.replaceState({}, '', '?theme=light');
+    const originalTheme = window.localStorage.getItem('pi-voice-theme');
+    window.history.replaceState({}, '', '/');
+    window.localStorage.setItem('pi-voice-theme', 'light');
     try {
       await mount(presentations[0]);
       const rendered = await commands.inspectMcpFrame({
@@ -234,6 +238,74 @@ describe('MCP App renderers', () => {
       expect(rendered.attribute).toBe('light');
     } finally {
       window.history.replaceState({}, '', originalUrl);
+      if (originalTheme === null) window.localStorage.removeItem('pi-voice-theme');
+      else window.localStorage.setItem('pi-voice-theme', originalTheme);
+    }
+  });
+
+  test('theme changes reach mounted first-party and Excalidraw apps', async () => {
+    const originalTheme = window.localStorage.getItem('pi-voice-theme');
+    window.localStorage.setItem('pi-voice-theme', 'light');
+    try {
+      await mount(presentations[0]);
+      window.voiceBridge.setThemePreference('dark');
+      await vi.waitFor(async () => {
+        const rendered = await commands.inspectMcpFrame({
+          title: presentations[0].title,
+          selector: 'html',
+          attribute: 'data-pi-theme',
+          skipAnimations: true,
+        });
+        expect(rendered.attribute).toBe('dark');
+      });
+
+      const excalidraw = presentations.find(({ name }) => name === 'Excalidraw');
+      await mount(excalidraw);
+      await commands.inspectMcpFrame({
+        title: excalidraw.title,
+        selector: '.excalidraw-container svg',
+        skipAnimations: true,
+      });
+      window.voiceBridge.setThemePreference('light');
+      await vi.waitFor(async () => {
+        const rendered = await commands.inspectMcpFrame({
+          title: excalidraw.title,
+          selector: 'html',
+          attribute: 'data-pi-theme',
+          skipAnimations: true,
+        });
+        expect(rendered.attribute).toBe('light');
+      });
+    } finally {
+      if (originalTheme === null) window.localStorage.removeItem('pi-voice-theme');
+      else window.localStorage.setItem('pi-voice-theme', originalTheme);
+    }
+  });
+
+  test('journal review uses readable design tokens in light mode', async () => {
+    const originalTheme = window.localStorage.getItem('pi-voice-theme');
+    window.localStorage.setItem('pi-voice-theme', 'light');
+    try {
+      const journal = presentations.find(({ name }) => name === 'Journal review');
+      await mount(journal);
+      const panel = await commands.inspectMcpFrame({
+        title: journal.title,
+        selector: '.suggestion-panel',
+        computedStyles: ['background-color', 'color'],
+      });
+      expect(panel.computedStyles).toEqual({
+        'background-color': 'rgb(238, 242, 244)',
+        color: 'rgb(20, 32, 39)',
+      });
+      const title = await commands.inspectMcpFrame({
+        title: journal.title,
+        selector: '.suggestion-panel h2',
+        computedStyles: ['color'],
+      });
+      expect(title.computedStyles.color).toBe('rgb(20, 32, 39)');
+    } finally {
+      if (originalTheme === null) window.localStorage.removeItem('pi-voice-theme');
+      else window.localStorage.setItem('pi-voice-theme', originalTheme);
     }
   });
 

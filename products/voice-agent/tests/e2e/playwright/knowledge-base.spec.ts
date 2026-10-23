@@ -65,11 +65,17 @@ test('browses, filters, and maps journal notes with synchronized details', async
   await page.goto('/knowledge/', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: 'Journal & knowledge' })).toBeVisible();
   await expect(page.getByText('Live Oxigraph', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Yesterday' })).toBeVisible();
   await expect(page.getByRole('button', { name: /Keep durable memory separate/ })).toBeVisible();
 
-  await page.getByRole('button', { name: /Knowledge review/ }).first().click();
+  await page.getByRole('button', { name: 'Filter' }).click();
+  await page.getByRole('checkbox', { name: /Knowledge review/ }).check();
+  await expect(page.getByRole('region', { name: 'Active filters' }))
+    .toContainText('Topic: Knowledge review');
   await expect(page.getByRole('heading', { name: 'Knowledge review' })).toBeVisible();
-  await expect(page.getByText('3 entries · newest first')).toBeVisible();
+  await expect(page.getByText('3 notes · newest first')).toBeVisible();
+  await page.getByRole('button', { name: 'Remove Topic: Knowledge review filter' }).click();
+  await expect(page.getByText('4 notes · newest first')).toBeVisible();
 
   await page.getByRole('button', { name: /Selecting a topic should keep the journal list/ }).click();
   await expect(page.getByRole('complementary', { name: 'Selected journal note' }))
@@ -95,6 +101,24 @@ test('browses, filters, and maps journal notes with synchronized details', async
   await expectCleanBrowser(browserEvidence);
 });
 
+test('combines type and date filters and removes them independently', async ({ page, browserEvidence }) => {
+  await installOxigraphFixture(page);
+  await page.goto('/knowledge/', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Filter' }).click();
+  await page.getByRole('radio', { name: 'Decision' }).check();
+  await page.getByRole('radio', { name: 'Last 7 days' }).check();
+  await expect(page.getByText('2 notes · newest first')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Active filters' }).getByRole('button'))
+    .toHaveCount(3);
+
+  await page.getByRole('button', { name: 'Remove Type: Decision filter' }).click();
+  await expect(page.getByText('3 notes · newest first')).toBeVisible();
+  await page.getByRole('button', { name: 'Remove Date: Last 7 days filter' }).click();
+  await expect(page.getByText('4 notes · newest first')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Active filters' })).toHaveCount(0);
+  await expectCleanBrowser(browserEvidence);
+});
+
 test('maps Cytoscape node events to journal state', async ({ page, browserEvidence }) => {
   await installOxigraphFixture(page);
   await page.goto('/knowledge/', { waitUntil: 'domcontentloaded' });
@@ -109,14 +133,14 @@ test('maps Cytoscape node events to journal state', async ({ page, browserEviden
   await emitMapNodeTap(page, 'topic:Privacy');
   await expect(page.getByRole('button', { name: 'Journal', exact: false })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('heading', { name: 'Privacy' })).toBeVisible();
-  await expect(page.getByText('2 entries · newest first')).toBeVisible();
+  await expect(page.getByText('2 notes · newest first')).toBeVisible();
 
   await page.getByRole('button', { name: 'Map', exact: false }).click();
   await expect(page.locator('.map-canvas canvas').first()).toBeVisible();
   await emitMapNodeTap(page, 'capture-voice-1019');
   await expect(page.getByRole('button', { name: 'Journal', exact: false })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('input[placeholder^="Search notes"]')).toHaveValue('Voice session · 19 Oct');
-  await expect(page.getByText('1 entries · newest first')).toBeVisible();
+  await expect(page.getByText('1 note · newest first')).toBeVisible();
   await expect(page.getByRole('complementary', { name: 'Selected journal note' }))
     .toContainText('Keep personal knowledge local and expose only bounded, read-only views to the browser.');
   await expectCleanBrowser(browserEvidence);

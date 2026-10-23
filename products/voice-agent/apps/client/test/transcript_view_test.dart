@@ -9,6 +9,41 @@ import 'package:voice_agent_client/views/pi_workspace_view.dart';
 import 'package:voice_agent_client/views/transcript_view.dart';
 
 void main() {
+  testWidgets('Pi brand returns to the voice assistant', (tester) async {
+    final api = _FakeVoiceApi();
+    var returnedHome = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TranscriptView(
+          api: api,
+          onNavigateHome: () => returnedHome = true,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('workspace-home')));
+
+    expect(returnedHome, isTrue);
+  });
+
+  testWidgets('mobile composer is laid out on its first frame', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _FakeVoiceApi();
+
+    await tester.pumpWidget(MaterialApp(home: TranscriptView(api: api)));
+    await tester.pump();
+
+    final composer = tester.getRect(find.byKey(const Key('message-pi')));
+    expect(composer.width, greaterThan(0));
+    expect(composer.height, greaterThan(0));
+    expect(composer.bottom, lessThanOrEqualTo(844));
+  });
+
   test('progress burst becomes a concise spoken update', () {
     final summary = summarizeTaskProgress(const [
       TaskProgressEvent(id: 1, spoken: 'The agent has started working.'),

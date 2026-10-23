@@ -15,6 +15,7 @@ const elements = await readFile(new URL('../design_system/elements.css', import.
 const font = await readFile(new URL('../design_system/fonts/SourceCodeVF-Upright.ttf.woff2', import.meta.url));
 for (const value of ['--pi-color-canvas', '--pi-color-focus', '--pi-size-touch', '[data-pi-theme="light"]', 'prefers-reduced-motion']) assert.match(css, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 assert.match(dart, /static const accent = Color\(0xFF56E39F\)/);
+assert.match(dart, /static const lightCanvas = Color\(0xFFF7F9FA\)/);
 assert.match(css, /Source Code Pro/);
 assert.match(dart, /fontFamily = 'Source Code Pro'/);
 assert.equal(font.toString('ascii', 0, 4), 'wOF2');

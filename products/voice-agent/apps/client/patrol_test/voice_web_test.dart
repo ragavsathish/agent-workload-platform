@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:patrol/patrol.dart';
 import 'package:voice_agent_client/main.dart' as app;
+import 'package:web/web.dart' as web;
 
 void main() {
   patrolTest('observes the responsive voice shell and navigation', ($) async {
     await $.platform.web.resizeWindow(size: const Size(390, 844));
+    web.window.localStorage.setItem('pi-voice-theme', 'dark');
     await $.pumpWidgetAndSettle(const app.VoiceAgentApp());
 
     await _observePhoneShell($);
@@ -20,6 +22,8 @@ Future<void> _observePhoneShell(PatrolIntegrationTester $) async {
   await $(const Key('conversation-map-placeholder')).waitUntilExists();
   await $(const Key('start-conversation')).waitUntilExists();
   expect($('Private coding workspace'), findsNothing);
+  await $(const Key('theme-toggle')).tap();
+  await $(const Key('theme-toggle')).tap();
 }
 
 Future<void> _observeDesktopWorkspace(PatrolIntegrationTester $) async {

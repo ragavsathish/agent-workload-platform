@@ -8,6 +8,7 @@ test('speech promise waits for playback and stop releases it', async () => {
   const originalCreateObjectURL = URL.createObjectURL;
   const originalRevokeObjectURL = URL.revokeObjectURL;
   const audios = [];
+  const storedPreferences = new Map();
 
   class FakeAudio extends EventTarget {
     constructor() {
@@ -21,7 +22,13 @@ test('speech promise waits for playback and stop releases it', async () => {
     pause() { this.paused = true; }
   }
 
-  globalThis.window = {};
+  globalThis.window = {
+    document: { documentElement: { dataset: {} } },
+    localStorage: {
+      getItem: (key) => storedPreferences.get(key) ?? null,
+      setItem: (key, value) => storedPreferences.set(key, value),
+    },
+  };
   globalThis.Audio = FakeAudio;
   globalThis.fetch = async () => ({ ok: true, blob: async () => new Blob(['audio']) });
   URL.createObjectURL = () => 'blob:test-audio';
@@ -51,6 +58,17 @@ test('speech promise waits for playback and stop releases it', async () => {
 
     const opened = [];
     window.open = (...args) => opened.push(args);
+    let homeUrl;
+    window.location = { assign: (url) => { homeUrl = url; } };
+    window.voiceBridge.navigateHome();
+    assert.equal(homeUrl, '/');
+    assert.equal(window.voiceBridge.getThemePreference(), 'system');
+    window.voiceBridge.setThemePreference('light');
+    assert.equal(window.voiceBridge.getThemePreference(), 'light');
+    assert.equal(window.document.documentElement.dataset.piTheme, 'light');
+    window.voiceBridge.setThemePreference('system');
+    assert.equal(window.document.documentElement.dataset.piTheme, undefined);
+    assert.throws(() => window.voiceBridge.setThemePreference('sepia'));
     window.voiceBridge.openView('knowledge-base');
     assert.equal(opened.at(-1)[0], '/knowledge/');
     assert.equal(opened.at(-1)[2], 'noopener,noreferrer');

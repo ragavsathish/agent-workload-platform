@@ -5,6 +5,13 @@ import 'client_actions_stub.dart'
 abstract final class ClientActions {
   static void openView(String view) => platform.openView(view);
 
+  static void navigateHome() => platform.navigateHome();
+
+  static String getThemePreference() => platform.getThemePreference();
+
+  static void setThemePreference(String theme) =>
+      platform.setThemePreference(theme);
+
   static void openExternalUrl(String url) => platform.openExternalUrl(url);
 
   static void openTaskArtifactUrl(String url) =>

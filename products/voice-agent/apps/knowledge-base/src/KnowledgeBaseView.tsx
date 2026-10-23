@@ -81,14 +81,45 @@ const dateLabel = (value: string) => new Intl.DateTimeFormat('en', {
   day: 'numeric', month: 'short', year: 'numeric',
 }).format(new Date(value));
 
+const timeLabel = (value: string) => new Intl.DateTimeFormat('en', {
+  hour: 'numeric', minute: '2-digit',
+}).format(new Date(value));
+
+const dateKey = (value: string | Date) => {
+  const date = value instanceof Date ? value : new Date(value);
+  return [date.getFullYear(), `${date.getMonth() + 1}`.padStart(2, '0'), `${date.getDate()}`.padStart(2, '0')].join('-');
+};
+
+const dateGroupLabel = (key: string) => {
+  const [year, month, day] = key.split('-').map(Number);
+  const date = new Date(year!, month! - 1, day!);
+  const today = new Date();
+  const todayKey = dateKey(today);
+  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+  if (key === todayKey) return 'Today';
+  if (key === dateKey(yesterday)) return 'Yesterday';
+  return new Intl.DateTimeFormat('en', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
+};
+
+const noteTypes = ['decision', 'idea', 'thought', 'goal', 'question', 'learning'];
+const dateRanges = [
+  { value: 'any', label: 'Any time' },
+  { value: '7d', label: 'Last 7 days' },
+  { value: '30d', label: 'Last 30 days' },
+  { value: 'year', label: 'This year' },
+] as const;
+
 const mapLabel = (text: string) => text.length > 34 ? `${text.slice(0, 31).trimEnd()}…` : text;
 
 export const KnowledgeBaseView = () => {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [mode, setMode] = useState<'journal' | 'map'>('journal');
   const [query, setQuery] = useState('');
-  const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<string>('all');
+  const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
+  const [dateRange, setDateRange] = useState<(typeof dateRanges)[number]['value']>('any');
+  const [topicQuery, setTopicQuery] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [entries, setEntries] = useState<Entry[]>(sampleEntries);
   const [connection, setConnection] = useState<'sample' | 'loading' | 'live' | 'error'>(
     configuredOxigraphEndpoint() ? 'loading' : 'sample',
@@ -97,8 +128,12 @@ export const KnowledgeBaseView = () => {
   const [selectedId, setSelectedId] = useState(sampleEntries[0]?.id ?? '');
   const [notice, setNotice] = useState('');
   const graphRef = useRef<HTMLDivElement>(null);
+  const entryListRef = useRef<HTMLDivElement>(null);
   const graphInstanceRef = useRef<import('cytoscape').Core | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const filterPopoverRef = useRef<HTMLDivElement>(null);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
+  const listScrollTopRef = useRef(0);
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
 
@@ -126,14 +161,47 @@ export const KnowledgeBaseView = () => {
   }, {}), [entries]);
   const topics = Object.entries(topicCounts).sort(([left], [right]) => left.localeCompare(right));
 
-  const filteredEntries = useMemo(() => entries.filter((entry) => {
+  const activeFilters = [
+    ...(selectedType !== 'all' ? [{ key: 'type', label: `Type: ${selectedType[0]!.toUpperCase()}${selectedType.slice(1)}` }] : []),
+    ...selectedTopics.map((topic) => ({ key: `topic:${topic}`, label: `Topic: ${topic}` })),
+    ...(dateRange !== 'any' ? [{ key: 'date', label: `Date: ${dateRanges.find(({ value }) => value === dateRange)?.label}` }] : []),
+  ];
+  const activeFilterCount = activeFilters.length;
+
+  const sortedEntries = useMemo(() => [...entries].sort(
+    (left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt),
+  ), [entries]);
+
+  const filteredEntries = useMemo(() => sortedEntries.filter((entry) => {
     const normalizedQuery = query.trim().toLowerCase();
     const matchesQuery = !normalizedQuery || [entry.text, entry.transcript, entry.sourceLabel, ...entry.topics]
       .some((value) => value.toLowerCase().includes(normalizedQuery));
-    return matchesQuery
-      && (!selectedTopic || entry.topics.includes(selectedTopic))
+    const matchesTopics = selectedTopics.length === 0
+      || selectedTopics.some((topic) => entry.topics.includes(topic));
+    const createdAt = new Date(entry.createdAt);
+    const now = new Date();
+    const matchesDate = dateRange === 'any'
+      || (dateRange === 'year' && createdAt.getFullYear() === now.getFullYear())
+      || (dateRange === '7d' && createdAt.getTime() >= now.getTime() - 7 * 24 * 60 * 60 * 1000)
+      || (dateRange === '30d' && createdAt.getTime() >= now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    return matchesQuery && matchesTopics && matchesDate
       && (selectedType === 'all' || entry.type === selectedType);
-  }), [query, selectedTopic, selectedType]);
+  }), [dateRange, query, selectedTopics, selectedType, sortedEntries]);
+
+  const dateGroups = useMemo(() => {
+    const groups = new Map<string, Entry[]>();
+    for (const entry of filteredEntries) {
+      const key = dateKey(entry.createdAt);
+      groups.set(key, [...(groups.get(key) ?? []), entry]);
+    }
+    return [...groups.entries()];
+  }, [filteredEntries]);
+
+  const visibleTopics = topics.filter(([topic]) => topic.toLowerCase().includes(topicQuery.trim().toLowerCase()));
+  const scopeSummary = [
+    query.trim() ? `Search: “${query.trim()}”` : '',
+    ...activeFilters.map(({ label }) => label),
+  ].filter(Boolean).join(' · ');
 
   const selectedEntry = filteredEntries.find(({ id }) => id === selectedId)
     ?? filteredEntries[0]
@@ -151,10 +219,31 @@ export const KnowledgeBaseView = () => {
         event.preventDefault();
         searchRef.current?.focus();
       }
+      if (event.key === 'Escape' && filtersOpen) {
+        setFiltersOpen(false);
+        filterButtonRef.current?.focus();
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [filtersOpen]);
+
+  useEffect(() => {
+    if (mode === 'journal' && entryListRef.current) {
+      entryListRef.current.scrollTop = listScrollTopRef.current;
+    }
+  }, [mode]);
+
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && !filterPopoverRef.current?.contains(event.target)) {
+        setFiltersOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [filtersOpen]);
 
   useEffect(() => {
     document.documentElement.dataset.piTheme = theme;
@@ -219,7 +308,7 @@ export const KnowledgeBaseView = () => {
       setNotice(`Selected journal note: ${event.target.data('label')}`);
       });
       graph.on('tap', 'node[kind="topic"]', (event) => {
-      setSelectedTopic(String(event.target.data('topic')));
+      selectTopic(String(event.target.data('topic')));
       setMode('journal');
       setNotice(`Showing notes tagged ${event.target.data('topic')}`);
       });
@@ -227,8 +316,9 @@ export const KnowledgeBaseView = () => {
       const sourceId = String(event.target.data('sourceId'));
       const sourceEntry = filteredEntries.find(({ sourceId: id }) => id === sourceId);
       if (sourceEntry) setSelectedId(sourceEntry.id);
-      setSelectedTopic(null);
+      setSelectedTopics([]);
       setSelectedType('all');
+      setDateRange('any');
       setQuery(String(event.target.data('label')));
       setMode('journal');
       setNotice(`Showing journal notes from ${event.target.data('label')}`);
@@ -249,10 +339,39 @@ export const KnowledgeBaseView = () => {
     if (selected.nonempty()) selected.select();
   }, [filteredEntries, mode, selectedId]);
 
-  const setTopic = (topic: string | null) => {
-    setSelectedTopic(topic);
-    if (topic) setNotice(`Showing notes tagged ${topic}`);
-    else setNotice('Showing all journal notes');
+  const toggleTopic = (topic: string) => {
+    setSelectedTopics((current) => current.includes(topic)
+      ? current.filter((value) => value !== topic)
+      : [...current, topic]);
+  };
+
+  const clearFilters = () => {
+    setSelectedType('all');
+    setSelectedTopics([]);
+    setDateRange('any');
+    setTopicQuery('');
+    setNotice('All journal filters cleared');
+  };
+
+  const clearAll = () => {
+    setQuery('');
+    clearFilters();
+  };
+
+  const removeFilter = (key: string) => {
+    if (key === 'type') setSelectedType('all');
+    else if (key === 'date') setDateRange('any');
+    else if (key.startsWith('topic:')) {
+      const topic = key.slice('topic:'.length);
+      setSelectedTopics((current) => current.filter((value) => value !== topic));
+    }
+    setNotice('Journal filter removed');
+  };
+
+  const selectTopic = (topic: string) => {
+    setSelectedTopics((current) => current.includes(topic) ? current : [...current, topic]);
+    setMode('journal');
+    setNotice(`Showing notes tagged ${topic}`);
   };
 
   const chooseEntry = (entry: Entry) => {
@@ -304,72 +423,97 @@ export const KnowledgeBaseView = () => {
           <input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search notes, sources, topics…" />
           <kbd>⌘ K</kbd>
         </label>
-        <label className="type-filter">
-          <span className="visually-hidden">Filter by note type</span>
-          <select value={selectedType} onChange={(event) => setSelectedType(event.target.value)}>
-            <option value="all">All types</option>
-            <option value="decision">Decision</option>
-            <option value="idea">Idea</option>
-            <option value="thought">Thought</option>
-            <option value="goal">Goal</option>
-            <option value="question">Question</option>
-            <option value="learning">Learning</option>
-          </select>
-        </label>
+        <div className="filter-popover" ref={filterPopoverRef}>
+          <button
+            className={`pi-button filter-trigger ${filtersOpen ? 'open' : ''}`}
+            type="button"
+            ref={filterButtonRef}
+            aria-expanded={filtersOpen}
+            aria-controls="journal-filter-menu"
+            onClick={() => setFiltersOpen((open) => !open)}
+          >
+            <span aria-hidden="true">☷</span> Filter
+            {activeFilterCount > 0 && <span className="filter-count">{activeFilterCount}</span>}
+          </button>
+          {filtersOpen && <div className="filter-menu" id="journal-filter-menu" role="group" aria-label="Journal filters">
+            <fieldset className="filter-group">
+              <legend>Type</legend>
+              <label className="filter-option"><input type="radio" name="note-type" value="all" checked={selectedType === 'all'} onChange={() => setSelectedType('all')} /><span>All types</span></label>
+              {noteTypes.map((type) => <label className="filter-option" key={type}>
+                <input type="radio" name="note-type" value={type} checked={selectedType === type} onChange={() => setSelectedType(type)} />
+                <span>{type[0]!.toUpperCase() + type.slice(1)}</span>
+              </label>)}
+            </fieldset>
+            <fieldset className="filter-group">
+              <legend>Topic</legend>
+              {topics.length > 8 && <label className="topic-search">
+                <span className="visually-hidden">Search topics</span>
+                <input value={topicQuery} onChange={(event) => setTopicQuery(event.target.value)} placeholder="Find a topic…" />
+              </label>}
+              <div className="filter-options-scroll">
+                {visibleTopics.length === 0 && <p className="filter-empty">No topics match.</p>}
+                {visibleTopics.map(([topic, count]) => <label className="filter-option" key={topic}>
+                  <input type="checkbox" checked={selectedTopics.includes(topic)} onChange={() => toggleTopic(topic)} />
+                  <span>{topic}</span><small>{count}</small>
+                </label>)}
+              </div>
+            </fieldset>
+            <fieldset className="filter-group">
+              <legend>Date</legend>
+              {dateRanges.map(({ value, label }) => <label className="filter-option" key={value}>
+                <input type="radio" name="date-range" value={value} checked={dateRange === value} onChange={() => setDateRange(value)} />
+                <span>{label}</span>
+              </label>)}
+            </fieldset>
+            {activeFilterCount > 0 && <button className="filter-clear" type="button" onClick={clearFilters}>Clear filters</button>}
+          </div>}
+        </div>
         <div className="view-switch" role="group" aria-label="Knowledge view">
           <button type="button" className={mode === 'journal' ? 'active' : ''} aria-pressed={mode === 'journal'} onClick={() => setMode('journal')}><span aria-hidden="true">☷</span> Journal</button>
           <button type="button" className={mode === 'map' ? 'active' : ''} aria-pressed={mode === 'map'} onClick={() => setMode('map')}><span aria-hidden="true">⠿</span> Map</button>
         </div>
       </section>
 
-      <section className={`knowledge-workspace ${mode === 'map' ? 'map-mode' : ''}`}>
-        <aside className="topic-rail pi-surface" aria-label="Journal topics">
-          <div className="rail-heading">
-            <p className="pi-kicker">BROWSE</p>
-            <h2>Journal</h2>
-          </div>
-          <button type="button" className={`topic-row ${selectedTopic === null ? 'selected' : ''}`} onClick={() => setTopic(null)}>
-            <span className="topic-symbol all-symbol" aria-hidden="true">⌁</span><span>All notes</span><span className="topic-count">{entries.length}</span>
-          </button>
-          <div className="topic-divider" />
-          <p className="topic-label">TOPICS <span>{topics.length}</span></p>
-          {topics.map(([topic, count]) => (
-            <button type="button" key={topic} className={`topic-row ${selectedTopic === topic ? 'selected' : ''}`} onClick={() => setTopic(topic)}>
-              <span className="topic-symbol" aria-hidden="true">#</span><span>{topic}</span><span className="topic-count">{count}</span>
-            </button>
-          ))}
-          <div className="topic-divider" />
-          <div className="rail-footnote"><span className="tag-icon" aria-hidden="true">◇</span><span>Topics are extracted tags. They don’t imply a hierarchy.</span></div>
-        </aside>
+      {activeFilterCount > 0 && <section className="active-filters" aria-label="Active filters" role="region">
+        <span className="active-filters-label">FILTERED BY</span>
+        {activeFilters.map(({ key, label }) => <button className="active-filter-chip" type="button" key={key} onClick={() => removeFilter(key)} aria-label={`Remove ${label} filter`}>
+          {label}<span aria-hidden="true">×</span>
+        </button>)}
+        <button className="clear-all-filters" type="button" onClick={clearFilters}>Clear all</button>
+      </section>}
 
+      <section className={`knowledge-workspace ${mode === 'map' ? 'map-mode' : ''}`}>
         {mode === 'journal' ? (
           <section className="entry-list-panel pi-surface" aria-label="Journal note list">
             <div className="panel-toolbar">
-              <div><h2>{selectedTopic ?? 'All notes'}</h2><p>{filteredEntries.length} entries · newest first</p></div>
-              <span className="sort-label">NEWEST FIRST</span>
+              <div><h2>{selectedTopics.length === 1 ? selectedTopics[0] : 'All notes'}</h2><p>{filteredEntries.length} {filteredEntries.length === 1 ? 'note' : 'notes'} · newest first</p></div>
+              <span className="sort-label">{dateGroups.length} {dateGroups.length === 1 ? 'DAY' : 'DAYS'}</span>
             </div>
-            <div className="entry-list" role="list">
-              {filteredEntries.map((entry) => (
-                <div role="listitem" key={entry.id}>
-                  <button type="button" className={`entry-card ${selectedEntry?.id === entry.id ? 'selected' : ''}`} onClick={() => chooseEntry(entry)} aria-pressed={selectedEntry?.id === entry.id}>
-                    <div className="entry-meta"><span className={`type-mark type-${entry.type}`} aria-hidden="true" /> <span>{entry.type}</span><time dateTime={entry.createdAt}>{dateLabel(entry.createdAt)}</time></div>
-                    <span className="entry-text">{entry.text}</span>
-                    <span className="entry-tags">{entry.topics.slice(0, 3).map((topic) => <span className="tag-chip" key={topic}>{topic}</span>)}</span>
-                  </button>
-                </div>
-              ))}
-              {filteredEntries.length === 0 && <div className="pi-empty-state"><strong>No notes match</strong><span>Try a different phrase or clear a filter.</span><button className="pi-button" onClick={() => { setQuery(''); setTopic(null); setSelectedType('all'); }}>Clear filters</button></div>}
+            <div className="entry-list" ref={entryListRef} role="list" onScroll={(event) => { listScrollTopRef.current = event.currentTarget.scrollTop; }}>
+              {dateGroups.map(([key, groupEntries]) => <section className="date-group" key={key} aria-labelledby={`date-${key}`}>
+                <div className="date-heading"><h3 id={`date-${key}`}>{dateGroupLabel(key)}</h3><span>{groupEntries.length}</span></div>
+                {groupEntries.map((entry) => (
+                  <div role="listitem" key={entry.id}>
+                    <button type="button" className={`entry-card ${selectedEntry?.id === entry.id ? 'selected' : ''}`} onClick={() => chooseEntry(entry)} aria-pressed={selectedEntry?.id === entry.id}>
+                      <div className="entry-meta"><span className={`type-mark type-${entry.type}`} aria-hidden="true" /> <span>{entry.type}</span><time dateTime={entry.createdAt}>{timeLabel(entry.createdAt)}</time></div>
+                      <span className="entry-text">{entry.text}</span>
+                      <span className="entry-tags">{entry.topics.slice(0, 2).map((topic) => <span className="tag-chip" key={topic}>{topic}</span>)}{entry.topics.length > 2 && <span className="tag-overflow">+{entry.topics.length - 2}</span>}</span>
+                    </button>
+                  </div>
+                ))}
+              </section>)}
+              {filteredEntries.length === 0 && <div className="pi-empty-state"><strong>No notes match</strong><span>Try another search or remove a filter.</span><button className="pi-button" type="button" onClick={clearAll}>Clear search and filters</button></div>}
             </div>
           </section>
         ) : (
           <section className="map-panel pi-surface" aria-label="Knowledge relationship map">
-            <div className="map-heading"><div><h2>Knowledge map</h2><p>Notes · captures · topic tags</p></div><div className="map-controls"><button className="pi-button" type="button" aria-label="Zoom out map" title="Zoom out" onClick={() => { const graph = graphInstanceRef.current; if (graph) graph.zoom({ level: graph.zoom() / 1.25, renderedPosition: { x: graph.width() / 2, y: graph.height() / 2 } }); }}>−</button><button className="pi-button" type="button" aria-label="Zoom in map" title="Zoom in" onClick={() => { const graph = graphInstanceRef.current; if (graph) graph.zoom({ level: graph.zoom() * 1.25, renderedPosition: { x: graph.width() / 2, y: graph.height() / 2 } }); }}>+</button><button className="pi-button" type="button" onClick={() => graphInstanceRef.current?.fit(undefined, 32)}>Fit map</button><button className="pi-button map-reset" type="button" onClick={() => { setQuery(''); setTopic(null); setSelectedType('all'); }}>Reset</button></div></div>
+            <div className="map-heading"><div><h2>Knowledge map</h2><p>Notes · captures · topic tags</p></div><div className="map-controls"><button className="pi-button" type="button" aria-label="Zoom out map" title="Zoom out" onClick={() => { const graph = graphInstanceRef.current; if (graph) graph.zoom({ level: graph.zoom() / 1.25, renderedPosition: { x: graph.width() / 2, y: graph.height() / 2 } }); }}>−</button><button className="pi-button" type="button" aria-label="Zoom in map" title="Zoom in" onClick={() => { const graph = graphInstanceRef.current; if (graph) graph.zoom({ level: graph.zoom() * 1.25, renderedPosition: { x: graph.width() / 2, y: graph.height() / 2 } }); }}>+</button><button className="pi-button" type="button" onClick={() => graphInstanceRef.current?.fit(undefined, 32)}>Fit map</button><button className="pi-button map-reset" type="button" onClick={clearAll}>Reset</button></div></div>
             <div className="map-legend" aria-label="Map legend"><span><i className="legend-note" /> Journal note</span><span><i className="legend-capture" /> Source capture</span><span><i className="legend-topic" /> Topic tag</span></div>
             <div className="map-canvas" ref={graphRef} role="img" aria-label={`Relationship map with ${filteredEntries.length} journal notes. Use the journal list to navigate notes, or select a note or topic node.`} />
             <div className="map-node-list" aria-label="Keyboard accessible journal notes">
               {filteredEntries.map((entry) => <button type="button" key={entry.id} className={selectedEntry?.id === entry.id ? 'selected' : ''} aria-pressed={selectedEntry?.id === entry.id} onClick={() => chooseEntry(entry)}>{entry.text}</button>)}
             </div>
-            <div className="map-scope">Showing {filteredEntries.length} notes {selectedTopic ? `tagged “${selectedTopic}”` : 'from all topics'} · select a topic node to filter the journal</div>
+            <div className="map-scope">Showing {filteredEntries.length} {filteredEntries.length === 1 ? 'note' : 'notes'}{scopeSummary ? ` · ${scopeSummary}` : ''} · select a topic node to filter the journal</div>
           </section>
         )}
 
@@ -379,7 +523,7 @@ export const KnowledgeBaseView = () => {
               <div className="detail-head"><div className="detail-icon" aria-hidden="true">✳</div><div><p className="pi-kicker">JOURNAL NOTE</p><span>{selectedEntry.type.toUpperCase()}</span></div></div>
               <h2>{selectedEntry.text}</h2>
               <div className="detail-date"><span aria-hidden="true">◷</span> Captured {dateLabel(selectedEntry.createdAt)}</div>
-              <div className="detail-section"><h3>TOPIC TAGS</h3><div className="detail-tags">{selectedEntry.topics.map((topic) => <button key={topic} type="button" className="tag-chip clickable" onClick={() => { setTopic(topic); setMode('journal'); }}>{topic}</button>)}</div></div>
+              <div className="detail-section"><h3>TOPIC TAGS</h3><div className="detail-tags">{selectedEntry.topics.map((topic) => <button key={topic} type="button" className="tag-chip clickable" onClick={() => selectTopic(topic)}>{topic}</button>)}</div></div>
               <div className="detail-section source-section"><div className="section-title-row"><h3>SOURCE CAPTURE</h3><span className="source-badge">LINKED</span></div><div className="source-link"><span className="capture-icon" aria-hidden="true">▤</span><span><strong>{selectedEntry.sourceLabel}</strong><small>Original conversation</small></span></div><blockquote>{selectedEntry.transcript}</blockquote><p className="source-note">Source transcript is shown for context. No exact evidence span is stored for this preview.</p></div>
               <div className="detail-footer"><span className="read-only-mark" aria-hidden="true">◉</span><span>Read-only knowledge view</span></div>
             </>

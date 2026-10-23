@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'api_client.dart';
 import 'platform/app_home.dart';
+import 'platform/client_actions.dart';
 import 'theme.dart';
 import 'ux_telemetry.dart';
 
@@ -23,6 +24,24 @@ class VoiceAgentApp extends StatefulWidget {
 
 class _VoiceAgentAppState extends State<VoiceAgentApp> {
   late final VoiceApi _api = VoiceApi();
+  late ThemeMode _themeMode = _parseThemeMode(
+    ClientActions.getThemePreference(),
+  );
+
+  ThemeMode _parseThemeMode(String value) => switch (value) {
+    'light' => ThemeMode.light,
+    'dark' => ThemeMode.dark,
+    _ => ThemeMode.system,
+  };
+
+  void _setThemeMode(ThemeMode mode) {
+    setState(() => _themeMode = mode);
+    ClientActions.setThemePreference(switch (mode) {
+      ThemeMode.light => 'light',
+      ThemeMode.dark => 'dark',
+      ThemeMode.system => 'system',
+    });
+  }
 
   @override
   void dispose() {
@@ -37,8 +56,14 @@ class _VoiceAgentAppState extends State<VoiceAgentApp> {
     return MaterialApp(
       title: 'Pi Voice',
       debugShowCheckedModeBanner: false,
-      theme: buildTheme(),
-      home: home,
+      theme: buildTheme(brightness: Brightness.light),
+      darkTheme: buildTheme(brightness: Brightness.dark),
+      themeMode: _themeMode,
+      home: ThemeModeScope(
+        mode: _themeMode,
+        onChange: _setThemeMode,
+        child: home,
+      ),
     );
   }
 }

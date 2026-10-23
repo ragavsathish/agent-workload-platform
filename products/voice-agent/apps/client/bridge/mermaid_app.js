@@ -6,14 +6,20 @@ import { connectFirstPartyMcpApp } from '../design_system/mcp-app-runtime.js';
 const MAX_NODES = 24;
 const MAX_EDGES = 48;
 let revision = 0;
+let activeTheme = 'dark';
+let currentPresentation;
 
-mermaid.initialize({
-  startOnLoad: false,
-  securityLevel: 'strict',
-  suppressErrorRendering: true,
-  theme: 'dark',
-  flowchart: { htmlLabels: false, useMaxWidth: true },
-});
+const configureMermaid = (theme) => {
+  activeTheme = theme;
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'strict',
+    suppressErrorRendering: true,
+    theme: theme === 'light' ? 'default' : 'dark',
+    flowchart: { htmlLabels: false, useMaxWidth: true },
+  });
+};
+configureMermaid(activeTheme);
 
 const root = document.querySelector('#app');
 
@@ -65,6 +71,7 @@ const sourceFromPresentation = (presentation) => {
 const renderPresentation = async (value) => {
   const presentation = value?.presentation ?? value;
   if (!presentation || typeof presentation !== 'object' || !root) return;
+  currentPresentation = presentation;
   try {
     const source = sourceFromPresentation(presentation);
     await mermaid.parse(source);
@@ -102,4 +109,10 @@ app.ontoolresult = ({ structuredContent }) => void renderPresentation(structured
 app.onteardown = async () => ({});
 app.onerror = (error) => console.error('[mermaid-app]', error);
 
-connectFirstPartyMcpApp(app, '[mermaid-app]');
+connectFirstPartyMcpApp(app, '[mermaid-app]', {
+  onThemeChange: (theme) => {
+    if (theme === activeTheme) return;
+    configureMermaid(theme);
+    if (currentPresentation) void renderPresentation(currentPresentation);
+  },
+});

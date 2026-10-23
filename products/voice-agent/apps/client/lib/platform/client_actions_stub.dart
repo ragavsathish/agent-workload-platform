@@ -1,6 +1,13 @@
 void openView(String view) =>
     throw UnsupportedError('Native navigation is not installed yet.');
 
+void navigateHome() =>
+    throw UnsupportedError('Native navigation is not installed yet.');
+
+String getThemePreference() => 'system';
+
+void setThemePreference(String theme) {}
+
 void openExternalUrl(String url) =>
     throw UnsupportedError('External navigation is not installed yet.');
 

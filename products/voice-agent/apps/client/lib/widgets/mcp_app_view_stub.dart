@@ -20,13 +20,13 @@ class McpAppView extends StatelessWidget {
     height: height,
     alignment: Alignment.center,
     decoration: BoxDecoration(
-      color: PiColors.surfaceRaised,
-      border: Border.all(color: PiColors.border),
+      color: PiColors.of(context).surfaceRaised,
+      border: Border.all(color: PiColors.of(context).border),
       borderRadius: BorderRadius.circular(10),
     ),
-    child: const Text(
+    child: Text(
       'Interactive visuals are available in the web workspace.',
-      style: TextStyle(color: PiColors.muted),
+      style: TextStyle(color: PiColors.of(context).muted),
     ),
   );
 }
