@@ -49,6 +49,9 @@ const normalize = (value) => {
     ? candidate.suggestion
     : {};
   const evidence = exactSelector(transcript, suggestion.evidence);
+  const confidence = typeof suggestion.confidence === 'number' && Number.isFinite(suggestion.confidence)
+    ? Math.max(0, Math.min(1, suggestion.confidence))
+    : undefined;
   const progress = candidate.progress && typeof candidate.progress === 'object'
     ? candidate.progress
     : {};
@@ -65,7 +68,7 @@ const normalize = (value) => {
       topics: Array.isArray(suggestion.topics)
         ? suggestion.topics.map((topic) => text(topic)).filter(Boolean).slice(0, 8)
         : [],
-      confidence: Math.max(0, Math.min(1, Number(suggestion.confidence) || 0)),
+      ...(confidence !== undefined ? { confidence } : {}),
       evidence,
     },
     progress: {
@@ -152,6 +155,32 @@ const toolbar = (status) => {
   return bar;
 };
 
+const reviewNavigation = (presentation, status) => {
+  const bar = element('nav', { id: 'review-navigation', className: 'review-navigation', 'aria-label': 'Journal note navigation' });
+  const previous = element('button', {
+    id: 'review-previous',
+    type: 'button',
+    className: 'pi-button',
+    'aria-label': 'Previous journal note',
+  }, '← Previous');
+  const next = element('button', {
+    id: 'review-next',
+    type: 'button',
+    className: 'pi-button',
+    'aria-label': 'Next journal note',
+  }, 'Next →');
+  previous.disabled = presentation.progress.current <= 1;
+  next.disabled = presentation.progress.current >= presentation.progress.total;
+  previous.addEventListener('click', () => {
+    void announce('Go to the previous journal note without changing this note\'s review outcome. Call navigate_review with direction "previous" and return its presentation.', status);
+  });
+  next.addEventListener('click', () => {
+    void announce('Go to the next journal note without changing this note\'s review outcome. Call navigate_review with direction "next" and return its presentation.', status);
+  });
+  bar.append(previous, element('span', { 'aria-live': 'polite' }, `Note ${presentation.progress.current} of ${presentation.progress.total}`), next);
+  return bar;
+};
+
 const suggestionPanel = (presentation, status) => {
   const suggestion = presentation.suggestion;
   const panel = element('section', { className: 'pi-surface suggestion-panel', 'aria-labelledby': 'suggestion-title' });
@@ -164,8 +193,10 @@ const suggestionPanel = (presentation, status) => {
   const meta = element('div', { className: 'suggestion-meta' });
   meta.append(
     element('span', { className: 'pi-badge type-chip' }, suggestion.type),
-    element('span', {}, `${Math.round(suggestion.confidence * 100)}% confidence`),
   );
+  if (typeof suggestion.confidence === 'number') {
+    meta.append(element('span', {}, `${Math.round(suggestion.confidence * 100)}% confidence`));
+  }
   const topics = element('div', { className: 'topics', 'aria-label': 'Topics' });
   suggestion.topics.forEach((topic) => topics.append(element('span', {}, topic)));
   const evidence = element(
@@ -179,7 +210,7 @@ const suggestionPanel = (presentation, status) => {
     element('div', {}, 'Voice stays active'),
     element('p', {}, 'Ask about your knowledge, correct this annotation, or request a coding change.'),
   );
-  panel.append(heading, title, meta, topics, evidence, toolbar(status), voice);
+  panel.append(heading, title, meta, topics, evidence, reviewNavigation(presentation, status), toolbar(status), voice);
   return panel;
 };
 

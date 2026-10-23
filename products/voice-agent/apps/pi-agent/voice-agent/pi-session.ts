@@ -35,6 +35,7 @@ const JOURNAL_REVIEW_MCP_SERVER = join(JOURNAL_REVIEW_MCP_ROOT, "stdio-bundle.mj
 const JOURNAL_REVIEW_TOOLS = [
   "mcp__journal_review__render_journal_review",
   "mcp__journal_review__review_active",
+  "mcp__journal_review__navigate_review",
   "mcp__journal_review__get_review_status",
 ] as const;
 

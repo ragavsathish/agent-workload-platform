@@ -44,6 +44,9 @@ h1 { margin: 0; font-size: clamp(20px, 3.2vw, 31px); line-height: 1.08; letter-s
 .type-chip, .topics span { padding: 5px 8px; border: 1px solid var(--line-bright); border-radius: 999px; background: #111c23; color: #bcd0d4; }
 .type-chip { border-color: #2c705c; color: #8ee5c2; text-transform: uppercase; }
 #selected-evidence { margin: 20px 18px; padding: 12px 14px; border: 0; border-left: 2px solid var(--amber); border-radius: 0 8px 8px 0; background: #181a18; color: #e9dfc6; font-size: 13px; line-height: 1.55; }
+.review-navigation { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 18px 12px; }
+.review-navigation span { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.review-navigation button:disabled { cursor: not-allowed; opacity: .45; }
 .review-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; padding: 0 18px; }
 .action { padding: 8px 10px; }
 .action:hover { transform: translateY(-1px); }
@@ -65,8 +68,10 @@ footer { display: flex; justify-content: space-between; gap: 12px; padding: 9px 
 .variant-b .suggestion-panel .panel-heading { grid-column: 1 / -1; margin: 0; }
 .variant-b .suggestion-panel h2 { align-self: center; padding: 22px; }
 .variant-b .suggestion-meta, .variant-b .topics, .variant-b #selected-evidence { grid-column: 1; }
-.variant-b .review-actions, .variant-b .voice-handoff { grid-column: 2; }
-.variant-b .review-actions { grid-row: 2 / 5; align-self: center; padding: 22px; }
+.variant-b .review-navigation, .variant-b .review-actions, .variant-b .voice-handoff { grid-column: 2; }
+.variant-b .review-navigation { grid-row: 2; align-self: center; }
+.variant-b .review-actions { grid-row: 3 / 6; align-self: center; padding: 22px; }
+.variant-b .voice-handoff { grid-row: 6; }
 .variant-b .voice-handoff { margin: 0 22px 22px; }
 .variant-b #transcript { min-height: 250px; }
 
@@ -87,6 +92,7 @@ footer { display: flex; justify-content: space-between; gap: 12px; padding: 9px 
   #transcript, .variant-c #transcript { min-height: 300px; padding: 22px; font-size: 17px; }
   .variant-b .suggestion-panel { display: block; }
   .variant-b .review-actions { padding: 0 18px; }
+  .variant-b .review-navigation { padding: 0 18px 12px; }
   .variant-b .voice-handoff { margin: 16px 18px 0; }
   footer span:first-child, footer span:last-child { display: none; }
   footer { justify-content: center; }

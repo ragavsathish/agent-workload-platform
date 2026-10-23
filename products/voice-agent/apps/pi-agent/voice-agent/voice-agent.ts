@@ -98,6 +98,7 @@ export const VOICE_INITIAL_TOOLS = [
   ...PLAYWRIGHT_TRACE_TOOLS.map((name) => `+${name}`),
   "+mcp__journal_review__render_journal_review",
   "+mcp__journal_review__review_active",
+  "+mcp__journal_review__navigate_review",
   "+mcp__journal_review__get_review_status",
   "+attach_task_session",
 ] as const;

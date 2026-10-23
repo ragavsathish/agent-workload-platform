@@ -333,6 +333,18 @@ describe('MCP App renderers', () => {
     });
     expect(transcript.text).toContain('annotate examples first');
 
+    const navigation = await commands.inspectMcpFrame({
+      title: journal.title,
+      selector: '#review-navigation',
+    });
+    expect(navigation.text).toContain('Note 7 of 40');
+    const next = await commands.inspectMcpFrame({
+      title: journal.title,
+      selector: '#review-next',
+      attribute: 'disabled',
+    });
+    expect(next.attribute).not.toBe('');
+
     await commands.clickMcpFrame({ title: journal.title, selector: '#review-accept' });
     const state = await commands.inspectMcpFrame({
       title: journal.title,
@@ -345,6 +357,32 @@ describe('MCP App renderers', () => {
       title: journal.title,
       path: 'build/vitest-screenshots/journal-review-dark.png',
     });
+  });
+
+  test('shows journal queue navigation and omits confidence when unknown', async () => {
+    const journal = presentations.find(({ name }) => name === 'Journal review');
+    const value = structuredClone(journal.value);
+    value.progress = { current: 1, total: 2, reviewed: 0 };
+    delete value.suggestion.confidence;
+    await mount({ ...journal, value });
+
+    const previous = await commands.inspectMcpFrame({
+      title: journal.title,
+      selector: '#review-previous',
+      attribute: 'disabled',
+    });
+    expect(previous.attribute).toBe('');
+    const next = await commands.inspectMcpFrame({
+      title: journal.title,
+      selector: '#review-next',
+      attribute: 'disabled',
+    });
+    expect(next.attribute).not.toBe('true');
+    const meta = await commands.inspectMcpFrame({
+      title: journal.title,
+      selector: '.suggestion-meta',
+    });
+    expect(meta.text).not.toContain('confidence');
   });
 
   test('waits for a host element created after rendering starts', async () => {
