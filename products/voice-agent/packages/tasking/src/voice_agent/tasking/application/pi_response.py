@@ -17,6 +17,13 @@ EXCALIDRAW_TYPES = {
 
 PRESENTATION_INSTRUCTION = """
 
+Before your first tool call, write one brief public sentence beginning with "Progress: ".
+Write another such sentence when you move to a new phase or evidence changes your approach.
+Describe what you are checking and why in plain language. These sentences are for the user's
+live narration; do not include private reasoning, sensitive details, raw tool output, or a
+command transcript.
+The final assistant message must still follow the JSON format below.
+
 When the work is complete, make your final assistant message exactly one JSON object
 with fields "spoken" and "presentation". "spoken" must be a concise, precise summary
 suitable for text-to-speech. Give a useful account of the work in four to eight

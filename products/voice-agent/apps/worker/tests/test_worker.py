@@ -120,6 +120,7 @@ assert os.environ["GONDOLIN_EXECUTION_IMAGE_REF"] == "project-build:v1-v2-exampl
 assert os.environ["PI_TASK_SKILLS_DIR"] == sys.argv[sys.argv.index("--skill") + 1]
 answer = {"spoken": "Done.", "presentation": {"kind": "status", "title": "Done", "nodes": [{"id": "done", "label": "Done"}], "edges": []}}
 print(json.dumps({"type": "turn_start"}), flush=True)
+print(json.dumps({"type": "message_end", "message": {"role": "assistant", "content": [{"type": "text", "text": "Progress: I am checking the project guidance before reviewing the code."}]}}), flush=True)
 print(json.dumps({"type": "tool_execution_start", "toolName": "read", "args": {"path": "/workspace/README.md"}}), flush=True)
 print(json.dumps({"type": "message_end", "message": {"role": "assistant", "content": [{"type": "text", "text": json.dumps(answer)}]}}))
 print(json.dumps({"type": "agent_settled"}))
@@ -153,6 +154,7 @@ print(json.dumps({"type": "agent_settled"}))
     assert result["exit_code"] == 0
     assert result["response"]["spoken"] == "Done."
     assert progress == [
+        "I am checking the project guidance before reviewing the code.",
         "The agent is reading README.md.",
         "The agent has finished and is preparing the result.",
     ]

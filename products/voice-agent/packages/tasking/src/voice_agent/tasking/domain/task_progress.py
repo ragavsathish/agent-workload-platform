@@ -53,6 +53,26 @@ def narration_from_pi_record(line: bytes) -> str | None:
     if not isinstance(event, dict):
         return None
     kind = event.get("type")
+    if kind == "message_end":
+        message = event.get("message")
+        if not isinstance(message, dict) or message.get("role") != "assistant":
+            return None
+        content = message.get("content")
+        if not isinstance(content, list):
+            return None
+        for part in content:
+            if not isinstance(part, dict) or part.get("type") != "text":
+                continue
+            value = part.get("text")
+            if not isinstance(value, str):
+                continue
+            first_line = value.lstrip().splitlines()[0] if value.strip() else ""
+            if not first_line.startswith("Progress: "):
+                continue
+            detail = _safe_detail(first_line.removeprefix("Progress: "), max_length=240)
+            if detail:
+                return detail
+        return None
     if kind == "agent_settled":
         return "The agent has finished and is preparing the result."
     if kind == "tool_execution_start":

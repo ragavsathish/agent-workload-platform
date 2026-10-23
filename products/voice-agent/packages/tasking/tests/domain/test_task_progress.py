@@ -33,3 +33,24 @@ def test_progress_describes_a_safe_workspace_command() -> None:
 
 def test_progress_omits_generic_task_start() -> None:
     assert narration_from_pi_record(b'{"type":"turn_start"}') is None
+
+
+def test_progress_accepts_only_explicit_public_assistant_commentary() -> None:
+    def record(text: str) -> bytes:
+        return json.dumps({
+            "type": "message_end",
+            "message": {"role": "assistant", "content": [{"type": "text", "text": text}]},
+        }).encode()
+
+    assert narration_from_pi_record(record(
+        "Progress: I am checking the API contract before changing the client."
+    )) == "I am checking the API contract before changing the client."
+    assert narration_from_pi_record(record(
+        "\n\nProgress: I am reading the README to identify its owner.\n\n"
+    )) == "I am reading the README to identify its owner."
+    assert narration_from_pi_record(record(
+        "\nProgress: I have found the owner and will summarize it.\n\n{\"spoken\":\"Final\"}"
+    )) == "I have found the owner and will summarize it."
+    assert narration_from_pi_record(record("My private scratch work")) is None
+    assert narration_from_pi_record(record("Progress: read secret-token")) is None
+    assert narration_from_pi_record(record('{"spoken":"Final result"}')) is None
