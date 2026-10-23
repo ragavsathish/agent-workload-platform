@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { AudioDiagnosticsCharts, LiveAudioDiagnostics } from './AudioDiagnosticsCharts';
+import type { SessionMetrics } from './AudioDiagnosticsCharts';
 import { AudioWaveform } from './AudioWaveform';
 
 type AudioDiagnosticSession = {
@@ -57,6 +58,42 @@ export const AudioDiagnosticsView = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const [sessionMetrics, setSessionMetrics] = useState<SessionMetrics | null>(null);
+  const [metricsError, setMetricsError] = useState('');
+  const [micSettings, setMicSettings] = useState<Record<string, unknown> | null>(null);
+
+  useEffect(() => {
+    const refreshMic = () => {
+      try {
+        const stored: unknown = JSON.parse(localStorage.getItem('voiceMicSettings') ?? 'null');
+        setMicSettings(stored && typeof stored === 'object' ? stored as Record<string, unknown> : null);
+      } catch { setMicSettings(null); }
+    };
+    refreshMic();
+    const timer = window.setInterval(refreshMic, 2_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedSession) return;
+    let active = true;
+    setSessionMetrics(null);
+    setMetricsError('');
+    void fetch(`/api/audio-diagnostics/${encodeURIComponent(selectedSession)}/metrics`, { cache: 'no-store' })
+      .then(async (response) => {
+        const payload: unknown = await response.json();
+        if (!response.ok || !payload || typeof payload !== 'object') throw new Error();
+        const values = payload as Partial<SessionMetrics>;
+        if (!Array.isArray(values.points)) throw new Error();
+        if (active) setSessionMetrics({
+          points: values.points,
+          vadSamples: Array.isArray(values.vadSamples) ? values.vadSamples : [],
+          events: Array.isArray(values.events) ? values.events : [],
+        });
+      })
+      .catch(() => { if (active) setMetricsError('Diagnostic metrics are unavailable for this session.'); });
+    return () => { active = false; };
+  }, [selectedSession]);
 
   const refresh = useCallback(async () => {
     try {
@@ -99,6 +136,13 @@ export const AudioDiagnosticsView = () => {
 
       {error && <p className="audio-diagnostics-error" role="alert">{error}</p>}
       <LiveAudioDiagnostics />
+      <section className="mic-settings">
+        <h2>Browser microphone processing</h2>
+        {micSettings ? <p>
+          Echo cancellation: {String(micSettings.echoCancellation ?? 'unknown')} · Noise suppression: {String(micSettings.noiseSuppression ?? 'unknown')} · Automatic gain: {String(micSettings.autoGainControl ?? 'unknown')} · Sample rate: {String(micSettings.sampleRate ?? 'unknown')} Hz · Channels: {String(micSettings.channelCount ?? 'unknown')}
+        </p> : <p>Start a conversation in this browser to capture the applied microphone settings.</p>}
+        <p>These settings are held in this browser and may differ from a previous conversation or another device.</p>
+      </section>
       <section className="audio-session-list" aria-live="polite">
         {loading && <p className="audio-diagnostics-empty">Loading replays…</p>}
         {!loading && sessions.length === 0 && !error && (
@@ -137,18 +181,20 @@ export const AudioDiagnosticsView = () => {
                       label={LABELS[variant] ?? variant}
                       color={COLORS[variant] ?? '#73808a'}
                       showSpectrogram={variant === 'raw' || variant === 'voxlock'}
+                      events={sessionMetrics?.events}
                       url={`/api/audio-diagnostics/${encodeURIComponent(session.id)}/${encodeURIComponent(variant)}.wav`}
                     />
                   </section>
                 ))}
               </div>
             )}
-            {selectedSession === session.id && (
+            {selectedSession === session.id && sessionMetrics && (
               <AudioDiagnosticsCharts
-                sessionId={session.id}
+                metrics={sessionMetrics}
                 selectedFilter={session.selectedFilter}
               />
             )}
+            {selectedSession === session.id && metricsError && <p className="audio-session-warning">{metricsError}</p>}
             {(session.droppedChunks > 0 || session.truncated) && (
               <p className="audio-session-warning">
                 {session.droppedChunks > 0 && `${session.droppedChunks} chunks were not recorded. `}

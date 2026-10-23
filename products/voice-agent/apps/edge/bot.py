@@ -17,7 +17,6 @@ from opentelemetry.propagate import extract, inject
 from pipecat.adapters.schemas.direct_function import DirectFunction
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
-from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.frames.frames import (
     LLMFullResponseEndFrame,
@@ -49,7 +48,8 @@ from pipecat.workers.runner import WorkerRunner
 from voice_agent.shared.telemetry import configure_telemetry
 
 from audio_diagnostics import audio_diagnostic_store
-from audio_filter import audio_filter_readiness, create_audio_filter
+from audio_filter import SelectedReplayAudioFilter, audio_filter_readiness, create_audio_filter
+from diagnostic_vad import DiagnosticSileroVADAnalyzer
 from grafana_mcp import read_grafana_app, read_grafana_trace
 from otel_bridge import configure_pipecat_observers
 from presentation_response import StreamingSpokenExtractor, parse_presentation_response
@@ -630,7 +630,9 @@ async def summarize_owned_task_progress(
     return await broker_task_narration(proposal_id, instruction, events)
 
 
-async def run_bot(transport: BaseTransport, identity: str):
+async def run_bot(
+    transport: BaseTransport, identity: str, input_filter: SelectedReplayAudioFilter
+):
     broker_url = required_env("INFERENCE_BROKER_BASE_URL")
     broker_token = required_env("INFERENCE_BROKER_TOKEN")
     gateway_url = required_env("AGENT_GATEWAY_BASE_URL").rstrip("/")
@@ -874,10 +876,13 @@ async def run_bot(transport: BaseTransport, identity: str):
     # In Pi mode the native Pi process owns the task tools through its
     # restricted extension. Ollama mode keeps executing them in this edge.
     context = LLMContext(tools=[] if llm_backend == "pi" else gateway_tools)
+    vad_analyzer = DiagnosticSileroVADAnalyzer(
+        input_filter, params=VADParams(stop_secs=0.2)
+    )
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
-            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.2)),
+            vad_analyzer=vad_analyzer,
             # VAD can mistake quiet background audio for a user turn. If STT
             # returns no text, do not send Pipecat's synthetic "please repeat"
             # developer message to the conversational agent.
@@ -896,6 +901,7 @@ async def run_bot(transport: BaseTransport, identity: str):
     @user_aggregator.event_handler("on_user_turn_started")
     async def on_user_turn_started(_aggregator, _strategy):
         telemetry.record("pipecat.user_turn.started")
+        input_filter.record_event("user_turn_started", vad_analyzer.audio_time_seconds)
 
     @user_aggregator.event_handler("on_user_turn_inference_triggered")
     async def on_user_turn_inference_triggered(_aggregator, _strategy):
@@ -904,8 +910,10 @@ async def run_bot(transport: BaseTransport, identity: str):
     @user_aggregator.event_handler("on_user_turn_stopped")
     async def on_user_turn_stopped(_aggregator, _strategy, _message):
         telemetry.record("pipecat.user_turn.stopped")
+        input_filter.record_event("user_turn_stopped", vad_analyzer.audio_time_seconds)
         if not _message.content.strip():
             telemetry.record("pipecat.user_turn.empty")
+            input_filter.record_event("empty_user_turn", vad_analyzer.audio_time_seconds)
 
     @user_aggregator.event_handler("on_user_turn_stop_timeout")
     async def on_user_turn_stop_timeout(_aggregator):
@@ -914,6 +922,7 @@ async def run_bot(transport: BaseTransport, identity: str):
     @user_aggregator.event_handler("on_user_turn_message_added")
     async def on_user_turn_message_added(_aggregator, _message):
         telemetry.record("pipecat.user_turn.transcript_emitted")
+        input_filter.record_event("transcript_emitted", vad_analyzer.audio_time_seconds)
 
     presentation_response = VoicePresentationResponseProcessor()
     pipeline = Pipeline(
@@ -939,7 +948,7 @@ async def run_bot(transport: BaseTransport, identity: str):
             enable_metrics=True,
             enable_usage_metrics=True,
         ),
-        observers=list(configure_pipecat_observers(telemetry)),
+        observers=list(configure_pipecat_observers(telemetry, input_filter.record_event)),
     )
 
     @worker.rtvi.event_handler("on_client_ready")
@@ -988,11 +997,12 @@ async def bot(runner_args: RunnerArguments):
                     logger.warning("Rejected concurrent WebRTC voice session")
                     await runner_args.webrtc_connection.disconnect()
                     return
+                input_filter = create_audio_filter(telemetry)
                 transport = SmallWebRTCTransport(
                     webrtc_connection=runner_args.webrtc_connection,
                     params=TransportParams(
                         audio_in_enabled=True,
-                        audio_in_filter=create_audio_filter(telemetry),
+                        audio_in_filter=input_filter,
                         audio_out_enabled=True,
                     ),
                 )
@@ -1005,7 +1015,7 @@ async def bot(runner_args: RunnerArguments):
                 logger.error("Unsupported runner arguments: {}", type(runner_args))
                 return
         try:
-            await run_bot(transport, identity)
+            await run_bot(transport, identity, input_filter)
         finally:
             _voice_session_active = False
 

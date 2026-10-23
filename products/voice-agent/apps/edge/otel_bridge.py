@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from pipecat.observers.error_observer import ErrorObserver
@@ -20,8 +20,11 @@ class PipecatTelemetryBridge:
     processor/model names, identities, and exception text are discarded.
     """
 
-    def __init__(self, telemetry: Any) -> None:
+    def __init__(
+        self, telemetry: Any, record_diagnostic_event: Callable[[str], None] | None = None
+    ) -> None:
         self._telemetry = telemetry
+        self._record_diagnostic_event = record_diagnostic_event
 
     def observers(self) -> list[Any]:
         error = ErrorObserver()
@@ -65,6 +68,9 @@ class PipecatTelemetryBridge:
             }:
                 kind = "unknown"
             self._telemetry.record(f"pipecat.speech.{kind}")
+            if kind in {"bot_speech_started", "bot_speech_stopped", "interruption"}:
+                if self._record_diagnostic_event is not None:
+                    self._record_diagnostic_event(kind)
 
         @turns.event_handler("on_turn_started")
         async def on_turn_started(_observer: Any, _turn_number: int) -> None:
@@ -97,6 +103,8 @@ class PipecatTelemetryBridge:
         return [error, service, speaking, turns, latency]
 
 
-def configure_pipecat_observers(telemetry: Any) -> Sequence[Any]:
+def configure_pipecat_observers(
+    telemetry: Any, record_diagnostic_event: Callable[[str], None] | None = None
+) -> Sequence[Any]:
     """Return Pipecat observers connected to the app telemetry."""
-    return PipecatTelemetryBridge(telemetry).observers()
+    return PipecatTelemetryBridge(telemetry, record_diagnostic_event).observers()

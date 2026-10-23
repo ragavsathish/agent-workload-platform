@@ -188,6 +188,17 @@ class SelectedReplayAudioFilter(BaseAudioFilter):
     async def process_frame(self, frame: FilterControlFrame):
         await self._filter.process_frame(frame)
 
+    def record_vad_sample(self, time_seconds: float, confidence: float, volume: float) -> None:
+        if self._recorder is not None:
+            self._recorder.record_vad_sample(time_seconds, confidence, volume)
+
+    def record_event(self, kind: str, time_seconds: float | None = None) -> None:
+        if self._recorder is not None:
+            self._recorder.record_event(
+                kind,
+                self._recorder.audio_time_seconds if time_seconds is None else time_seconds,
+            )
+
     async def filter(self, audio: bytes) -> bytes:
         filtered = await self._filter.filter(audio)
         self._input_frames += len(audio) // 2

@@ -152,6 +152,18 @@ const textContent = (content) => Array.isArray(content)
   : '';
 
 const emit = (type, detail = {}) => events.push({ type, ...detail, at: Date.now() });
+const rememberMicSettings = (track, participant) => {
+  if (track.kind !== 'audio' || participant?.local !== true) return;
+  try {
+    const settings = track.getSettings();
+    const visible = Object.fromEntries(
+      ['echoCancellation', 'noiseSuppression', 'autoGainControl', 'sampleRate', 'channelCount']
+        .filter((key) => settings[key] !== undefined)
+        .map((key) => [key, settings[key]]),
+    );
+    localStorage.setItem('voiceMicSettings', JSON.stringify({ ...visible, observedAt: Date.now() }));
+  } catch { /* Diagnostics must not interrupt the conversation. */ }
+};
 const messagePresentation = (value) => {
   let payload = value;
   for (let depth = 0; depth < 2; depth += 1) {
@@ -264,7 +276,10 @@ const ensureClient = async () => {
         onDisconnected: () => emit('disconnected'),
         onTransportStateChanged: (state) => emit('transport', { state }),
         onBotReady: () => emit('ready'),
-        onTrackStarted: playBotTrack,
+        onTrackStarted: (track, participant) => {
+          rememberMicSettings(track, participant);
+          playBotTrack(track, participant);
+        },
         onTrackStopped: stopBotTrack,
       },
     });

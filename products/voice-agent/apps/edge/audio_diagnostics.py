@@ -78,6 +78,8 @@ class SessionAudioRecorder:
         self._closed = False
         self._error: BaseException | None = None
         self._metrics: list[dict[str, object]] = []
+        self._vad_samples: list[dict[str, object]] = []
+        self._events: list[dict[str, object]] = []
         self._latest_waveform: list[dict[str, float | int]] = []
         self._snapshot_lock = threading.Lock()
         self._queue: queue.Queue[object] = queue.Queue(maxsize=256)
@@ -169,8 +171,13 @@ class SessionAudioRecorder:
         metrics_path = self._temporary / "metrics.json"
         with self._snapshot_lock:
             metrics = list(self._metrics)
+            vad_samples = list(self._vad_samples)
+            events = list(self._events)
         metrics_path.write_text(
-            json.dumps({"version": 1, "points": metrics}, separators=(",", ":")),
+            json.dumps(
+                {"version": 2, "points": metrics, "vadSamples": vad_samples, "events": events},
+                separators=(",", ":"),
+            ),
             encoding="utf-8",
         )
         metrics_path.chmod(0o600)
@@ -181,10 +188,27 @@ class SessionAudioRecorder:
         self._store.prune()
         return session
 
+    def record_vad_sample(self, time_seconds: float, confidence: float, volume: float) -> None:
+        if self._closed or time_seconds > self._max_frames / self.sample_rate:
+            return
+        with self._snapshot_lock:
+            self._vad_samples.append({
+                "timeSeconds": round(time_seconds, 3),
+                "confidence": round(float(confidence), 4),
+                "volume": round(float(volume), 4),
+            })
+
+    def record_event(self, kind: str, time_seconds: float) -> None:
+        if self._closed or time_seconds > self._max_frames / self.sample_rate:
+            return
+        with self._snapshot_lock:
+            self._events.append({"kind": kind, "timeSeconds": round(time_seconds, 3)})
+
     def snapshot(self) -> dict[str, object]:
         with self._snapshot_lock:
             point = dict(self._metrics[-1]) if self._metrics else None
             waveform = list(self._latest_waveform)
+            events = list(self._events[-20:])
         return {
             "active": True,
             "id": self.id,
@@ -192,7 +216,12 @@ class SessionAudioRecorder:
             "selectedFilter": self.selected_filter,
             "point": point,
             "waveform": waveform,
+            "events": events,
         }
+
+    @property
+    def audio_time_seconds(self) -> float:
+        return self._raw_frames / self.sample_rate
 
 
 class AudioDiagnosticStore:

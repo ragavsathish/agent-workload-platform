@@ -7,13 +7,14 @@ import {
   Legend,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
 
-type MetricPoint = {
+export type MetricPoint = {
   timeSeconds?: number;
   rawDbfs?: number | null;
   voxlockDbfs?: number | null;
@@ -25,6 +26,15 @@ type MetricPoint = {
   lstmHiddenRms?: number[];
   lstmCellRms?: number[];
   maskMagnitude?: number[];
+};
+
+export type VadSample = { timeSeconds: number; confidence: number; volume: number };
+export type DiagnosticEvent = { timeSeconds: number; kind: string };
+
+export type SessionMetrics = {
+  points: MetricPoint[];
+  vadSamples: VadSample[];
+  events: DiagnosticEvent[];
 };
 
 type WaveformPoint = { index: number; min: number; max: number };
@@ -102,36 +112,25 @@ export const LiveAudioDiagnostics = () => {
 };
 
 export const AudioDiagnosticsCharts = ({
-  sessionId,
+  metrics,
   selectedFilter,
 }: {
-  sessionId: string;
+  metrics: SessionMetrics;
   selectedFilter: string;
 }) => {
-  const [points, setPoints] = useState<MetricPoint[]>([]);
-  const [error, setError] = useState('');
+  const { points, vadSamples, events } = metrics;
+  const [focusedAt, setFocusedAt] = useState<number | null>(null);
+  const inFocus = (seconds: number) => focusedAt === null
+    || (seconds >= Math.max(0, focusedAt - 3) && seconds <= focusedAt + 3);
 
-  useEffect(() => {
-    let active = true;
-    void fetch(`/api/audio-diagnostics/${encodeURIComponent(sessionId)}/metrics`, { cache: 'no-store' })
-      .then(async (response) => {
-        const payload: unknown = await response.json();
-        if (!response.ok || typeof payload !== 'object' || payload === null) throw new Error();
-        const values = (payload as { points?: unknown }).points;
-        if (!Array.isArray(values)) throw new Error();
-        if (active) setPoints(values as MetricPoint[]);
-      })
-      .catch(() => {
-        if (active) setError('Diagnostic metrics are unavailable for this session.');
-      });
-    return () => { active = false; };
-  }, [sessionId]);
-
-  const chartPoints = useMemo(() => points.map((point) => ({
+  const chartPoints = useMemo(() => points.filter((point) =>
+    typeof point.timeSeconds === 'number' && inFocus(point.timeSeconds)).map((point) => ({
     ...point,
     lstmHiddenActivity: average(point.lstmHiddenRms),
     lstmCellActivity: average(point.lstmCellRms),
-  })), [points]);
+  })), [points, focusedAt]);
+  const chartVadSamples = useMemo(() => vadSamples.filter((sample) => inFocus(sample.timeSeconds)),
+    [vadSamples, focusedAt]);
   const maskProfile = useMemo(() => {
     const masks = points
       .map((point) => point.maskMagnitude)
@@ -144,7 +143,6 @@ export const AudioDiagnosticsCharts = ({
     }));
   }, [points]);
 
-  if (error) return <p className="audio-session-warning">{error}</p>;
   if (!points.length) return <p className="audio-diagnostics-empty">Loading diagnostics…</p>;
 
   const filterLabel = selectedFilter === 'rnnoise' ? 'RNNoise' : 'VoxLock';
@@ -152,15 +150,26 @@ export const AudioDiagnosticsCharts = ({
   const energyKey = `${selectedFilter}Dbfs`;
   const suppressionKey = `${selectedFilter}SuppressionDb`;
   const latencyKey = `${selectedFilter}LatencyMs`;
+  const markers = events.filter((event) => inFocus(event.timeSeconds)
+    && ['vad_speech_started', 'interruption', 'empty_user_turn', 'transcript_emitted',
+      'bot_speech_started', 'bot_speech_stopped'].includes(event.kind));
+  const eventColor = (kind: string) => kind === 'interruption' || kind === 'empty_user_turn'
+    ? '#ff8e7c' : kind === 'transcript_emitted' ? '#72b7ef'
+      : kind.startsWith('bot_speech') ? '#c792ea' : '#ffbd76';
 
   const lineChart = (lines: ReactNode) => (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={chartPoints}>
         <CartesianGrid stroke="#273039" vertical={false} />
-        <XAxis dataKey="timeSeconds" tick={{ fill: '#89949f', fontSize: 11 }} unit="s" />
+        <XAxis dataKey="timeSeconds" type="number" domain={['dataMin', 'dataMax']}
+          tick={{ fill: '#89949f', fontSize: 11 }} unit="s" />
         <YAxis tick={{ fill: '#89949f', fontSize: 11 }} width={48} />
         <Tooltip />
         <Legend />
+        {markers.map((event, index) => (
+          <ReferenceLine key={`${event.kind}-${index}`} x={event.timeSeconds}
+            stroke={eventColor(event.kind)} strokeDasharray="3 3" />
+        ))}
         {lines}
       </LineChart>
     </ResponsiveContainer>
@@ -174,6 +183,25 @@ export const AudioDiagnosticsCharts = ({
           <Line name={filterLabel} dataKey={energyKey} stroke={filterColor} dot={false} isAnimationActive={false} />
         </>)}
       </ChartFrame>
+      {vadSamples.length > 0 && <ChartFrame title="Silero decision · confidence and volume">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chartVadSamples}>
+            <CartesianGrid stroke="#273039" vertical={false} />
+            <XAxis dataKey="timeSeconds" type="number" domain={['dataMin', 'dataMax']}
+              tick={{ fill: '#89949f', fontSize: 11 }} unit="s" />
+            <YAxis domain={[0, 1]} tick={{ fill: '#89949f', fontSize: 11 }} width={48} />
+            <Tooltip /><Legend />
+            <ReferenceLine y={0.7} stroke="#c792ea" strokeDasharray="4 4" />
+            <ReferenceLine y={0.6} stroke="#56e39f" strokeDasharray="4 4" />
+            {markers.map((event, index) => (
+              <ReferenceLine key={`${event.kind}-${index}`} x={event.timeSeconds}
+                stroke={eventColor(event.kind)} strokeDasharray="3 3" />
+            ))}
+            <Line name="Confidence" dataKey="confidence" stroke="#c792ea" dot={false} isAnimationActive={false} />
+            <Line name="Smoothed volume" dataKey="volume" stroke="#56e39f" dot={false} isAnimationActive={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </ChartFrame>}
       <ChartFrame title="Suppression · dB">
         {lineChart(<>
           <Line name={filterLabel} dataKey={suppressionKey} stroke={filterColor} dot={false} isAnimationActive={false} />
@@ -203,6 +231,18 @@ export const AudioDiagnosticsCharts = ({
           </ResponsiveContainer>
         </ChartFrame>
       </>}
+      {events.length > 0 && <section className="diagnostic-events">
+        <h3>Turn events</h3>
+        <p>Choose an event to inspect a six-second window. Dashed markers align with the audio clock. Confidence and volume thresholds are 0.7 and 0.6.</p>
+        {focusedAt !== null && <button type="button" onClick={() => setFocusedAt(null)}>Show full session</button>}
+        <ol>{events.map((event, index) => (
+          <li key={`${event.kind}-${index}`}>
+            <button type="button" onClick={() => setFocusedAt(event.timeSeconds)}>
+              <time>{event.timeSeconds.toFixed(2)}s</time> {event.kind.replaceAll('_', ' ')}
+            </button>
+          </li>
+        ))}</ol>
+      </section>}
     </div>
   );
 };

@@ -19,6 +19,7 @@ button, a { font: inherit; }
 .audio-diagnostics-header,
 .audio-session-list,
 .live-diagnostic,
+.mic-settings,
 .audio-diagnostics-footer {
   width: min(100%, 72rem);
   margin-inline: auto;
@@ -68,6 +69,7 @@ button, a { font: inherit; }
 .audio-session-list { display: grid; gap: 1rem; }
 
 .live-diagnostic,
+.mic-settings,
 .audio-session-card {
   border: 1px solid #283038;
   border-radius: 14px;
@@ -76,6 +78,9 @@ button, a { font: inherit; }
 }
 
 .live-diagnostic { margin-bottom: 1rem; }
+.mic-settings { margin-bottom: 1rem; }
+.mic-settings h2 { margin: 0 0 0.5rem; font-size: 0.9rem; }
+.mic-settings p { margin: 0.3rem 0; color: #aab5be; font-size: 0.75rem; line-height: 1.5; }
 .live-diagnostic > header,
 .audio-session-card > header,
 .audio-session-card > header > div,
@@ -138,6 +143,22 @@ button, a { font: inherit; }
 }
 
 .audio-waveform { min-width: 0; }
+.audio-waveform-track { position: relative; }
+.audio-event-marker {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  width: 3px;
+  height: 72px;
+  padding: 0;
+  border: 0;
+  background: #ffbd76;
+  cursor: pointer;
+}
+.audio-event-interruption,
+.audio-event-empty_user_turn { background: #ff8e7c; }
+.audio-event-marker:hover,
+.audio-event-marker:focus-visible { width: 7px; outline: 1px solid white; }
 .audio-spectrogram { min-height: 7rem; overflow: hidden; background: #080b0e; }
 .audio-spectrogram > div { background: #080b0e !important; }
 .audio-waveform-controls {
@@ -163,6 +184,13 @@ button, a { font: inherit; }
 .diagnostic-chart { min-width: 0; border-top: 1px solid #273039; padding-top: 0.8rem; }
 .diagnostic-chart:last-child { grid-column: 1 / -1; }
 .diagnostic-chart-canvas { height: 15rem; margin-top: 0.65rem; }
+.diagnostic-events { grid-column: 1 / -1; border-top: 1px solid #273039; }
+.diagnostic-events h3 { font-size: 0.85rem; }
+.diagnostic-events p { color: #89949f; font-size: 0.72rem; }
+.diagnostic-events ol { max-height: 14rem; overflow: auto; padding-left: 1.5rem; font: 0.72rem/1.7 ui-monospace, monospace; }
+.diagnostic-events time { color: #ffbd76; }
+.diagnostic-events button { border: 0; background: transparent; color: #cbd4dc; cursor: pointer; text-align: left; }
+.diagnostic-events button:hover { color: white; text-decoration: underline; }
 
 .audio-session-warning,
 .audio-diagnostics-error,

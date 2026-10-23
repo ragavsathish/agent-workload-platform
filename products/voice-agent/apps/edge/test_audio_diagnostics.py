@@ -4,6 +4,8 @@ import wave
 from pathlib import Path
 from typing import cast
 
+import numpy as np
+
 from audio_diagnostics import AudioDiagnosticStore
 
 
@@ -17,13 +19,22 @@ class AudioDiagnosticStoreTest(unittest.TestCase):
                 filtered=b"\x02\x00" * 80,
                 metrics={"timeSeconds": 0.01, "voxlockLatencyMs": 2.5},
             )
+            recorder.record_vad_sample(0.01, np.float32(0.83), np.float32(0.71))
+            recorder.record_event("vad_speech_started", 0.01)
 
             session = recorder.close()
 
             self.assertIsNotNone(session)
             self.assertEqual(len(store.list()), 1)
-            points = cast(list[dict[str, object]], store.metrics(recorder.id)["points"])
+            payload = store.metrics(recorder.id)
+            points = cast(list[dict[str, object]], payload["points"])
             self.assertEqual(points[0]["voxlockLatencyMs"], 2.5)
+            self.assertEqual(payload["vadSamples"], [
+                {"timeSeconds": 0.01, "confidence": 0.83, "volume": 0.71}
+            ])
+            self.assertEqual(payload["events"], [
+                {"kind": "vad_speech_started", "timeSeconds": 0.01}
+            ])
             self.assertEqual(store.list()[0]["variants"], ["raw", "voxlock"])
             for variant, expected_frames in (("raw", 160), ("voxlock", 80)):
                 with wave.open(str(store.audio_path(recorder.id, variant)), "rb") as replay:
