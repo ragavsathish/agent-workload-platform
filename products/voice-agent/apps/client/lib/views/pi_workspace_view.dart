@@ -14,7 +14,10 @@ enum WorkspaceSection { conversation, tasks }
 String summarizeTaskProgress(List<TaskProgressEvent> events) {
   final updates = events
       .map((event) => event.spoken.trim())
-      .where((spoken) => spoken.isNotEmpty)
+      .where(
+        (spoken) =>
+            spoken.isNotEmpty && spoken != 'The agent has started working.',
+      )
       .toList();
   if (updates.isEmpty) return '';
   if (updates.length == 1) return updates.single;
@@ -23,7 +26,6 @@ String summarizeTaskProgress(List<TaskProgressEvent> events) {
   var errors = 0;
   final details = <String>[];
   for (final spoken in updates) {
-    if (spoken == 'The agent has started working.') continue;
     if (spoken == 'The agent is running a workspace command.') {
       commands += 1;
       continue;
@@ -36,9 +38,6 @@ String summarizeTaskProgress(List<TaskProgressEvent> events) {
     if (details.isEmpty || details.last != spoken) details.add(spoken);
   }
   final summary = <String>[];
-  if (updates.length > 3) {
-    summary.add('The agent made ${updates.length} updates.');
-  }
   if (commands > 0) {
     summary.add(
       'It ran $commands workspace ${commands == 1 ? 'command' : 'commands'}.',
@@ -54,7 +53,7 @@ String summarizeTaskProgress(List<TaskProgressEvent> events) {
       details.length > 3 ? details.sublist(details.length - 3) : details,
     );
   }
-  return summary.isEmpty ? updates.last : summary.join(' ');
+  return summary.join(' ');
 }
 
 /// Pi Web-inspired session workspace for typed conversation and durable work.

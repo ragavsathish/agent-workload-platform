@@ -45,13 +45,8 @@ def test_task_progress_keeps_later_updates_after_a_fast_burst(monkeypatch) -> No
 
     assert len(stored) == 101
     assert stored[-1] == "Action 100."
-    publish("The agent has started working.")
     publish("The agent is reading source files.")
-    publish("The agent has started working.")
-    assert stored[-2:] == [
-        "The agent has started working.",
-        "The agent is reading source files.",
-    ]
+    assert stored[-1] == "The agent is reading source files."
 
 
 def settings(tmp_path: Path, *, sandboxed: bool) -> Settings:
@@ -158,7 +153,6 @@ print(json.dumps({"type": "agent_settled"}))
     assert result["exit_code"] == 0
     assert result["response"]["spoken"] == "Done."
     assert progress == [
-        "The agent has started working.",
         "The agent is reading README.md.",
         "The agent has finished and is preparing the result.",
     ]

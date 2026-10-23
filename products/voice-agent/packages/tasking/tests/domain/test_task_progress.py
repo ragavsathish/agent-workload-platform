@@ -29,3 +29,7 @@ def test_progress_describes_a_safe_workspace_command() -> None:
         "toolName": "read",
         "args": {"path": "/workspace/docs/README.md"},
     }).encode()) == "The agent is reading README.md."
+
+
+def test_progress_omits_generic_task_start() -> None:
+    assert narration_from_pi_record(b'{"type":"turn_start"}') is None

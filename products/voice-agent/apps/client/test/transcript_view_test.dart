@@ -30,11 +30,21 @@ void main() {
         spoken: 'The agent is running: git diff main...HEAD.',
       ),
     ]);
-    expect(summary, contains('6 updates'));
+    expect(summary, isNot(contains('started working')));
+    expect(summary, isNot(contains('updates')));
     expect(summary, contains('2 workspace commands'));
     expect(summary, contains('1 tool error'));
     expect(summary, contains('reading SKILL.md'));
     expect(summary, contains('git diff main...HEAD'));
+  });
+
+  test('old task-start event is silent on its own', () {
+    expect(
+      summarizeTaskProgress(const [
+        TaskProgressEvent(id: 1, spoken: 'The agent has started working.'),
+      ]),
+      isEmpty,
+    );
   });
 
   testWidgets(
@@ -330,7 +340,7 @@ void main() {
 
     expect(api.progressAfter, contains(40));
     expect(spoken, hasLength(1));
-    expect(spoken.single, contains('41 updates'));
+    expect(spoken.single, isNot(contains('updates')));
     expect(spoken.single, contains('Action 41.'));
   });
 

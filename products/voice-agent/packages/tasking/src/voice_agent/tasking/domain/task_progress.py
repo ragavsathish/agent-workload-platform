@@ -53,8 +53,6 @@ def narration_from_pi_record(line: bytes) -> str | None:
     if not isinstance(event, dict):
         return None
     kind = event.get("type")
-    if kind == "turn_start":
-        return "The agent has started working."
     if kind == "agent_settled":
         return "The agent has finished and is preparing the result."
     if kind == "tool_execution_start":
