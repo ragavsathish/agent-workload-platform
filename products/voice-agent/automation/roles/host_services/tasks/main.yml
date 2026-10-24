@@ -207,10 +207,13 @@
     mode: "0700"
   notify: Restart host services
 
-- name: Remove superseded JavaScript storage collector
+- name: Remove superseded JavaScript storage collectors
   ansible.builtin.file:
-    path: "{{ host_services_runtime_dir }}/apps/host-observability/storage-collector.mjs"
+    path: "{{ host_services_runtime_dir }}/apps/host-observability/{{ item }}"
     state: absent
+  loop:
+    - storage-collector.mjs
+    - storage-exporter.mjs
 
 - name: Install host observability configuration
   ansible.builtin.copy:
