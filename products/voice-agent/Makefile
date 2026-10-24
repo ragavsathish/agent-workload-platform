@@ -11,7 +11,7 @@ WASM_ACTIONS := setup build check install clean
 .PHONY: login status grafana-password grafana-mcp-token warm-models benchmark-mlx publish-workspace
 .PHONY: blackbox-voice blackbox-e2e blackbox-personal-knowledge blackbox-remote-session
 .PHONY: playwright-voice playwright-diagnostics playwright-knowledge-base playwright-grafana playwright-readme-demo playwright-tailnet-voice
-.PHONY: playwright-tailnet-diagnostics host-preflight install-host-services
+.PHONY: playwright-tailnet-diagnostics host-preflight install-host-services storage-collector-build
 .PHONY: native-start native-stop native-restart native-status
 .PHONY: config-init config-check
 .PHONY: grafana-c4-dashboard require-babashka digital-twin-image-build digital-twin-load digital-twin-query
@@ -260,8 +260,14 @@ playwright-tailnet-diagnostics:
 
 host-preflight: automation-preflight
 
-install-host-services: wasm-install digital-twin-image-build pi-rpc-host-release config-check
+install-host-services: wasm-install digital-twin-image-build pi-rpc-host-release storage-collector-build config-check
 	$(ANSIBLE) automation/playbooks/install_host_services.yml
+
+storage-collector-build: apps/host-observability/storage-collector/dist/storage-collector
+
+apps/host-observability/storage-collector/dist/storage-collector: $(wildcard apps/host-observability/storage-collector/*.go) apps/host-observability/storage-collector/go.mod apps/host-observability/storage-collector/go.sum
+	mkdir -p apps/host-observability/storage-collector/dist
+	docker run --rm --platform linux/arm64 -v "$(CURDIR)/apps/host-observability/storage-collector:/src" -w /src -e GOOS=darwin -e GOARCH=arm64 -e CGO_ENABLED=0 golang:1.27.1-alpine go build -trimpath -o dist/storage-collector .
 
 wasm-setup: $(WASM_COMPONENTS:%=wasm-setup-%)
 wasm-build: $(WASM_COMPONENTS:%=wasm-build-%)

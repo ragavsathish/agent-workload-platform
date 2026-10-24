@@ -266,8 +266,9 @@ outcomes, voice-filter pass rate, user-perceived and inference-stage latency, ta
 failures, and recent payload-free traces.
 The provisioned **Storage Capacity** dashboard shows host APFS free space, selected Gondolin
 directories, and Docker usage and reclaimable space. Host capacity comes from Fluent Bit's
-`node_exporter_metrics` filesystem collector; its `exec` and `log_to_metrics` plugins collect
-the directory and Docker gauges once a minute.
+`node_exporter_metrics` filesystem collector; its `exec` and `log_to_metrics` plugins publish
+the directory and Docker gauges once a minute. A Go helper calls Docker's Engine SDK directly
+for byte-precise disk usage and reclaimable totals.
 
 The pinned official `grafana/mcp-grafana` service is available only on Mac loopback at
 `http://127.0.0.1:8000/mcp`. Compose creates a Viewer service account for its Grafana connection,

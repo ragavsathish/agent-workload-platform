@@ -195,13 +195,22 @@
 
 - name: Install host observability source
   ansible.builtin.copy:
-    src: "{{ voice_agent_root }}/apps/host-observability/{{ item }}"
-    dest: "{{ host_services_runtime_dir }}/apps/host-observability/{{ item }}"
+    src: "{{ voice_agent_root }}/apps/host-observability/gondolin-exporter.mjs"
+    dest: "{{ host_services_runtime_dir }}/apps/host-observability/gondolin-exporter.mjs"
     mode: "0600"
-  loop:
-    - gondolin-exporter.mjs
-    - storage-collector.mjs
   notify: Restart host services
+
+- name: Install host storage collector
+  ansible.builtin.copy:
+    src: "{{ voice_agent_root }}/apps/host-observability/storage-collector/dist/storage-collector"
+    dest: "{{ host_services_runtime_dir }}/apps/host-observability/storage-collector"
+    mode: "0700"
+  notify: Restart host services
+
+- name: Remove superseded JavaScript storage collector
+  ansible.builtin.file:
+    path: "{{ host_services_runtime_dir }}/apps/host-observability/storage-collector.mjs"
+    state: absent
 
 - name: Install host observability configuration
   ansible.builtin.copy:
