@@ -35,6 +35,7 @@ const JOURNAL_REVIEW_MCP_SERVER = join(JOURNAL_REVIEW_MCP_ROOT, "stdio-bundle.mj
 const JOURNAL_REVIEW_TOOLS = [
   "mcp__journal_review__render_journal_review",
   "mcp__journal_review__review_active",
+  "mcp__journal_review__submit_journal_correction",
   "mcp__journal_review__navigate_review",
   "mcp__journal_review__get_review_status",
 ] as const;
@@ -192,7 +193,14 @@ export function createJournalReviewMcpRegistration(): ExtensionFactory {
     pi.registerMcpServer("journal-review", {
       command: process.execPath,
       args: [JOURNAL_REVIEW_MCP_SERVER, "--stdio"],
-      env: { JOURNAL_REVIEW_APP_HTML: join(JOURNAL_REVIEW_MCP_ROOT, "app", "main.html") },
+      env: {
+        JOURNAL_REVIEW_APP_HTML: join(JOURNAL_REVIEW_MCP_ROOT, "app", "main.html"),
+        ...(process.env.AGENT_GATEWAY_BASE_URL ? { AGENT_GATEWAY_BASE_URL: process.env.AGENT_GATEWAY_BASE_URL } : {}),
+        ...(process.env.AGENT_GATEWAY_TOKEN ? { AGENT_GATEWAY_TOKEN: process.env.AGENT_GATEWAY_TOKEN } : {}),
+        ...(process.env.AGENT_GATEWAY_TOKEN_FILE ? { AGENT_GATEWAY_TOKEN_FILE: process.env.AGENT_GATEWAY_TOKEN_FILE } : {}),
+        ...(process.env.ORCHESTRATOR_ALLOWED_USERS ? { ORCHESTRATOR_ALLOWED_USERS: process.env.ORCHESTRATOR_ALLOWED_USERS } : {}),
+        ...(process.env.JOURNAL_REVIEW_OWNER_IDENTITY ? { JOURNAL_REVIEW_OWNER_IDENTITY: process.env.JOURNAL_REVIEW_OWNER_IDENTITY } : {}),
+      },
       exposure: "direct",
       description: "Render and update the active cognitive-journal review with exact evidence spans.",
       timeout: 30,

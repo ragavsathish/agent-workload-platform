@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
+import { readFile as readFileAsync } from "node:fs/promises";
 
 import {
   registerAppResource,
@@ -10,6 +11,40 @@ import type { CallToolResult, ReadResourceResult } from "@modelcontextprotocol/s
 import { z } from "zod";
 
 export const APP_RESOURCE_URI = "ui://journal-review/main.html";
+const JOURNAL_ENTRY_ID = /^[a-f0-9]{32}:entry:[1-9][0-9]*$/u;
+const JOURNAL_TYPES = ["thought", "idea", "question", "decision", "goal", "learning"] as const;
+
+export interface JournalGateway {
+  saveCorrection(entryId: string, correction: { text: string; type: string; topics: string[] }): Promise<string>;
+}
+
+export function configuredJournalGateway(): JournalGateway | undefined {
+  const baseUrl = process.env.AGENT_GATEWAY_BASE_URL;
+  const token = process.env.AGENT_GATEWAY_TOKEN
+    || (process.env.AGENT_GATEWAY_TOKEN_FILE ? readFileSync(process.env.AGENT_GATEWAY_TOKEN_FILE, "utf8").trim() : undefined);
+  const identity = process.env.JOURNAL_REVIEW_OWNER_IDENTITY || process.env.ORCHESTRATOR_ALLOWED_USERS;
+  if (identity?.includes(",")) return undefined;
+  if (!baseUrl || !token || !identity) return undefined;
+  return {
+    async saveCorrection(entryId, correction) {
+      const root = baseUrl.replace(/\/$/u, "");
+      const api = root.endsWith("/v1") ? root : `${root}/v1`;
+      const response = await fetch(`${api}/digital-twin/journal/${encodeURIComponent(entryId)}/feedback`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          identity, action: "edit", correctedText: correction.text,
+          correctedType: correction.type, correctedTopics: correction.topics,
+        }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) throw new Error(`Gateway rejected journal correction (${response.status}).`);
+      const saved = await response.json() as { entryId?: string; feedbackId?: string };
+      if (saved.entryId !== entryId || !saved.feedbackId) throw new Error("Gateway returned an invalid journal receipt.");
+      return saved.feedbackId;
+    },
+  };
+}
 
 export type ReviewOutcome = "pending" | "accepted" | "edited" | "rejected" | "missed" | "empty";
 
@@ -26,6 +61,7 @@ interface ReviewQueue {
   items: JournalReviewItem[];
   currentIndex: number;
 }
+export const createReviewStore = (): Map<string, ReviewQueue> => new Map();
 
 export interface JournalReviewPresentation {
   kind: "journal-review";
@@ -43,6 +79,7 @@ export interface JournalReviewPresentation {
   };
   progress: { current: number; total: number; reviewed: number };
   outcome: ReviewOutcome;
+  canSaveCorrection?: boolean;
 }
 
 const fixtureTranscript = [
@@ -85,11 +122,14 @@ const resultFor = (presentation: JournalReviewPresentation, text: string): CallT
   structuredContent: { presentation },
 });
 
-export function createServer(appHtmlPath: string): McpServer {
+export function createServer(
+  appHtmlPath: string,
+  gateway: JournalGateway | undefined = configuredJournalGateway(),
+  reviews = createReviewStore(),
+): McpServer {
   const server = new McpServer({ name: "Journal Review", version: "0.1.0" });
-  const reviews = new Map<string, ReviewQueue>();
   const initial = fixtureReview();
-  reviews.set(initial.reviewId, {
+  if (!reviews.has(initial.reviewId)) reviews.set(initial.reviewId, {
     title: initial.title,
     currentIndex: 0,
     items: [{
@@ -116,6 +156,7 @@ export function createServer(appHtmlPath: string): McpServer {
         reviewed: queue.items.filter(({ outcome }) => outcome !== "pending").length,
       },
       outcome: item.outcome,
+      canSaveCorrection: Boolean(gateway && JOURNAL_ENTRY_ID.test(item.id)),
     };
   };
 
@@ -254,6 +295,49 @@ export function createServer(appHtmlPath: string): McpServer {
 
   registerAppTool(
     server,
+    "submit_journal_correction",
+    {
+      title: "Save journal correction",
+      description: "Save the active, reviewed journal note correction to the authenticated knowledge gateway.",
+      inputSchema: z.object({
+        reviewId: z.string().max(200),
+        suggestionId: z.string().regex(JOURNAL_ENTRY_ID),
+        text: z.string().trim().min(1).max(1_000),
+        type: z.enum(JOURNAL_TYPES),
+        topics: z.array(z.string().trim().min(1).max(80)).max(12).refine((topics) => new Set(topics).size === topics.length),
+        evidence: z.object({ quote: z.string().min(1).max(4_000), start: z.number().int().nonnegative(), end: z.number().int().positive() }).optional(),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+      _meta: { ui: { resourceUri: APP_RESOURCE_URI } },
+    },
+    async ({ reviewId, suggestionId, text, type, topics, evidence }): Promise<CallToolResult> => {
+      const queue = reviews.get(reviewId);
+      const active = queue?.items[queue.currentIndex];
+      if (!queue || !active || active.id !== suggestionId) return {
+        content: [{ type: "text", text: "The active journal suggestion changed; reload before saving." }], isError: true,
+      };
+      if (evidence && (evidence.end <= evidence.start || active.transcript.slice(evidence.start, evidence.end) !== evidence.quote)) return {
+        content: [{ type: "text", text: "Evidence must be an exact quote from the transcript." }], isError: true,
+      };
+      if (!gateway) return { content: [{ type: "text", text: "Journal saving is not configured on this MCP server." }], isError: true };
+      try {
+        const feedbackId = await gateway.saveCorrection(suggestionId, { text, type, topics });
+        queue.items[queue.currentIndex] = {
+          ...active, outcome: "edited",
+          suggestion: { ...active.suggestion, statement: text, type, topics, ...(evidence ? { evidence } : {}) },
+        };
+        const presentation = presentationAt(reviewId, queue);
+        const result = resultFor(presentation, `Journal correction saved (feedback ${feedbackId}).`);
+        result.structuredContent = { presentation, receipt: { feedbackId } };
+        return result;
+      } catch (error) {
+        return { content: [{ type: "text", text: error instanceof Error ? error.message : "Journal correction could not be saved." }], isError: true };
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
     "navigate_review",
     {
       title: "Navigate journal review",
@@ -317,7 +401,7 @@ export function createServer(appHtmlPath: string): McpServer {
       contents: [{
         uri: APP_RESOURCE_URI,
         mimeType: RESOURCE_MIME_TYPE,
-        text: await readFile(appHtmlPath, "utf8"),
+        text: await readFileAsync(appHtmlPath, "utf8"),
         _meta: { ui: { prefersBorder: false } },
       }],
     }),

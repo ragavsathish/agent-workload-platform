@@ -1,8 +1,16 @@
-import type { ElementDefinition } from 'cytoscape';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { configuredOxigraphEndpoint, fetchJournalEntries, type JournalEntry } from './journal-api';
+import { configuredOxigraphEndpoint, fetchAssertionReview, fetchJournalEntries, saveAssertionReview, saveJournalFeedback, type JournalEntry } from './journal-api';
+import { KnowledgeGraph } from '../../client/knowledge_ui/KnowledgeGraph';
+import { KnowledgeNoteCard } from '../../client/knowledge_ui/KnowledgeNoteCard';
+import { JournalCorrectionForm, JOURNAL_TYPES, type JournalCorrection } from '../../client/knowledge_ui/JournalCorrectionForm';
+import { SourceCapture } from '../../client/knowledge_ui/SourceCapture';
 
 type Entry = JournalEntry;
+type ReviewDraft = { entryId: string; text: string; type: Entry['type']; topics: string };
+type AssertionKind = 'none' | 'conversation_topic' | 'skill_evidence' | 'profile_update';
+type ProfileField = 'none' | 'job_title' | 'home_location' | 'credential' | 'employment';
+type AssertionDraft = { entryId: string; ownerAuthored: 'unknown' | 'yes' | 'no'; kind: AssertionKind | ''; profileField: ProfileField; reason: string };
+type AssertionPreview = Omit<AssertionDraft, 'entryId'>;
 
 const sampleEntries: Entry[] = [
   {
@@ -81,10 +89,6 @@ const dateLabel = (value: string) => new Intl.DateTimeFormat('en', {
   day: 'numeric', month: 'short', year: 'numeric',
 }).format(new Date(value));
 
-const timeLabel = (value: string) => new Intl.DateTimeFormat('en', {
-  hour: 'numeric', minute: '2-digit',
-}).format(new Date(value));
-
 const dateKey = (value: string | Date) => {
   const date = value instanceof Date ? value : new Date(value);
   return [date.getFullYear(), `${date.getMonth() + 1}`.padStart(2, '0'), `${date.getDate()}`.padStart(2, '0')].join('-');
@@ -101,15 +105,13 @@ const dateGroupLabel = (key: string) => {
   return new Intl.DateTimeFormat('en', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
 };
 
-const noteTypes = ['decision', 'idea', 'thought', 'goal', 'question', 'learning'];
+const noteTypes = JOURNAL_TYPES;
 const dateRanges = [
   { value: 'any', label: 'Any time' },
   { value: '7d', label: 'Last 7 days' },
   { value: '30d', label: 'Last 30 days' },
   { value: 'year', label: 'This year' },
 ] as const;
-
-const mapLabel = (text: string) => text.length > 34 ? `${text.slice(0, 31).trimEnd()}…` : text;
 
 export const KnowledgeBaseView = () => {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -121,21 +123,25 @@ export const KnowledgeBaseView = () => {
   const [topicQuery, setTopicQuery] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [entries, setEntries] = useState<Entry[]>(sampleEntries);
+  const [previewEdits, setPreviewEdits] = useState<Record<string, Pick<Entry, 'text' | 'type' | 'topics'>>>({});
+  const [hiddenIds, setHiddenIds] = useState<string[]>([]);
+  const [reviewDraft, setReviewDraft] = useState<ReviewDraft | null>(null);
+  const [assertionDraft, setAssertionDraft] = useState<AssertionDraft | null>(null);
+  const [assertionPreviews, setAssertionPreviews] = useState<Record<string, AssertionPreview>>({});
+  const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null);
+  const [lastRemovedId, setLastRemovedId] = useState<string | null>(null);
   const [connection, setConnection] = useState<'sample' | 'loading' | 'live' | 'error'>(
     configuredOxigraphEndpoint() ? 'loading' : 'sample',
   );
   const [connectionMessage, setConnectionMessage] = useState('');
   const [selectedId, setSelectedId] = useState(sampleEntries[0]?.id ?? '');
   const [notice, setNotice] = useState('');
-  const graphRef = useRef<HTMLDivElement>(null);
+  const [saving, setSaving] = useState(false);
   const entryListRef = useRef<HTMLDivElement>(null);
-  const graphInstanceRef = useRef<import('cytoscape').Core | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const filterPopoverRef = useRef<HTMLDivElement>(null);
   const filterButtonRef = useRef<HTMLButtonElement>(null);
   const listScrollTopRef = useRef(0);
-  const selectedIdRef = useRef(selectedId);
-  selectedIdRef.current = selectedId;
 
   useEffect(() => {
     const endpoint = configuredOxigraphEndpoint();
@@ -144,6 +150,12 @@ export const KnowledgeBaseView = () => {
     setConnection('loading');
     void fetchJournalEntries(endpoint, controller.signal).then((liveEntries) => {
       setEntries(liveEntries);
+      setPreviewEdits({});
+      setHiddenIds([]);
+      setReviewDraft(null);
+      setAssertionDraft(null);
+      setAssertionPreviews({});
+      setLastRemovedId(null);
       setConnection('live');
       setConnectionMessage('');
     }).catch((error: unknown) => {
@@ -155,10 +167,14 @@ export const KnowledgeBaseView = () => {
     return () => controller.abort();
   }, []);
 
-  const topicCounts = useMemo(() => entries.reduce<Record<string, number>>((counts, entry) => {
+  const visibleEntries = useMemo(() => entries
+    .filter((entry) => !hiddenIds.includes(entry.id))
+    .map((entry) => ({ ...entry, ...previewEdits[entry.id] })), [entries, hiddenIds, previewEdits]);
+
+  const topicCounts = useMemo(() => visibleEntries.reduce<Record<string, number>>((counts, entry) => {
     for (const topic of entry.topics) counts[topic] = (counts[topic] ?? 0) + 1;
     return counts;
-  }, {}), [entries]);
+  }, {}), [visibleEntries]);
   const topics = Object.entries(topicCounts).sort(([left], [right]) => left.localeCompare(right));
 
   const activeFilters = [
@@ -168,9 +184,9 @@ export const KnowledgeBaseView = () => {
   ];
   const activeFilterCount = activeFilters.length;
 
-  const sortedEntries = useMemo(() => [...entries].sort(
+  const sortedEntries = useMemo(() => [...visibleEntries].sort(
     (left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt),
-  ), [entries]);
+  ), [visibleEntries]);
 
   const filteredEntries = useMemo(() => sortedEntries.filter((entry) => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -252,93 +268,6 @@ export const KnowledgeBaseView = () => {
     );
   }, [theme]);
 
-  useEffect(() => {
-    if (mode !== 'map' || !graphRef.current) return;
-    let destroyed = false;
-    let graph: import('cytoscape').Core | undefined;
-    const visibleSources = new Map<string, Entry>();
-    const visibleTopics = new Set<string>();
-    for (const entry of filteredEntries) {
-      visibleSources.set(entry.sourceId, entry);
-      for (const topic of entry.topics) visibleTopics.add(topic);
-    }
-    const elements: ElementDefinition[] = [];
-    const addedTopics = new Set<string>();
-    for (const entry of filteredEntries) {
-      elements.push({ data: { id: entry.id, label: mapLabel(entry.text), kind: 'note', entryId: entry.id } });
-      elements.push({ data: { id: `edge-source-${entry.id}`, source: entry.id, target: entry.sourceId, label: 'from capture' } });
-      for (const topic of entry.topics) {
-        const topicId = `topic:${topic}`;
-        if (!visibleTopics.has(topic)) continue;
-        if (!addedTopics.has(topic)) {
-          elements.push({ data: { id: topicId, label: topic, kind: 'topic', topic } });
-          addedTopics.add(topic);
-        }
-        elements.push({ data: { id: `edge-${entry.id}-${topic}`, source: entry.id, target: topicId, label: 'tagged' } });
-      }
-    }
-    for (const [sourceId, entry] of visibleSources) {
-      elements.push({ data: { id: sourceId, label: entry.sourceLabel, kind: 'source', sourceId } });
-    }
-    const styles = getComputedStyle(document.documentElement);
-    const token = (name: string) => styles.getPropertyValue(name).trim();
-    void import('cytoscape').then(({ default: cytoscape }) => {
-      if (destroyed || !graphRef.current) return;
-      graph = cytoscape({
-      container: graphRef.current,
-      elements,
-      layout: { name: 'cose', animate: false, nodeRepulsion: () => 8500, idealEdgeLength: () => 125, padding: 32 },
-      minZoom: 0.25,
-      maxZoom: 2,
-      style: [
-        { selector: 'node', style: { 'background-color': token('--pi-color-info'), label: 'data(label)', color: token('--pi-color-text'), 'font-family': 'Source Code Pro, monospace', 'font-size': 10, 'text-wrap': 'wrap', 'text-max-width': '140px', 'text-valign': 'center', 'text-halign': 'center', width: 34, height: 34, 'border-width': 2, 'border-color': token('--pi-color-canvas') } },
-        { selector: 'node[kind="note"]', style: { shape: 'round-rectangle', width: 160, height: 62, 'background-color': token('--pi-color-surface-raised'), 'border-color': token('--pi-color-accent'), 'text-max-width': '138px', 'font-size': 9, padding: '8px' } },
-        { selector: 'node[kind="source"]', style: { shape: 'rectangle', width: 110, height: 38, 'background-color': token('--pi-color-surface'), 'border-color': token('--pi-color-border-strong'), 'font-size': 8, 'text-max-width': '100px' } },
-        { selector: 'node[kind="topic"]', style: { shape: 'hexagon', width: 100, height: 54, 'background-color': token('--pi-color-accent'), color: token('--pi-color-accent-text'), 'font-size': 9, 'text-max-width': '88px' } },
-        { selector: 'edge', style: { width: 1.5, 'line-color': token('--pi-color-border-strong'), 'target-arrow-color': token('--pi-color-border-strong'), 'target-arrow-shape': 'triangle', 'curve-style': 'bezier', label: 'data(label)', color: token('--pi-color-text-muted'), 'font-size': 7, 'text-background-color': token('--pi-color-canvas'), 'text-background-opacity': 0.9, 'text-background-padding': '2px' } },
-        { selector: 'node:selected', style: { 'border-width': 4, 'border-color': token('--pi-color-focus'), 'z-index': 99 } },
-      ],
-      });
-      graphInstanceRef.current = graph;
-      const selectedNode = graph.getElementById(selectedIdRef.current);
-      if (selectedNode.nonempty()) selectedNode.select();
-      graph.on('tap', 'node[kind="note"]', (event) => {
-      const id = String(event.target.data('entryId'));
-      setSelectedId(id);
-      setNotice(`Selected journal note: ${event.target.data('label')}`);
-      });
-      graph.on('tap', 'node[kind="topic"]', (event) => {
-      selectTopic(String(event.target.data('topic')));
-      setMode('journal');
-      setNotice(`Showing notes tagged ${event.target.data('topic')}`);
-      });
-      graph.on('tap', 'node[kind="source"]', (event) => {
-      const sourceId = String(event.target.data('sourceId'));
-      const sourceEntry = filteredEntries.find(({ sourceId: id }) => id === sourceId);
-      if (sourceEntry) setSelectedId(sourceEntry.id);
-      setSelectedTopics([]);
-      setSelectedType('all');
-      setDateRange('any');
-      setQuery(String(event.target.data('label')));
-      setMode('journal');
-      setNotice(`Showing journal notes from ${event.target.data('label')}`);
-      });
-    });
-    return () => {
-      destroyed = true;
-      graph?.destroy();
-      if (graphInstanceRef.current === graph) graphInstanceRef.current = null;
-    };
-  }, [filteredEntries, mode, theme]);
-
-  useEffect(() => {
-    const graph = graphInstanceRef.current;
-    if (!graph || mode !== 'map') return;
-    graph.nodes().unselect();
-    const selected = graph.getElementById(selectedId);
-    if (selected.nonempty()) selected.select();
-  }, [filteredEntries, mode, selectedId]);
-
   const toggleTopic = (topic: string) => {
     setSelectedTopics((current) => current.includes(topic)
       ? current.filter((value) => value !== topic)
@@ -376,7 +305,119 @@ export const KnowledgeBaseView = () => {
 
   const chooseEntry = (entry: Entry) => {
     setSelectedId(entry.id);
+    setReviewDraft(null);
+    setAssertionDraft(null);
+    setRemoveConfirmId(null);
     setNotice(`Selected journal note from ${dateLabel(entry.createdAt)}`);
+  };
+
+  const startReview = (entry: Entry) => {
+    setRemoveConfirmId(null);
+    setAssertionDraft(null);
+    setReviewDraft({ entryId: entry.id, text: entry.text, type: entry.type, topics: entry.topics.join(', ') });
+  };
+
+  const startAssertionReview = (entry: Entry) => {
+    setReviewDraft(null);
+    setRemoveConfirmId(null);
+    setAssertionDraft({ entryId: entry.id, ownerAuthored: 'unknown', kind: '', profileField: 'none', reason: '' });
+  };
+
+  useEffect(() => {
+    if (connection !== 'live' || !selectedId) return;
+    let active = true;
+    void fetchAssertionReview(selectedId).then((review) => {
+      if (!active || !review) return;
+      setAssertionPreviews((current) => ({ ...current, [selectedId]: {
+        ownerAuthored: review.ownerAuthored ? 'yes' : 'no',
+        kind: (review.expectedKind ?? '') as AssertionKind | '',
+        profileField: (review.expectedProfileField ?? 'none') as ProfileField,
+        reason: review.reason,
+      } }));
+    }).catch(() => { /* A missing review or read failure does not block journal browsing. */ });
+    return () => { active = false; };
+  }, [connection, selectedId]);
+
+  const reloadSavedJournal = async () => {
+    const endpoint = configuredOxigraphEndpoint();
+    if (!endpoint) throw new Error('Oxigraph query endpoint is not configured.');
+    setEntries(await fetchJournalEntries(endpoint));
+  };
+
+  const applyAssertionPreview = async () => {
+    if (!assertionDraft || assertionDraft.ownerAuthored === 'unknown' || !assertionDraft.reason.trim()
+      || (assertionDraft.ownerAuthored === 'yes' && !assertionDraft.kind)
+      || (assertionDraft.kind === 'profile_update' && assertionDraft.profileField === 'none')) return;
+    const { entryId, ...preview } = assertionDraft;
+    if (connection === 'live') {
+      setSaving(true);
+      try {
+        await saveAssertionReview(entryId, {
+          ownerAuthored: preview.ownerAuthored === 'yes',
+          ...(preview.ownerAuthored === 'yes' ? { expectedKind: preview.kind, expectedProfileField: preview.profileField } : {}),
+          reason: preview.reason,
+        });
+        const saved = await fetchAssertionReview(entryId);
+        if (!saved) throw new Error('Saved assertion review could not be read back.');
+        setAssertionPreviews((current) => ({ ...current, [entryId]: preview }));
+        setAssertionDraft(null);
+        setNotice('Assertion review saved separately from accepted personal facts.');
+      } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not save assertion review.'); }
+      finally { setSaving(false); }
+      return;
+    }
+    setAssertionPreviews((current) => ({ ...current, [entryId]: preview }));
+    setAssertionDraft(null);
+    setNotice('Assertion review preview updated. No training label has been saved.');
+  };
+
+  const applyReviewPreview = async (correction: JournalCorrection) => {
+    if (!reviewDraft) return;
+    const { text, type, topics } = correction;
+    if (connection === 'live') {
+      setSaving(true);
+      try {
+        await saveJournalFeedback(reviewDraft.entryId, { action: 'edit', correctedText: text, correctedType: type, correctedTopics: topics });
+        await reloadSavedJournal();
+        setReviewDraft(null);
+        setNotice('Journal correction saved to Oxigraph.');
+      } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not save journal correction.'); }
+      finally { setSaving(false); }
+      return;
+    }
+    setPreviewEdits((current) => ({ ...current, [reviewDraft.entryId]: { text, type, topics } }));
+    setReviewDraft(null);
+    setNotice('Preview updated. This review has not been saved.');
+  };
+
+  const hideSelectedPreview = async (entry: Entry) => {
+    if (connection === 'live') {
+      setSaving(true);
+      try {
+        await saveJournalFeedback(entry.id, { action: 'delete' });
+        await reloadSavedJournal();
+        setRemoveConfirmId(null);
+        setReviewDraft(null);
+        setAssertionDraft(null);
+        setNotice('Journal note removed from the saved graph. The source capture remains.');
+      } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not remove journal note.'); }
+      finally { setSaving(false); }
+      return;
+    }
+    setHiddenIds((current) => [...current, entry.id]);
+    setLastRemovedId(entry.id);
+    setRemoveConfirmId(null);
+    setReviewDraft(null);
+    setAssertionDraft(null);
+    setNotice('Note removed from this preview. Source data has not changed.');
+  };
+
+  const undoRemoval = () => {
+    if (!lastRemovedId) return;
+    setHiddenIds((current) => current.filter((id) => id !== lastRemovedId));
+    setSelectedId(lastRemovedId);
+    setLastRemovedId(null);
+    setNotice('Note restored to this preview.');
   };
 
   return (
@@ -496,11 +537,7 @@ export const KnowledgeBaseView = () => {
                 <div className="date-heading"><h3 id={`date-${key}`}>{dateGroupLabel(key)}</h3><span>{groupEntries.length}</span></div>
                 {groupEntries.map((entry) => (
                   <div role="listitem" key={entry.id}>
-                    <button type="button" className={`entry-card ${selectedEntry?.id === entry.id ? 'selected' : ''}`} onClick={() => chooseEntry(entry)} aria-pressed={selectedEntry?.id === entry.id}>
-                      <div className="entry-meta"><span className={`type-mark type-${entry.type}`} aria-hidden="true" /> <span>{entry.type}</span><time dateTime={entry.createdAt}>{timeLabel(entry.createdAt)}</time></div>
-                      <span className="entry-text">{entry.text}</span>
-                      <span className="entry-tags">{entry.topics.slice(0, 2).map((topic) => <span className="tag-chip" key={topic}>{topic}</span>)}{entry.topics.length > 2 && <span className="tag-overflow">+{entry.topics.length - 2}</span>}</span>
-                    </button>
+                    <KnowledgeNoteCard note={entry} selected={selectedEntry?.id === entry.id} onSelect={() => chooseEntry(entry)} />
                   </div>
                 ))}
               </section>)}
@@ -508,15 +545,19 @@ export const KnowledgeBaseView = () => {
             </div>
           </section>
         ) : (
-          <section className="map-panel pi-surface" aria-label="Knowledge relationship map">
-            <div className="map-heading"><div><h2>Knowledge map</h2><p>Notes · captures · topic tags</p></div><div className="map-controls"><button className="pi-button" type="button" aria-label="Zoom out map" title="Zoom out" onClick={() => { const graph = graphInstanceRef.current; if (graph) graph.zoom({ level: graph.zoom() / 1.25, renderedPosition: { x: graph.width() / 2, y: graph.height() / 2 } }); }}>−</button><button className="pi-button" type="button" aria-label="Zoom in map" title="Zoom in" onClick={() => { const graph = graphInstanceRef.current; if (graph) graph.zoom({ level: graph.zoom() * 1.25, renderedPosition: { x: graph.width() / 2, y: graph.height() / 2 } }); }}>+</button><button className="pi-button" type="button" onClick={() => graphInstanceRef.current?.fit(undefined, 32)}>Fit map</button><button className="pi-button map-reset" type="button" onClick={clearAll}>Reset</button></div></div>
-            <div className="map-legend" aria-label="Map legend"><span><i className="legend-note" /> Journal note</span><span><i className="legend-capture" /> Source capture</span><span><i className="legend-topic" /> Topic tag</span></div>
-            <div className="map-canvas" ref={graphRef} role="img" aria-label={`Relationship map with ${filteredEntries.length} journal notes. Use the journal list to navigate notes, or select a note or topic node.`} />
-            <div className="map-node-list" aria-label="Keyboard accessible journal notes">
-              {filteredEntries.map((entry) => <button type="button" key={entry.id} className={selectedEntry?.id === entry.id ? 'selected' : ''} aria-pressed={selectedEntry?.id === entry.id} onClick={() => chooseEntry(entry)}>{entry.text}</button>)}
-            </div>
-            <div className="map-scope">Showing {filteredEntries.length} {filteredEntries.length === 1 ? 'note' : 'notes'}{scopeSummary ? ` · ${scopeSummary}` : ''} · select a topic node to filter the journal</div>
-          </section>
+          <KnowledgeGraph entries={filteredEntries} selectedId={selectedEntry?.id} theme={theme} scopeSummary={scopeSummary}
+            onSelectEntry={(entry) => { setSelectedId(entry.id); setNotice(`Selected journal note: ${entry.text}`); }}
+            onSelectTopic={(topic) => { selectTopic(topic); setNotice(`Showing notes tagged ${topic}`); }}
+            onSelectSource={(entry) => {
+              setSelectedId(entry.id);
+              setSelectedTopics([]);
+              setSelectedType('all');
+              setDateRange('any');
+              setQuery(entry.sourceLabel);
+              setMode('journal');
+              setNotice(`Showing journal notes from ${entry.sourceLabel}`);
+            }}
+            onReset={clearAll} />
         )}
 
         <aside className="entry-detail pi-surface" aria-label="Selected journal note">
@@ -526,8 +567,43 @@ export const KnowledgeBaseView = () => {
               <h2>{selectedEntry.text}</h2>
               <div className="detail-date"><span aria-hidden="true">◷</span> Captured {dateLabel(selectedEntry.createdAt)}</div>
               <div className="detail-section"><h3>TOPIC TAGS</h3><div className="detail-tags">{selectedEntry.topics.map((topic) => <button key={topic} type="button" className="tag-chip clickable" onClick={() => selectTopic(topic)}>{topic}</button>)}</div></div>
-              <div className="detail-section source-section"><div className="section-title-row"><h3>SOURCE CAPTURE</h3><span className="source-badge">LINKED</span></div><div className="source-link"><span className="capture-icon" aria-hidden="true">▤</span><span><strong>{selectedEntry.sourceLabel}</strong><small>Original conversation</small></span></div><blockquote>{selectedEntry.transcript}</blockquote><p className="source-note">Source transcript is shown for context. No exact evidence span is stored for this preview.</p></div>
-              <div className="detail-footer"><span className="read-only-mark" aria-hidden="true">◉</span><span>Read-only knowledge view</span></div>
+              <div className="detail-section source-section"><div className="section-title-row"><h3>SOURCE CAPTURE</h3><span className="source-badge">LINKED</span></div><SourceCapture source={selectedEntry.sourceLabel} sourceId={selectedEntry.sourceId} transcript={selectedEntry.transcript} /></div>
+              <section className="review-section" aria-label="Review selected note">
+                <div className="review-heading"><h3>REVIEW THIS NOTE</h3><span>{connection === 'live' ? 'SAVED GRAPH' : 'LOCAL PREVIEW'}</span></div>
+                <p>{connection === 'live' ? 'Correct this journal note or remove it from the saved graph. The source capture remains available.' : 'Try a correction or remove this note from the map. Changes reset when you reload.'}</p>
+                {reviewDraft?.entryId === selectedEntry.id ? (
+                  <div className="review-form"><JournalCorrectionForm key={reviewDraft.entryId} initial={{ text: reviewDraft.text, type: reviewDraft.type, topics: reviewDraft.topics.split(',').map((topic) => topic.trim()).filter(Boolean) }} saving={saving} saveLabel={connection === 'live' ? 'Save correction' : 'Apply preview'} onSave={applyReviewPreview} onCancel={() => setReviewDraft(null)} /></div>
+                ) : removeConfirmId === selectedEntry.id ? (
+                  <div className="review-confirm" role="group" aria-label="Confirm removal">
+                    <strong>Remove this note from {connection === 'live' ? 'the saved graph' : 'the preview'}?</strong>
+                    <p>{connection === 'live' ? 'The source capture and audit record remain available.' : 'The source capture remains available. No saved graph data will change.'}</p>
+                    <div className="review-actions"><button className="pi-button review-danger" type="button" disabled={saving} onClick={() => hideSelectedPreview(selectedEntry)}>{saving ? 'Removing…' : 'Remove note'}</button><button className="pi-button" type="button" disabled={saving} onClick={() => setRemoveConfirmId(null)}>Cancel</button></div>
+                  </div>
+                ) : (
+                  <div className="review-actions"><button className="pi-button review-primary" type="button" onClick={() => startReview(selectedEntry)}>Correct note</button><button className="pi-button" type="button" onClick={() => setRemoveConfirmId(selectedEntry.id)}>Remove node</button></div>
+                )}
+              </section>
+              <section className="review-section assertion-section" aria-label="Review source assertion">
+                <div className="review-heading"><h3>ASSERTION LABEL</h3><span>{connection === 'live' ? 'REVIEW RECORD' : 'LOCAL PREVIEW'}</span></div>
+                <p>This journal capture has no verified owner-turn provenance or classifier prediction. Check the source before proposing a label.</p>
+                {assertionPreviews[selectedEntry.id] && <p className="review-result">{assertionPreviews[selectedEntry.id].ownerAuthored === 'no'
+                  ? 'Excluded from owner assertion examples'
+                  : `${connection === 'live' ? 'Reviewed label' : 'Proposed label'}: ${assertionPreviews[selectedEntry.id].kind}`}</p>}
+                {assertionDraft?.entryId === selectedEntry.id ? (
+                  <div className="review-form">
+                    <fieldset className="assertion-authorship"><legend>Was this source turn authored by the owner?</legend>
+                      {(['yes', 'no', 'unknown'] as const).map((value) => <label key={value}><input type="radio" name="owner-authored" checked={assertionDraft.ownerAuthored === value} onChange={() => setAssertionDraft({ ...assertionDraft, ownerAuthored: value, kind: '', profileField: 'none' })} />{value === 'yes' ? 'Yes' : value === 'no' ? 'No' : 'Unsure'}</label>)}
+                    </fieldset>
+                    {assertionDraft.ownerAuthored === 'yes' && <>
+                      <label>Assertion kind<select value={assertionDraft.kind} onChange={(event) => setAssertionDraft({ ...assertionDraft, kind: event.target.value as AssertionKind, profileField: 'none' })}><option value="">Choose a kind</option><option value="none">None</option><option value="conversation_topic">Conversation topic</option><option value="skill_evidence">Skill evidence</option><option value="profile_update">Profile update</option></select></label>
+                      {assertionDraft.kind === 'profile_update' && <label>Profile field<select value={assertionDraft.profileField} onChange={(event) => setAssertionDraft({ ...assertionDraft, profileField: event.target.value as ProfileField })}><option value="none">Choose a field</option><option value="job_title">Job title</option><option value="home_location">Home location</option><option value="credential">Credential</option><option value="employment">Employment</option></select></label>}
+                    </>}
+                    <label>Review reason<textarea value={assertionDraft.reason} onChange={(event) => setAssertionDraft({ ...assertionDraft, reason: event.target.value })} rows={2} placeholder="Why this authorship and label?" /></label>
+                    <div className="review-actions"><button className="pi-button review-primary" type="button" disabled={saving || assertionDraft.ownerAuthored === 'unknown' || assertionDraft.reason.trim().length < 3 || (assertionDraft.ownerAuthored === 'yes' && (!assertionDraft.kind || (assertionDraft.kind === 'profile_update' && assertionDraft.profileField === 'none')))} onClick={applyAssertionPreview}>{saving ? 'Saving…' : connection === 'live' ? 'Save review' : 'Apply label preview'}</button><button className="pi-button" type="button" disabled={saving} onClick={() => setAssertionDraft(null)}>Cancel</button></div>
+                  </div>
+                ) : <button className="pi-button assertion-start" type="button" onClick={() => startAssertionReview(selectedEntry)}>{assertionPreviews[selectedEntry.id] ? 'Revise label' : 'Review source'}</button>}
+              </section>
+              <div className="detail-footer"><span className="read-only-mark" aria-hidden="true">◉</span><span>{connection === 'live' ? 'Owner authenticated graph review' : 'Sample mode · graph writes unavailable'}</span></div>
             </>
           ) : (
             <div className="pi-empty-state"><strong>Select a journal note</strong><span>Its source and topic connections will appear here.</span></div>
@@ -535,8 +611,9 @@ export const KnowledgeBaseView = () => {
         </aside>
       </section>
 
+      {lastRemovedId && <div className="review-undo" role="status">Note removed from this preview. <button type="button" onClick={undoRemoval}>Undo</button></div>}
       <p className="knowledge-status" aria-live="polite">{notice}</p>
-      <footer className="knowledge-footer"><span>PI / PRIVATE DIGITAL TWIN</span><span>Read-only journal view · {connection === 'live' ? 'Oxigraph' : 'preview data'}</span></footer>
+      <footer className="knowledge-footer"><span>PI / PRIVATE DIGITAL TWIN</span><span>{connection === 'live' ? 'Oxigraph journal review' : 'Review UX preview · sample data'}</span></footer>
     </main>
   );
 };

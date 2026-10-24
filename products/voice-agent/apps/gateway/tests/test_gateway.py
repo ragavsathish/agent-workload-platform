@@ -163,11 +163,14 @@ def test_task_artifact_download_requires_owner_and_returns_attachment(monkeypatc
         "proposal_id": "proposal-1",
         "name": "workspace",
     }
-    assert client.get(
-        "/v1/tasks/proposal-1/artifacts/execution",
-        params={"identity": "owner@example.com"},
-        headers=headers,
-    ).status_code == 422
+    assert (
+        client.get(
+            "/v1/tasks/proposal-1/artifacts/execution",
+            params={"identity": "owner@example.com"},
+            headers=headers,
+        ).status_code
+        == 422
+    )
 
 
 def test_task_approval_passes_trace_context_to_the_durable_queue(monkeypatch):
@@ -187,11 +190,7 @@ def test_task_approval_passes_trace_context_to_the_durable_queue(monkeypatch):
         gateway,
         "inject",
         lambda carrier: carrier.update(
-            {
-                "traceparent": (
-                    "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01"
-                )
-            }
+            {"traceparent": ("00-1234567890abcdef1234567890abcdef-1234567890abcdef-01")}
         ),
     )
     client = TestClient(gateway.app)
@@ -483,6 +482,84 @@ def test_journal_feedback_updates_private_review_state(monkeypatch):
     assert "GRAPH <urn:awp:digital-twin:graph:journal-feedback>" in updates[0]
     assert 'awp:previousType "idea"' in updates[0]
     assert 'awp:correctedType "thought"' in updates[0]
+
+
+def test_journal_edit_replaces_topics_and_escapes_slash_as_sparql_literal(monkeypatch):
+    gateway = load_gateway(monkeypatch)
+    updates = []
+    monkeypatch.setattr(
+        gateway, "_sparql_rows", lambda _query: [{"kind": "idea", "label": "Original"}]
+    )
+    monkeypatch.setattr(gateway, "_sparql_update", updates.append)
+    entry_id = f"{'a' * 32}:entry:1"
+    response = TestClient(gateway.app).post(
+        f"/v1/digital-twin/journal/{entry_id}/feedback",
+        headers={"Authorization": f"Bearer {'g' * 32}"},
+        json={
+            "identity": "owner@example.com",
+            "action": "edit",
+            "correctedText": "A/B",
+            "correctedType": "thought",
+            "correctedTopics": ["Learning", "Graph"],
+        },
+    )
+    assert response.status_code == 200
+    assert 'schema:text "A/B"' in updates[0]
+    assert "schema:keywords ?oldTopic" in updates[0]
+    assert 'schema:keywords "Learning"' in updates[0]
+    assert 'schema:keywords "Graph"' in updates[0]
+
+
+def test_assertion_review_stays_in_separate_graph_and_requires_owner_authorship(monkeypatch):
+    gateway = load_gateway(monkeypatch)
+    updates = []
+    monkeypatch.setattr(
+        gateway,
+        "_sparql_rows",
+        lambda query: (
+            [{"kind": "idea"}]
+            if "SELECT ?kind ?label ?status" in query
+            else [
+                {
+                    "ownerAuthored": "true",
+                    "expectedKind": "skill_evidence",
+                    "reason": "Verified owner turn",
+                }
+            ]
+        ),
+    )
+    monkeypatch.setattr(gateway, "_sparql_update", updates.append)
+    client = TestClient(gateway.app)
+    path = f"/v1/digital-twin/journal/{'a' * 32}:entry:1/assertion-review"
+    headers = {"Authorization": f"Bearer {'g' * 32}"}
+    invalid = client.post(
+        path,
+        headers=headers,
+        json={
+            "identity": "owner@example.com",
+            "ownerAuthored": False,
+            "expectedKind": "skill_evidence",
+            "reason": "Not owner",
+        },
+    )
+    assert invalid.status_code == 422
+    saved = client.post(
+        path,
+        headers=headers,
+        json={
+            "identity": "owner@example.com",
+            "ownerAuthored": True,
+            "expectedKind": "skill_evidence",
+            "reason": "Verified owner turn",
+        },
+    )
+    assert saved.status_code == 200
+    assert len(updates) == 1
+    assert "graph:assertion-feedback" in updates[0]
+    assert "graph:journal>" not in updates[0]
+    read = client.get(path + "?identity=owner@example.com", headers=headers)
+    assert read.status_code == 200
+    assert read.json()["review"]["expectedKind"] == "skill_evidence"
 
 
 def test_journal_feedback_validates_corrections_and_records_misses(monkeypatch):

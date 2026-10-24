@@ -31,11 +31,17 @@
     "@pipecat-ai/small-webrtc-transport": "1.10.8",
     "@recogito/text-annotator": "4.2.5",
     "beautiful-mermaid": "1.1.3",
+    "cytoscape": "3.33.1",
     "katex": "0.18.10",
     "mermaid": "12.2.0",
-    "playwright-recast": "0.23.0"
+    "playwright-recast": "0.23.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
   },
   "devDependencies": {
+    "@types/cytoscape": "3.21.9",
+    "@types/react": "19.2.0",
+    "@types/react-dom": "19.2.0",
     "@vitest/browser-playwright": "4.1.11",
     "esbuild": "0.28.2",
     "playwright": "1.58.2",

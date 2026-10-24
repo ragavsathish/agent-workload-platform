@@ -3,6 +3,7 @@ import { createTextAnnotator } from '@recogito/text-annotator';
 import '@recogito/text-annotator/text-annotator.css';
 import '../design_system/elements.css';
 import { connectFirstPartyMcpApp } from '../design_system/mcp-app-runtime.js';
+import { mountKnowledgeWidgets } from '../knowledge_ui/mountKnowledgeWidgets.tsx';
 import '../journal_review_app/theme.css';
 
 const root = document.querySelector('#app');
@@ -10,6 +11,8 @@ const MAX_TEXT = 12_000;
 const OUTCOMES = new Set(['accepted', 'edited', 'rejected', 'missed', 'empty']);
 let annotator;
 let current;
+let unmountKnowledgeWidgets;
+let editing = false;
 
 const app = new App(
   { name: 'Pi Journal Review', version: '0.1.0' },
@@ -77,6 +80,7 @@ const normalize = (value) => {
       reviewed: Math.max(0, Number(progress.reviewed) || 0),
     },
     outcome: OUTCOMES.has(candidate.outcome) ? candidate.outcome : 'pending',
+    canSaveCorrection: candidate.canSaveCorrection === true,
   };
 };
 
@@ -127,11 +131,34 @@ const announce = async (message, status) => {
   }
 };
 
+const saveCorrection = async (correction, status) => {
+  status.textContent = 'Saving correction…';
+  try {
+    const result = await app.callServerTool({ name: 'submit_journal_correction', arguments: {
+      reviewId: current.reviewId,
+      suggestionId: current.suggestion.id,
+      text: correction.text,
+      type: correction.type,
+      topics: correction.topics,
+      ...(current.suggestion.evidence ? { evidence: current.suggestion.evidence } : {}),
+    } });
+    if (result?.isError || !result?.structuredContent?.receipt?.feedbackId) {
+      throw new Error(result?.content?.find((item) => item.type === 'text')?.text || 'The gateway did not confirm the save.');
+    }
+    editing = false;
+    render(result.structuredContent);
+    const savedStatus = document.querySelector('#review-status');
+    if (savedStatus) savedStatus.textContent = `Saved to Oxigraph · ${result.structuredContent.receipt.feedbackId}`;
+  } catch (error) {
+    status.textContent = error instanceof Error ? error.message : 'Could not save correction';
+  }
+};
+
 const toolbar = (status) => {
   const bar = element('div', { className: 'review-actions', 'aria-label': 'Review actions' });
   const actions = [
     ['accept', 'Accept', 'accepted'],
-    ['edit', 'Edit with voice', 'edited'],
+    ['edit', current.canSaveCorrection ? 'Correct note' : 'Edit with voice', 'edited'],
     ['reject', 'Reject', 'rejected'],
     ['miss', 'Add missing fact', 'missed'],
     ['empty', 'No entry', 'empty'],
@@ -139,6 +166,12 @@ const toolbar = (status) => {
   for (const [id, label, outcome] of actions) {
     const button = element('button', { id: `review-${id}`, type: 'button', className: `pi-button action action-${id}`, 'data-variant': id === 'accept' ? 'primary' : id === 'reject' ? 'danger' : 'default' }, label);
     button.addEventListener('click', () => {
+      if (id === 'edit' && current.canSaveCorrection) {
+        editing = true;
+        render(current);
+        document.querySelector('#journal-correction-panel textarea')?.focus();
+        return;
+      }
       const instruction = outcome === 'accepted'
         ? 'Accept the active journal suggestion and move to the next review item.'
         : outcome === 'edited'
@@ -189,16 +222,10 @@ const suggestionPanel = (presentation, status) => {
     element('div', {}, 'AI SUGGESTION'),
     element('span', { id: 'review-state', className: 'pi-badge', 'data-outcome': presentation.outcome }, presentation.outcome),
   );
-  const title = element('h2', { id: 'suggestion-title' }, suggestion.statement);
-  const meta = element('div', { className: 'suggestion-meta' });
-  meta.append(
-    element('span', { className: 'pi-badge type-chip' }, suggestion.type),
-  );
-  if (typeof suggestion.confidence === 'number') {
-    meta.append(element('span', {}, `${Math.round(suggestion.confidence * 100)}% confidence`));
-  }
-  const topics = element('div', { className: 'topics', 'aria-label': 'Topics' });
-  suggestion.topics.forEach((topic) => topics.append(element('span', {}, topic)));
+  const noteCard = element('div', { id: 'knowledge-note-card' });
+  const confidence = typeof suggestion.confidence === 'number'
+    ? element('span', { className: 'suggestion-confidence' }, `${Math.round(suggestion.confidence * 100)}% confidence`)
+    : null;
   const evidence = element(
     'blockquote',
     { id: 'selected-evidence' },
@@ -210,7 +237,13 @@ const suggestionPanel = (presentation, status) => {
     element('div', {}, 'Voice stays active'),
     element('p', {}, 'Ask about your knowledge, correct this annotation, or request a coding change.'),
   );
-  panel.append(heading, title, meta, topics, evidence, reviewNavigation(presentation, status), toolbar(status), voice);
+  const graph = element('div', { id: 'journal-knowledge-graph' });
+  const correction = element('div', { id: 'journal-correction-panel' });
+  panel.append(heading, noteCard);
+  if (confidence) panel.append(confidence);
+  panel.append(evidence, reviewNavigation(presentation, status), toolbar(status));
+  if (editing && presentation.canSaveCorrection) panel.append(correction);
+  panel.append(voice, graph);
   return panel;
 };
 
@@ -222,7 +255,8 @@ const transcriptPanel = (presentation, status) => {
     element('span', {}, 'Select text to correct evidence'),
   );
   const transcript = element('article', { id: 'transcript', tabindex: '0' }, presentation.transcript);
-  panel.append(heading, transcript);
+  const source = element('div', { id: 'journal-source-header' });
+  panel.append(heading, source, transcript);
 
   annotator?.destroy();
   requestAnimationFrame(() => {
@@ -278,6 +312,8 @@ const switcher = (selected) => {
 
 const render = (value) => {
   try {
+    unmountKnowledgeWidgets?.();
+    unmountKnowledgeWidgets = undefined;
     current = normalize(value);
     const selectedVariant = variant();
     root.replaceChildren();
@@ -308,12 +344,29 @@ const render = (value) => {
       element('span', {}, 'Voice agent owns tools & TTS'),
     );
     root.append(header, workspace, footer);
+    unmountKnowledgeWidgets = mountKnowledgeWidgets({
+      noteContainer: root.querySelector('#knowledge-note-card'),
+      graphContainer: root.querySelector('#journal-knowledge-graph'),
+      sourceContainer: root.querySelector('#journal-source-header'),
+      correctionContainer: root.querySelector('#journal-correction-panel'),
+      id: current.suggestion.id,
+      text: current.suggestion.statement,
+      type: current.suggestion.type,
+      topics: current.suggestion.topics,
+      sourceId: current.reviewId,
+      sourceLabel: current.source,
+      onSelectTopic: (topic) => { void announce(`Find journal notes tagged ${topic}.`, status); },
+      onSaveCorrection: current.canSaveCorrection && editing ? (correction) => saveCorrection(correction, status) : undefined,
+      onCancelCorrection: () => { editing = false; render(current); },
+    });
     if (new URLSearchParams(window.location.search).get('prototype') === '1') {
       root.append(switcher(selectedVariant));
     }
     root.dataset.ready = 'true';
     void app.updateModelContext(contextFor(current)).catch(() => {});
   } catch (error) {
+    unmountKnowledgeWidgets?.();
+    unmountKnowledgeWidgets = undefined;
     annotator?.destroy();
     annotator = undefined;
     root.replaceChildren(element('p', { id: 'error' }, 'Journal review is unavailable'));
@@ -322,9 +375,11 @@ const render = (value) => {
   }
 };
 
-app.ontoolinput = ({ arguments: input }) => render(input);
-app.ontoolresult = ({ structuredContent }) => render(structuredContent);
+app.ontoolinput = ({ arguments: input }) => { editing = false; render(input); };
+app.ontoolresult = ({ structuredContent }) => { editing = false; render(structuredContent); };
 app.onteardown = async () => {
+  unmountKnowledgeWidgets?.();
+  unmountKnowledgeWidgets = undefined;
   annotator?.destroy();
   annotator = undefined;
   root.replaceChildren();

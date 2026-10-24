@@ -88,7 +88,7 @@ const presentations = [
     title: 'Journal Review',
     src: '/journal-review/main.html',
     selector: '#app[data-ready="true"]',
-    labels: ['Review journal extraction', 'Use reviewed labels before training', 'Voice stays active'],
+    labels: ['Review journal extraction', 'Use reviewed labels before training', 'Knowledge map', 'Voice stays active'],
     value: {
       kind: 'journal-review',
       reviewId: 'review-fixture',
@@ -299,7 +299,7 @@ describe('MCP App renderers', () => {
       });
       const title = await commands.inspectMcpFrame({
         title: journal.title,
-        selector: '.suggestion-panel h2',
+        selector: '#suggestion-title',
         computedStyles: ['color'],
       });
       expect(title.computedStyles.color).toBe('rgb(20, 32, 39)');
@@ -405,6 +405,14 @@ describe('MCP App renderers', () => {
     });
     expect(transcript.text).toContain('annotate examples first');
 
+    const graph = await commands.inspectMcpFrame({
+      title: journal.title,
+      selector: '#journal-knowledge-graph .map-canvas canvas[data-id="layer2-node"]',
+    });
+    expect(graph).toBeDefined();
+    const note = await commands.inspectMcpFrame({ title: journal.title, selector: '#knowledge-note-card' });
+    expect(note.text).toContain('Use reviewed labels before training a model.');
+
     const navigation = await commands.inspectMcpFrame({
       title: journal.title,
       selector: '#review-navigation',
@@ -450,11 +458,27 @@ describe('MCP App renderers', () => {
       attribute: 'disabled',
     });
     expect(next.attribute).not.toBe('true');
-    const meta = await commands.inspectMcpFrame({
+    const card = await commands.inspectMcpFrame({
       title: journal.title,
-      selector: '.suggestion-meta',
+      selector: '#knowledge-note-card',
     });
-    expect(meta.text).not.toContain('confidence');
+    expect(card.text).not.toContain('confidence');
+  });
+
+  test('shows the shared source and correction form for a saveable journal entry', async () => {
+    const journal = presentations.find(({ name }) => name === 'Journal review');
+    const value = structuredClone(journal.value);
+    value.suggestion.id = `${'a'.repeat(32)}:entry:1`;
+    value.canSaveCorrection = true;
+    await mount({ ...journal, value });
+    const source = await commands.inspectMcpFrame({ title: journal.title, selector: '#journal-source-header' });
+    expect(source.text).toContain('Voice session · local fixture');
+    await commands.clickMcpFrame({ title: journal.title, selector: '#review-edit' });
+    const form = await commands.inspectMcpFrame({ title: journal.title, selector: '#journal-correction-panel' });
+    expect(form.text).toContain('Corrected note');
+    expect(form.text).toContain('Topic tags');
+    const state = await commands.inspectMcpFrame({ title: journal.title, selector: '#review-state', attribute: 'data-outcome' });
+    expect(state.attribute).toBe('pending');
   });
 
   test('waits for a host element created after rendering starts', async () => {

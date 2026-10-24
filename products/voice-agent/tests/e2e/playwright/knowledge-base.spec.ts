@@ -9,16 +9,19 @@ const emitMapNodeTap = async (page, nodeId: string) => page.locator('.map-canvas
   node.emit('tap');
 }, nodeId);
 
+const firstId = `${'a'.repeat(32)}:entry:1`;
+const graphId = `${'a'.repeat(32)}:entry:2`;
+
 const journalFixture = [
   {
-    id: 'note-memory-boundaries', kind: 'decision',
+    id: firstId, kind: 'decision',
     text: 'Keep durable memory separate from accepted facts until the owner reviews it.',
     createdAt: '2026-10-22T15:42:00Z', sourceId: 'capture-voice-1022',
     sourceLabel: 'Voice session · 22 Oct', transcript: 'Keep durable memory separate until I have reviewed it.',
     topics: ['Knowledge review', 'Privacy'],
   },
   {
-    id: 'note-graph-view', kind: 'idea',
+    id: graphId, kind: 'idea',
     text: 'A graph view should help me discover connections without hiding the original journal note.',
     createdAt: '2026-10-22T15:35:00Z', sourceId: 'capture-voice-1022',
     sourceLabel: 'Voice session · 22 Oct', transcript: 'A graph could show relationships between notes.',
@@ -42,12 +45,13 @@ const journalFixture = [
 
 const bind = (value: string) => ({ type: 'literal', value });
 const installOxigraphFixture = async (page) => {
+  const state = { entries: structuredClone(journalFixture), review: null as null | Record<string, string> };
   await page.route('**/oxigraph/query', async (route) => {
     const request = route.request();
     expect(request.method()).toBe('POST');
     expect(request.headers()['content-type']).toContain('application/sparql-query');
     expect(request.postData()).toContain('GRAPH <urn:awp:digital-twin:graph:journal>');
-    const bindings = journalFixture.flatMap((entry) => entry.topics.map((topic) => ({
+    const bindings = state.entries.flatMap((entry) => entry.topics.map((topic) => ({
       id: bind(entry.id), kind: bind(entry.kind), text: bind(entry.text), createdAt: bind(entry.createdAt),
       sourceId: bind(entry.sourceId), sourceLabel: bind(entry.sourceLabel),
       transcript: bind(entry.transcript), topic: bind(topic),
@@ -58,6 +62,29 @@ const installOxigraphFixture = async (page) => {
       body: JSON.stringify({ head: { vars: ['id', 'kind', 'text', 'createdAt', 'sourceId', 'sourceLabel', 'transcript', 'topic'] }, results: { bindings } }),
     });
   });
+  await page.route('**/api/knowledge/journal/*/assertion-review', async (route) => {
+    if (route.request().method() === 'POST') {
+      const body = route.request().postDataJSON() as Record<string, string>;
+      state.review = { ownerAuthored: String(body.ownerAuthored), expectedKind: body.expectedKind, expectedProfileField: body.expectedProfileField, reason: body.reason };
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ reviewId: 'saved' }) });
+    } else {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ review: state.review }) });
+    }
+  });
+  await page.route('**/api/knowledge/journal/*/feedback', async (route) => {
+    const body = route.request().postDataJSON() as { action: string; correctedText?: string; correctedType?: string; correctedTopics?: string[] };
+    if (body.action === 'delete') state.entries = state.entries.filter(({ id }) => !route.request().url().includes(encodeURIComponent(id)));
+    else {
+      const entry = state.entries.find(({ id }) => route.request().url().includes(encodeURIComponent(id)));
+      if (entry) {
+        entry.text = body.correctedText!;
+        entry.kind = body.correctedType!;
+        entry.topics = body.correctedTopics!;
+      }
+    }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ feedbackId: 'saved' }) });
+  });
+  return state;
 };
 
 test('browses, filters, and maps journal notes with synchronized details', async ({ page, browserEvidence }) => {
@@ -65,7 +92,7 @@ test('browses, filters, and maps journal notes with synchronized details', async
   await page.goto('/knowledge/', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: 'Journal & knowledge' })).toBeVisible();
   await expect(page.getByText('Live Oxigraph', { exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Yesterday' })).toBeVisible();
+  await expect(page.locator('#date-2026-10-22')).toBeVisible();
   await expect(page.getByRole('button', { name: /Keep durable memory separate/ })).toBeVisible();
 
   await page.getByRole('button', { name: 'Filter' }).click();
@@ -125,7 +152,7 @@ test('maps Cytoscape node events to journal state', async ({ page, browserEviden
   await page.getByRole('button', { name: 'Map', exact: false }).click();
   await expect(page.locator('.map-canvas canvas').first()).toBeVisible();
 
-  await emitMapNodeTap(page, 'note-graph-view');
+  await emitMapNodeTap(page, graphId);
   await expect(page.getByRole('complementary', { name: 'Selected journal note' }))
     .toContainText('A graph view should help me discover connections without hiding the original journal note.');
   await expect(page.locator('.knowledge-status')).toContainText('Selected journal note');
@@ -143,5 +170,39 @@ test('maps Cytoscape node events to journal state', async ({ page, browserEviden
   await expect(page.getByText('1 note · newest first')).toBeVisible();
   await expect(page.getByRole('complementary', { name: 'Selected journal note' }))
     .toContainText('Keep personal knowledge local and expose only bounded, read-only views to the browser.');
+  await expectCleanBrowser(browserEvidence);
+});
+
+test('saves a note correction, assertion review, and removal through the owner route', async ({ page, browserEvidence }) => {
+  const state = await installOxigraphFixture(page);
+  await page.goto('/knowledge/', { waitUntil: 'domcontentloaded' });
+  const detail = page.getByRole('complementary', { name: 'Selected journal note' });
+  const review = page.getByRole('region', { name: 'Review selected note' });
+  await review.getByRole('button', { name: 'Correct note' }).click();
+  await review.getByRole('textbox', { name: 'Corrected note' }).fill('Memory stays under owner review.');
+  await review.getByRole('combobox', { name: 'Note type' }).selectOption('idea');
+  await review.getByRole('textbox', { name: /Topic tags/ }).fill('Privacy, Learning');
+  await review.getByRole('button', { name: 'Save correction' }).click();
+  await expect(detail.getByRole('heading', { name: 'Memory stays under owner review.' })).toBeVisible();
+  expect(state.entries[0]?.topics).toEqual(['Privacy', 'Learning']);
+  await expect(detail).toContainText('Keep durable memory separate until I have reviewed it.');
+  await page.getByRole('button', { name: 'Map', exact: false }).click();
+  await expect(page.getByRole('button', { name: 'Memory stays under owner review.' })).toBeVisible();
+
+  const assertion = page.getByRole('region', { name: 'Review source assertion' });
+  await assertion.getByRole('button', { name: 'Review source' }).click();
+  await expect(assertion.getByRole('button', { name: 'Save review' })).toBeDisabled();
+  await assertion.getByRole('radio', { name: 'No' }).check();
+  await assertion.getByRole('textbox', { name: 'Review reason' }).fill('This capture is not a verified owner turn.');
+  await assertion.getByRole('button', { name: 'Save review' }).click();
+  await expect(assertion).toContainText('Excluded from owner assertion examples');
+
+  await page.reload();
+  await expect(detail.getByRole('heading', { name: 'Memory stays under owner review.' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Review source assertion' })).toContainText('Excluded from owner assertion examples');
+  await review.getByRole('button', { name: 'Remove node' }).click();
+  await review.getByRole('button', { name: 'Remove note' }).click();
+  await expect(page.getByRole('button', { name: 'Memory stays under owner review.' })).toHaveCount(0);
+  expect(state.entries.some(({ id }) => id === firstId)).toBe(false);
   await expectCleanBrowser(browserEvidence);
 });

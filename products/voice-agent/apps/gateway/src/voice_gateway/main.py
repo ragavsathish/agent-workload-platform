@@ -25,7 +25,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi import Path as ApiPath
 from fastapi.responses import Response
 from opentelemetry.propagate import inject
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from voice_agent.shared.telemetry import configure_telemetry
 from voice_agent.tasking.application.pi_response import parse_pi_event_stream, response_from_text
 from voice_agent.tasking.application.service import ProposalError, TaskService
@@ -274,6 +274,30 @@ class JournalFeedback(IdentityRequest):
     corrected_text: str | None = Field(
         default=None, alias="correctedText", min_length=1, max_length=1_000
     )
+    corrected_topics: list[str] | None = Field(default=None, alias="correctedTopics", max_length=12)
+
+    @field_validator("corrected_topics")
+    @classmethod
+    def validate_topics(cls, topics: list[str] | None) -> list[str] | None:
+        if topics is None:
+            return None
+        normalized = [topic.strip() for topic in topics]
+        if any(not topic or len(topic) > 80 for topic in normalized) or len(set(normalized)) != len(
+            normalized
+        ):
+            raise ValueError("topics must be unique nonempty strings of at most 80 characters")
+        return normalized
+
+
+class AssertionReview(IdentityRequest):
+    owner_authored: bool = Field(alias="ownerAuthored")
+    expected_kind: (
+        Literal["none", "conversation_topic", "skill_evidence", "profile_update"] | None
+    ) = Field(default=None, alias="expectedKind")
+    expected_profile_field: (
+        Literal["none", "job_title", "home_location", "credential", "employment"] | None
+    ) = Field(default=None, alias="expectedProfileField")
+    reason: str = Field(min_length=3, max_length=500)
 
 
 class JournalMissFeedback(IdentityRequest):
@@ -456,7 +480,7 @@ def _sparql_rows(query: str) -> list[dict[str, str]]:
 
 
 def _rdf_literal(value: str) -> str:
-    return json.dumps(value, ensure_ascii=False).replace("/", "\\/")
+    return json.dumps(value, ensure_ascii=False)
 
 
 def _journal_update(capture: JournalCapture) -> str:
@@ -520,8 +544,13 @@ def _journal_feedback_update(
     status = "deleted" if feedback.action == "delete" else "reviewed"
     replacement_type = feedback.corrected_type or previous_type
     delete_text = "schema:text ?oldText ;" if feedback.corrected_text else ""
+    delete_topics = "schema:keywords ?oldTopic ;" if feedback.corrected_topics is not None else ""
     insert_text = (
         f"schema:text {_rdf_literal(feedback.corrected_text)} ;" if feedback.corrected_text else ""
+    )
+    insert_topics = "\n".join(
+        f"    <{entry}> schema:keywords {_rdf_literal(topic)} ."
+        for topic in (feedback.corrected_topics or [])
     )
     feedback_properties = [
         f"  schema:identifier {_rdf_literal(event_id)}",
@@ -533,17 +562,22 @@ def _journal_feedback_update(
     ]
     if feedback.corrected_text:
         feedback_properties.append(f"  schema:text {_rdf_literal(feedback.corrected_text)}")
+    if feedback.corrected_topics is not None:
+        feedback_properties.extend(
+            f"  awp:correctedTopic {_rdf_literal(topic)}" for topic in feedback.corrected_topics
+        )
     return "\n".join(
         [
             "PREFIX schema: <https://schema.org/>",
             "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>",
             "PREFIX awp: <urn:awp:digital-twin:predicate:>",
             "DELETE { GRAPH <urn:awp:digital-twin:graph:journal> {",
-            f"  <{entry}> schema:additionalType ?oldType ; {delete_text} awp:status ?oldStatus .",
+            f"  <{entry}> schema:additionalType ?oldType ; {delete_text} {delete_topics} awp:status ?oldStatus .",
             "} }",
             "INSERT {",
             "  GRAPH <urn:awp:digital-twin:graph:journal> {",
             f"    <{entry}> schema:additionalType {_rdf_literal(replacement_type)} ; {insert_text} awp:status {_rdf_literal(status)} .",
+            insert_topics,
             "  }",
             "  GRAPH <urn:awp:digital-twin:graph:journal-feedback> {",
             f"    <{event}> a schema:ReviewAction ;",
@@ -553,9 +587,61 @@ def _journal_feedback_update(
             "WHERE { GRAPH <urn:awp:digital-twin:graph:journal> {",
             f"  <{entry}> schema:additionalType ?oldType .",
             f"  OPTIONAL {{ <{entry}> schema:text ?oldText }}",
+            f"  OPTIONAL {{ <{entry}> schema:keywords ?oldTopic }}",
             f"  OPTIONAL {{ <{entry}> awp:status ?oldStatus }}",
             "} }",
             "",
+        ]
+    )
+
+
+def _assertion_review_update(
+    entry_id: str, review: AssertionReview, event_id: str, created_at: datetime
+) -> str:
+    entry = f"urn:awp:digital-twin:journal:{entry_id}"
+    event = f"urn:awp:digital-twin:assertion-review:{event_id}"
+    properties = [
+        f"  schema:isBasedOn <{entry}>",
+        f"  schema:dateCreated {_rdf_literal(created_at.isoformat())}^^xsd:dateTime",
+        f"  schema:agent {_rdf_literal(normalized_identity(review.identity))}",
+        f"  schema:description {_rdf_literal(review.reason.strip())}",
+        f"  awp:ownerAuthored {'true' if review.owner_authored else 'false'}",
+    ]
+    if review.expected_kind is not None:
+        properties.append(f"  awp:expectedKind {_rdf_literal(review.expected_kind)}")
+    if review.expected_profile_field is not None:
+        properties.append(
+            f"  awp:expectedProfileField {_rdf_literal(review.expected_profile_field)}"
+        )
+    return "\n".join(
+        [
+            "PREFIX schema: <https://schema.org/>",
+            "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>",
+            "PREFIX awp: <urn:awp:digital-twin:predicate:>",
+            "INSERT DATA { GRAPH <urn:awp:digital-twin:graph:assertion-feedback> {",
+            f"  <{event}> a schema:ReviewAction ;",
+            "  " + " ;\n  ".join(properties) + " .",
+            "} }",
+        ]
+    )
+
+
+def _assertion_review_query(entry_id: str) -> str:
+    entry = f"urn:awp:digital-twin:journal:{entry_id}"
+    return "\n".join(
+        [
+            "PREFIX schema: <https://schema.org/>",
+            "PREFIX awp: <urn:awp:digital-twin:predicate:>",
+            "SELECT ?ownerAuthored ?expectedKind ?expectedProfileField ?reason ?reviewedAt WHERE {",
+            "  GRAPH <urn:awp:digital-twin:graph:assertion-feedback> {",
+            f"    ?review a schema:ReviewAction ; schema:isBasedOn <{entry}> ;",
+            "      awp:ownerAuthored ?ownerAuthored ; schema:description ?reason ; schema:dateCreated ?reviewedAt .",
+            "    OPTIONAL { ?review awp:expectedKind ?expectedKind }",
+            "    OPTIONAL { ?review awp:expectedProfileField ?expectedProfileField }",
+            "  }",
+            "}",
+            "ORDER BY DESC(?reviewedAt)",
+            "LIMIT 1",
         ]
     )
 
@@ -779,7 +865,9 @@ async def record_journal_feedback(
     if body.action == "wrong_type" and body.corrected_type is None:
         raise HTTPException(status_code=422, detail="wrong_type feedback requires correctedType")
     if body.action in {"keep", "delete"} and (
-        body.corrected_type is not None or body.corrected_text is not None
+        body.corrected_type is not None
+        or body.corrected_text is not None
+        or body.corrected_topics is not None
     ):
         raise HTTPException(status_code=422, detail="keep and delete do not accept corrections")
     with telemetry.observe("digital_twin.journal.feedback"):
@@ -807,6 +895,60 @@ async def record_journal_feedback(
             )
             telemetry.record("digital_twin.journal.feedback.action", outcome=body.action)
             return {"entryId": entry_id, "action": body.action, "feedbackId": event_id}
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/v1/digital-twin/journal/{entry_id}/assertion-review")
+async def record_assertion_review(
+    entry_id: Annotated[str, ApiPath(pattern=r"^[a-f0-9]{32}:entry:[1-9][0-9]*$")],
+    body: AssertionReview,
+    _: None = Depends(authenticate),
+):
+    normalized_identity(body.identity)
+    if body.owner_authored:
+        if body.expected_kind is None:
+            raise HTTPException(
+                status_code=422, detail="owner assertion review requires expectedKind"
+            )
+        if body.expected_kind == "profile_update" and body.expected_profile_field in {None, "none"}:
+            raise HTTPException(
+                status_code=422, detail="profile update requires expectedProfileField"
+            )
+        if body.expected_kind != "profile_update" and body.expected_profile_field not in {
+            None,
+            "none",
+        }:
+            raise HTTPException(
+                status_code=422, detail="non-profile kind cannot have a profile field"
+            )
+    elif body.expected_kind is not None or body.expected_profile_field is not None:
+        raise HTTPException(status_code=422, detail="non-owner source cannot have assertion labels")
+    with telemetry.observe("digital_twin.assertion.review"):
+        try:
+            if not await asyncio.to_thread(_sparql_rows, _journal_entry_query(entry_id)):
+                raise HTTPException(status_code=404, detail="journal entry not found")
+            event_id = uuid4().hex
+            await asyncio.to_thread(
+                _sparql_update,
+                _assertion_review_update(entry_id, body, event_id, datetime.now(UTC)),
+            )
+            return {"entryId": entry_id, "reviewId": event_id}
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/v1/digital-twin/journal/{entry_id}/assertion-review")
+async def get_assertion_review(
+    entry_id: Annotated[str, ApiPath(pattern=r"^[a-f0-9]{32}:entry:[1-9][0-9]*$")],
+    identity: str = Query(min_length=3, max_length=320),
+    _: None = Depends(authenticate),
+):
+    normalized_identity(identity)
+    with telemetry.observe("digital_twin.assertion.review.read"):
+        try:
+            rows = await asyncio.to_thread(_sparql_rows, _assertion_review_query(entry_id))
+            return {"entryId": entry_id, "review": rows[0] if rows else None}
         except RuntimeError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 

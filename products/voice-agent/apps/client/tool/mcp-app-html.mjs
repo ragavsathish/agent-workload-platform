@@ -34,6 +34,7 @@ export const buildMcpAppHtml = async ({
     bundle: true,
     entryPoints: [fileURLToPath(entryPoint)],
     format: 'iife',
+    jsx: 'automatic',
     loader: { '.woff2': 'dataurl', '.otf': 'dataurl' },
     minify: true,
     nodePaths: nodePaths.map(fileURLToPath),

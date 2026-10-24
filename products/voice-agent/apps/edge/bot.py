@@ -1277,6 +1277,46 @@ if __name__ == "__main__":
             headers={"Cache-Control": "no-store"},
         )
 
+    def knowledge_entry_path(entry_id: str, suffix: str) -> str:
+        if re.fullmatch(r"[a-f0-9]{32}:entry:[1-9][0-9]*", entry_id) is None:
+            raise HTTPException(status_code=400, detail="invalid journal entry ID")
+        return f"/v1/digital-twin/journal/{entry_id}/{suffix}"
+
+    async def knowledge_body(request: Request, allowed: set[str]) -> dict[str, object]:
+        try:
+            payload = await request.json()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="invalid knowledge review") from exc
+        if not isinstance(payload, dict) or set(payload) - allowed:
+            raise HTTPException(status_code=400, detail="invalid knowledge review fields")
+        return payload
+
+    @app.post("/api/knowledge/journal/{entry_id}/feedback")
+    async def browser_journal_feedback(entry_id: str, request: Request):
+        path = knowledge_entry_path(entry_id, "feedback")
+        body = await knowledge_body(request, {"action", "correctedText", "correctedType", "correctedTopics"})
+        return JSONResponse(
+            await owner_gateway_request(request, "POST", path, body=body),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/knowledge/journal/{entry_id}/assertion-review")
+    async def browser_assertion_review(entry_id: str, request: Request):
+        path = knowledge_entry_path(entry_id, "assertion-review")
+        body = await knowledge_body(request, {"ownerAuthored", "expectedKind", "expectedProfileField", "reason"})
+        return JSONResponse(
+            await owner_gateway_request(request, "POST", path, body=body),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/api/knowledge/journal/{entry_id}/assertion-review")
+    async def browser_get_assertion_review(entry_id: str, request: Request):
+        path = knowledge_entry_path(entry_id, "assertion-review")
+        return JSONResponse(
+            await owner_gateway_request(request, "GET", path),
+            headers={"Cache-Control": "no-store"},
+        )
+
     @app.post("/api/tasks", status_code=201)
     async def create_browser_task(request: Request):
         try:

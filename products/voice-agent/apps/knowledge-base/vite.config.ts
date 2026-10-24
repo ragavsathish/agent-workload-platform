@@ -7,7 +7,9 @@ export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   base: '/knowledge/',
   plugins: [react()],
+  resolve: { dedupe: ['react', 'react-dom'] },
   server: {
+    allowedHosts: ['host.docker.internal'],
     proxy: {
       '/oxigraph': {
         target: 'http://127.0.0.1:7878',

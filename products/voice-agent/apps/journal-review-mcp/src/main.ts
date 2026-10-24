@@ -8,7 +8,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { Request, Response } from "express";
 
-import { createServer } from "./server.js";
+import { createReviewStore, createServer } from "./server.js";
 
 const distributionRoot = dirname(fileURLToPath(import.meta.url));
 const appHtml = resolve(
@@ -35,11 +35,12 @@ async function startStdio(): Promise<void> {
 
 async function startHttp(): Promise<void> {
   const app = createMcpExpressApp({ host, allowedHosts });
+  const reviews = createReviewStore();
   app.get("/api/health", (_request: Request, response: Response) => {
     response.json({ status: "ok", app: "journal-review" });
   });
   app.all("/mcp", async (request: Request, response: Response) => {
-    const server = createServer(appHtml);
+    const server = createServer(appHtml, undefined, reviews);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     response.on("close", () => {
       void transport.close();
