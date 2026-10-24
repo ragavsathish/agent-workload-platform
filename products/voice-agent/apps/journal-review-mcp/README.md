@@ -11,3 +11,5 @@ For saved corrections, configure `AGENT_GATEWAY_BASE_URL` (with or without `/v1`
 `JOURNAL_REVIEW_OWNER_IDENTITY` or `ORCHESTRATOR_ALLOWED_USERS`. These stay in the MCP server
 process; the app HTML has no direct network permission. The command only accepts the active
 entry, a valid journal entry ID, bounded correction fields, and an exact transcript quote.
+For the macOS Pi voice service, set the token file path and owner identity in the private
+`deploy/host-env/pi-voice.env`, then run `make install-host-services` to apply them.
