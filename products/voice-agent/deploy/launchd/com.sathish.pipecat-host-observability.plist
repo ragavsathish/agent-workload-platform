@@ -17,6 +17,8 @@
     <key>GONDOLIN_METRICS_DIR</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/gondolin-metrics</string>
     <key>GONDOLIN_METRICS_HOST</key><string>127.0.0.1</string>
     <key>GONDOLIN_METRICS_PORT</key><string>9465</string>
+    <key>STORAGE_ARTIFACTS_DIR</key><string>/Users/sathish.narayanan/Documents/git/agent-workload-platform/artifacts</string>
+    <key>STORAGE_COLLECTOR_COMMAND</key><string>/opt/homebrew/bin/node "/Users/sathish.narayanan/Library/Application Support/PipecatEdge/apps/host-observability/storage-collector.mjs"</string>
   </dict>
   <key>KeepAlive</key><true/>
   <key>Umask</key><integer>63</integer>

@@ -264,6 +264,10 @@ not exposed by the VM or application containers. The provisioned **Voice Product
 journey from detected speech through transcript, Pi inference, and reply audio. It also shows turn
 outcomes, voice-filter pass rate, user-perceived and inference-stage latency, task activity,
 failures, and recent payload-free traces.
+The provisioned **Storage Capacity** dashboard shows host APFS free space, selected Gondolin
+directories, and Docker usage and reclaimable space. Host capacity comes from Fluent Bit's
+`node_exporter_metrics` filesystem collector; its `exec` and `log_to_metrics` plugins collect
+the directory and Docker gauges once a minute.
 
 The pinned official `grafana/mcp-grafana` service is available only on Mac loopback at
 `http://127.0.0.1:8000/mcp`. Compose creates a Viewer service account for its Grafana connection,

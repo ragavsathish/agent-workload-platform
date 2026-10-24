@@ -2,6 +2,10 @@ service:
   flush: 1
   log_level: info
 
+parsers:
+  - name: storage_json
+    format: json
+
 pipeline:
   inputs:
     - name: node_exporter_metrics
@@ -9,11 +13,53 @@ pipeline:
       scrape_interval: 5
       # Fluent Bit's diskstats collector repeatedly fails macOS IORegistry
       # traversal while the remaining host collectors continue to work.
-      metrics: cpu,meminfo,loadavg,netdev,uname
+      metrics: cpu,meminfo,loadavg,netdev,uname,filesystem
+    - name: exec
+      tag: storage_samples
+      command: ${STORAGE_COLLECTOR_COMMAND}
+      parser: storage_json
+      interval_sec: 60
+      buf_size: 64k
+
+  filters:
+    - name: log_to_metrics
+      match: storage_samples
+      tag: storage_metrics
+      metric_mode: gauge
+      metric_namespace: platform
+      metric_subsystem: storage
+      metric_name: directory_bytes
+      metric_description: Disk usage of selected platform directories.
+      value_field: bytes
+      regex: 'metric ^directory$'
+      label_field: area
+    - name: log_to_metrics
+      match: storage_samples
+      tag: storage_metrics
+      metric_mode: gauge
+      metric_namespace: platform
+      metric_subsystem: docker_storage
+      metric_name: size_bytes
+      metric_description: Docker disk usage by object type.
+      value_field: bytes
+      regex: 'metric ^docker_size$'
+      label_field: kind
+    - name: log_to_metrics
+      match: storage_samples
+      tag: storage_metrics
+      metric_mode: gauge
+      metric_namespace: platform
+      metric_subsystem: docker_storage
+      metric_name: reclaimable_bytes
+      metric_description: Docker reported reclaimable bytes by object type.
+      value_field: bytes
+      regex: 'metric ^docker_reclaimable$'
+      label_field: kind
+      discard_logs: true
 
   outputs:
     - name: prometheus_exporter
-      match: host_metrics
+      match: '*_metrics'
       host: 127.0.0.1
       port: 2022
       add_label:

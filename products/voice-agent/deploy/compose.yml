@@ -294,6 +294,7 @@ services:
       - ./observability/dashboards.yml:/otel-lgtm/grafana/conf/provisioning/dashboards/pipecat.yml:ro
       - ./observability/pipecat-overview.json:/otel-lgtm/grafana/conf/provisioning/dashboards/pipecat/pipecat-overview.json:ro
       - ./observability/system-overview.json:/otel-lgtm/grafana/conf/provisioning/dashboards/pipecat/system-overview.json:ro
+      - ./observability/storage-capacity.json:/otel-lgtm/grafana/conf/provisioning/dashboards/pipecat/storage-capacity.json:ro
       - ./observability/c4-heatmap.json:/otel-lgtm/grafana/conf/provisioning/dashboards/pipecat/c4-heatmap.json:ro
       - ./observability/otelcol-config.yaml:/otel-lgtm/otelcol-config.yaml:ro
     networks:

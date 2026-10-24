@@ -195,9 +195,12 @@
 
 - name: Install host observability source
   ansible.builtin.copy:
-    src: "{{ voice_agent_root }}/apps/host-observability/gondolin-exporter.mjs"
-    dest: "{{ host_services_runtime_dir }}/apps/host-observability/gondolin-exporter.mjs"
+    src: "{{ voice_agent_root }}/apps/host-observability/{{ item }}"
+    dest: "{{ host_services_runtime_dir }}/apps/host-observability/{{ item }}"
     mode: "0600"
+  loop:
+    - gondolin-exporter.mjs
+    - storage-collector.mjs
   notify: Restart host services
 
 - name: Install host observability configuration
