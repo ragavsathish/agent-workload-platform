@@ -63,7 +63,11 @@ class ArtifactStore:
             ),
         )
 
-    def publish_workspace(self, name: str, repository: Path) -> str:
+    def publish_workspace(
+        self, name: str, repository: Path, allowed: tuple[str, ...]
+    ) -> str:
+        """Publish an allowlisted repository's committed branch as an immutable bundle."""
+        validate_workspace_name(name, allowed)
         root = Path(
             subprocess.check_output(
                 ["git", "-C", str(repository), "rev-parse", "--show-toplevel"], text=True

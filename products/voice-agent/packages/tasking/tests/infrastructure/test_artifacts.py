@@ -23,6 +23,23 @@ def test_workspace_name_is_logical_and_allowlisted() -> None:
         validate_workspace_name("scratch", ("scratch",))
 
 
+def test_publish_rejects_unallowlisted_workspace_before_artifact_writes(tmp_path: Path) -> None:
+    writes: list[str] = []
+
+    class Client:
+        def put_object(self, *, Key: str, **_: object) -> None:
+            writes.append(Key)
+
+    store = object.__new__(ArtifactStore)
+    store.bucket = "test-bucket"
+    store.client = Client()
+
+    with pytest.raises(ValueError, match="not allowed"):
+        store.publish_workspace("sdft-confsft-methods-paper", tmp_path, ("approved",))
+
+    assert writes == []
+
+
 def test_source_uri_must_target_expected_bucket_and_digest() -> None:
     store = object.__new__(ArtifactStore)
     store.bucket = "agent-artifacts"
@@ -66,7 +83,7 @@ def test_workspace_bundle_preserves_source_branch(tmp_path: Path, branch: str) -
     store = object.__new__(ArtifactStore)
     store.bucket = "test-bucket"
     store.client = Client()
-    uri = store.publish_workspace("source", repository)
+    uri = store.publish_workspace("source", repository, ("source",))
     with store.materialize_workspace(uri, tmp_path / "scratch") as workspace:
         assert _workflow_ref(workspace) == f"refs/heads/{branch}"
         assert (workspace / "README.md").read_text() == "source snapshot\n"

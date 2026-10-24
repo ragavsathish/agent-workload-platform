@@ -31,10 +31,13 @@ file only into its owning process.
 
 Set `VOICE_DEFAULT_WORKSPACE` to one name in `ORCHESTRATOR_ALLOWED_WORKSPACES`; spoken
 commands can then say “the default workspace” without asking speech recognition to reconstruct a
-filesystem path. Publish its committed Git state with `make publish-workspace`; the native worker
-downloads that immutable bundle from loopback-only S3Mock. Refresh Pi's provider subscription/login
-before enabling approvals. A stale login is recorded as a durable failed task rather than falling
-back to an unapproved provider.
+filesystem path. To authorize a new logical workspace, add its exact lowercase name to
+`ORCHESTRATOR_ALLOWED_WORKSPACES`, then publish its committed Git state with
+`make publish-workspace WORKSPACE_ID=sdft-confsft-methods-paper REPOSITORY=/path/to/repository`.
+The publisher rejects names outside that explicit allowlist before writing artifacts, and task
+resolution rejects an allowlisted name until its immutable bundle pointer exists in loopback-only
+S3Mock. Refresh Pi's provider subscription/login before enabling approvals. A stale login is
+recorded as a durable failed task rather than falling back to an unapproved provider.
 
 The worker does not require Documents, Desktop, or Downloads access. Scratch workspaces live under
 `~/.local/share/agent-workload-platform/workspaces` with mode `0700` and are removed after every

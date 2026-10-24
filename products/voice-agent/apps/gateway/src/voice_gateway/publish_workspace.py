@@ -19,6 +19,7 @@ def main() -> None:
     settings = Settings.from_env()
     if not settings.artifact_workspaces:
         raise SystemExit("ARTIFACT_ENDPOINT_URL is not configured")
+    # Reject unapproved names before connecting to the artifact store.
     validate_workspace_name(args.workspace, settings.allowed_workspaces)
     store = ArtifactStore(
         endpoint_url=settings.artifact_endpoint_url,
@@ -26,7 +27,9 @@ def main() -> None:
         access_key=settings.artifact_access_key,
         secret_key=settings.artifact_secret_key,
     )
-    uri = store.publish_workspace(args.workspace, args.repository)
+    uri = store.publish_workspace(
+        args.workspace, args.repository, settings.allowed_workspaces
+    )
     print(uri)
 
 
