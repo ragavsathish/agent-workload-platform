@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { createConnection, createServer } from "node:net";
@@ -135,6 +135,18 @@ test("private owner creates, queries, aborts and reopens native tasks", async ()
     assert.equal(batch.success, true, batch.error);
     assert.equal((batch.data as Record<string, { state: string }>)[taskId].state, "completed");
 
+    const nativeId = (JSON.parse(execFileSync(process.execPath, [join(import.meta.dirname, "cli.js"),
+      "submit", "--identity", "owner@example.com", "--workspace", "scratch",
+      "--instruction", "Inspect only"], { encoding: "utf8", env: {
+      ...process.env, PI_DURABLE_OWNER_SOCKET: socket,
+    } })) as { task_id: string }).task_id;
+    const described = await request(socket, "describe", { taskId: nativeId });
+    assert.equal((described.data as { identity: string }).identity, "owner@example.com");
+    const ownerList = await request(socket, "list_native", { identity: "owner@example.com", limit: 10 });
+    assert.equal((ownerList.data as Array<{ task_id: string }>)[0].task_id, nativeId);
+    const otherList = await request(socket, "list_native", { identity: "other@example.com", limit: 10 });
+    assert.deepEqual(otherList.data, []);
+
     const cancelledId = randomUUID();
     await request(socket, "submit", {
       requestId: cancelledId, input: { text: "Never send", holdMs: 5_000 },
@@ -148,6 +160,7 @@ test("private owner creates, queries, aborts and reopens native tasks", async ()
     assert.equal((await request(socket, "get", { taskId })).data &&
       ((await request(socket, "get", { taskId })).data as { state: string }).state, "completed");
     assert.equal(((await request(socket, "get", { taskId: cancelledId })).data as { state: string }).state, "cancelled");
+    assert.equal(((await request(socket, "describe", { taskId: nativeId })).data as { workspace: string }).workspace, "scratch");
   } finally {
     if (child) await stopOwner(child, "SIGKILL");
     await rm(directory, { recursive: true, force: true });

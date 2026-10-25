@@ -4,6 +4,7 @@ from pathlib import Path
 import uuid
 
 import pytest
+from voice_agent.tasking.application import service as service_module
 from voice_agent.tasking.application.service import (
     ProposalError,
     TaskService,
@@ -190,6 +191,58 @@ def test_scratch_plan_does_not_resolve_a_repository(tmp_path: Path) -> None:
         "instruction": "Explore an idea",
         "workspace": "scratch",
     }
+
+
+def test_native_cli_task_projects_to_flutter_and_checks_owner(tmp_path: Path, monkeypatch) -> None:
+    service = TaskService(settings(tmp_path))
+    task_id = "11111111-1111-4111-8111-111111111111"
+    native = {
+        "task_id": task_id,
+        "identity": "owner@example.com",
+        "instruction": "Inspect only",
+        "workspace": "scratch",
+        "created_at": "2026-10-25T12:00:00Z",
+    }
+    monkeypatch.setattr(service, "_get_owned", lambda *_: (_ for _ in ()).throw(ProposalError("proposal not found")))
+    monkeypatch.setattr(service.owner, "describe", lambda _task_id: native)
+    monkeypatch.setattr(service.owner, "get", lambda _task_id: {"state": "running", "result": None, "failure": None})
+
+    view = service.get(identity="owner@example.com", proposal_id=task_id)
+    assert view["id"] == task_id
+    assert view["status"] == "approved"
+    assert view["result"]["state"] == "running"
+    assert view["session_name"].startswith("Pi Durable")
+    with pytest.raises(ProposalError, match="task not found"):
+        service.get(identity="other@example.com", proposal_id=task_id)
+
+    class EmptyCursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def execute(self, *_):
+            return None
+
+        def fetchall(self):
+            return []
+
+    class EmptyConnection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def cursor(self, **_):
+            return EmptyCursor()
+
+    monkeypatch.setattr(service_module.psycopg, "connect", lambda _: EmptyConnection())
+    monkeypatch.setattr(service.owner, "get_many", lambda _: {})
+    monkeypatch.setattr(service.owner, "list_native", lambda identity, limit: [native] if identity == "owner@example.com" else [])
+    assert service.list(identity="owner@example.com")[0]["id"] == task_id
+    assert service.list(identity="other@example.com") == []
 
 
 def test_scratch_only_configuration_needs_no_repository_allowlist(tmp_path: Path) -> None:

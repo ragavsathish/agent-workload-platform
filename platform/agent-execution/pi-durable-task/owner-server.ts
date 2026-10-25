@@ -10,9 +10,11 @@ import { DurableTaskOwner, type ProductInput, type ValidationInput } from "./own
 
 type Request = {
   id: string;
-  command: "submit" | "get" | "get_many" | "abort" | "retry" | "inspect";
+  command: "submit" | "get" | "get_many" | "describe" | "list_native" | "abort" | "retry" | "inspect";
   taskId?: string;
   taskIds?: string[];
+  identity?: string;
+  limit?: number;
   requestId?: string;
   input?: ValidationInput | ProductInput;
 };
@@ -24,7 +26,7 @@ function validRequest(value: unknown): value is Request {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
   return typeof item.id === "string" && item.id.length <= 100
-    && ["submit", "get", "get_many", "abort", "retry", "inspect"].includes(String(item.command));
+    && ["submit", "get", "get_many", "describe", "list_native", "abort", "retry", "inspect"].includes(String(item.command));
 }
 
 function send(socket: Socket, value: object): void {
@@ -86,6 +88,17 @@ export async function serveOwner(storagePath: string, socketPath: string, restar
                   throw new Error("up to 100 task IDs required");
                 }
                 data = await owner!.getMany(request.taskIds);
+                break;
+              case "describe":
+                if (typeof request.taskId !== "string" || !TASK_ID.test(request.taskId)) throw new Error("task ID required");
+                data = await owner!.describe(request.taskId);
+                break;
+              case "list_native":
+                if (typeof request.identity !== "string" || request.identity.length < 3 || request.identity.length > 320
+                    || !Number.isInteger(request.limit) || request.limit! < 1 || request.limit! > 100) {
+                  throw new Error("bounded owner identity and limit required");
+                }
+                data = await owner!.listNative(request.identity, request.limit);
                 break;
               case "abort":
                 if (typeof request.taskId !== "string") throw new Error("task ID required");

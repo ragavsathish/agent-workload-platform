@@ -224,19 +224,26 @@ class TaskService:
                 rows = cursor.fetchall()
         task_ids = list(dict.fromkeys(str(row["task_id"]) for row in rows if row["task_id"]))
         task_results = self.owner.get_many(task_ids)
-        return [self._view(row, include_token=True, use_prefetched=True,
+        views = [self._view(row, include_token=True, use_prefetched=True,
                            task_result=task_results.get(str(row["task_id"])) if row["task_id"] else None)
                 for row in rows]
+        native = [self._native_view(item) for item in self.owner.list_native(identity, min(max(limit, 1), 100))]
+        if session_name is not None:
+            native = [item for item in native if item["session_name"] == session_name.strip()]
+        return sorted([*views, *native], key=lambda item: item["created_at"], reverse=True)[:limit]
 
     def get(self, *, identity: str, proposal_id: str) -> dict[str, Any]:
-        row = self._get_owned(identity, proposal_id)
+        try:
+            row = self._get_owned(identity, proposal_id)
+        except ProposalError:
+            return self._native_view(self._get_native_owned(identity, proposal_id))
         return self._view(row, include_token=True)
 
     def artifact(
         self, *, identity: str, proposal_id: str, name: str
     ) -> tuple[bytes, str, str]:
         """Read an artifact only after checking its proposal owner and result."""
-        row = self._get_owned(identity, proposal_id)
+        row = self._get_owned_or_native(identity, proposal_id)
         expected_name = "workspace" if row["workspace"] == SCRATCH_WORKSPACE else "patch"
         if name != expected_name:
             raise ProposalError("task artifact is unavailable")
@@ -319,6 +326,11 @@ class TaskService:
         return self._view(approved, include_token=False)
 
     def cancel(self, *, identity: str, proposal_id: str) -> dict[str, Any]:
+        native = self.owner.describe(proposal_id)
+        if native is not None:
+            owned = self._get_native_owned(identity, proposal_id)
+            self.owner.abort(proposal_id)
+            return self._native_view(owned)
         with psycopg.connect(self.settings.database_url) as conn:
             with conn.cursor(row_factory=dict_row) as cursor:
                 cursor.execute(
@@ -362,6 +374,36 @@ class TaskService:
             raise ProposalError("proposal not found")
         return row
 
+    def _get_native_owned(self, identity: str, task_id: str) -> dict[str, Any]:
+        try:
+            uuid.UUID(task_id)
+        except ValueError as exc:
+            raise ProposalError("proposal not found") from exc
+        native = self.owner.describe(task_id)
+        if native is None or native.get("identity") != identity:
+            raise ProposalError("task not found")
+        return native
+
+    def _get_owned_or_native(self, identity: str, task_id: str) -> dict[str, Any]:
+        try:
+            return self._get_owned(identity, task_id)
+        except ProposalError:
+            native = self._get_native_owned(identity, task_id)
+            return {"task_id": native["task_id"], "workspace": native["workspace"]}
+
+    def _native_view(self, native: dict[str, Any]) -> dict[str, Any]:
+        created_at = datetime.fromisoformat(native["created_at"])
+        return {
+            "id": native["task_id"], "identity": native["identity"],
+            "instruction": native["instruction"], "workspace": native["workspace"],
+            "session_name": f"Pi Durable · {native['task_id'][:8]}",
+            "session_reference": None,
+            "plan_hash": plan_hash({"instruction": native["instruction"], "workspace": native["workspace"]}),
+            "status": "approved", "task_id": native["task_id"],
+            "created_at": created_at, "expires_at": None, "approval_token": None,
+            "result": native.get("result") or self._task_result(native["task_id"]),
+        }
+
     def _task_result(self, task_id: object | None) -> dict[str, Any] | None:
         if not task_id:
             return None
@@ -371,7 +413,7 @@ class TaskService:
         self, *, identity: str, proposal_id: str, after: int = 0, limit: int = 40
     ) -> list[dict[str, object]]:
         """Read only narrated events for a proposal owned by this identity."""
-        row = self._get_owned(identity, proposal_id)
+        row = self._get_owned_or_native(identity, proposal_id)
         if not row["task_id"]:
             return []
         with (

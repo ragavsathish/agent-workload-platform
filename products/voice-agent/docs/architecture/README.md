@@ -124,6 +124,11 @@ runs Pi Durable conversations directly in both modes. `WORKER_PI_EXECUTION_MODE=
 runs their file and shell tools in an isolated task VM; `WORKER_PI_EXECUTION_MODE=host`
 runs those tools on the Mac. The switch changes tool execution while the
 public approval, identity, task, and artifact APIs keep their existing shape.
+The local Pi Durable CLI can also submit an owner-tagged `agent-run` task directly over the
+owner's private Unix socket. The owner stores its display metadata with the native task;
+the Gateway projects only tasks matching the authenticated identity into the Flutter board.
+The same bounded progress rows, narration route, result, and artifact lookup work by native
+task ID. CLI submission does not create a browser proposal or use its approval step.
 Sandboxed scratch tasks use a worker-controlled default image and
 publish a bounded workspace ZIP rather than a Git patch. Missing named repositories fail explicitly;
 they never silently become scratch tasks. Optional external integrations are exposed through

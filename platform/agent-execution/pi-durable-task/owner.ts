@@ -17,7 +17,7 @@ export type ProductKind = "agent-run" | "song-lyrics" | "song-render" | "digital
 export type ProductInput = { kind: ProductKind; params: Record<string, unknown>; requestId: string };
 type ProductResult = Record<string, unknown>;
 
-const Requests = defineDoc<{ entries: Record<string, { taskId: number; inputJson: string }> }>({
+const Requests = defineDoc<{ entries: Record<string, { taskId: number; inputJson: string; createdAt?: string }> }>({
   kind: "voice.owner.requests",
   version: 1,
   scope: "session",
@@ -160,6 +160,9 @@ export type OwnerSnapshot = {
   result: ValidationResult | ProductResult | null;
   failure: string | null;
 };
+type NativeSubmission = {
+  task_id: string; identity: string; instruction: string; workspace: string; created_at: string;
+};
 
 export class DurableTaskOwner {
   private constructor(private readonly harness: Harness, private readonly root: Awaited<ReturnType<Harness["root"]>>) {}
@@ -196,7 +199,7 @@ export class DurableTaskOwner {
       const taskId = await ("kind" in input
         ? tx.createTask(ProductTask, input, { ownership: { kind: "conversation" }, conversationId: this.root.id })
         : tx.createTask(ValidationTask, input, { ownership: { kind: "conversation" }, conversationId: this.root.id }));
-      requests.entries[requestId] = { taskId, inputJson: JSON.stringify(input) };
+      requests.entries[requestId] = { taskId, inputJson: JSON.stringify(input), createdAt: new Date().toISOString() };
     }, BACKGROUND_CONTEXT);
     return requestId;
   }
@@ -229,6 +232,34 @@ export class DurableTaskOwner {
       taskId,
       requests?.entries[taskId]?.taskId ? await this.get(taskId) : null,
     ])));
+  }
+
+  private nativeSubmission(taskId: string, entry?: { inputJson: string; createdAt?: string }): NativeSubmission | null {
+    if (!entry || typeof entry.inputJson !== "string") return null;
+    let input: unknown;
+    try { input = JSON.parse(entry.inputJson); } catch { return null; }
+    if (!input || typeof input !== "object" || !("kind" in input) || input.kind !== "agent-run"
+      || !("params" in input) || !input.params || typeof input.params !== "object") return null;
+    const params = input.params as Record<string, unknown>;
+    if (params.native_cli !== true || typeof params.identity !== "string"
+      || typeof params.instruction !== "string" || typeof params.workspace !== "string") return null;
+    return { task_id: taskId, identity: params.identity, instruction: params.instruction,
+      workspace: params.workspace, created_at: entry.createdAt ?? new Date(0).toISOString() };
+  }
+
+  async describe(taskId: string): Promise<NativeSubmission | null> {
+    const requests = await this.harness.snapshot(Requests, BACKGROUND_CONTEXT);
+    return this.nativeSubmission(taskId, requests?.entries[taskId]);
+  }
+
+  async listNative(identity: string, limit = 50): Promise<Array<NativeSubmission & { result: OwnerSnapshot | null }>> {
+    const requests = await this.harness.snapshot(Requests, BACKGROUND_CONTEXT);
+    const entries = Object.entries(requests?.entries ?? {}).reverse();
+    const matching = entries.flatMap(([id, entry]) => {
+      const item = this.nativeSubmission(id, entry);
+      return item?.identity === identity ? [item] : [];
+    }).slice(0, limit);
+    return Promise.all(matching.map(async (item) => ({ ...item, result: await this.get(item.task_id) })));
   }
 
   async abort(taskId: string): Promise<"marked" | "terminal"> {

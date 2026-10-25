@@ -17,6 +17,28 @@ Unknown IDs return `null` on `get` and reject commands. Reusing a request ID
 with different input rejects; reusing it with the same input returns the
 original task ID.
 
+The local `pi-durable-task` CLI submits an `agent-run` task straight to this
+private owner socket. It records owner identity, instruction, workspace, and
+creation time with the native submission; `describe` and `list_native` expose
+only these CLI submissions to the authenticated Gateway projection. This lets
+the Flutter task board query their state, bounded progress feed, narration,
+result, and artifact without creating an HTTP proposal first. The socket's
+filesystem permissions are the CLI's local authorization boundary.
+
+```sh
+pnpm --dir platform/agent-execution/pi-durable-task run build
+node platform/agent-execution/pi-durable-task/dist/cli.js submit \
+  --identity owner@example.com --workspace scratch \
+  --instruction 'Inspect the workspace and report what you find.'
+node platform/agent-execution/pi-durable-task/dist/cli.js list \
+  --identity owner@example.com
+```
+
+Use the exact owner login accepted by the Voice Edge; another identity will not
+appear on that owner's Flutter board. `get --task-id UUID` and `abort --task-id
+UUID` operate on the native task. The CLI is a private local operator command,
+not a tailnet endpoint.
+
 The `voice.owner.validation` task proves native task creation, cancellation,
 storage reopen, and `retryTask()` without invoking a model or touching a
 workspace. The owner also admits the five public product task kinds through

@@ -1,6 +1,7 @@
 sequenceDiagram
     autonumber
     actor User as Tailnet User
+    participant CLI as Local Pi Durable CLI
     participant Browser as Browser Client
     participant Edge as Voice Edge
     participant Gateway as Agent Gateway
@@ -13,18 +14,25 @@ sequenceDiagram
     participant Tools as Host or Gondolin Tools
     participant Model as Model Provider
 
-    User->>Browser: Propose a scratch or repository task
-    Browser->>Edge: Send owner-scoped proposal
-    Edge->>Gateway: Forward authenticated request
-    Gateway->>DB: Persist proposal and signed plan
-    Gateway-->>Browser: Return reviewable proposal
-    User->>Browser: Approve proposal
-    Browser->>Edge: Send approval
-    Edge->>Gateway: Forward approval
-    Gateway->>Owner: Submit native agent-run task over private HTTP
-    Owner->>SQLite: Persist task and request ID
-    Owner-->>Gateway: Return stable public task ID
-    Gateway->>DB: Mark proposal approved
+    alt Browser proposal
+        User->>Browser: Propose a scratch or repository task
+        Browser->>Edge: Send owner-scoped proposal
+        Edge->>Gateway: Forward authenticated request
+        Gateway->>DB: Persist proposal and signed plan
+        Gateway-->>Browser: Return reviewable proposal
+        User->>Browser: Approve proposal
+        Browser->>Edge: Send approval
+        Edge->>Gateway: Forward approval
+        Gateway->>Owner: Submit native agent-run task over private HTTP
+        Owner->>SQLite: Persist task and request ID
+        Owner-->>Gateway: Return stable public task ID
+        Gateway->>DB: Mark proposal approved
+    else Native CLI submission
+        User->>CLI: Submit owner-scoped agent-run task
+        CLI->>Owner: Submit directly over private Unix socket
+        Owner->>SQLite: Persist task, identity, and display metadata
+        Owner-->>CLI: Return native task ID
+    end
     Owner->>Effects: Prepare task workspace
     Effects->>Store: Materialize workspace
     alt Host execution
@@ -43,6 +51,13 @@ sequenceDiagram
     User->>Browser: Refresh task
     Browser->>Edge: Read task state
     Edge->>Gateway: Query owner-scoped task
+    Gateway->>Owner: List native CLI tasks for this identity
     Gateway->>Owner: Get native task snapshot
     Owner-->>Gateway: State and bounded result
     Gateway-->>Browser: Public task view
+    opt Listen to agent
+        Browser->>Edge: Poll bounded progress after cursor
+        Edge->>Gateway: Read owner-scoped progress
+        Gateway->>DB: Read safe progress by native task ID
+        Gateway-->>Browser: Safe progress for narration
+    end

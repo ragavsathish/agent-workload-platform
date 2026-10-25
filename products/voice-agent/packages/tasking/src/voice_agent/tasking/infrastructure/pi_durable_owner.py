@@ -47,6 +47,12 @@ class PiDurableOwner:
             return {}
         return self._call("get_many", taskIds=task_ids)
 
+    def describe(self, task_id: str) -> dict[str, Any] | None:
+        return self._call("describe", taskId=task_id)
+
+    def list_native(self, identity: str, limit: int = 50) -> list[dict[str, Any]]:
+        return self._call("list_native", identity=identity, limit=limit)
+
     def abort(self, task_id: str) -> str:
         return str(self._call("abort", taskId=task_id)["disposition"])
 
