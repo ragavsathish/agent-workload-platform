@@ -1,7 +1,7 @@
 flowchart LR
     PI[External container<br/><b>Pi Voice Service</b><br/>owns VM lifecycle and invokes tools]
     S3[(External data store<br/><b>S3Mock</b><br/>scoped artifacts)]
-    GITEA[(External data store<br/><b>Gitea</b><br/>scoped repository access)]
+    GITEA[(External data store<br/><b>Gitea</b><br/>voice administrator access)]
     REGISTRY[(External data<br/><b>VM Metrics Registry</b><br/>host PID registration files)]
     DATA[(External data<br/><b>Host Skills</b><br/>mounted read-only)]
 
@@ -13,8 +13,8 @@ flowchart LR
         SHELL["Component<br/><b>Bash Tool Adapter</b><br/>streamed output, timeout, and abort"]
         MOUNTS["Component<br/><b>Mount Policy</b><br/>skills read-only at /skills"]
         CLONE["Component<br/><b>Git Workspace</b><br/>shallow clone of main at /workspace"]
-        EGRESS["Component<br/><b>Service Egress Gate</b><br/>deny-by-default URL rewrite to two loopback services"]
-        TEA["Component<br/><b>Scoped Tea Provisioner</b><br/>configures one Gitea login inside the guest"]
+        EGRESS["Component<br/><b>Service Egress Gate</b><br/>deny-by-default URL rewrite to four loopback services"]
+        TEA["Component<br/><b>Tea Login Provisioner</b><br/>configures administrator login inside the guest"]
         METRICS["Component<br/><b>VM Registration</b><br/>publishes runner PID and resource allocation"]
 
         LIFECYCLE --> MOUNTS

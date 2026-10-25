@@ -12,6 +12,7 @@ import re
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from voice_agent.tasking.application.pi_response import presentation_prompt, response_from_text
 from voice_agent.tasking.domain.song_generation import lyric_prompt, manifest_from_pi_result
@@ -22,6 +23,22 @@ from voice_agent.tasking.infrastructure.config import Settings
 from .main import prepare_repository_image, task_progress_publisher, validate_worker
 
 _TASK_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+_REPOSITORY_SOURCE = re.compile(
+    r"workspaces/([a-z0-9][a-z0-9._-]{0,127})/sources/[0-9a-f]{64}\.bundle"
+)
+
+
+def task_repository(workspace_ref: str) -> str | None:
+    if is_scratch_workspace(workspace_ref):
+        return None
+    if workspace_ref.startswith("s3://"):
+        match = _REPOSITORY_SOURCE.fullmatch(urlparse(workspace_ref).path.lstrip("/"))
+        if not match:
+            raise ValueError("workspace source does not identify a repository")
+        return match.group(1)
+    if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,127}", workspace_ref):
+        raise ValueError("workspace does not identify a repository")
+    return workspace_ref
 
 
 def _artifacts(settings: Settings) -> ArtifactStore | None:
@@ -75,6 +92,7 @@ def prepare(payload: dict[str, Any], settings: Settings) -> dict[str, Any]:
     return {
         "workspace": str(workspace),
         "imageRef": image_ref,
+        "giteaRepository": task_repository(workspace_ref),
         "instruction": presentation_prompt(instruction),
     }
 

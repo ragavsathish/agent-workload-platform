@@ -146,8 +146,11 @@ checks that the Dockerfile pin matches the client lockfile.
 5. Network access is disabled unless enabled by trusted product defaults or a
    workspace-confined project policy. This repository declares its policy in
    `.pi/gondolin-policy.json`. WebSockets remain disabled by default.
-6. `session_shutdown` checkpoints the root disk for a saved Pi session, then
-   closes the VM and removes temporary output and metrics registration. Pi
+6. If `.pi/gondolin.json` declares `hooks.sessionStop`, `session_shutdown`
+   runs that workspace-confined hook. The repository's Clojure Git hook pushes
+   committed work to the current non-main branch, creating a `pi/session-<id>`
+   branch when needed. It then checkpoints the root disk for
+   a saved Pi session, closes the VM, and removes temporary output and metrics registration. Pi
    `--no-session` runs close without a checkpoint because they cannot resume.
 7. `/gondolin-dispose` closes the active task VM, deletes its saved checkpoint,
    and exits Pi. For an inactive session, run

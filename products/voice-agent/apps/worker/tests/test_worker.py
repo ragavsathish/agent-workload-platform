@@ -12,7 +12,7 @@ from opentelemetry.propagate import inject
 from voice_agent.tasking.infrastructure.config import Settings
 
 from voice_worker.native_task import execute
-from voice_worker.workspace_effect import prepare, finish, main as workspace_effect_main
+from voice_worker.workspace_effect import prepare, finish, main as workspace_effect_main, task_repository
 from voice_worker.main import (
     continue_task_trace,
     prepare_repository_image,
@@ -204,7 +204,17 @@ def test_workspace_effect_prepares_scratch_and_projects_public_result(tmp_path: 
     assert result["response"]["text"] == "done"
     assert prepared["instruction"].startswith("Create a file")
     assert Path(prepared["workspace"]).name == "workspace"
+    assert prepared["giteaRepository"] is None
     assert prepare(payload, configured)["workspace"] == prepared["workspace"]
+
+
+def test_task_repository_uses_the_published_workspace_identity() -> None:
+    digest = "a" * 64
+    assert task_repository("scratch") is None
+    assert task_repository("agent-workload-platform") == "agent-workload-platform"
+    assert task_repository(f"s3://agent-artifacts/workspaces/full-wasm-server/sources/{digest}.bundle") == "full-wasm-server"
+    with pytest.raises(ValueError, match="does not identify a repository"):
+        task_repository("../../other")
 
 
 def test_workspace_progress_uses_the_bounded_owner_feed(monkeypatch, capsys) -> None:

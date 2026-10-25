@@ -46,6 +46,36 @@ function memoryBytes(value: string): number {
   return Math.round(amount * multiplier);
 }
 
+/** Resolve a repository hook to its guest mount without following a symlink out. */
+export function resolveGuestHook(workspace: string, hookPath: string): string {
+  const root = fs.realpathSync(workspace);
+  const hook = fs.realpathSync(path.resolve(root, hookPath));
+  const inside = path.relative(root, hook);
+  if (!inside || inside === ".." || inside.startsWith(`..${path.sep}`)
+    || path.isAbsolute(inside) || !fs.statSync(hook).isFile()) {
+    throw new Error("Gondolin hook must be a file inside the task workspace");
+  }
+  return `/workspace/${inside.split(path.sep).join("/")}`;
+}
+
+export function resolveGuestHooks(workspace: string, value: unknown): string[] {
+  if (value === undefined) return [];
+  const paths = Array.isArray(value) ? value : [value];
+  if (paths.length > 8 || paths.some((entry) => typeof entry !== "string" || !entry)) {
+    throw new Error("Gondolin session start hooks must be at most eight non-empty paths");
+  }
+  return paths.map((entry: string) => resolveGuestHook(workspace, entry));
+}
+
+export function guestHookCommand(guestPath: string, args: readonly string[] = []): string[] {
+  if (!guestPath.startsWith("/workspace/")) throw new Error("Gondolin hook must be inside /workspace");
+  const interpreter = guestPath.endsWith(".clj") ? "/usr/local/bin/bb"
+    : guestPath.endsWith(".js") ? "/usr/local/bin/node"
+      : guestPath.endsWith(".sh") ? "/bin/sh" : undefined;
+  if (!interpreter) throw new Error("Gondolin hook must be .clj, .js, or .sh");
+  return [interpreter, guestPath, ...args];
+}
+
 export type GondolinSessionOptions = {
   imagePath: string;
   mounts?: Record<string, string | { hostPath: string; readonly?: boolean }>;
@@ -302,7 +332,7 @@ export class GondolinSession {
         netEnabled: networkEnabled,
       },
       httpHooks: network?.httpHooks,
-      env: { ...network?.env, ...this.options.environment },
+      env: { ...this.options.environment, ...network?.env },
       dns: this.options.dns,
       vfs: { mounts },
       rootfs: this.options.rootfs,

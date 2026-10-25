@@ -142,6 +142,25 @@
   no_log: true
   notify: Restart host services
 
+- name: Find repository-scoped Gitea VM tokens
+  ansible.builtin.find:
+    paths: "{{ voice_agent_root }}/deploy/secrets"
+    patterns: gitea-task-*-token
+    file_type: file
+  register: host_services_gitea_task_tokens
+  no_log: true
+
+- name: Install repository-scoped Gitea VM tokens
+  ansible.builtin.copy:
+    src: "{{ item.path }}"
+    dest: "{{ host_services_runtime_dir }}/secrets/{{ item.path | basename }}"
+    mode: "0600"
+  loop: "{{ host_services_gitea_task_tokens.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  no_log: true
+  notify: Restart host services
+
 - name: Install Pi Durable owner transport token
   ansible.builtin.copy:
     src: "{{ voice_agent_root }}/deploy/secrets/agent-gateway-token"

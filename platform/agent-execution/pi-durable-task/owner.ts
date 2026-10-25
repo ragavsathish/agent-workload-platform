@@ -81,6 +81,7 @@ async function executeProduct(input: ProductInput, signal: AbortSignal): Promise
     workspace: prepared.workspace,
     instruction: prepared.instruction,
     imageRef: typeof prepared.imageRef === "string" ? prepared.imageRef : undefined,
+    giteaRepository: typeof prepared.giteaRepository === "string" ? prepared.giteaRepository : undefined,
     onProgress: progress,
     signal,
   });

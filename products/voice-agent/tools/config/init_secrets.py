@@ -134,6 +134,11 @@ def main() -> None:
         gitea_agent_password = gitea_agent_password_path.read_text(encoding="utf-8").strip()
     else:
         gitea_agent_password = secrets.token_urlsafe(32)
+    gitea_voice_admin_password_path = secrets_dir / "gitea-voice-admin-password"
+    if gitea_voice_admin_password_path.is_file():
+        gitea_voice_admin_password = gitea_voice_admin_password_path.read_text(encoding="utf-8").strip()
+    else:
+        gitea_voice_admin_password = secrets.token_urlsafe(32)
     gitea_builder_password_path = secrets_dir / "gitea-builder-password"
     if gitea_builder_password_path.is_file():
         gitea_builder_password = gitea_builder_password_path.read_text(encoding="utf-8").strip()
@@ -160,6 +165,7 @@ def main() -> None:
         "grafana-mcp-caller-token": grafana_mcp_caller,
         "gitea-admin-password": gitea,
         "gitea-agent-password": gitea_agent_password,
+        "gitea-voice-admin-password": gitea_voice_admin_password,
         "gitea-builder-password": gitea_builder_password,
         "gitea-dispatcher-password": gitea_dispatcher_password,
     }

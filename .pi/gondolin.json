@@ -7,6 +7,17 @@
   },
   "memory": "8G",
   "cpus": 4,
+  "gitea": {
+    "repository": "agent-workload-platform",
+    "access": "write"
+  },
+  "hooks": {
+    "sessionStart": [
+      ".pi/hooks/configure-gitea.clj",
+      ".pi/hooks/start-dev-stack.clj"
+    ],
+    "sessionStop": ".pi/hooks/push-non-main.clj"
+  },
   "environment": {
     "PATROL_WEB_LOCALE": "en-US",
     "PATROL_WEB_IGNORE_HTTPS_ERRORS": "true"
@@ -14,8 +25,7 @@
   "development": {
     "docker": true,
     "vmm": "qemu",
-    "disk": "64G",
-    "sessionStartHook": ".pi/hooks/start-dev-stack.clj"
+    "disk": "64G"
   },
   "policy": ".pi/gondolin-policy.json"
 }

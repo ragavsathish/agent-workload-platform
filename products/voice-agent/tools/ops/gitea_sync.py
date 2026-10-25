@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
+import secrets
 import subprocess
 import time
 import urllib.error
@@ -160,6 +162,23 @@ def ensure_token(username: str, name: str, scopes: str) -> str:
     return value
 
 
+def ensure_repository_writer(repository: str, authorization: str) -> None:
+    """Give one restricted VM identity write access to exactly this repository."""
+
+    username = f"vm-{hashlib.sha256(repository.encode()).hexdigest()[:20]}"
+    password_path = SECRETS / f"gitea-task-{repository}-password"
+    if not password_path.is_file():
+        atomic_write(password_path, secrets.token_urlsafe(32))
+    ensure_user(username, password_path.read_text(encoding="utf-8").strip())
+    ensure_token(username, f"task-{repository}", "write:repository,write:issue,read:user")
+    request(
+        f"/api/v1/repos/{OWNER}/{repository}/collaborators/{username}",
+        authorization=authorization,
+        method="PUT",
+        data={"permission": "write"},
+    )
+
+
 def publish_repository(password: str) -> None:
     authorization = basic(OWNER, password)
     try:
@@ -214,6 +233,7 @@ def configure_repositories(password: str, base_image_pull_token: str) -> None:
     for repository in repositories:
         name = repository["name"]
         prefix = f"/api/v1/repos/{OWNER}/{name}"
+        ensure_repository_writer(name, authorization)
         request(
             prefix,
             authorization=authorization,
@@ -261,6 +281,7 @@ def main() -> None:
         (OWNER, publisher_password, True),
         ("workflow-dispatcher", secret("gitea-dispatcher-password"), False),
         ("voice-agent", secret("gitea-agent-password"), False),
+        ("voice-admin", secret("gitea-voice-admin-password"), True),
     ]
     for username, password, admin in users:
         ensure_user(username, password, admin=admin)
@@ -283,6 +304,7 @@ def main() -> None:
         "agent",
         "public-only,read:repository,read:issue,read:user,read:organization",
     )
+    ensure_token("voice-admin", "voice-admin", "all")
     base_image_pull_token = ensure_token("image-builder", "builder", "read:package,read:user")
     ensure_token("workflow-dispatcher", "dispatcher", "write:repository,read:user")
     publish_repository(publisher_password)

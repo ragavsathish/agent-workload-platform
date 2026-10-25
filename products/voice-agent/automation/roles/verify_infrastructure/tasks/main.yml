@@ -284,6 +284,7 @@
     use_netrc: false
   loop:
     - { secret: gitea-agent-token, login: voice-agent }
+    - { secret: gitea-voice-admin-token, login: voice-admin }
     - { secret: gitea-builder-token, login: image-builder }
     - { secret: gitea-dispatcher-token, login: workflow-dispatcher }
   loop_control:
@@ -296,6 +297,7 @@
   ansible.builtin.assert:
     that:
       - (item.content | from_json).login == item.item.login
+      - ((item.content | from_json).is_admin | default(false)) == (item.item.login == 'voice-admin')
     quiet: true
   loop: "{{ verify_infrastructure_gitea_identities.results }}"
   loop_control:

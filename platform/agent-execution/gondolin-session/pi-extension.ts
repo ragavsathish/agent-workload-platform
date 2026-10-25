@@ -1,4 +1,6 @@
 import fs from "node:fs";
+import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,7 +12,7 @@ import {
   type McpTransportFactory,
 } from "@earendil-works/pi-coding-agent";
 
-import { GondolinSession } from "./session.js";
+import { GondolinSession, guestHookCommand, resolveGuestHook, resolveGuestHooks } from "./session.js";
 import { taskVmCheckpointPath, TaskVmLease } from "./task-vm-state.js";
 
 // Pi exposes custom MCP transport factories but not its default factory. Resolve the implementation
@@ -29,12 +31,13 @@ type ResolvedGondolinConfig = {
     docker: boolean;
     disk: string;
     vmm: "qemu" | "krun" | undefined;
-    sessionStartHook: string | undefined;
   };
   networkEnabled: boolean;
   allowedHosts: string[];
   skillsDirectory: string | undefined;
   environment: Record<string, string>;
+  gitea?: { repository: string };
+  hooks: { sessionStart: string[]; sessionStop?: string };
 };
 type ProjectVmConfig = {
   image?: string;
@@ -42,6 +45,8 @@ type ProjectVmConfig = {
   cpus?: number;
   policy?: string;
   environment?: Record<string, string>;
+  gitea?: { repository: string; access: "write" };
+  hooks?: { sessionStart?: string | string[]; sessionStop?: string };
   development?: {
     docker?: boolean;
     disk?: string;
@@ -121,6 +126,27 @@ function resolveGondolinConfig(options: {
     ))) {
     throw new Error("gondolin.environment must map environment variable names to strings");
   }
+  if (raw.gitea !== undefined) {
+    if (!record(raw.gitea) || raw.gitea.access !== "write"
+      || typeof raw.gitea.repository !== "string"
+      || !/^[a-z0-9][a-z0-9._-]{0,127}$/u.test(raw.gitea.repository)) {
+      throw new Error("gondolin.gitea must declare a repository with write access");
+    }
+    if (raw.gitea.pushOnStop !== undefined) throw new Error("Use gondolin.hooks.sessionStop instead of gitea.pushOnStop");
+    const origin = execFileSync("git", ["-C", projectDirectory, "remote", "get-url", "origin"],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    const originRepository = origin.replace(/\.git$/u, "").split(/[/:]/u).at(-1);
+    if (raw.gitea.repository !== originRepository) {
+      throw new Error("Gondolin Gitea repository does not match the project workspace");
+    }
+  }
+  if (raw.hooks !== undefined && !record(raw.hooks)) throw new Error("gondolin.hooks must be an object");
+  if (record(raw.hooks)) {
+    if (raw.hooks.sessionStop !== undefined
+      && (typeof raw.hooks.sessionStop !== "string" || !raw.hooks.sessionStop)) {
+      throw new Error("gondolin.hooks.sessionStop must be a non-empty path");
+    }
+  }
   if (raw.development !== undefined && !record(raw.development)) {
     throw new Error("gondolin.development must be an object");
   }
@@ -151,21 +177,8 @@ function resolveGondolinConfig(options: {
     }
   }
   const config = raw as ProjectVmConfig;
-  let sessionStartHook: string | undefined;
-  if (config.development?.sessionStartHook) {
-    if (!config.development.docker) {
-      throw new Error("gondolin.development.sessionStartHook requires docker: true");
-    }
-    const requestedHookPath = path.resolve(projectDirectory, config.development.sessionStartHook);
-    if (!insideDirectory(projectDirectory, requestedHookPath)) {
-      throw new Error("gondolin.development.sessionStartHook must stay inside the task workspace");
-    }
-    const hookPath = fs.realpathSync(requestedHookPath);
-    if (!insideDirectory(projectDirectory, hookPath) || !fs.statSync(hookPath).isFile()) {
-      throw new Error("gondolin.development.sessionStartHook must be a file inside the task workspace");
-    }
-    sessionStartHook = `/workspace/${path.relative(projectDirectory, hookPath).split(path.sep).join("/")}`;
-  }
+  const startPath = config.hooks?.sessionStart ?? config.development?.sessionStartHook;
+  const stopPath = config.hooks?.sessionStop;
 
   let networkEnabled = options.fallbackPublicInternet;
   let allowedHosts = networkEnabled ? ["*"] : [];
@@ -196,12 +209,16 @@ function resolveGondolinConfig(options: {
       docker: config.development?.docker ?? false,
       disk: config.development?.disk ?? "64G",
       vmm: config.development?.vmm,
-      sessionStartHook,
     },
     networkEnabled,
     allowedHosts,
     skillsDirectory: options.skillsDirectory,
     environment: config.environment ?? {},
+    gitea: config.gitea ? { repository: config.gitea.repository } : undefined,
+    hooks: {
+      sessionStart: resolveGuestHooks(projectDirectory, startPath),
+      sessionStop: stopPath ? resolveGuestHook(projectDirectory, stopPath) : undefined,
+    },
   };
 }
 
@@ -230,19 +247,25 @@ function runtimeInstructions(
   ].join("\n");
 }
 
-function taskGiteaBridge(): { guest: URL; upstream: URL; owner: string; token?: string } | undefined {
-  const endpoint = process.env.GITEA_ENDPOINT_URL;
-  if (!endpoint) return undefined;
+function taskGiteaBridge(repository: string): {
+  guest: URL; upstream: URL; owner: string; repository: string; username: string; token: string;
+} {
+  const endpoint = process.env.GITEA_ENDPOINT_URL ?? "http://127.0.0.1:3001";
   const upstream = new URL(endpoint);
   if (upstream.protocol !== "http:" || upstream.hostname !== "127.0.0.1" || !upstream.port
     || upstream.pathname !== "/" || upstream.search || upstream.hash) {
     throw new Error("GITEA_ENDPOINT_URL must be an HTTP loopback origin with an explicit port");
   }
   const guest = new URL(`http://gitea.local:${upstream.port}`);
-  const tokenFile = process.env.GITEA_REVIEW_TOKEN_FILE;
-  const token = tokenFile ? fs.readFileSync(tokenFile, "utf8").trim() : undefined;
-  if (tokenFile && !token) throw new Error("GITEA_REVIEW_TOKEN_FILE is empty");
-  return { guest, upstream, owner: process.env.GITEA_OWNER || "source-publisher", token };
+  const directory = process.env.GITEA_TASK_TOKEN_DIR
+    ?? path.join(os.homedir(), "Library", "Application Support", "PipecatEdge", "secrets");
+  const token = fs.readFileSync(path.join(directory, `gitea-task-${repository}-token`), "utf8").trim();
+  if (!token) throw new Error("repository VM Gitea token is empty");
+  return {
+    guest, upstream, owner: process.env.GITEA_OWNER || "source-publisher", repository,
+    username: `vm-${createHash("sha256").update(repository).digest("hex").slice(0, 20)}`,
+    token,
+  };
 }
 
 export default function gondolinSessionExtension(pi: ExtensionAPI): void {
@@ -343,7 +366,7 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
       await checkpointActive();
       const configured = activeConfig();
       const devSession = configured.development.docker;
-      const gitea = devSession && configured.networkEnabled ? taskGiteaBridge() : undefined;
+      const gitea = configured.gitea ? taskGiteaBridge(configured.gitea.repository) : undefined;
       sessionFile = context.sessionManager.getSessionFile();
       checkpointPath = sessionFile ? taskVmCheckpointPath(sessionFile) : undefined;
       lease = checkpointPath ? TaskVmLease.acquire(checkpointPath) : undefined;
@@ -370,18 +393,20 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
             ? { "/skills": { hostPath: configured.skillsDirectory, readonly: true } }
             : {}),
         },
-        network: configured.networkEnabled
+        network: configured.networkEnabled || gitea
           ? {
               allowedHosts: gitea
                 ? [...new Set([...configured.allowedHosts, gitea.guest.hostname])]
                 : configured.allowedHosts,
               ...(gitea ? {
+                secrets: {
+                  GITEA_TOKEN: { value: gitea.token, hosts: [gitea.upstream.hostname] },
+                },
                 allowedInternalHosts: [gitea.upstream.hostname],
                 onRequest: (request: Request) => {
                   const requested = new URL(request.url);
-                  if (requested.hostname !== gitea.guest.hostname || requested.port !== gitea.guest.port) {
-                    return request;
-                  }
+                  if (requested.hostname !== gitea.guest.hostname) return request;
+                  if (requested.port !== gitea.guest.port) return new Response("Gitea destination denied", { status: 403 });
                   requested.protocol = gitea.upstream.protocol;
                   requested.hostname = gitea.upstream.hostname;
                   requested.port = gitea.upstream.port;
@@ -390,6 +415,7 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
               } : {}),
             }
           : false,
+        ...(gitea ? { dns: { mode: "synthetic", syntheticHostMapping: "per-host" } } : {}),
         environment: {
           ...(devSession ? {
             PATH: "/opt/flutter/bin:/opt/flutter/bin/cache/dart-sdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
@@ -398,27 +424,19 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
             PUB_CACHE: "/var/cache/pub",
             PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright",
           } : {}),
-          ...(gitea ? { GITEA_BASE_URL: gitea.guest.origin, GITEA_OWNER: gitea.owner } : {}),
+          ...(gitea ? {
+            GITEA_BASE_URL: gitea.guest.origin, GITEA_OWNER: gitea.owner,
+            GITEA_REPOSITORY: gitea.repository, GITEA_USERNAME: gitea.username,
+          } : {}),
           ...configured.environment,
         },
         memory: configured.memory,
         cpus: configured.cpus,
         rootfs: { mode: "cow", ...(devSession ? { size: configured.development.disk } : {}) },
         maxHttpResponseBodyBytes: devSession ? 512 * 1024 * 1024 : undefined,
-        startupCommands: devSession ? [
-          ["/usr/local/bin/start-dev-docker"],
-          ...(configured.development.sessionStartHook
-            ? [[
-                configured.development.sessionStartHook.endsWith(".clj")
-                  ? "/usr/local/bin/bb"
-                  : "/usr/local/bin/node",
-                configured.development.sessionStartHook,
-              ]]
-            : []),
-          ...(gitea?.token ? [[
-            "/usr/local/bin/tea", "login", "add", "--name", "local", "--url",
-            gitea.guest.origin, "--token", gitea.token, "--no-version-check",
-          ]] : []),
+        startupCommands: devSession || configured.hooks.sessionStart.length ? [
+          ...(devSession ? [["/usr/local/bin/start-dev-docker"]] : []),
+          ...configured.hooks.sessionStart.map((hook) => guestHookCommand(hook)),
         ] : undefined,
         sessionLabel: devSession ? "pi-dev-worktree" : "pi-agent-workload",
         resumeCheckpointPath: checkpointPath,
@@ -465,7 +483,25 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
     })(pi);
   }
 
-  pi.on("session_shutdown", async () => {
-    await checkpointActive();
+  pi.on("session_shutdown", async (_event, context) => {
+    try {
+      const stopHook = config?.hooks.sessionStop;
+      if (session && stopHook) {
+        const gitea = config?.gitea ? taskGiteaBridge(config.gitea.repository) : undefined;
+        const identity = createHash("sha256").update(sessionFile ?? `${projectDirectory}:${process.pid}`).digest("hex").slice(0, 16);
+        const args = gitea
+          ? [`pi/session-${identity}`, `${gitea.guest.origin}/${gitea.owner}/${gitea.repository}.git`]
+          : [];
+        const result = await session.run(guestHookCommand(stopHook, args),
+          { signal: AbortSignal.timeout(30_000) });
+        if (!result.ok) throw new Error(result.stderr.trim().slice(-1000));
+        context.ui.notify("Pi session stop hook completed", "info");
+      }
+    } catch (error) {
+      context.ui.notify(`Pi branch push failed: ${asError(error).message}`, "error");
+      throw error;
+    } finally {
+      await checkpointActive();
+    }
   });
 }

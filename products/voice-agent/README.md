@@ -382,11 +382,11 @@ mirrors only committed refs from this repository. Gitea is reachable from macOS 
 `http://127.0.0.1:3001`; Gondolin can reach only its synthetic read endpoint and S3Mock, with all
 other VM network destinations denied.
 
-The VM image includes the checksum-verified `tea` CLI. Deployment provisions a separate restricted
-`voice-agent` account and a
-`public-only,read:repository,read:issue,read:user,read:organization` token. The persistent
-VM configures that token as Tea login `local`; it cannot publish code or mutate issues and pull
-requests. The deployment-only `source-publisher` credential never enters the VM.
+The VM image includes the checksum-verified `tea` CLI. Deployment provisions a separate
+`voice-admin` Gitea administrator account with an `all`-scoped token for the persistent
+voice VM's Tea login `local`. The restricted `voice-agent` account and its read-only token
+remain available to the task worker. The deployment-only `source-publisher` credential
+does not enter the VM.
 
 Project-specific task images are declared in `.pi/gondolin.json`. Before Pi starts, the task worker
 checks the local versioned handoff folder and dispatches the repository's fixed Gitea workflow on a miss. One shared, capacity-one

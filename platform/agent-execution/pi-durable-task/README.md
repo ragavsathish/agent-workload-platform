@@ -25,6 +25,32 @@ the Flutter task board query their state, bounded progress feed, narration,
 result, and artifact without creating an HTTP proposal first. The socket's
 filesystem permissions are the CLI's local authorization boundary.
 
+For a repository task in Gondolin mode, the checked-out workspace may declare
+its Gitea access in `.pi/gondolin.json`:
+
+```json
+{
+  "gitea": {"repository":"agent-workload-platform","access":"write"},
+  "hooks": {
+    "sessionStart":".pi/hooks/configure-gitea.clj",
+    "sessionStop":".pi/hooks/push-non-main.clj"
+  }
+}
+```
+
+The declared repository must match the task workspace identity. The owner
+reads that repository's token from `GITEA_TASK_TOKEN_DIR` on the host. The
+declared Clojure start hook configures the guest's Git remote and, when
+installed, Tea login. Gondolin exposes only a placeholder to the VM and
+substitutes the token in HTTP authorization headers for the allowed Gitea
+upstream. Token values do not belong in Pi JSON or the repository.
+Scratch tasks and workspaces without a declaration receive no Gitea writer.
+The voice VM uses its separate instance-admin token. The Clojure stop hook
+pushes committed work after each settled task submission (including follow-ups).
+A checkout on `main`, `master`, or a detached HEAD moves to
+`pi/task-<task-id>`; an existing non-main branch keeps its name.
+The push is never forced. Uncommitted changes remain in the workspace.
+
 ```sh
 pnpm --dir platform/agent-execution/pi-durable-task run build
 node platform/agent-execution/pi-durable-task/dist/cli.js submit \

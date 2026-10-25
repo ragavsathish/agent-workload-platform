@@ -32,6 +32,7 @@ export class RemoteTaskBridge {
     private readonly socketDirectory: string,
     private readonly idleSeconds: number,
     private readonly disposeEnvironment: () => Promise<void>,
+    private readonly afterSettled?: () => Promise<void>,
   ) {}
 
   get path(): string { return join(this.socketDirectory, `${this.taskId}.sock`); }
@@ -127,6 +128,7 @@ export class RemoteTaskBridge {
       send(socket, { id, type: "response", command: type, success: true,
         data: { disposition: request.streamingBehavior === "steer" ? "steered" : "started" } });
       const answer = await this.session.waitForAnswer(submission);
+      await this.afterSettled?.();
       this.lastAnswer = answer.text;
       telemetry.record("remote.prompt");
       this.broadcast({ type: "agent_settled" });

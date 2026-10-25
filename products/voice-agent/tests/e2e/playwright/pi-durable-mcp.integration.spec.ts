@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as allure from 'allure-js-commons';
@@ -137,6 +137,96 @@ test('Pi Durable session selects host or Gondolin tools without changing the ans
       if (value === undefined) delete process.env[name]; else process.env[name] = value;
     }
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('Repository task VM receives only its repository writer', async ({}, testInfo) => {
+  await allure.epic('Durable work');
+  await allure.feature('Repository VM access');
+  await allure.story('Task VM can address its own Gitea repository');
+  const { createModels } = await import('@earendil-works/pi-ai/models');
+  const { fauxAssistantMessage, fauxProvider } = await import('@earendil-works/pi-ai/providers/faux');
+  const { runPiSession } = await import('../../../../../platform/agent-execution/pi-durable-task/dist/session-execution.js');
+  const directory = await mkdtemp(join(tmpdir(), 'pi-repo-vm-'));
+  const socketDirectory = join('/tmp', `pi-repo-vm-${process.pid}`);
+  const previous = Object.fromEntries(['WORKER_PI_EXECUTION_MODE', 'GITEA_TASK_TOKEN_DIR',
+    'GITEA_ENDPOINT_URL', 'GITEA_OWNER', 'PI_SESSION_DIR', 'PI_TASK_SESSION_SOCKET_DIR', 'PI_MODEL']
+    .map((key) => [key, process.env[key]]));
+  const token = 'fixture-repository-writer-token';
+  try {
+    await mkdir(join(directory, '.pi'));
+    await mkdir(join(directory, '.pi', 'hooks'));
+    await writeFile(join(directory, '.pi', 'hooks', 'configure-gitea.clj'), '(println "ready")\n');
+    await writeFile(join(directory, '.pi', 'hooks', 'push-non-main.clj'), '(println "pushed")\n');
+    await writeFile(join(directory, '.pi', 'gondolin.json'), JSON.stringify({
+      gitea: { repository: 'agent-workload-platform', access: 'write' },
+      hooks: { sessionStart: '.pi/hooks/configure-gitea.clj', sessionStop: '.pi/hooks/push-non-main.clj' },
+    }));
+    await writeFile(join(directory, 'gitea-task-agent-workload-platform-token'), token);
+    process.env.WORKER_PI_EXECUTION_MODE = 'gondolin';
+    process.env.GITEA_TASK_TOKEN_DIR = directory;
+    process.env.GITEA_ENDPOINT_URL = 'http://127.0.0.1:3001';
+    process.env.GITEA_OWNER = 'source-publisher';
+    process.env.PI_SESSION_DIR = directory;
+    process.env.PI_TASK_SESSION_SOCKET_DIR = socketDirectory;
+    const faux = fauxProvider();
+    const models = createModels();
+    models.setProvider(faux.provider);
+    faux.setResponses([fauxAssistantMessage('Repository ready.')]);
+    process.env.PI_MODEL = `${faux.provider.id}/${faux.models[0].id}`;
+    let vmOptions: any;
+    let stopCommand: string[] | undefined;
+    await allure.step('Given Pi JSON declares this repository and its writer credential exists', async () => {
+      assert.equal((await readFile(join(directory, 'gitea-task-agent-workload-platform-token'), 'utf8')), token);
+    });
+    await allure.step('And a task for another repository cannot use that declaration', async () => {
+      await assert.rejects(runPiSession({ taskId: '00000000-0000-4000-8000-000000000080',
+        workspace: directory, instruction: 'Inspect this repository.',
+        giteaRepository: 'sdft-confsft-methods-paper', imageRef: '/images/task.ext4' },
+      { models }), /does not match the task workspace/);
+    });
+    const answer = await allure.step('When the native Pi task starts its VM', async () => {
+      return runPiSession({ taskId: '00000000-0000-4000-8000-000000000081',
+        workspace: directory, instruction: 'Inspect this repository.',
+        giteaRepository: 'agent-workload-platform', imageRef: '/images/task.ext4' },
+      { models, createGondolinSession: (options) => {
+        vmOptions = options;
+        return { start: async () => {}, close: async () => {},
+          run: async (command: string[]) => {
+            stopCommand = command;
+            return { ok: true, stdout: '', stderr: '', exitCode: 0 };
+          } } as any;
+      } });
+    });
+    await allure.step('Then Pi runs the repository Clojure hooks with only its writer credential', async () => {
+      assert.equal(answer, 'Repository ready.');
+      assert.equal(vmOptions.environment.GITEA_REPOSITORY, 'agent-workload-platform');
+      assert.ok(vmOptions.network.allowedHosts.includes('gitea.local'));
+      assert.match(vmOptions.environment.GITEA_USERNAME, /^vm-[a-f0-9]{20}$/);
+      assert.equal(vmOptions.environment.GITEA_TOKEN, undefined);
+      assert.equal(vmOptions.network.secrets.GITEA_TOKEN.value, token);
+      assert.deepEqual(vmOptions.network.secrets.GITEA_TOKEN.hosts, ['127.0.0.1']);
+      assert.deepEqual(vmOptions.startupCommands.at(-1),
+        ['/usr/local/bin/bb', '/workspace/.pi/hooks/configure-gitea.clj']);
+      assert.deepEqual(stopCommand, ['/usr/local/bin/bb', '/workspace/.pi/hooks/push-non-main.clj',
+        'pi/task-00000000-0000-4000-8000-000000000081',
+        'http://gitea.local:3001/source-publisher/agent-workload-platform.git']);
+    });
+    await testInfo.attach('repository-vm-routing', { body: Buffer.from(JSON.stringify({
+      repository: vmOptions.environment.GITEA_REPOSITORY,
+      guestHost: 'gitea.local',
+      remote: 'source-publisher/agent-workload-platform',
+      stopHook: stopCommand?.[1],
+      answer,
+    })), contentType: 'application/json' });
+  } finally {
+    const { closeTaskSessions } = await import('../../../../../platform/agent-execution/pi-durable-task/dist/remote-session.js');
+    await closeTaskSessions();
+    await rm(socketDirectory, { recursive: true, force: true });
+    await rm(directory, { recursive: true, force: true });
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
   }
 });
 
