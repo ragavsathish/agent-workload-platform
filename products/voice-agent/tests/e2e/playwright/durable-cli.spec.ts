@@ -11,6 +11,7 @@ test('submits with Pi Durable CLI and follows the task in Flutter', async ({ pag
 
   const taskId = process.env.DURABLE_CLI_TEST_TASK_ID;
   const marker = process.env.DURABLE_CLI_TEST_MARKER;
+  const expectedOS = process.env.DURABLE_CLI_EXPECT_OS;
   expect(taskId, 'the operator submitted a native task').toMatch(/^[0-9a-f-]{36}$/);
   expect(marker, 'the operator supplied a unique proof marker').toMatch(/^cli-e2e-\d+$/);
   const proof: Record<string, unknown> = { taskId, marker, states: [] };
@@ -73,6 +74,10 @@ test('submits with Pi Durable CLI and follows the task in Flutter', async ({ pag
       expect(artifact.headers()['content-type']).toContain('application/zip');
       const archive = await artifact.body();
       expect(zipEntry(archive, `${marker}.txt`).toString('utf8')).toBe(`${marker}\n`);
+      if (expectedOS) {
+        expect(zipEntry(archive, 'execution-os.txt').toString('utf8')).toBe(`${expectedOS}\n`);
+        proof.executionOS = expectedOS;
+      }
       proof.artifactBytes = archive.length;
       proof.artifactSha256 = createHash('sha256').update(archive).digest('hex');
       proof.finalState = latest.result.state;

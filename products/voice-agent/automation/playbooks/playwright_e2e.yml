@@ -147,7 +147,10 @@
               - >-
                 In this scratch workspace, create {{ durable_cli_marker }}.txt containing
                 exactly {{ durable_cli_marker }} followed by a newline. Verify the file
-                contents, then report completion. Do not access the network or modify other files.
+                contents, then report completion. Do not access the network or modify files
+                other than those requested here.
+                {{ 'Also run uname -s and create execution-os.txt containing its exact output followed by a newline.'
+                   if lookup('ansible.builtin.env', 'DURABLE_CLI_EXPECT_OS') | length > 0 else '' }}
           register: durable_cli_submission
           changed_when: true
           when: playwright_project == 'durable-cli'
@@ -195,6 +198,7 @@
               PLAYWRIGHT_PROJECT: "{{ playwright_project }}"
               DURABLE_CLI_TEST_TASK_ID: "{{ durable_cli_task_id | default('') }}"
               DURABLE_CLI_TEST_MARKER: "{{ durable_cli_marker | default('') }}"
+              DURABLE_CLI_EXPECT_OS: "{{ lookup('ansible.builtin.env', 'DURABLE_CLI_EXPECT_OS') }}"
           environment:
             PLAYWRIGHT_AUDIO_FILE: "{{ playwright_audio_file }}"
             PLAYWRIGHT_OUTPUT_DIR: "{{ playwright_output_dir }}"

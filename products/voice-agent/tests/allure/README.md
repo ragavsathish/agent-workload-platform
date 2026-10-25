@@ -27,6 +27,8 @@ CLI, then Playwright verifies its owner-visible Flutter card, Listen to agent co
 completed result, and ZIP contents with measured Given/When/Then Allure steps. The run keeps
 Playwright traces and JSON proof in its output directory. `make allure-durable-cli` adds this
 opt-in journey to the combined Allure report using the same owner identity.
+Set `DURABLE_CLI_EXPECT_OS=Darwin` when checking host execution; the task also runs `uname -s`
+and the test verifies that its workspace artifact contains `Darwin`.
 The report also contains `coverage-audit.md`, a generated matrix of passed cases by journey and
 layer plus a C4 view and C2 element table. Those tables separate deployed, fixture, and
 contract evidence so a mock does not count as execution of the production worker or store.
