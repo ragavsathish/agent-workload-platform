@@ -1,6 +1,7 @@
 import * as allure from 'allure-js-commons';
 import { test, expect, expectCleanBrowser } from './fixtures';
 import { loadRecentReplay, openDiagnostics } from './diagnostics-journey';
+import { captureResponsiveLayout, responsiveViewports } from './responsive-layout';
 
 const sessionId = '11111111-1111-4111-8111-111111111111';
 
@@ -8,6 +9,25 @@ async function selectScenario(page: Parameters<typeof openDiagnostics>[0], scena
   const response = await page.request.post('/__fixture/diagnostics/scenario', { data: { scenario } });
   expect(response.status()).toBe(200);
 }
+
+test('replay dashboard stays usable across mobile, tablet, and desktop', async ({ page, browserEvidence }, testInfo) => {
+  await selectScenario(page, 'ready');
+  for (const viewport of responsiveViewports) {
+    await allure.step(`Given the replay dashboard opens at ${viewport.name} resolution`, async () => {
+      await page.setViewportSize(viewport);
+      await openDiagnostics(page);
+      await loadRecentReplay(page, sessionId);
+      await captureResponsiveLayout(page, testInfo, 'diagnostics-replay', viewport);
+      await page.getByRole('heading', { name: 'Turn events' }).scrollIntoViewIfNeeded();
+      await testInfo.attach(`diagnostics-replay-${viewport.name}-charts`, {
+        body: await page.screenshot({ animations: 'disabled' }), contentType: 'image/png',
+      });
+    });
+  }
+  await allure.step('Then the browser reports no unexpected errors', async () => {
+    expectCleanBrowser(browserEvidence);
+  });
+});
 
 test('replays a recorded conversation through the C2 Voice Edge mock', async ({ page, browserEvidence }, testInfo) => {
   await selectScenario(page, 'ready');

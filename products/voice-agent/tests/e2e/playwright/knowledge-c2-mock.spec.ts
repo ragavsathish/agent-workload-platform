@@ -1,5 +1,6 @@
 import * as allure from 'allure-js-commons';
 import { test, expect, expectCleanBrowser } from './fixtures';
+import { captureResponsiveLayout, responsiveViewports } from './responsive-layout';
 
 const entryId = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:entry:1';
 const note = `[data-entry-id="${entryId}"]`;
@@ -50,5 +51,29 @@ test('reviewed journal entry stays linked across the C2 mock boundaries', async 
 
   await allure.step('And the browser reports no unexpected errors', async () => {
     await expectCleanBrowser(browserEvidence);
+  });
+});
+
+test('journal and graph stay usable across mobile, tablet, and desktop', async ({ page, browserEvidence }, testInfo) => {
+  for (const viewport of responsiveViewports) {
+    await allure.step(`Given the journal opens at ${viewport.name} resolution`, async () => {
+      await page.setViewportSize(viewport);
+      await page.goto('/knowledge/', { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('.local-state')).toHaveText('Live Oxigraph');
+      await expect(page.getByRole('region', { name: 'Journal controls' })).toBeVisible();
+      await page.locator(`[role="listitem"]${note}`).getByRole('button').click();
+      await expect(page.locator(`aside${note}`)).toBeVisible();
+      await captureResponsiveLayout(page, testInfo, 'journal', viewport);
+    });
+    await allure.step(`When I switch to the knowledge map at ${viewport.name} resolution`, async () => {
+      await page.getByRole('group', { name: 'Knowledge view' })
+        .getByRole('button', { name: 'Map' }).click();
+      await expect(page.locator('.knowledge-graph.map-panel')).toBeVisible();
+      await expect(page.locator('.map-canvas canvas').first()).toBeVisible();
+      await captureResponsiveLayout(page, testInfo, 'knowledge-map', viewport);
+    });
+  }
+  await allure.step('Then the browser reports no unexpected errors', async () => {
+    expectCleanBrowser(browserEvidence);
   });
 });

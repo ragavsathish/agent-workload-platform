@@ -26,6 +26,7 @@ WASM_ACTIONS := setup build check install clean
 .PHONY: db-init gitea-sync broker pi-durable-owner pull-model
 .PHONY: test-pi-durable-mcp
 .PHONY: test-tailnet-owner playwright-voice-telemetry
+.PHONY: playwright-responsive-c2-mock
 
 COMPOSE = docker compose --env-file deploy/.env -f deploy/compose.yml
 MLFLOW_COMPOSE = $(COMPOSE) -f deploy/compose.mlflow.yml
@@ -53,6 +54,8 @@ help:
 		'                      Verify MLflow model versioning through local S3Mock' \
 		'  make playwright-readme-demo' \
 		'                      Rebuild the narrated README product tour locally' \
+		'  make playwright-responsive-c2-mock' \
+		'                      Check mock-backed UI at mobile, tablet, and desktop sizes' \
 		'  make allure-knowledge-review' \
 		'                      Run knowledge and MCP tests with a local Allure report' \
 		'  make verify         Verify deployed infrastructure' \
@@ -267,7 +270,10 @@ playwright-diagnostics-c2-mock:
 	tests/e2e/run-c2-mock diagnostics-c2-mock
 
 playwright-durable-c2-mock:
+	npm --prefix apps/client run build
 	tests/e2e/run-c2-mock durable-c2-mock
+
+playwright-responsive-c2-mock: playwright-knowledge-c2-mock playwright-diagnostics-c2-mock playwright-durable-c2-mock
 
 test-voice-edge-c2-mock:
 	PYTHONPATH=apps/edge:packages/telemetry/src uv run --project apps/edge python -m unittest apps.edge.test_c2_broker_mock

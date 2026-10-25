@@ -75,6 +75,14 @@ status and endpoint rather than hidden from the report. The older
 `knowledge-base` suite uses `page.route()` fixtures and is labeled C3 browser
 integration; `knowledge-c2-mock` crosses a separate Babashka service boundary.
 
+Run `make playwright-responsive-c2-mock` to inspect the mock-backed journal and map,
+replay dashboard, and Flutter durable task board at 390 × 844, 820 × 1180, and
+1440 × 900. The cases attach viewport screenshots, width measurements, and
+Playwright traces to Allure. The journal and map also attach full-page captures;
+the diagnostics case captures the lower charts after scrolling. The width check
+uses the scrollable document width, since Flutter's hidden typography measurement
+can increase `body.scrollWidth` without creating visible horizontal scrolling.
+
 | Layer | What it proves in this run | Examples |
 | --- | --- | --- |
 | User journey (black box) | Public app behavior and visible or durable outcomes | Playwright voice and diagnostics journeys; Patrol voice journey |
@@ -96,8 +104,8 @@ The `intent-taxonomy.mjs` rules group current cases under their intended use and
 the observable test title and suite. They describe test intent, not an independent product
 requirement or full coverage claim. A new title without a known mapping keeps its suite and title
 and receives the `intent-needs-review` tag. A skipped journey remains skipped, even when lower
-layers pass. The deployed voice journey checks replay and metric outcomes, but the current report
-has no standalone telemetry-ingestion test; the observability layer does not imply one.
+layers pass. The deployed voice telemetry journey checks the same turn's Tempo trace
+and completed-turn metric increment; it does not verify every telemetry ingestion path.
 
 ## C4 traceability
 

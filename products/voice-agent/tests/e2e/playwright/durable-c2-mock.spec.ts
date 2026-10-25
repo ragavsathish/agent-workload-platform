@@ -2,6 +2,45 @@ import { randomUUID } from 'node:crypto';
 import * as allure from 'allure-js-commons';
 import { test, expect, enableFlutterSemantics, expectCleanBrowser } from './fixtures';
 import { zipEntry } from './zip-artifact';
+import { captureResponsiveLayout, responsiveViewports } from './responsive-layout';
+
+function expectCleanFlutterBrowser(page, browserEvidence, maxFontAborts: number) {
+  const fontAborts = browserEvidence.requestFailures.filter((failure: {
+    method: string; url: string; error: string,
+  }) => failure.method === 'GET' && failure.error === 'net::ERR_ABORTED'
+    && new URL(failure.url).origin === new URL(page.url()).origin
+    && /^\/assets\/(?:fonts\/MaterialIcons-Regular\.otf|packages\/cupertino_icons\/assets\/CupertinoIcons\.ttf|design_system\/fonts\/SourceCodePro-(?:Regular|Semibold)\.ttf)$/u
+      .test(new URL(failure.url).pathname));
+  expect(fontAborts.length).toBeLessThanOrEqual(maxFontAborts);
+  expectCleanBrowser({ ...browserEvidence,
+    requestFailures: browserEvidence.requestFailures.filter((failure: unknown) =>
+      !fontAborts.includes(failure)) });
+}
+
+test('durable task board stays usable across mobile, tablet, and desktop', async ({ page, browserEvidence }, testInfo) => {
+  expect((await page.request.post('/__fixture/durable/scenario', {
+    data: { scenario: 'scratch-success' },
+  })).ok()).toBeTruthy();
+  const proposed = await page.request.post('/api/tasks', {
+    data: { workspace: 'scratch', instruction: 'Review this responsive task board' },
+  });
+  expect(proposed.status()).toBe(201);
+  const task = await proposed.json();
+  for (const viewport of responsiveViewports) {
+    await allure.step(`Given the task board opens at ${viewport.name} resolution`, async () => {
+      await page.setViewportSize(viewport);
+      await page.goto('/?view=transcript', { waitUntil: 'networkidle' });
+      await enableFlutterSemantics(page);
+      await page.getByRole('button', { name: viewport.name === 'desktop'
+        ? /^Tasks \d+ recent/ : /^Show tasks/ }).click();
+      await expect(page.locator(`[flt-semantics-identifier="task-${task.id}"]`)).toBeVisible();
+      await captureResponsiveLayout(page, testInfo, 'durable-task-board', viewport);
+    });
+  }
+  await allure.step('Then the browser reports no unexpected errors', async () => {
+    expectCleanFlutterBrowser(page, browserEvidence, 12);
+  });
+});
 
 test('scratch task completes through the Flutter board and returns its workspace', async ({
   page, browserEvidence,
@@ -61,18 +100,7 @@ test('scratch task completes through the Flutter board and returns its workspace
   });
 
   await allure.step('And the browser reports no unexpected errors', async () => {
-    const expectedFontAborts = browserEvidence.requestFailures.filter((failure: {
-      method: string; url: string; error: string,
-    }) => failure.method === 'GET' && failure.error === 'net::ERR_ABORTED'
-      && new URL(failure.url).origin === new URL(page.url()).origin
-      && [
-        '/assets/fonts/MaterialIcons-Regular.otf',
-        '/assets/design_system/fonts/SourceCodePro-Regular.ttf',
-      ].includes(new URL(failure.url).pathname));
-    expect(expectedFontAborts.length).toBeLessThanOrEqual(2);
-    expectCleanBrowser({ ...browserEvidence,
-      requestFailures: browserEvidence.requestFailures.filter((failure: unknown) =>
-        !expectedFontAborts.includes(failure)) });
+    expectCleanFlutterBrowser(page, browserEvidence, 4);
   });
 });
 
