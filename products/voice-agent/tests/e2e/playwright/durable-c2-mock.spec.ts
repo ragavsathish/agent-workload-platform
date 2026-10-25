@@ -78,6 +78,7 @@ test('scratch task completes through the Flutter board and returns its workspace
 
 for (const [scenario, expected] of [
   ['worker-failed', 200], ['repository-unavailable', 503], ['approval-conflict', 409],
+  ['owner-unavailable', 503],
 ] as const) {
   test(`${scenario} is visible at the task contract`, async ({ page }, testInfo) => {
     await allure.step(`Given the ${scenario} C2 scenario is selected`, async () => {
@@ -111,6 +112,34 @@ for (const [scenario, expected] of [
     });
   });
 }
+
+test('completed work with a missing artifact returns an explicit lookup failure', async ({ page }, testInfo) => {
+  const marker = `missing-${randomUUID().slice(0, 8)}`;
+  const filename = `${marker}.txt`;
+  await allure.step('Given the C2 owner completes work but the artifact store loses the ZIP', async () => {
+    expect((await page.request.post('/__fixture/durable/scenario', {
+      data: { scenario: 'artifact-missing' },
+    })).status()).toBe(200);
+  });
+  const task = await allure.step('When I propose and approve a scratch task', async () => {
+    const proposed = await page.request.post('/api/tasks', { data: { workspace: 'scratch',
+      instruction: `In this scratch workspace, create ${filename} containing exactly ${marker} followed by a newline.` } });
+    expect(proposed.status()).toBe(201);
+    const task = await proposed.json();
+    expect((await page.request.post(`/api/tasks/${task.id}/approve`)).status()).toBe(200);
+    return task;
+  });
+  await allure.step('Then the public result remains completed and artifact lookup returns 404', async () => {
+    const latest = (await (await page.request.get('/api/tasks')).json())
+      .find((item: { id: string }) => item.id === task.id);
+    expect(latest.result.state).toBe('completed');
+    expect((await page.request.get(`/api/tasks/${task.id}/artifacts/workspace`)).status()).toBe(404);
+    await testInfo.attach('c2-missing-artifact-evidence', {
+      body: Buffer.from(`${JSON.stringify({ task: latest, artifactStatus: 404 }, null, 2)}\n`),
+      contentType: 'application/json',
+    });
+  });
+});
 
 test('cancelled or invalid work never exposes a workspace artifact', async ({ page }, testInfo) => {
   await allure.step('Given a fresh durable service rejects an empty proposal', async () => {

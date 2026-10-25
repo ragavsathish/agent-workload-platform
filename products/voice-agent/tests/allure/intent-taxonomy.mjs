@@ -9,6 +9,11 @@ function inferBehavior(suite, title) {
   if (suite === 'Playwright · diagnostics-c2-mock') return behavior('Voice conversation', 'Input diagnostics', 'Inspect conversation diagnostics');
   if (suite === 'Playwright · durable-c2-mock') return behavior('Durable work', 'Task execution', 'Approve scratch work and inspect C2 failures');
   if (suite === 'Pi Durable owner C2 mock') return behavior('Durable work', 'Task execution', 'Create, query, abort, and retry tasks through the owner client');
+  if (suite === 'Playwright · pi-durable-mcp-integration') {
+    if (/follow-up/u.test(name)) return behavior('Durable work', 'Task execution', 'Continue a task conversation from voice');
+    if (/gondolin|host/u.test(name)) return behavior('Durable work', 'Task execution', 'Run task tools in the selected environment');
+    return behavior('Durable work', 'Task execution', 'Call an allowlisted MCP product tool');
+  }
   if (suite === 'Playwright · knowledge-base') {
     if (/saves a note correction/u.test(name)) return behavior('Knowledge and review', 'Review decisions', 'Save a correction and review assertions');
     if (/browses|filters|cytoscape/u.test(name)) return behavior('Knowledge and review', 'Journal exploration', 'Explore and filter journal knowledge');
@@ -23,6 +28,7 @@ function inferBehavior(suite, title) {
   if (suite === 'Playwright · task-diagram') return behavior('Durable work', 'Task diagrams', 'Open a persisted task diagram');
   if (suite === 'Playwright · durable') return behavior('Durable work', 'Task execution', 'Approve work and retrieve its artifact');
   if (suite === 'Playwright · grafana') return behavior('Operations', 'Architecture dashboard', 'Inspect the live C4 health map');
+  if (suite === 'Playwright · tailnet-owner-integration') return behavior('Gateway access', 'Capabilities', 'Reject a different tailnet user at protected routes');
   if (suite === 'Patrol web') {
     if (/workspace/u.test(name)) return behavior('Durable work', 'Workspace', 'Continue durable work in the browser');
     if (/live edge/u.test(name)) return behavior('Voice conversation', 'Live edge', 'Complete a typed turn through the edge');
@@ -121,10 +127,12 @@ const layers = {
 
 function layerFor(suite, title) {
   if (suite === 'Playwright · knowledge-c2-mock') return 'integration';
+  if (suite === 'Playwright · tailnet-owner-integration') return 'deployedIntegration';
   if (suite === 'Playwright · knowledge-live') return 'deployedIntegration';
   if (suite === 'Playwright · diagnostics-c2-mock') return 'integration';
   if (suite === 'Playwright · durable-c2-mock') return 'integration';
   if (suite === 'Pi Durable owner C2 mock') return 'integration';
+  if (suite === 'Playwright · pi-durable-mcp-integration') return 'integration';
   if (suite === 'Playwright · knowledge-base') return 'integration';
   if (suite === 'Playwright · task-diagram') return 'integration';
   if (suite === 'Patrol web' && /workspace/u.test(title.toLowerCase())) return 'integration';

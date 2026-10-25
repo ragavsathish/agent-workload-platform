@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { coverageAudit, coverageAuditMarkdown } from './coverage-audit.mjs';
+import { coverageAudit, coverageAuditMarkdown, validateC4Traceability } from './coverage-audit.mjs';
 import { inferC4Scope } from './c4-traceability.mjs';
 
 const voiceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -38,6 +38,7 @@ const architecture = join(voiceRoot, 'docs/architecture');
 const c2Source = await readFile(join(architecture, 'c2-container.mmd'), 'utf8');
 const diagramNames = (await readdir(architecture))
   .filter((name) => /^(?:c[123]|d[123]|deployment-security).*\.mmd$/u.test(name)).sort();
+validateC4Traceability(results, c2Source, diagramNames);
 const audit = coverageAudit(results, c2Source, diagramNames);
 const runRoot = dirname(manifest.reportPath);
 const json = `${JSON.stringify(audit, null, 2)}\n`;

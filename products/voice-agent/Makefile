@@ -25,6 +25,7 @@ WASM_ACTIONS := setup build check install clean
 .PHONY: digital-twin-mlflow-up digital-twin-mlflow-verify
 .PHONY: db-init gitea-sync broker pi-durable-owner pull-model
 .PHONY: test-pi-durable-mcp
+.PHONY: test-tailnet-owner
 
 COMPOSE = docker compose --env-file deploy/.env -f deploy/compose.yml
 MLFLOW_COMPOSE = $(COMPOSE) -f deploy/compose.mlflow.yml
@@ -437,6 +438,9 @@ pi-durable-owner:
 test-pi-durable-mcp:
 	pnpm --dir ../../platform/agent-execution/pi-durable-task build
 	cd tests/e2e && npx playwright test --config playwright.config.ts --project pi-durable-mcp-integration
+
+test-tailnet-owner:
+	cd tests/e2e && npx playwright test --config playwright.config.ts --project tailnet-owner-integration
 
 pull-model:
 	ollama pull qwen3.5:9b-mlx

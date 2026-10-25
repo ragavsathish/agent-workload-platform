@@ -10,6 +10,8 @@ const views = {
   broker: 'c3-inference-broker.mmd',
   piVoice: 'c3-pi-voice-service.mmd',
   gateway: 'c3-agent-gateway.mmd',
+  owner: 'c3-pi-task-worker.mmd',
+  taskTools: 'c3-task-tool-runtime.mmd',
   voiceTurn: 'd1-interactive-voice-turn.mmd',
   delegatedTask: 'd2-delegated-task.mmd',
   deployment: 'deployment-security.mmd',
@@ -32,10 +34,17 @@ export function inferC4Scope(suite, title) {
   if (suite === 'Playwright · diagnostics-c2-mock') return scope('C2 fixture-backed integration',
     ['Input Diagnostics', 'Voice Edge'], ['containers', 'diagnostics']);
   if (suite === 'Playwright · durable-c2-mock') return scope('C2 fixture-backed integration',
-    ['Browser Voice Client', 'Voice Edge', 'Agent Gateway', 'Task Database and Queue',
-      'Pi Task Worker', 'Workspace and Result Store'], ['containers', 'browser', 'delegatedTask']);
+    ['Browser Voice Client', 'Voice Edge', 'Agent Gateway', 'Proposal and Song Database',
+      'Pi Durable Owner', 'Workspace and Result Store'], ['containers', 'browser', 'owner', 'delegatedTask']);
   if (suite === 'Pi Durable owner C2 mock') return scope('C2 fixture-backed integration',
-    ['Pi Task Worker', 'Pi Task Session'], ['containers', 'delegatedTask']);
+    ['Agent Gateway', 'Pi Durable Owner'], ['containers', 'owner', 'delegatedTask']);
+  if (suite === 'Playwright · pi-durable-mcp-integration') {
+    if (/gondolin task vm/u.test(name)) return scope('C2 fixture-backed VM integration',
+      ['Pi Durable Owner', 'Task Tool Sandbox'], ['containers', 'owner', 'taskTools', 'delegatedTask']);
+    if (/follow-up/u.test(name)) return scope('C2 local integration',
+      ['Pi Voice Service', 'Pi Durable Owner'], ['containers', 'owner', 'taskTools', 'delegatedTask']);
+    return scope('C3 local integration', ['Pi Durable Owner'], ['owner', 'taskTools', 'delegatedTask']);
+  }
   if (suite === 'Playwright · knowledge-base') {
     return scope('C3 browser integration with route fixtures',
       ['Journal & Knowledge'], ['knowledge']);
@@ -46,10 +55,13 @@ export function inferC4Scope(suite, title) {
     ['Browser Voice Client'], ['browser']);
   if (suite === 'Playwright · durable') return scope('C1/C2 system journey',
     ['Tailnet Ingress', 'Path Router', 'Browser Voice Client', 'Voice Edge', 'Agent Gateway',
-      'Task Database and Queue', 'Pi Task Worker', 'Pi Task Session', 'Task Tool Sandbox',
-      'Workspace and Result Store'], ['context', 'containers', 'delegatedTask']);
+      'Proposal and Song Database', 'Pi Durable Owner', 'Pi Durable Owner Store', 'Task Tool Sandbox',
+      'Workspace and Result Store'], ['context', 'containers', 'owner', 'taskTools', 'delegatedTask']);
   if (suite === 'Playwright · grafana') return scope('C2 authenticated dashboard journey',
     ['Tailnet Ingress', 'Path Router', 'Metrics and Traces'], ['containers', 'deployment']);
+  if (suite === 'Playwright · tailnet-owner-integration') return scope('C2 deployed ingress integration',
+    ['Path Router', 'Voice Edge', 'Knowledge Graph Store'],
+    ['containers', 'edge', 'deployment']);
   if (suite === 'Playwright · voice') {
     if (/deployed voice session/u.test(name)) return scope('C1/C2 system journey',
       ['Browser Voice Client', 'Voice Edge', 'Inference Broker', 'Pi Voice Service', 'Metrics and Traces'],

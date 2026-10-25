@@ -123,11 +123,19 @@ and voice follow-up through the task socket. It attaches bounded JSON or text ev
 The faux model replaces the external model provider; the real VM case runs when the
 local Gondolin image is available. These cases exercise the owner-side integration
 and tool boundary, not a deployed Gateway task or Pi Durable's internal behavior.
+The combined report now includes this suite and its native Playwright traces. It also
+includes the deployed `tailnet-owner-integration` case, which sends another identity
+through Traefik's tailnet entry point and requires 403 for metrics and Oxigraph while
+the configured owner still receives 200 for a bounded graph query. The test runs
+inside Traefik's network namespace, so it checks Traefik and forward-auth, not
+Tailscale Serve's identity stamping.
 The combined report also runs the Python owner client against the Babashka C2 owner
 service. Allure Pytest records native Given/When/Then steps for idempotent creation,
 single and batch result queries, abort, retry, and owner failure. JSON receipts stay
 attached to the steps; this fixture-backed integration does not count as a deployed
 Pi Durable owner run.
+Report generation fails if a result names a C2 container or C4 view missing from the
+current Mermaid sources. This catches stale labels after architecture migrations.
 
 The voice suite uses a recorded microphone fixture. Its Grafana MCP App case is skipped on local
 ingress; run the separate tailnet ingress journey for that case. The report shows one run of these

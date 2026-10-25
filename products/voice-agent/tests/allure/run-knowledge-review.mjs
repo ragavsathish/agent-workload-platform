@@ -7,7 +7,7 @@ import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { inferIntent } from './intent-taxonomy.mjs';
 import { inferC4Scope } from './c4-traceability.mjs';
-import { coverageAudit, coverageAuditMarkdown } from './coverage-audit.mjs';
+import { coverageAudit, coverageAuditMarkdown, validateC4Traceability } from './coverage-audit.mjs';
 
 const voiceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const repoRoot = resolve(voiceRoot, '../..');
@@ -136,8 +136,9 @@ export async function attachPlaywrightEvidence(data, items, outputDir, allureRes
         const source = `${item.uuid}-${attemptIndex}-${index}${attachment.path ? extname(attachment.path) : extensionFor(attachment.contentType)}`;
         const target = join(allureResultsDir, source);
         if (attachment.path) {
-          if (!attachment.path.startsWith('/output/')) throw new Error(`Unexpected Playwright evidence path for ${fullName}`);
-          const origin = resolve(outputDir, attachment.path.slice('/output/'.length));
+          const origin = attachment.path.startsWith('/output/')
+            ? resolve(outputDir, attachment.path.slice('/output/'.length))
+            : resolve(attachment.path);
           if (!origin.startsWith(`${resolve(outputDir)}${sep}`)) throw new Error(`Playwright evidence escapes its output directory for ${fullName}`);
           await copyFile(origin, target);
         } else if (attachment.body) {
@@ -396,6 +397,37 @@ async function main() {
     }
   }
 
+  const piIntegrationOutput = join(runRoot, 'playwright-pi-durable-mcp-integration');
+  const piIntegration = await runCommand('pi-durable-mcp-integration', 'make',
+    ['test-pi-durable-mcp'], { env: { VOICE_E2E_OUTPUT: piIntegrationOutput } });
+  try {
+    const data = JSON.parse(await readFile(join(piIntegrationOutput, 'results.json'), 'utf8'));
+    const attachment = await attachLog('pi-durable-mcp-integration', piIntegration.logPath);
+    const items = playwrightResults(data, attachment);
+    await attachPlaywrightEvidence(data, items, piIntegrationOutput, resultsRoot);
+    await attachNativePlaywrightSteps(join(piIntegrationOutput, 'native-allure-results'), items);
+    await recordParsed('pi-durable-mcp-integration', piIntegration, items, 4);
+  } catch (error) {
+    const attachment = await attachLog('pi-durable-mcp-integration', piIntegration.logPath);
+    await emit([gate('pi-durable-mcp-integration', { ...piIntegration, code: 1 }, attachment,
+      `Pi Durable integration results unavailable: ${error.message}`)]);
+  }
+  const ingressOutput = join(runRoot, 'playwright-tailnet-owner-integration');
+  const ingress = await runCommand('tailnet-owner-integration', 'make', ['test-tailnet-owner'],
+    { env: { VOICE_E2E_OUTPUT: ingressOutput } });
+  try {
+    const data = JSON.parse(await readFile(join(ingressOutput, 'results.json'), 'utf8'));
+    const attachment = await attachLog('tailnet-owner-integration', ingress.logPath);
+    const items = playwrightResults(data, attachment);
+    await attachPlaywrightEvidence(data, items, ingressOutput, resultsRoot);
+    await attachNativePlaywrightSteps(join(ingressOutput, 'native-allure-results'), items);
+    await recordParsed('tailnet-owner-integration', ingress, items);
+  } catch (error) {
+    const attachment = await attachLog('tailnet-owner-integration', ingress.logPath);
+    await emit([gate('tailnet-owner-integration', { ...ingress, code: 1 }, attachment,
+      `Tailnet owner integration results unavailable: ${error.message}`)]);
+  }
+
   await recordProbe({
     id: 'voice-edge-broker-mock', suite: 'Voice Edge broker mock',
     title: 'normalizes typed Pi responses and failures through the C2 broker mock',
@@ -530,10 +562,10 @@ async function main() {
     title: 'compiles the source-backed C4 operational dashboard',
     command: 'bb', args: ['deploy/observability/c4-dashboard_test.clj'],
     validate: (output) => {
-      if (!/Ran 4 tests containing 13 assertions\.[\s\S]*0 failures, 0 errors\./u.test(output)) {
+      if (!/Ran 4 tests containing 16 assertions\.[\s\S]*0 failures, 0 errors\./u.test(output)) {
         throw new Error('C4 dashboard contract did not report its expected assertions');
       }
-      return { diagramPanels: 16, evidencePanel: 1, assertions: 13 };
+      return { diagramPanels: 16, evidencePanel: 1, assertions: 16 };
     },
   });
 
@@ -552,6 +584,7 @@ async function main() {
   const c2Source = await readFile(join(voiceRoot, 'docs/architecture/c2-container.mmd'), 'utf8');
   const diagramNames = (await readdir(join(voiceRoot, 'docs/architecture')))
     .filter((name) => /^(?:c[123]|d[123]|deployment-security).*\.mmd$/u.test(name)).sort();
+  validateC4Traceability(emitted, c2Source, diagramNames);
   const audit = coverageAudit(emitted, c2Source, diagramNames);
   const auditJson = `${JSON.stringify(audit, null, 2)}\n`;
   await writeFile(join(runRoot, 'coverage-audit.json'), auditJson);

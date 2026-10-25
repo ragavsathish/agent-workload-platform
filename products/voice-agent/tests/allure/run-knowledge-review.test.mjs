@@ -6,7 +6,7 @@ import test from 'node:test';
 
 import { inferIntent } from './intent-taxonomy.mjs';
 import { inferC4Scope } from './c4-traceability.mjs';
-import { c2Elements, coverageAudit, coverageAuditMarkdown, evidenceMode } from './coverage-audit.mjs';
+import { c2Elements, coverageAudit, coverageAuditMarkdown, evidenceMode, validateC4Traceability } from './coverage-audit.mjs';
 import { attachNativePlaywrightSteps, attachPlaywrightEvidence, nativePytestResults, readNativePytestResults, nodeTapResults, patrolResults, playwrightResults, pytestJunitResults, rustTestResults, vitestResults } from './run-knowledge-review.mjs';
 
 test('groups known behaviors and marks new test intent for review', () => {
@@ -82,9 +82,10 @@ test('maps tests to existing C4 boundaries without claiming fixture-backed infra
   assert.deepEqual(inferC4Scope('Playwright · durable', 'approves real durable work and retrieves its workspace artifact'), {
     level: 'C1/C2 system journey',
     containers: ['Tailnet Ingress', 'Path Router', 'Browser Voice Client', 'Voice Edge', 'Agent Gateway',
-      'Task Database and Queue', 'Pi Task Worker', 'Pi Task Session', 'Task Tool Sandbox',
+      'Proposal and Song Database', 'Pi Durable Owner', 'Pi Durable Owner Store', 'Task Tool Sandbox',
       'Workspace and Result Store'],
-    views: ['c1-system-context.mmd', 'c2-container.mmd', 'd2-delegated-task.mmd'],
+    views: ['c1-system-context.mmd', 'c2-container.mmd', 'c3-pi-task-worker.mmd',
+      'c3-task-tool-runtime.mmd', 'd2-delegated-task.mmd'],
   });
   assert.deepEqual(inferC4Scope('Playwright · grafana', 'renders every operational C4 panel with accessible color semantics'), {
     level: 'C2 authenticated dashboard journey',
@@ -95,6 +96,20 @@ test('maps tests to existing C4 boundaries without claiming fixture-backed infra
     level: 'Code-level unit', containers: [], views: [], code: 'Personal Knowledge Core',
   });
   assert.equal(inferC4Scope('New suite', 'new behavior').needsReview, true);
+});
+
+test('fails report generation when a test points to a retired C2 name or missing view', () => {
+  const model = '    OWNER["Container<br/><b>Pi Durable Owner</b>"]\n    class OWNER container;\n';
+  const item = { fullName: 'owner-test', labels: [
+    { name: 'c4Container', value: 'Pi Durable Owner' },
+    { name: 'c4View', value: 'c2-container.mmd' },
+    { name: 'c4Level', value: 'C2 fixture-backed integration' },
+  ] };
+  assert.doesNotThrow(() => validateC4Traceability([item], model, ['c2-container.mmd']));
+  assert.throws(() => validateC4Traceability([{ ...item, labels: [
+    { name: 'c4Container', value: 'Pi Task Worker' },
+    { name: 'c4View', value: 'missing.mmd' },
+  ] }], model, ['c2-container.mmd']), /unknown C2 container Pi Task Worker[\s\S]*unknown C4 view missing.mmd/u);
 });
 
 test('audits C2 gaps and counts only passed evidence for each journey layer', () => {
@@ -232,20 +247,25 @@ test('attaches a Playwright trace and inline evidence to its Allure case', async
     await mkdir(join(output, 'test-results', 'case'), { recursive: true });
     await mkdir(results);
     await writeFile(join(output, 'test-results', 'case', 'trace.zip'), 'trace bytes');
+    await writeFile(join(output, 'test-results', 'case', 'local-trace.zip'), 'local trace bytes');
     const data = { suites: [{ specs: [{ file: 'voice.spec.ts', title: 'voice journey', tests: [{
       projectName: 'voice', results: [{ status: 'passed', startTime: '2026-10-25T00:00:00Z',
         duration: 10, attachments: [
           { name: 'trace', contentType: 'application/zip', path: '/output/test-results/case/trace.zip' },
+          { name: 'trace', contentType: 'application/zip', path: join(output, 'test-results', 'case', 'local-trace.zip') },
           { name: 'session evidence', contentType: 'application/json', body: Buffer.from('{"ok":true}').toString('base64') },
         ] }],
     }] }] }] };
     const items = playwrightResults(data);
     await attachPlaywrightEvidence(data, items, output, results);
     assert.deepEqual(items[0].attachments.map(({ name, type }) => [name, type]), [
-      ['Playwright trace', 'application/vnd.allure.playwright-trace'], ['session evidence', 'application/json'],
+      ['Playwright trace', 'application/vnd.allure.playwright-trace'],
+      ['Playwright trace', 'application/vnd.allure.playwright-trace'],
+      ['session evidence', 'application/json'],
     ]);
     assert.equal(await readFile(join(results, items[0].attachments[0].source), 'utf8'), 'trace bytes');
-    assert.equal(await readFile(join(results, items[0].attachments[1].source), 'utf8'), '{"ok":true}');
+    assert.equal(await readFile(join(results, items[0].attachments[1].source), 'utf8'), 'local trace bytes');
+    assert.equal(await readFile(join(results, items[0].attachments[2].source), 'utf8'), '{"ok":true}');
   } finally {
     await rm(root, { recursive: true, force: true });
   }

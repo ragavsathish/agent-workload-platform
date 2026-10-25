@@ -22,6 +22,11 @@ const contrastRatio = (first, second) => {
   return (values[0] + 0.05) / (values[1] + 0.05);
 };
 
+const isNeutralGray = (color) => {
+  const channels = color.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/u)?.slice(1).map(Number);
+  return Boolean(channels && Math.max(...channels) - Math.min(...channels) <= 8);
+};
+
 test('renders every operational C4 panel with accessible color semantics', async ({
   page,
   browserEvidence,
@@ -117,10 +122,7 @@ test('renders every operational C4 panel with accessible color semantics', async
     ));
     detailBackgrounds.push(...fills.map((fill) => ({ panel: panel.title, fill })));
   }
-  const nonGrayDetailBackgrounds = detailBackgrounds.filter(({ fill }) => ![
-    'rgb(63, 63, 70)',
-    'rgb(212, 212, 216)',
-  ].includes(fill));
+  const nonGrayDetailBackgrounds = detailBackgrounds.filter(({ fill }) => !isNeutralGray(fill));
   expect(
     nonGrayDetailBackgrounds,
     'Only C2 may use colored node backgrounds; detail views must use neutral gray fills',

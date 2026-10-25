@@ -106,6 +106,10 @@ module.exports = defineConfig({
       testMatch: /pi-durable-mcp\.integration\.spec\.ts/,
     },
     {
+      name: 'tailnet-owner-integration',
+      testMatch: /tailnet-owner\.integration\.spec\.ts/,
+    },
+    {
       name: 'readme-demo',
       testMatch: /readme-demo\.spec\.ts/,
       use: { viewport: { width: 1920, height: 1080 } },

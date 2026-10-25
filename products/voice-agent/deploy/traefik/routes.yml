@@ -44,7 +44,7 @@ http:
       entryPoints: [tailnet]
       rule: "HeaderRegexp(`Tailscale-User-Login`, `.+`) && Path(`/oxigraph/query`) && Method(`POST`)"
       priority: 500
-      middlewares: [tailnet-loopback-only, oxigraph-prefix]
+      middlewares: [tailnet-loopback-only, owner-only, oxigraph-prefix]
       service: oxigraph
     local-oxigraph-query:
       entryPoints: [local]

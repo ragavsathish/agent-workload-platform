@@ -6,7 +6,8 @@
            [java.util UUID]
            [java.util.zip ZipEntry ZipOutputStream]))
 
-(def scenarios #{"scratch-success" "worker-failed" "repository-unavailable" "approval-conflict"})
+(def scenarios #{"scratch-success" "worker-failed" "repository-unavailable"
+                 "approval-conflict" "owner-unavailable" "artifact-missing"})
 (def boundaries
   [{:id "DURABLE" :container "Durable Task API" :consumer "Flutter Task Board"
     :method "POST" :path "/api/tasks" :contract "proposal, approval, result and artifact"}])
@@ -64,8 +65,10 @@
                      (nil? task) 404
                      (and (= action "approve") (not= "pending" (:status task))) 409
                      (and (= action "approve") (= scenario "approval-conflict")) 409
+                     (and (= action "approve") (= scenario "owner-unavailable")) 503
                      (and (= action "approve") (= scenario "repository-unavailable")
                           (= "repository" (:workspace task))) 503
+                     (and (= action "artifacts/workspace") (= scenario "artifact-missing")) 404
                      (and (= action "artifacts/workspace")
                           (not= "completed" (get-in task [:result :state]))) 404
                      :else 200)
@@ -83,7 +86,8 @@
                        (not= status 200) (reply status {:detail (case status
                                                                  404 "Task or artifact not found"
                                                                  409 "Task cannot be approved"
-                                                                 "Repository unavailable")})
+                                                                 (if (= scenario "owner-unavailable")
+                                                                   "Task owner unavailable" "Repository unavailable"))})
                        (= action "artifacts/workspace")
                        (if archive
                          {:status 200 :headers {"Content-Type" "application/zip"

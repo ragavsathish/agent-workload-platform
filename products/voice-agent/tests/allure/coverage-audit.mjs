@@ -24,6 +24,23 @@ export function c2Elements(mermaid) {
   return ids.map((id) => names.get(id)).filter(Boolean);
 }
 
+export function validateC4Traceability(items, mermaid, diagramNames) {
+  const containers = new Set(c2Elements(mermaid));
+  const views = new Set(diagramNames);
+  const problems = new Set();
+  for (const item of items) {
+    const identity = item.fullName ?? item.name;
+    for (const name of labelValues(item, 'c4Container')) {
+      if (!containers.has(name)) problems.add(`${identity}: unknown C2 container ${name}`);
+    }
+    for (const name of labelValues(item, 'c4View')) {
+      if (!views.has(name)) problems.add(`${identity}: unknown C4 view ${name}`);
+    }
+    if (label(item, 'c4Level') === 'Unmapped') problems.add(`${identity}: unmapped C4 scope`);
+  }
+  if (problems.size) throw new Error(`C4 traceability is stale:\n${[...problems].sort().join('\n')}`);
+}
+
 const blankCounts = () => ({ passed: 0, skipped: 0, failed: 0,
   deployedPassed: 0, fixturePassed: 0, contractPassed: 0 });
 
