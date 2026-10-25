@@ -874,6 +874,7 @@ class _WorkspaceHeader extends StatelessWidget {
           IconButton.outlined(
             key: const Key('new-voice-session'),
             tooltip: 'New Voice Session',
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
             onPressed: onNewSession,
             icon: const PiHeaderIcon(PiHeaderIcons.newSession),
           ),
@@ -882,6 +883,7 @@ class _WorkspaceHeader extends StatelessWidget {
           IconButton.outlined(
             key: const Key('session-history'),
             tooltip: 'Voice session history',
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
             onPressed: onHistory,
             icon: const PiHeaderIcon(PiHeaderIcons.history),
           ),
@@ -895,6 +897,7 @@ class _WorkspaceHeader extends StatelessWidget {
             tooltip: section == WorkspaceSection.conversation
                 ? 'Show tasks'
                 : 'Show conversation',
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
             onPressed: () => onSection(
               section == WorkspaceSection.conversation
                   ? WorkspaceSection.tasks
@@ -2051,11 +2054,13 @@ class _NewTaskDialogState extends State<_NewTaskDialog> {
     ),
     actions: [
       TextButton(
+        style: TextButton.styleFrom(minimumSize: const Size(44, 52)),
         onPressed: () => Navigator.pop(context),
         child: const Text('Cancel'),
       ),
       FilledButton(
         key: const Key('submit-new-task'),
+        style: FilledButton.styleFrom(minimumSize: const Size(44, 52)),
         onPressed: () {
           final value = _controller.text.trim();
           if (value.isNotEmpty) Navigator.pop(context, value);

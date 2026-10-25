@@ -45,6 +45,7 @@ test('puts user journeys before their deployed, app, contract, and unit evidence
     ['Playwright · knowledge-base', 'saves a note correction through the owner route', 'integration'],
     ['Playwright · knowledge-c2-mock', 'reviewed journal entry stays linked across the C2 mock boundaries', 'integration'],
     ['Playwright · diagnostics-c2-mock', 'replays a recorded conversation through the C2 Voice Edge mock', 'integration'],
+    ['Playwright · flutter-responsive-c2-mock', 'Flutter voice home, conversation, and task dialog fit mobile, tablet, and desktop', 'integration'],
     ['Voice Edge broker mock', 'normalizes typed Pi responses and failures through the C2 broker mock', 'integration'],
     ['Deployed MCP save round trip', 'deployed MCP correction reaches the gateway and Oxigraph, then removes its fixture', 'deployedIntegration'],
     ['Journal MCP contract', 'saves an exact-evidence correction through the gateway before marking it reviewed', 'integration'],
@@ -79,6 +80,12 @@ test('maps tests to existing C4 boundaries without claiming fixture-backed infra
     level: 'C2 fixture-backed integration',
     containers: ['Input Diagnostics', 'Voice Edge'],
     views: ['c2-container.mmd', 'c3-input-diagnostics.mmd'],
+  });
+  assert.deepEqual(inferC4Scope('Playwright · flutter-responsive-c2-mock',
+    'Flutter voice home, conversation, and task dialog fit mobile, tablet, and desktop'), {
+    level: 'C2 fixture-backed browser integration',
+    containers: ['Browser Voice Client', 'Voice Edge'],
+    views: ['c2-container.mmd', 'c3-browser-client.mmd'],
   });
   assert.deepEqual(inferC4Scope('Playwright · voice-telemetry',
     'completes a deployed voice session and retains its diagnostics'), {

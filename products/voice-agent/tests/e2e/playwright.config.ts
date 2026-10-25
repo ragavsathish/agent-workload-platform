@@ -104,6 +104,11 @@ module.exports = defineConfig({
       use: { viewport: { width: 390, height: 844 }, actionTimeout: 15_000 },
     },
     {
+      name: 'flutter-responsive-c2-mock',
+      testMatch: /flutter-responsive-c2-mock\.spec\.ts/,
+      use: { viewport: { width: 390, height: 844 }, actionTimeout: 15_000 },
+    },
+    {
       name: 'grafana',
       testMatch: /grafana\.spec\.ts/,
       use: {

@@ -36,6 +36,8 @@ export function inferC4Scope(suite, title) {
   if (suite === 'Playwright · durable-c2-mock') return scope('C2 fixture-backed integration',
     ['Browser Voice Client', 'Voice Edge', 'Agent Gateway', 'Proposal and Song Database',
       'Pi Durable Owner', 'Workspace and Result Store'], ['containers', 'browser', 'owner', 'delegatedTask']);
+  if (suite === 'Playwright · flutter-responsive-c2-mock') return scope('C2 fixture-backed browser integration',
+    ['Browser Voice Client', 'Voice Edge'], ['containers', 'browser']);
   if (suite === 'Pi Durable owner C2 mock') return scope('C2 fixture-backed integration',
     ['Agent Gateway', 'Pi Durable Owner'], ['containers', 'owner', 'delegatedTask']);
   if (suite === 'Playwright · pi-durable-mcp-integration') {

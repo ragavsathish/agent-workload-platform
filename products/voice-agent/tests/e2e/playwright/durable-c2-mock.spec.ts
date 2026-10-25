@@ -1,21 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import * as allure from 'allure-js-commons';
-import { test, expect, enableFlutterSemantics, expectCleanBrowser } from './fixtures';
+import { test, expect, enableFlutterSemantics } from './fixtures';
 import { zipEntry } from './zip-artifact';
 import { captureResponsiveLayout, responsiveViewports } from './responsive-layout';
-
-function expectCleanFlutterBrowser(page, browserEvidence, maxFontAborts: number) {
-  const fontAborts = browserEvidence.requestFailures.filter((failure: {
-    method: string; url: string; error: string,
-  }) => failure.method === 'GET' && failure.error === 'net::ERR_ABORTED'
-    && new URL(failure.url).origin === new URL(page.url()).origin
-    && /^\/assets\/(?:fonts\/MaterialIcons-Regular\.otf|packages\/cupertino_icons\/assets\/CupertinoIcons\.ttf|design_system\/fonts\/SourceCodePro-(?:Regular|Semibold)\.ttf)$/u
-      .test(new URL(failure.url).pathname));
-  expect(fontAborts.length).toBeLessThanOrEqual(maxFontAborts);
-  expectCleanBrowser({ ...browserEvidence,
-    requestFailures: browserEvidence.requestFailures.filter((failure: unknown) =>
-      !fontAborts.includes(failure)) });
-}
+import { expectCleanFlutterBrowser } from './flutter-browser';
 
 test('durable task board stays usable across mobile, tablet, and desktop', async ({ page, browserEvidence }, testInfo) => {
   expect((await page.request.post('/__fixture/durable/scenario', {

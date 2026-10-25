@@ -376,7 +376,8 @@ async function main() {
   };
 
   const browserProjects = ['knowledge-base', 'knowledge-c2-mock', 'knowledge-live', 'voice',
-    'voice-telemetry', 'diagnostics', 'diagnostics-c2-mock', 'durable-c2-mock', 'task-diagram', 'grafana'];
+    'voice-telemetry', 'diagnostics', 'diagnostics-c2-mock', 'durable-c2-mock',
+    'flutter-responsive-c2-mock', 'task-diagram', 'grafana'];
   if (process.env.VOICE_RUN_DURABLE_E2E === 'true') browserProjects.push('durable');
   for (const project of browserProjects) {
     const name = `playwright-${project}`;

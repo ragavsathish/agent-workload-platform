@@ -27,6 +27,7 @@ WASM_ACTIONS := setup build check install clean
 .PHONY: test-pi-durable-mcp
 .PHONY: test-tailnet-owner playwright-voice-telemetry
 .PHONY: playwright-responsive-c2-mock
+.PHONY: playwright-flutter-responsive-c2-mock
 
 COMPOSE = docker compose --env-file deploy/.env -f deploy/compose.yml
 MLFLOW_COMPOSE = $(COMPOSE) -f deploy/compose.mlflow.yml
@@ -273,7 +274,11 @@ playwright-durable-c2-mock:
 	npm --prefix apps/client run build
 	tests/e2e/run-c2-mock durable-c2-mock
 
-playwright-responsive-c2-mock: playwright-knowledge-c2-mock playwright-diagnostics-c2-mock playwright-durable-c2-mock
+playwright-flutter-responsive-c2-mock:
+	npm --prefix apps/client run build
+	tests/e2e/run-c2-mock flutter-responsive-c2-mock
+
+playwright-responsive-c2-mock: playwright-knowledge-c2-mock playwright-diagnostics-c2-mock playwright-durable-c2-mock playwright-flutter-responsive-c2-mock
 
 test-voice-edge-c2-mock:
 	PYTHONPATH=apps/edge:packages/telemetry/src uv run --project apps/edge python -m unittest apps.edge.test_c2_broker_mock

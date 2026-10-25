@@ -8,6 +8,7 @@ function inferBehavior(suite, title) {
   if (suite === 'Playwright · knowledge-live') return behavior('Knowledge and review', 'Review decisions', 'Correct a test-owned entry in the deployed graph');
   if (suite === 'Playwright · diagnostics-c2-mock') return behavior('Voice conversation', 'Input diagnostics', 'Inspect conversation diagnostics');
   if (suite === 'Playwright · durable-c2-mock') return behavior('Durable work', 'Task execution', 'Approve scratch work and inspect C2 failures');
+  if (suite === 'Playwright · flutter-responsive-c2-mock') return behavior('Voice conversation', 'Voice interface', 'Navigate Flutter home and workspace across screen sizes');
   if (suite === 'Pi Durable owner C2 mock') return behavior('Durable work', 'Task execution', 'Create, query, abort, and retry tasks through the owner client');
   if (suite === 'Playwright · pi-durable-mcp-integration') {
     if (/follow-up/u.test(name)) return behavior('Durable work', 'Task execution', 'Continue a task conversation from voice');
@@ -133,6 +134,7 @@ function layerFor(suite, title) {
   if (suite === 'Playwright · knowledge-live') return 'deployedIntegration';
   if (suite === 'Playwright · diagnostics-c2-mock') return 'integration';
   if (suite === 'Playwright · durable-c2-mock') return 'integration';
+  if (suite === 'Playwright · flutter-responsive-c2-mock') return 'integration';
   if (suite === 'Pi Durable owner C2 mock') return 'integration';
   if (suite === 'Playwright · pi-durable-mcp-integration') return 'integration';
   if (suite === 'Playwright · knowledge-base') return 'integration';

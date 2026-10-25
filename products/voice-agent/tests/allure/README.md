@@ -76,12 +76,14 @@ status and endpoint rather than hidden from the report. The older
 integration; `knowledge-c2-mock` crosses a separate Babashka service boundary.
 
 Run `make playwright-responsive-c2-mock` to inspect the mock-backed journal and map,
-replay dashboard, and Flutter durable task board at 390 × 844, 820 × 1180, and
+replay dashboard, and Flutter voice home, conversation, task dialog, and durable task board at 390 × 844, 820 × 1180, and
 1440 × 900. The cases attach viewport screenshots, width measurements, and
 Playwright traces to Allure. The journal and map also attach full-page captures;
 the diagnostics case captures the lower charts after scrolling. The width check
 uses the scrollable document width, since Flutter's hidden typography measurement
 can increase `body.scrollWidth` without creating visible horizontal scrolling.
+Run `make playwright-flutter-responsive-c2-mock` for the Flutter home and workspace
+alone; it rebuilds the WebAssembly client before the mock browser run.
 
 | Layer | What it proves in this run | Examples |
 | --- | --- | --- |

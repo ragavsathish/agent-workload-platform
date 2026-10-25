@@ -7,7 +7,8 @@ case "${1:-}" in
   knowledge-c2-mock) overlay="$voice_root/deploy/compose.c2-knowledge.yml" ;;
   diagnostics-c2-mock) overlay="$voice_root/deploy/compose.c2-diagnostics.yml" ;;
   durable-c2-mock) overlay="$voice_root/deploy/compose.c2-durable.yml" ;;
-  *) echo "Usage: run-c2-mock {knowledge-c2-mock|diagnostics-c2-mock|durable-c2-mock}" >&2; exit 2 ;;
+  flutter-responsive-c2-mock) overlay="$voice_root/deploy/compose.c2-durable.yml" ;;
+  *) echo "Usage: run-c2-mock {knowledge-c2-mock|diagnostics-c2-mock|durable-c2-mock|flutter-responsive-c2-mock}" >&2; exit 2 ;;
 esac
 export PLAYWRIGHT_C2_PROJECT="$1"
 run_id="$(date -u +%Y%m%dT%H%M%SZ)-$$"
