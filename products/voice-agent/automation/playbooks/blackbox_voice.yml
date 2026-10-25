@@ -21,8 +21,8 @@
       - pipecat-image-builder
       - pipecat-gitea-runner
     remote_session_operations:
-      - client.attached
-      - command
+      - remote.attach
+      - remote.prompt
   tasks:
     - name: Read deployment configuration
       ansible.builtin.set_fact:
@@ -126,7 +126,7 @@
       ansible.builtin.uri:
         url: >-
           http://127.0.0.1:3300/api/datasources/proxy/uid/prometheus/api/v1/query?query={{
-          ('sum(pipecat_operation_total{service_namespace="pipecat-mlx-voice",service_name="pi-task-rpc",app_operation="'
+          ('sum(pipecat_operation_total{service_namespace="pipecat-mlx-voice",service_name="pi-durable-owner",app_operation="'
            + item + '",app_outcome="ok"}) or vector(0)') | urlencode }}
         method: GET
         user: admin
@@ -229,7 +229,7 @@
       ansible.builtin.uri:
         url: >-
           http://127.0.0.1:3300/api/datasources/proxy/uid/prometheus/api/v1/query?query={{
-          ('sum(pipecat_operation_total{service_namespace="pipecat-mlx-voice",service_name="pi-task-rpc",app_operation="'
+          ('sum(pipecat_operation_total{service_namespace="pipecat-mlx-voice",service_name="pi-durable-owner",app_operation="'
            + item + '",app_outcome="ok"}) or vector(0)') | urlencode }}
         method: GET
         user: admin

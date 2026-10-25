@@ -3,9 +3,9 @@ set -euo pipefail
 
 project="${1:-}"
 case "$project" in
-  voice|diagnostics|knowledge-base|readme-demo) ;;
+  voice|diagnostics|knowledge-base|knowledge-live|task-diagram|readme-demo) ;;
   *)
-    echo "Usage: $0 voice|diagnostics|knowledge-base|readme-demo" >&2
+    echo "Usage: $0 voice|diagnostics|knowledge-base|knowledge-live|task-diagram|readme-demo" >&2
     exit 2
     ;;
 esac
@@ -58,4 +58,5 @@ PLAYWRIGHT_OUTPUT_DIR="$output_dir" \
     --profile e2e \
     run --rm \
     -e "PLAYWRIGHT_PROJECT=$project" \
+    -e "KNOWLEDGE_E2E_ENTRY_ID=${KNOWLEDGE_E2E_ENTRY_ID:-}" \
     playwright-local-e2e

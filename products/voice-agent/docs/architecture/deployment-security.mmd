@@ -24,11 +24,10 @@ flowchart LR
 
             subgraph CONTROL_NET["control · non-internal"]
                 GATEWAY["Agent Gateway<br/>identity · commands"]
-                HABITAT["Absurd Habitat<br/>queue operations"]
             end
 
             subgraph DATA_NET["data · internal"]
-                POSTGRES[("PostgreSQL<br/>proposals · queue · checkpoints")]
+                POSTGRES[("PostgreSQL<br/>proposals · song state · progress")]
                 S3[("S3Mock<br/>workspaces · results")]
                 GITEA[("Gitea<br/>Git · Actions · workflow state")]
                 DOCKER_JOB_API["Docker Job API<br/>Go · authenticated jobs"]
@@ -49,9 +48,7 @@ flowchart LR
             EDGE -->|"identity-checked App and trace proxy"| GRAFANA_MCP
             GATEWAY --> POSTGRES
             GATEWAY --> S3
-            GATEWAY -->|"fixed read-only SPARQL"| OXIGRAPH
-            HABITAT -->|"scoped queue SQL"| POSTGRES
-            ROUTER -->|"/queue/"| HABITAT
+            GATEWAY -->|"bounded fact queries<br/>journal and review updates"| OXIGRAPH
             ROUTER -->|"/git/"| GITEA
             ROUTER -->|"/metrics/"| OTEL
             EDGE -.->|"OTLP"| OTEL
@@ -61,8 +58,12 @@ flowchart LR
             direction TB
             BROKER["Inference Broker<br/>FastAPI · MLX STT/TTS"]
             PI["Pi Voice Service<br/>persistent Pi session"]
-            WORKER["Pi Task Worker<br/>claim · execute · checkpoint"]
-            TASK_PI["Pi Task Session<br/>bounded child process"]
+            WORKER["Workspace and Artifact Effects<br/>bounded Python child"]
+            OWNER["Pi Durable Owner<br/>one Harness · private HTTP and Unix socket"]
+            OWNER_STORE[("Owner SQLite<br/>private native task state")]
+            TASK_PI["Pi Durable Conversation<br/>owned by the Owner process"]
+            HOST_TASK_TOOLS["Durable CodingTools<br/>worker account access"]
+            TASK_STORE[("Pi Durable SQLite<br/>private per-task state")]
             BUILDER_MANAGER["Builder VM Manager<br/>warm VM lifecycle"]
             IMAGE_HANDOFF[("Image Handoff<br/>versioned image tar files")]
             VOICE_WASSETTE["Voice Wassette MCP<br/>per-session child"]
@@ -72,8 +73,12 @@ flowchart LR
 
             BROKER --> PI
             PI --> RUNTIME
+            GATEWAY -->|"private bearer HTTP"| OWNER
+            OWNER -->|"prepare and capture"| WORKER
             WORKER --> RUNTIME
-            WORKER --> TASK_PI
+            OWNER --> TASK_PI
+            OWNER --> OWNER_STORE
+            TASK_PI -->|"both modes · checkpoints"| TASK_STORE
             PI --> VOICE_WASSETTE
             TASK_PI --> TASK_WASSETTE
             PI -->|"bearer · loopback streamable HTTP"| GRAFANA_MCP
@@ -97,7 +102,8 @@ flowchart LR
         EDGE -->|"bearer · host-access"| BROKER
         VOICE_WASSETTE -->|"component-scoped bearers<br/>task and read-only knowledge tools"| GATEWAY
         PI -->|"native tools"| VOICE_TOOLS
-        TASK_PI -->|"isolated tools"| TASK_TOOLS
+        TASK_PI -->|"Gondolin mode · isolated tools"| TASK_TOOLS
+        TASK_PI -->|"host mode · native tools"| HOST_TASK_TOOLS
         BUILDER_MANAGER -->|"resume · checkpoint"| RUNNER
         VOICE_TOOLS -->|"synthetic allowlist"| GITEA
         VOICE_TOOLS -->|"synthetic allowlist"| S3
@@ -135,7 +141,7 @@ flowchart LR
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
     class USER person;
     class CONTROL,MODELS,INTERNET,HOST_DOCKER external;
-    class BROWSER,BROKER,PI,WORKER,TASK_PI,BUILDER_MANAGER,VOICE_WASSETTE,TASK_WASSETTE,HOST_METRICS,VOICE_TOOLS,TASK_TOOLS,RUNNER,CLIENT,DOCKER_JOB_API,HABITAT,DOCKER_METRICS,OTEL,GRAFANA_MCP runtime;
+    class BROWSER,BROKER,PI,WORKER,OWNER,TASK_PI,BUILDER_MANAGER,VOICE_WASSETTE,TASK_WASSETTE,HOST_METRICS,VOICE_TOOLS,TASK_TOOLS,RUNNER,CLIENT,DOCKER_JOB_API,DOCKER_METRICS,OTEL,GRAFANA_MCP runtime;
     class INGRESS,ROUTER,EDGE,GATEWAY security;
     class TRUST_RISK warning;
-    class POSTGRES,S3,GITEA,OXIGRAPH,RUNTIME,IMAGE_HANDOFF data;
+    class POSTGRES,S3,GITEA,OXIGRAPH,RUNTIME,IMAGE_HANDOFF,TASK_STORE,OWNER_STORE data;

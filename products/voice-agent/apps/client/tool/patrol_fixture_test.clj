@@ -77,6 +77,104 @@
         (server/stop-server! fixture)
         (http/stop! edge)))))
 
+(deftest fixture-evidence-records-browser-mutations-and-final-state
+  (let [fixture (server/start-server {:port 0 :nonce "fixture-test-nonce"})
+        client (HttpClient/newHttpClient)
+        base (str "http://127.0.0.1:" (:port fixture))
+        get-json (fn [path]
+                   (let [request (-> (HttpRequest/newBuilder (URI/create (str base path))) (.GET) (.build))
+                         response (.send client request (HttpResponse$BodyHandlers/ofString))]
+                     (is (= 200 (.statusCode response)))
+                     (json/parse-string (.body response) true)))]
+    (try
+      (let [request (-> (HttpRequest/newBuilder (URI/create (str base "/api/tasks/fixture-task/approve")))
+                        (.POST (HttpRequest$BodyPublishers/noBody)) (.build))
+            response (.send client request (HttpResponse$BodyHandlers/ofString))
+            evidence (get-json "/__fixture/evidence")]
+        (is (= 200 (.statusCode response)))
+        (is (= "fixture-test-nonce" (:nonce evidence)))
+        (is (= [{:method "POST" :path "/api/tasks/fixture-task/approve" :status 200}]
+               (:events evidence)))
+        (is (= "approved" (:status (first (:tasks evidence))))))
+      (finally (server/stop-server! fixture)))))
+
+(deftest c2-mock-shares-journal-state-across-query-owner-route-and-gateway
+  (let [entry-id (str (apply str (repeat 32 "a")) ":entry:1")
+        other-id (str (apply str (repeat 32 "b")) ":entry:1")
+        entry {:id entry-id :kind "idea" :text "Initial note" :createdAt "2026-10-25T08:00:00Z"
+               :sourceId "capture-1" :sourceLabel "Voice session" :transcript "Original turn"
+               :topics ["Learning"]}
+        fixture (server/start-server {:port 0 :c2-entries [entry]})
+        client (HttpClient/newHttpClient)
+        base (str "http://127.0.0.1:" (:port fixture))
+        send (fn [method path body headers]
+               (let [builder (HttpRequest/newBuilder (URI/create (str base path)))
+                     _ (doseq [[key value] headers] (.header builder key value))
+                     request (if (= method "GET") (.GET builder)
+                                 (.POST builder (HttpRequest$BodyPublishers/ofString
+                                                  (json/generate-string body))))
+                     response (.send client (.build request) (HttpResponse$BodyHandlers/ofString))]
+                 [(.statusCode response) (json/parse-string (.body response) true)]))]
+    (try
+      ;; Send raw SPARQL because the browser WASM owns query construction.
+      (let [request (-> (HttpRequest/newBuilder (URI/create (str base "/oxigraph/query")))
+                        (.header "Content-Type" "application/sparql-query")
+                        (.POST (HttpRequest$BodyPublishers/ofString
+                                "SELECT * WHERE { GRAPH <urn:awp:digital-twin:graph:journal> { ?s ?p ?o } }"))
+                        (.build))
+            initial (.send client request (HttpResponse$BodyHandlers/ofString))]
+        (is (= 200 (.statusCode initial)))
+        (is (= entry-id (get-in (json/parse-string (.body initial) true)
+                                [:results :bindings 0 :id :value]))))
+      (let [[status saved] (send "POST" (str "/api/knowledge/journal/" entry-id "/feedback")
+                                 {:action "edit" :correctedText "Reviewed note" :correctedType "learning"
+                                  :correctedTopics ["Learning" "Review"]}
+                                 {"Content-Type" "application/json"})]
+        (is (= 200 status))
+        (is (= entry-id (:entryId saved)))
+        (is (re-matches #"[a-f0-9]{32}" (:feedbackId saved))))
+      (let [[status state] (send "GET" "/__fixture/c2/evidence" nil {})]
+        (is (= 200 status))
+        (is (= "Reviewed note" (:text (first (:entries state)))))
+        (is (= ["Learning" "Review"] (:topics (first (:entries state))))))
+      (let [[status _] (send "POST" (str "/v1/digital-twin/journal/" entry-id "/feedback")
+                                   {:identity "owner@example.test" :action "edit" :correctedText "MCP saved note"
+                                    :correctedType "decision" :correctedTopics ["Review"]}
+                                   {"Content-Type" "application/json"})]
+        (is (= 401 status)))
+      (let [[status _] (send "POST" (str "/v1/digital-twin/journal/" entry-id "/feedback")
+                                   {:identity "owner@example.test" :action "edit" :correctedText "MCP saved note"
+                                    :correctedType "decision" :correctedTopics ["Review"]}
+                                   {"Content-Type" "application/json"
+                                    "Authorization" "Bearer c2-mock-token"})
+            [evidence-status evidence] (send "GET" "/__fixture/c2/evidence" nil {})]
+        (is (= 200 status))
+        (is (= 200 evidence-status))
+        (is (= "MCP saved note" (:text (first (:entries evidence)))))
+        (is (= ["OXIGRAPH" "EDGE" "GATEWAY"]
+               (mapv :containerId (:events evidence)))))
+      (let [request (-> (HttpRequest/newBuilder (URI/create (str base "/oxigraph/query")))
+                        (.header "Content-Type" "application/sparql-query")
+                        (.POST (HttpRequest$BodyPublishers/ofString
+                                "SELECT * WHERE { GRAPH <urn:awp:digital-twin:graph:journal> { ?s ?p ?o } }"))
+                        (.build))
+            latest (.send client request (HttpResponse$BodyHandlers/ofString))]
+        (is (= "application/sparql-results+json"
+               (.orElse (.firstValue (.headers latest) "Content-Type") "")))
+        (is (= "MCP saved note" (get-in (json/parse-string (.body latest) true)
+                                       [:results :bindings 0 :text :value]))))
+      (let [[status _] (send "POST" (str "/api/knowledge/journal/" entry-id "/assertion-review")
+                                   {:ownerAuthored "false" :reason "Not a verified owner turn"}
+                                   {"Content-Type" "application/json"})
+            [read-status review] (send "GET" (str "/api/knowledge/journal/" entry-id "/assertion-review") nil {})]
+        (is (= 200 status))
+        (is (= 200 read-status))
+        (is (= "Not a verified owner turn" (get-in review [:review :reason]))))
+      (let [[status _] (send "POST" (str "/api/knowledge/journal/" other-id "/feedback")
+                                   {:action "delete"} {"Content-Type" "application/json"})]
+        (is (= 404 status)))
+      (finally (server/stop-server! fixture)))))
+
 (deftest static-paths-cannot-escape-the-build-root
   (is (= "/tmp/client/index.html" (str (static/static-path "/tmp/client" "/"))))
   (is (= "/tmp/client/marp/index.html" (str (static/static-path "/tmp/client" "/marp/index.html"))))

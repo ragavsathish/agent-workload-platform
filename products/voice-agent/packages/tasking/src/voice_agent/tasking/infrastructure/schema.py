@@ -1,4 +1,4 @@
-"""Install this application's schema after Absurd has initialized Postgres."""
+"""Install this application's proposal and song schemas."""
 
 from pathlib import Path
 from typing import LiteralString, cast

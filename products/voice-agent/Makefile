@@ -5,13 +5,13 @@ WASM_ACTIONS := setup build check install clean
 
 .PHONY: help setup build check up start deployment-prepare logs down recreate verify cycle-test
 .PHONY: $(WASM_ACTIONS:%=wasm-%) FORCE
-.PHONY: automation-setup automation-check automation-verify automation-cycle automation-preflight
+.PHONY: automation-setup automation-check automation-verify automation-cycle automation-preflight automation-deploy-edge
 .PHONY: automation-digital-twin-e2e automation-playwright automation-blackbox-e2e
 .PHONY: automation-blackbox-voice automation-observability
 .PHONY: login status grafana-password grafana-mcp-token warm-models benchmark-mlx publish-workspace
 .PHONY: blackbox-voice blackbox-e2e blackbox-personal-knowledge blackbox-remote-session
-.PHONY: playwright-voice playwright-diagnostics playwright-knowledge-base playwright-grafana playwright-readme-demo playwright-tailnet-voice
-.PHONY: allure-knowledge-review
+.PHONY: playwright-voice playwright-diagnostics playwright-diagnostics-c2-mock playwright-knowledge-base playwright-knowledge-c2-mock playwright-knowledge-live playwright-durable-c2-mock playwright-task-diagram playwright-durable playwright-grafana playwright-readme-demo playwright-tailnet-voice test-voice-edge-c2-mock test-broker-pi-stream-c2-mock
+.PHONY: allure-knowledge-review allure-voice-agent allure-durable allure-publish allure-c4-coverage
 .PHONY: playwright-tailnet-diagnostics host-preflight install-host-services storage-collector-build
 .PHONY: native-start native-stop native-restart native-status
 .PHONY: config-init config-check
@@ -23,7 +23,8 @@ WASM_ACTIONS := setup build check install clean
 .PHONY: digital-twin-artifact-store digital-twin-artifact-add digital-twin-artifact-push
 .PHONY: digital-twin-artifact-pull digital-twin-artifact-status digital-twin-artifact-verify
 .PHONY: digital-twin-mlflow-up digital-twin-mlflow-verify
-.PHONY: db-init gitea-sync broker worker pull-model pi-rpc-host-release pi-rpc-host-smoke
+.PHONY: db-init gitea-sync broker pi-durable-owner pull-model
+.PHONY: test-pi-durable-mcp
 
 COMPOSE = docker compose --env-file deploy/.env -f deploy/compose.yml
 MLFLOW_COMPOSE = $(COMPOSE) -f deploy/compose.mlflow.yml
@@ -40,10 +41,8 @@ help:
 		'  make setup          Install development dependencies' \
 		'  make build          Build apps, images, dashboards, and WASM components' \
 		'  make check          Run all static checks and tests' \
-		'  make pi-rpc-host-release' \
-		'                      Build a checksummed native Pi RPC supervisor' \
-		'  make pi-rpc-host-smoke' \
-		'                      Exercise worker, Rust RPC, Pi, and Gondolin locally' \
+		'  make test-pi-durable-mcp' \
+		'                      Test Pi Durable MCP, host, Gondolin, and task follow-up' \
 		'  make start|up|down  Operate the full deployment' \
 		'  make native-start|native-stop|native-restart|native-status' \
 		'                      Manage all eight macOS services' \
@@ -121,7 +120,7 @@ config-check:
 	@if rg -q '=replace-with-' deploy/host-env/*.env; then \
 		echo "Replace placeholder credentials in deploy/host-env before installation" >&2; exit 1; \
 	fi
-	@for name in broker-token agent-gateway-token digital-twin-reader-token digital-twin-writer-token postgres-password database-url habitat-database-password approval-secret grafana-admin-password grafana-mcp-caller-token; do \
+	@for name in broker-token agent-gateway-token digital-twin-reader-token digital-twin-writer-token postgres-password database-url approval-secret grafana-admin-password grafana-mcp-caller-token; do \
 		test -s "deploy/secrets/$$name" || { echo "Missing deploy/secrets/$$name; run make config-init" >&2; exit 1; }; \
 	done
 
@@ -133,7 +132,7 @@ logs:
 	@interrupted=0; \
 	tail -n 100 -F "$$HOME/Library/Logs/PipecatEdge/"*.log & tail_pid=$$!; \
 	trap 'interrupted=1' INT TERM; \
-	$(COMPOSE) logs -f --tail=100 agent-gateway voice-edge tailscale traefik gitea habitat; status=$$?; \
+	$(COMPOSE) logs -f --tail=100 agent-gateway voice-edge tailscale traefik gitea; status=$$?; \
 	kill "$$tail_pid" 2>/dev/null || true; \
 	wait "$$tail_pid" 2>/dev/null || true; \
 	if [[ "$$interrupted" == 1 || "$$status" == 130 ]]; then exit 0; fi; \
@@ -175,6 +174,12 @@ automation-check:
 
 automation-verify:
 	$(ANSIBLE) automation/playbooks/verify.yml
+
+automation-deploy-edge:
+	$(ANSIBLE) automation/playbooks/deploy_edge.yml
+
+automation-deploy-gateway:
+	$(ANSIBLE) automation/playbooks/deploy_gateway.yml
 
 automation-cycle:
 	$(ANSIBLE) automation/playbooks/lifecycle.yml
@@ -249,8 +254,45 @@ playwright-diagnostics:
 playwright-knowledge-base:
 	tests/e2e/run-playwright-local knowledge-base
 
-allure-knowledge-review:
+playwright-knowledge-live:
+	node tests/e2e/run-knowledge-live.mjs
+
+playwright-knowledge-c2-mock:
+	VITE_OXIGRAPH_QUERY_URL=/oxigraph/query npm --prefix apps/knowledge-base run build
+	tests/e2e/run-c2-mock knowledge-c2-mock
+
+playwright-diagnostics-c2-mock:
+	npm --prefix apps/diagnostics run build
+	tests/e2e/run-c2-mock diagnostics-c2-mock
+
+playwright-durable-c2-mock:
+	tests/e2e/run-c2-mock durable-c2-mock
+
+test-voice-edge-c2-mock:
+	PYTHONPATH=apps/edge:packages/telemetry/src uv run --project apps/edge python -m unittest apps.edge.test_c2_broker_mock
+
+test-broker-pi-stream-c2-mock:
+	PYTHONPATH=apps/broker/src:packages/telemetry/src uv run --project apps/broker pytest -q apps/broker/tests/presentation/test_c2_pi_stream.py
+
+playwright-task-diagram:
+	tests/e2e/run-playwright-local task-diagram
+
+playwright-durable:
+	$(MAKE) automation-playwright PLAYWRIGHT_PROJECT=durable
+
+allure-durable:
+	VOICE_RUN_DURABLE_E2E=true $(MAKE) allure-voice-agent
+
+allure-voice-agent:
 	node tests/allure/run-knowledge-review.mjs
+
+allure-c4-coverage:
+	node tests/allure/refresh-c4-coverage.mjs
+
+allure-knowledge-review: allure-voice-agent
+
+allure-publish:
+	node tests/allure/publish-latest.mjs
 
 playwright-grafana:
 	$(MAKE) automation-playwright PLAYWRIGHT_PROJECT=grafana
@@ -266,7 +308,7 @@ playwright-tailnet-diagnostics:
 
 host-preflight: automation-preflight
 
-install-host-services: wasm-install digital-twin-image-build pi-rpc-host-release storage-collector-build config-check
+install-host-services: wasm-install digital-twin-image-build storage-collector-build config-check
 	$(ANSIBLE) automation/playbooks/install_host_services.yml
 
 storage-collector-build: apps/host-observability/storage-collector/dist/storage-collector
@@ -384,27 +426,20 @@ gitea-sync:
 broker:
 	PYTHONPATH=apps/broker/src:packages/telemetry/src uv run --project apps/broker python -m voice_agent.speech.presentation.http
 
-worker:
-	PYTHONPATH=apps/worker/src:packages/tasking/src:packages/telemetry/src uv run --project apps/worker python -m voice_worker.main
+pi-durable-owner:
+	@test -s deploy/host-env/worker.env
+	PI_DURABLE_OWNER_TOKEN_FILE="$$PWD/deploy/secrets/agent-gateway-token" \
+	PI_DURABLE_TASK_WORKDIR="$$PWD/apps/worker" \
+	PYTHONPATH="$$PWD/apps/worker/src:$$PWD/packages/tasking/src:$$PWD/packages/telemetry/src" \
+		dotenvx run --quiet --strict -f deploy/host-env/worker.env -- \
+		node ../../platform/agent-execution/pi-durable-task/dist/owner-server.js
+
+test-pi-durable-mcp:
+	pnpm --dir ../../platform/agent-execution/pi-durable-task build
+	cd tests/e2e && npx playwright test --config playwright.config.ts --project pi-durable-mcp-integration
 
 pull-model:
 	ollama pull qwen3.5:9b-mlx
-
-pi-rpc-host-release:
-	cargo build --locked --release --manifest-path apps/pi-rpc-host/Cargo.toml
-	@mkdir -p apps/pi-rpc-host/dist
-	@artifact="pi-task-rpc-$$(uname -s | tr '[:upper:]' '[:lower:]')-$$(uname -m)"; \
-		cp apps/pi-rpc-host/target/release/pi-task-rpc "apps/pi-rpc-host/dist/$$artifact"; \
-		chmod 0755 "apps/pi-rpc-host/dist/$$artifact"; \
-		cd apps/pi-rpc-host/dist && shasum -a 256 "$$artifact" > "$$artifact.sha256"; \
-		printf '%s\n' "apps/pi-rpc-host/dist/$$artifact"
-
-pi-rpc-host-smoke: pi-rpc-host-release
-	@test -s deploy/host-env/worker.env || { echo "Missing deploy/host-env/worker.env; run make setup" >&2; exit 1; }
-	@artifact="$$PWD/apps/pi-rpc-host/dist/pi-task-rpc-$$(uname -s | tr '[:upper:]' '[:lower:]')-$$(uname -m)"; \
-		dotenvx run --quiet --strict -f deploy/host-env/worker.env -- \
-		env PI_TASK_RPC_HOST_BINARY="$$artifact" PYTHONPATH="apps/worker/src:packages/tasking/src:packages/telemetry/src" \
-		uv run --project apps/worker python -m voice_worker.smoke --artifact "$$artifact" --workspace "$$PWD"
 
 check: require-babashka wasm-check automation-check
 	bb deploy/observability/c4-dashboard_test.clj
@@ -431,6 +466,7 @@ check: require-babashka wasm-check automation-check
 	cd apps/edge && PYTHONPATH=.:../../packages/telemetry/src uv run python -m unittest discover -p 'test_*.py'
 	cd apps/client && npm run lint
 	cd apps/client && npm test
+	cd apps/client && npm run test:mock
 	cd apps/client && npm run build
 	cd apps/diagnostics && npm run lint
 	cd apps/diagnostics && npm run build
@@ -438,5 +474,5 @@ check: require-babashka wasm-check automation-check
 	cd apps/knowledge-base && npm run build
 	$(MAKE) grafana-c4-dashboard
 	$(COMPOSE) config --quiet
-	for script in deploy/habitat/*.sh deploy/observability/*.sh; do sh -n "$$script"; done
+	for script in deploy/observability/*.sh; do sh -n "$$script"; done
 	for plist in deploy/launchd/*.plist; do plutil -lint "$$plist"; done

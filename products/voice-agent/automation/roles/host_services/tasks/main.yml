@@ -73,7 +73,6 @@
     - { name: uv, path: /opt/homebrew/bin/uv, kind: executable }
     - { name: dotenvx, path: /opt/homebrew/bin/dotenvx, kind: executable }
     - { name: Wassette, path: "{{ host_services_wassette_bin }}", kind: executable }
-    - { name: Pi RPC supervisor artifact, path: "{{ host_services_pi_rpc_artifact }}", kind: executable }
   register: host_services_prerequisites
   loop_control:
     label: "{{ item.name }}"
@@ -143,11 +142,12 @@
   no_log: true
   notify: Restart host services
 
-- name: Install the Pi RPC supervisor
+- name: Install Pi Durable owner transport token
   ansible.builtin.copy:
-    src: "{{ host_services_pi_rpc_artifact }}"
-    dest: "{{ host_services_bin_dir }}/pi-task-rpc"
-    mode: "0755"
+    src: "{{ voice_agent_root }}/deploy/secrets/agent-gateway-token"
+    dest: "{{ host_services_runtime_dir }}/secrets/agent-gateway-token"
+    mode: "0600"
+  no_log: true
   notify: Restart host services
 
 - name: Create private classifier cache
@@ -214,6 +214,16 @@
   loop:
     - storage-collector.mjs
     - storage-exporter.mjs
+
+- name: Remove retired Pi RPC supervisor binary
+  ansible.builtin.file:
+    path: "{{ host_services_bin_dir }}/pi-task-rpc"
+    state: absent
+
+- name: Remove retired Pi RPC session sockets
+  ansible.builtin.file:
+    path: "/tmp/awp-pi-rpc-{{ ansible_facts.user_uid }}"
+    state: absent
 
 - name: Install host observability configuration
   ansible.builtin.copy:
@@ -292,6 +302,7 @@
       - build
   loop:
     - "@agent-workload-platform/gondolin-session"
+    - "@agent-workload-platform/pi-durable-task"
     - "@agent-workload-platform/voice-pi-agent"
   changed_when: false
 
@@ -553,6 +564,23 @@
 
 - name: Apply host-service restarts
   ansible.builtin.meta: flush_handlers
+
+- name: Inspect the private Pi Durable owner socket
+  ansible.builtin.stat:
+    path: "/tmp/awp-pi-owner-{{ ansible_facts.user_uid }}/owner.sock"
+  register: host_services_pi_durable_owner_socket
+  until: >-
+    host_services_pi_durable_owner_socket.stat.issock | default(false)
+    and host_services_pi_durable_owner_socket.stat.mode == '0600'
+  retries: 30
+  delay: 1
+
+- name: Require the Pi Durable owner socket
+  ansible.builtin.assert:
+    that:
+      - host_services_pi_durable_owner_socket.stat.issock | default(false)
+      - host_services_pi_durable_owner_socket.stat.mode == '0600'
+    quiet: true
 
 - name: Wait for protected native endpoints
   ansible.builtin.uri:

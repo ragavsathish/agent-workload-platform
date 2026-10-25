@@ -7,10 +7,12 @@
       - voice
       - diagnostics
       - grafana
+      - durable
     playwright_output_defaults:
       voice: /tmp/pipecat-playwright-voice
       diagnostics: /tmp/pipecat-react-diagnostics
       grafana: /tmp/pipecat-grafana
+      durable: /tmp/pipecat-durable
   tasks:
     - name: Validate the requested browser project
       ansible.builtin.assert:

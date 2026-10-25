@@ -4,13 +4,10 @@ from __future__ import annotations
 
 import time
 import uuid
-from contextlib import closing
-from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import psycopg
-from absurd_sdk import Absurd, TaskResultSnapshot
 from psycopg.rows import dict_row
 from voice_agent.tasking.domain.approval import (
     ApprovalError,
@@ -31,6 +28,7 @@ from voice_agent.tasking.domain.workspaces import (
 )
 from voice_agent.tasking.infrastructure.artifacts import TASK_ARTIFACTS, ArtifactStore
 from voice_agent.tasking.infrastructure.config import Settings
+from voice_agent.tasking.infrastructure.pi_durable_owner import PiDurableOwner
 
 
 class ProposalError(ValueError):
@@ -74,6 +72,7 @@ class TaskService:
     def __init__(self, settings: Settings):
         settings.require_api()
         self.settings = settings
+        self.owner = PiDurableOwner(settings.pi_durable_owner_url, settings.pi_durable_owner_token_file)
         self.artifacts = (
             ArtifactStore(
                 endpoint_url=settings.artifact_endpoint_url,
@@ -123,30 +122,17 @@ class TaskService:
             raise ProposalError("session_id and message_id are required")
         source_key = f"{session_id.strip()}:{message_id.strip()}"
         tasks: dict[str, dict[str, str]] = {}
-        with closing(
-            Absurd(self.settings.database_url, queue_name=self.settings.queue)
-        ) as absurd:
-            for mode in ("journal", "classify"):
-                idempotency_key = f"digital-twin:{mode}:{source_key}"
-                spawned = absurd.spawn(
-                    f"digital-twin-{mode}",
-                    {
-                        "mode": mode,
-                        "identity": identity,
-                        "sessionId": session_id.strip(),
-                        "messageId": message_id.strip(),
-                        "transcript": text,
-                        "capturedAt": captured_at,
-                    },
-                    max_attempts=3,
-                    queue=self.settings.queue,
-                    cancellation={"max_duration": 180},
-                    idempotency_key=idempotency_key,
-                )
-                tasks[mode] = {
-                    "task_id": str(spawned["task_id"]),
-                    "idempotency_key": idempotency_key,
-                }
+        for mode in ("journal", "classify"):
+            idempotency_key = f"digital-twin:{mode}:{source_key}"
+            native_request_id = str(uuid.uuid5(uuid.NAMESPACE_URL, idempotency_key))
+            task_id = self.owner.submit(
+                f"digital-twin-{mode}",
+                {"mode": mode, "identity": identity, "sessionId": session_id.strip(),
+                 "messageId": message_id.strip(), "transcript": text,
+                 "capturedAt": captured_at},
+                native_request_id,
+            )
+            tasks[mode] = {"task_id": task_id, "idempotency_key": idempotency_key}
         return {"tasks": tasks}
 
     def propose(
@@ -236,7 +222,11 @@ class TaskService:
                         (identity, session_name.strip(), min(max(limit, 1), 100)),
                     )
                 rows = cursor.fetchall()
-        return [self._view(row, include_token=True) for row in rows]
+        task_ids = list(dict.fromkeys(str(row["task_id"]) for row in rows if row["task_id"]))
+        task_results = self.owner.get_many(task_ids)
+        return [self._view(row, include_token=True, use_prefetched=True,
+                           task_result=task_results.get(str(row["task_id"])) if row["task_id"] else None)
+                for row in rows]
 
     def get(self, *, identity: str, proposal_id: str) -> dict[str, Any]:
         row = self._get_owned(identity, proposal_id)
@@ -307,25 +297,13 @@ class TaskService:
                 if row["status"] == "approved" and row["task_id"]:
                     return self._view(row, include_token=False)
 
-                with closing(
-                    Absurd(self.settings.database_url, queue_name=self.settings.queue)
-                ) as absurd:
-                    spawned = absurd.spawn(
-                        "agent-run",
-                        {
-                            "proposal_id": str(row["id"]),
-                            "identity": identity,
-                            "instruction": row["instruction"],
-                            "workspace": row["workspace"],
-                            "trace_context": bounded_trace_context(trace_context),
-                        },
-                        max_attempts=1,
-                        queue=self.settings.queue,
-                        cancellation={
-                            "max_duration": self.settings.task_timeout_seconds + 60
-                        },
-                        idempotency_key=f"voice-proposal:{row['id']}",
-                    )
+                task_id = self.owner.submit(
+                    "agent-run",
+                    {"proposal_id": str(row["id"]), "identity": identity,
+                     "instruction": row["instruction"], "workspace": row["workspace"],
+                     "trace_context": bounded_trace_context(trace_context)},
+                    str(row["id"]),
+                )
                 cursor.execute(
                     """
                     UPDATE voice_task_proposals
@@ -333,7 +311,7 @@ class TaskService:
                     WHERE id = %s
                     RETURNING *
                     """,
-                    (str(spawned["task_id"]), proposal_id),
+                    (task_id, proposal_id),
                 )
                 approved = cursor.fetchone()
         if approved is None:
@@ -357,12 +335,7 @@ class TaskService:
                 if row["status"] == "cancelled":
                     return self._view(row, include_token=False)
                 if row["task_id"]:
-                    with closing(
-                        Absurd(
-                            self.settings.database_url, queue_name=self.settings.queue
-                        )
-                    ) as absurd:
-                        absurd.cancel_task(str(row["task_id"]))
+                    self.owner.abort(str(row["task_id"]))
                 cursor.execute(
                     """
                     UPDATE voice_task_proposals
@@ -392,15 +365,7 @@ class TaskService:
     def _task_result(self, task_id: object | None) -> dict[str, Any] | None:
         if not task_id:
             return None
-        with closing(
-            Absurd(self.settings.database_url, queue_name=self.settings.queue)
-        ) as absurd:
-            snapshot: TaskResultSnapshot | None = absurd.fetch_task_result(str(task_id))
-        return (
-            asdict(snapshot)
-            if snapshot
-            else {"state": "pending", "result": None, "failure": None}
-        )
+        return self.owner.get(str(task_id)) or {"state": "pending", "result": None, "failure": None}
 
     def progress(
         self, *, identity: str, proposal_id: str, after: int = 0, limit: int = 40
@@ -435,7 +400,8 @@ class TaskService:
                 for result in rows
             ]
 
-    def _view(self, row: dict[str, Any], *, include_token: bool) -> dict[str, Any]:
+    def _view(self, row: dict[str, Any], *, include_token: bool,
+              task_result: dict[str, Any] | None = None, use_prefetched: bool = False) -> dict[str, Any]:
         album = album_by_key(row["session_album_key"])
         token = None
         if (
@@ -466,5 +432,6 @@ class TaskService:
             "created_at": row["created_at"],
             "expires_at": row["expires_at"],
             "approval_token": token,
-            "result": self._task_result(row["task_id"]),
+            "result": (task_result or {"state": "pending", "result": None, "failure": None})
+            if use_prefetched and row["task_id"] else self._task_result(row["task_id"]),
         }

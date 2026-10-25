@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.sathish.pipecat-pi-durable-owner</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/dotenvx</string>
+    <string>run</string><string>--quiet</string><string>--strict</string><string>-f</string>
+    <string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/apps/worker/worker.env</string>
+    <string>--</string>
+    <string>/opt/homebrew/bin/node</string>
+    <string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/voice-pi-agent/node_modules/@agent-workload-platform/pi-durable-task/dist/owner-server.js</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/apps/worker</string>
+  <key>RunAtLoad</key><true/>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>HOME</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/runtime-home</string>
+    <key>PYTHONPATH</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/apps/worker/src:/Users/sathish.narayanan/Library/Application Support/PipecatEdge/packages/tasking/src:/Users/sathish.narayanan/Library/Application Support/PipecatEdge/packages/telemetry/src</string>
+    <key>PI_DURABLE_OWNER_TOKEN_FILE</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/secrets/agent-gateway-token</string>
+    <key>PI_DURABLE_TASK_WORKDIR</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/apps/worker</string>
+  </dict>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>/Users/sathish.narayanan/Library/Logs/PipecatEdge/pi-durable-owner.log</string>
+  <key>StandardErrorPath</key><string>/Users/sathish.narayanan/Library/Logs/PipecatEdge/pi-durable-owner.log</string>
+</dict>
+</plist>

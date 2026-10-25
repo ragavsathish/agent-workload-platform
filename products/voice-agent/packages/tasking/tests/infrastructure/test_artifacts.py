@@ -61,7 +61,10 @@ def test_scratch_root_is_not_documents(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("branch", ["main", "feature/dev-vm"])
-def test_workspace_bundle_preserves_source_branch(tmp_path: Path, branch: str) -> None:
+@pytest.mark.parametrize("persistent", [False, True])
+def test_workspace_bundle_preserves_source_branch(
+    tmp_path: Path, branch: str, persistent: bool
+) -> None:
     repository = tmp_path / "source"
     repository.mkdir()
     subprocess.run(["git", "-C", str(repository), "init", "-q", "-b", branch], check=True)
@@ -84,9 +87,19 @@ def test_workspace_bundle_preserves_source_branch(tmp_path: Path, branch: str) -
     store.bucket = "test-bucket"
     store.client = Client()
     uri = store.publish_workspace("source", repository, ("source",))
-    with store.materialize_workspace(uri, tmp_path / "scratch") as workspace:
+    persistent_root = tmp_path / "scratch" / "task-1" if persistent else None
+    with store.materialize_workspace(
+        uri, tmp_path / "scratch", persistent_root=persistent_root
+    ) as workspace:
         assert _workflow_ref(workspace) == f"refs/heads/{branch}"
         assert (workspace / "README.md").read_text() == "source snapshot\n"
+        if persistent:
+            (workspace / "result.txt").write_text("kept after restart\n")
+    if persistent:
+        with store.materialize_workspace(
+            uri, tmp_path / "scratch", persistent_root=persistent_root
+        ) as resumed:
+            assert (resumed / "result.txt").read_text() == "kept after restart\n"
 
 
 def test_missing_published_workspace_suggests_explicit_scratch() -> None:

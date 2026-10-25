@@ -2,6 +2,11 @@
 (ns patrol-fixture-server
   (:require [cheshire.core :as json]
             [clojure.string :as str]
+            [container-mock.broker :as broker]
+            [container-mock.diagnostics :as diagnostics]
+            [container-mock.durable :as durable]
+            [container-mock.journal :as c2]
+            [container-mock.pi-voice :as pi-voice]
             [patrol-fixture-domain :as domain]
             [patrol-fixture-scenes :as scenes]
             [patrol-fixture-static :as static]
@@ -59,12 +64,17 @@
 
 (defn start-server
   ([] (start-server {}))
-  ([{:keys [port host name nonce static-root ready-file turn-delay-ms speech-delay-ms
-            live-edge-url live-traceparent]
+  ([{:keys [port host name nonce static-root knowledge-root diagnostics-root ready-file turn-delay-ms speech-delay-ms
+            live-edge-url live-traceparent c2-entries durable-mode]
      :or {port 54321 host "127.0.0.1" name "voice-agent-patrol" turn-delay-ms 1800 speech-delay-ms 3000}}]
    (let [nonce (or nonce (str (UUID/randomUUID)))
-         state (atom (domain/create-initial-fixture-state)) pending (atom {}) lock (Object.)
-         route (fn [{:keys [method path headers body]}]
+         state (atom (domain/create-initial-fixture-state)) pending (atom {}) events (atom []) lock (Object.)
+         c2-state (atom (c2/initial-state (or c2-entries [])))
+         diagnostics-state (atom (diagnostics/initial-state))
+         broker-state (atom (broker/initial-state))
+         pi-voice-state (atom (pi-voice/initial-state))
+         durable-state (atom (durable/initial-state))
+         route-impl (fn [{:keys [method path headers body]}]
                  (let [body-map #(if (str/blank? body) {} (json/parse-string body true))
                        transition! (fn [transition status]
                                      (reset! state (:state transition))
@@ -72,6 +82,47 @@
                    (cond
                      (= method "OPTIONS") {:status 204 :headers cors}
                      (and (= method "GET") (= path "/health")) (json-response 200 {:ok true :fixture name :nonce nonce})
+                     (and (= method "GET") (= path "/__fixture/c2/boundaries"))
+                     (json-response 200 {:boundaries (into [] (concat c2/boundaries diagnostics/boundaries broker/boundaries pi-voice/boundaries durable/boundaries))})
+                     (and (= method "GET") (= path "/__fixture/evidence"))
+                     (json-response 200 {:fixture name :nonce nonce :events @events
+                                         :activeSessionId (:activeSessionId @state)
+                                         :tasks (:tasks @state)
+                                         :activeTurn (:activeTurn @state)
+                                         :c2Events (:events @c2-state)})
+                     (c2/route? path)
+                     (locking lock
+                       (let [{:keys [state response]} (c2/transition @c2-state
+                                                                       {:method method :path path
+                                                                        :headers headers :body body})]
+                         (reset! c2-state state)
+                         response))
+                     (diagnostics/route? path)
+                     (locking lock
+                       (let [{:keys [state response]} (diagnostics/transition @diagnostics-state
+                                                                              {:method method :path path :body body})]
+                         (reset! diagnostics-state state)
+                         response))
+                     (broker/route? path)
+                     (locking lock
+                       (let [{:keys [state response]} (broker/transition @broker-state
+                                                                         {:method method :path path
+                                                                          :headers headers :body body})]
+                         (reset! broker-state state)
+                         response))
+                     (pi-voice/route? path)
+                     (locking lock
+                       (let [{:keys [state response]} (pi-voice/transition @pi-voice-state
+                                                                            {:method method :path path
+                                                                             :headers headers :body body})]
+                         (reset! pi-voice-state state)
+                         response))
+                     (and durable-mode (durable/route? path))
+                     (locking lock
+                       (let [{:keys [state response]} (durable/transition @durable-state
+                                                                           {:method method :path path :body body})]
+                         (reset! durable-state state)
+                         response))
                      (and (= method "GET") (= path "/api/mock/scenes")) (json-response 200 {:scenes (scenes/fixture-scene-names)})
                      (and (= method "POST") (= path "/api/pi-speech"))
                      (do (Thread/sleep (long speech-delay-ms))
@@ -130,11 +181,26 @@
                      (let [[_ id action] (re-matches #"/api/tasks/([^/]+)/(approve|cancel)" path)
                            status (if (= action "approve") "approved" "cancelled")]
                        (locking lock (transition! (domain/change-task-status @state id status) 200)))
+                     (and knowledge-root (= method "GET") (str/starts-with? path "/knowledge/"))
+                     (or (static/serve-static knowledge-root (subs path (count "/knowledge")))
+                         (json-response 404 {:detail "knowledge asset not found"}))
+                     (and diagnostics-root (= method "GET") (str/starts-with? path "/diagnostics/"))
+                     (or (static/serve-static diagnostics-root (subs path (count "/diagnostics")))
+                         (json-response 404 {:detail "diagnostics asset not found"}))
                      (and static-root (= method "GET") (not (str/starts-with? path "/api/")))
                      (or (static/serve-static static-root path) (json-response 404 {:detail "fixture route not found"}))
                      :else (json-response 404 {:detail "fixture route not found"}))))
+         route (fn [{:keys [method path] :as request}]
+                 (let [response (route-impl request)]
+                   (when (and (= method "POST") (str/starts-with? path "/api/"))
+                     (swap! events conj {:method method :path path :status (:status response)}))
+                   response))
          _ (when (and static-root (not (Files/isRegularFile (Paths/get (str static-root) (into-array String ["index.html"])) (make-array java.nio.file.LinkOption 0))))
              (throw (ex-info "Static root is missing index.html; build the client first" {:root static-root})))
+         _ (when (and knowledge-root (not (Files/isRegularFile (Paths/get (str knowledge-root) (into-array String ["index.html"])) (make-array java.nio.file.LinkOption 0))))
+             (throw (ex-info "Knowledge root is missing index.html; build the knowledge app first" {:root knowledge-root})))
+         _ (when (and diagnostics-root (not (Files/isRegularFile (Paths/get (str diagnostics-root) (into-array String ["index.html"])) (make-array java.nio.file.LinkOption 0))))
+             (throw (ex-info "Diagnostics root is missing index.html; build the diagnostics app first" {:root diagnostics-root})))
          instance (http/start! {:host host :port port :handler route})
          ready {:fixture name :nonce nonce :port (:port instance)}]
      (when ready-file
@@ -142,7 +208,9 @@
          (when-let [parent (.getParent path)] (Files/createDirectories parent (make-array java.nio.file.attribute.FileAttribute 0)))
          (spit (str path) (str (json/generate-string ready) "\n"))))
      (println (str name " listening on http://" host ":" (:port instance)))
-     (assoc instance :state state :pending pending))))
+     (assoc instance :state state :pending pending :events events :c2-state c2-state
+            :diagnostics-state diagnostics-state :broker-state broker-state
+            :pi-voice-state pi-voice-state :durable-state durable-state))))
 
 (defn stop-server! [instance] (http/stop! instance))
 (defn -main [& _]
@@ -151,9 +219,14 @@
                                 :name (or (System/getenv "PATROL_FIXTURE_NAME") "voice-agent-patrol")
                                 :nonce (or (System/getenv "PATROL_FIXTURE_NONCE") (str (UUID/randomUUID)))
                                 :static-root (System/getenv "PATROL_FIXTURE_STATIC_ROOT")
+                                :knowledge-root (System/getenv "PATROL_KNOWLEDGE_STATIC_ROOT")
+                                :diagnostics-root (System/getenv "PATROL_DIAGNOSTICS_STATIC_ROOT")
                                 :ready-file (System/getenv "PATROL_FIXTURE_READY_FILE")
                                 :live-edge-url (not-empty (System/getenv "PATROL_LIVE_EDGE_URL"))
-                                :live-traceparent (System/getenv "PATROL_LIVE_TRACEPARENT")})]
+                                :live-traceparent (System/getenv "PATROL_LIVE_TRACEPARENT")
+                                :durable-mode (= "true" (System/getenv "PATROL_DURABLE_C2"))
+                                :c2-entries (when-let [path (not-empty (System/getenv "PATROL_C2_SCENARIO_FILE"))]
+                                              (json/parse-string (slurp path) true))})]
     (.addShutdownHook (Runtime/getRuntime) (Thread. #(stop-server! instance)))
     @(promise)))
 (when (= *file* (System/getProperty "babashka.file")) (-main))

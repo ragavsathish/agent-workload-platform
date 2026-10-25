@@ -435,6 +435,14 @@ async def broker_detach_pi_task() -> None:
         raise RuntimeError("Pi task could not be detached")
 
 
+def knowledge_entry_path(entry_id: str, suffix: str) -> str:
+    if re.fullmatch(r"[a-f0-9]{32}:entry:[1-9][0-9]*", entry_id) is None:
+        raise HTTPException(status_code=400, detail="invalid journal entry ID")
+    if suffix not in {"feedback", "assertion-review"}:
+        raise HTTPException(status_code=400, detail="invalid journal review route")
+    return f"/digital-twin/journal/{entry_id}/{suffix}"
+
+
 async def owner_gateway_request(
     request: Request,
     method: str,
@@ -1276,11 +1284,6 @@ if __name__ == "__main__":
             await owner_gateway_request(request, "GET", "/tasks", query=query),
             headers={"Cache-Control": "no-store"},
         )
-
-    def knowledge_entry_path(entry_id: str, suffix: str) -> str:
-        if re.fullmatch(r"[a-f0-9]{32}:entry:[1-9][0-9]*", entry_id) is None:
-            raise HTTPException(status_code=400, detail="invalid journal entry ID")
-        return f"/v1/digital-twin/journal/{entry_id}/{suffix}"
 
     async def knowledge_body(request: Request, allowed: set[str]) -> dict[str, object]:
         try:

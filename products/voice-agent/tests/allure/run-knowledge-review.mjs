@@ -2,9 +2,12 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, execFileSync } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
-import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { copyFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { inferIntent } from './intent-taxonomy.mjs';
+import { inferC4Scope } from './c4-traceability.mjs';
+import { coverageAudit, coverageAuditMarkdown } from './coverage-audit.mjs';
 
 const voiceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const repoRoot = resolve(voiceRoot, '../..');
@@ -21,23 +24,39 @@ const allureStatus = (status) => {
   if (['skipped', 'pending', 'todo'].includes(status)) return 'skipped';
   return 'failed';
 };
-const testResult = ({ fullName, name, status, suite, framework, start, duration = 0, message = '', attachment }) => {
+const testResult = ({ fullName, name, status, suite, framework, start, duration = 0, message = '', attachment,
+  testMethod, testClass }) => {
   const uuid = randomUUID();
   const started = Number.isFinite(start) ? start : Date.now();
+  const { epic, feature, story, capability, behavior, validationLayer, needsReview } = inferIntent(suite, name);
+  const c4 = inferC4Scope(suite, name);
   return {
     uuid, testCaseId: digest(fullName), historyId: digest(fullName), fullName, name,
     status: allureStatus(status), stage: 'finished', start: started, stop: started + Math.max(0, Math.round(duration)),
     ...(message ? { statusDetails: { message: message.slice(0, 4000) } } : {}),
     labels: [
       { name: 'parentSuite', value: 'Voice Agent' }, { name: 'suite', value: suite },
-      { name: 'framework', value: framework }, { name: 'language', value: 'javascript' },
+      { name: 'framework', value: framework },
+      { name: 'language', value: ({ patrol: 'dart', pytest: 'python', 'cargo test': 'rust' })[framework] ?? 'javascript' },
+      { name: 'epic', value: epic }, { name: 'feature', value: feature }, { name: 'story', value: story },
+      { name: 'capability', value: capability }, { name: 'behavior', value: behavior },
+      { name: 'validationLayer', value: validationLayer },
+      { name: 'c4System', value: 'Voice Agent' },
+      { name: 'c4Level', value: c4.level },
+      ...c4.containers.map((value) => ({ name: 'c4Container', value })),
+      ...c4.views.map((value) => ({ name: 'c4View', value })),
+      ...(c4.code ? [{ name: 'c4Code', value: c4.code }] : []),
+      ...(testMethod ? [{ name: 'testMethod', value: testMethod }] : []),
+      ...(testClass ? [{ name: 'testClass', value: testClass }] : []),
+      ...(needsReview ? [{ name: 'tag', value: 'intent-needs-review' }] : []),
+      ...(c4.needsReview ? [{ name: 'tag', value: 'c4-needs-review' }] : []),
     ],
     ...(attachment ? { attachments: [{ name: 'Test command output', source: attachment, type: 'text/plain' }] } : {}),
   };
 };
 
-export function playwrightResults(data, attachment) {
-  const results = [];
+function playwrightCases(data) {
+  const cases = [];
   const visit = (suites) => {
     for (const suite of suites ?? []) {
       for (const spec of suite.specs ?? []) {
@@ -45,19 +64,157 @@ export function playwrightResults(data, attachment) {
           const last = test.results?.at(-1);
           if (!last) continue;
           const fullName = `voice.playwright.${test.projectName}.${spec.file}.${spec.title}`;
-          results.push(testResult({
-            fullName, name: spec.title, status: last.status, suite: `Playwright · ${test.projectName}`,
-            framework: 'playwright', start: Date.parse(last.startTime), duration: last.duration,
-            message: last.error?.message || last.errors?.map((error) => error.message).join('\n') || '',
-            attachment: last.status === 'passed' ? undefined : attachment,
-          }));
+          cases.push({ spec, test, last, fullName });
         }
       }
       visit(suite.suites);
     }
   };
   visit(data.suites);
-  return results;
+  return cases;
+}
+
+export async function attachNativePlaywrightSteps(nativeResultsDir, items) {
+  const byName = new Map();
+  for (const item of items) {
+    if (byName.has(item.name)) throw new Error(`Ambiguous Playwright test title: ${item.name}`);
+    byName.set(item.name, item);
+  }
+  const attempts = new Map();
+  for (const file of await readdir(nativeResultsDir)) {
+    if (!file.endsWith('-result.json')) continue;
+    const result = JSON.parse(await readFile(join(nativeResultsDir, file), 'utf8'));
+    const item = byName.get(result.name);
+    if (!item) continue;
+    const steps = (result.steps ?? []).filter((step) => /^(?:Given|When|Then|And|But)\b/u.test(step.name));
+    if (!steps.length) continue;
+    if (!attempts.has(item.uuid)) attempts.set(item.uuid, []);
+    attempts.get(item.uuid).push({ status: result.status, start: result.start, stop: result.stop, steps });
+  }
+  for (const item of items) {
+    const recorded = (attempts.get(item.uuid) ?? []).sort((left, right) => left.start - right.start);
+    if (item.status !== 'skipped' && recorded.length === 0) {
+      throw new Error(`No Allure.step entries for ${item.fullName}`);
+    }
+    if (recorded.length === 1) item.steps = recorded[0].steps;
+    else if (recorded.length > 1) item.steps = recorded.map((attempt, index) => ({
+      name: `Attempt ${index + 1}`, status: attempt.status, stage: 'finished',
+      start: attempt.start, stop: attempt.stop, steps: attempt.steps,
+    }));
+  }
+}
+
+export function playwrightResults(data, attachment) {
+  return playwrightCases(data).map(({ spec, test, last, fullName }) => {
+    const item = testResult({
+      fullName, name: spec.title, status: last.status, suite: `Playwright · ${test.projectName}`,
+      framework: 'playwright', start: Date.parse(last.startTime), duration: last.duration,
+      message: last.error?.message || last.errors?.map((error) => error.message).join('\n') || '',
+      attachment: last.status === 'passed' ? undefined : attachment,
+    });
+    if (item.status === 'passed' && test.results.slice(0, -1).some((attempt) => attempt.status !== 'passed')) {
+      item.statusDetails = { ...item.statusDetails, flaky: true };
+    }
+    return item;
+  });
+}
+
+const extensionFor = (type) => ({
+  'application/json': '.json', 'application/zip': '.zip', 'image/png': '.png',
+  'image/jpeg': '.jpg', 'text/plain': '.txt', 'video/webm': '.webm',
+})[type] ?? '.bin';
+
+export async function attachPlaywrightEvidence(data, items, outputDir, allureResultsDir) {
+  const byName = new Map(items.map((item) => [item.fullName, item]));
+  for (const { fullName, test } of playwrightCases(data)) {
+    const item = byName.get(fullName);
+    if (!item) throw new Error(`Missing Allure result for ${fullName}`);
+    for (const [attemptIndex, attempt] of test.results.entries()) {
+      for (const [index, attachment] of (attempt.attachments ?? []).entries()) {
+        const isTrace = attachment.path?.endsWith('/trace.zip') ||
+          (attachment.name === 'trace' && attachment.contentType === 'application/zip');
+        const source = `${item.uuid}-${attemptIndex}-${index}${attachment.path ? extname(attachment.path) : extensionFor(attachment.contentType)}`;
+        const target = join(allureResultsDir, source);
+        if (attachment.path) {
+          if (!attachment.path.startsWith('/output/')) throw new Error(`Unexpected Playwright evidence path for ${fullName}`);
+          const origin = resolve(outputDir, attachment.path.slice('/output/'.length));
+          if (!origin.startsWith(`${resolve(outputDir)}${sep}`)) throw new Error(`Playwright evidence escapes its output directory for ${fullName}`);
+          await copyFile(origin, target);
+        } else if (attachment.body) {
+          await writeFile(target, Buffer.from(attachment.body, 'base64'));
+        } else {
+          throw new Error(`Playwright evidence is missing its contents for ${fullName}`);
+        }
+        item.attachments ??= [];
+        const name = isTrace ? 'Playwright trace' : attachment.name || 'Playwright evidence';
+        item.attachments.push({ name: test.results.length > 1 ? `Attempt ${attemptIndex + 1}: ${name}` : name,
+          source, type: isTrace ? 'application/vnd.allure.playwright-trace'
+            : attachment.contentType || 'application/octet-stream' });
+      }
+    }
+  }
+}
+
+const patrolAttachmentType = (name) => name.endsWith('trace.zip')
+  ? 'application/vnd.allure.playwright-trace' : ({
+    '.html': 'text/html', '.json': 'application/json', '.png': 'image/png',
+    '.webm': 'video/webm', '.zip': 'application/zip', '.log': 'text/plain',
+  })[extname(name)] ?? 'application/octet-stream';
+
+async function patrolEvidenceFiles(directory) {
+  const files = [];
+  for (const entry of (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) files.push(...await patrolEvidenceFiles(path));
+    else if (entry.isFile() && entry.name !== '.last-run.json') files.push(path);
+  }
+  return files;
+}
+
+export async function patrolResults(runDir, allureResultsDir, started, duration, targets = ['voice', 'workspace']) {
+  const items = [];
+  for (const target of targets) {
+    let rawResult;
+    try {
+      rawResult = await readFile(join(runDir, 'results', target, '.last-run.json'), 'utf8');
+    } catch (error) {
+      if (error.code === 'ENOENT') continue;
+      throw error;
+    }
+    const result = JSON.parse(rawResult);
+    const item = testResult({
+      fullName: `voice.patrol-web.${target}`,
+      name: target === 'voice' ? 'Voice shell and navigation' : target === 'workspace'
+        ? 'Workspace and durable work' : 'Live edge typed turn',
+      status: result.status, suite: 'Patrol web', framework: 'patrol',
+      start: started, duration: Math.round(duration / targets.length),
+      message: result.failedTests?.join('\n') ?? '',
+    });
+    const evidence = [
+      ...await patrolEvidenceFiles(join(runDir, 'results', target)),
+      join(runDir, `report-${target}`, 'index.html'),
+      join(runDir, 'evidence.json'),
+      ...(target === 'workspace' ? [join(runDir, 'fixture-evidence.json')] : []),
+    ];
+    for (const [index, path] of evidence.entries()) {
+      const source = `${item.uuid}-${index}${extname(path)}`;
+      try {
+        await copyFile(path, join(allureResultsDir, source));
+      } catch (error) {
+        if (result.status !== 'passed' && error.code === 'ENOENT') continue;
+        throw error;
+      }
+      item.attachments ??= [];
+      item.attachments.push({ name: path.endsWith('trace.zip') ? 'Patrol Playwright trace'
+        : path.endsWith('index.html') ? 'Patrol HTML report'
+          : path.endsWith('fixture-evidence.json') ? 'Patrol HTTP fixture evidence'
+          : path.endsWith('evidence.json') ? 'Patrol trace evidence'
+            : `Patrol ${extname(path).slice(1)}: ${path.split(sep).at(-1)}`,
+      source, type: patrolAttachmentType(path) });
+    }
+    items.push(item);
+  }
+  return items;
 }
 
 export function vitestResults(data, started, attachment) {
@@ -70,10 +227,10 @@ export function vitestResults(data, started, attachment) {
   })));
 }
 
-export function nodeTapResults(tap, started, attachment) {
+export function nodeTapResults(tap, started, attachment, { suite = 'Journal MCP contract', id = 'journal-review-mcp' } = {}) {
   return [...tap.matchAll(/^(not )?ok \d+ - (.+)$/gmu)].map((match) => testResult({
-    fullName: `voice.node.journal-review-mcp.${match[2]}`,
-    name: match[2], status: match[1] ? 'failed' : 'passed', suite: 'Journal MCP contract',
+    fullName: `voice.node.${id}.${match[2]}`,
+    name: match[2], status: match[1] ? 'failed' : 'passed', suite,
     framework: 'node:test', start: started,
     message: match[1] ? 'See the attached Node test output.' : '',
     attachment: match[1] ? attachment : undefined,
@@ -95,6 +252,7 @@ export function pytestJunitResults(xml, started, attachment) {
     results.push(testResult({
       fullName: `voice.pytest.${attributes.classname}.${attributes.name}`,
       name: attributes.name, status, suite: 'Gateway', framework: 'pytest',
+      testMethod: attributes.name, testClass: attributes.classname,
       start: started, duration: Number(attributes.time ?? 0) * 1000,
       message: failure ? xmlValue(failure[1]) : '',
       attachment: status === 'passed' ? undefined : attachment,
@@ -108,6 +266,7 @@ export function rustTestResults(output, started, attachment) {
     fullName: `voice.rust.personal-knowledge-core.${match[1]}`,
     name: match[1], status: match[2] === 'ok' ? 'passed' : match[2] === 'ignored' ? 'skipped' : 'failed',
     suite: 'Knowledge core', framework: 'cargo test', start: started,
+    testMethod: match[1],
     message: match[2] === 'FAILED' ? 'See the attached Cargo test output.' : '',
     attachment: match[2] === 'ok' ? undefined : attachment,
   }));
@@ -155,26 +314,99 @@ async function main() {
     suite: 'Command gates', framework: 'repository-runner', start: run.started,
     duration: run.duration, message, attachment,
   });
-  const recordParsed = async (name, run, items) => {
+  const recordParsed = async (name, run, items, expectedCount = 1) => {
     await emit(items);
-    if (run.code !== 0 || items.length === 0) {
+    if (run.code !== 0 || items.length < expectedCount) {
       const attachment = await attachLog(name, run.logPath);
       await emit([gate(name, { ...run, code: 1 }, attachment,
-        items.length === 0 ? `No ${name} test results were produced. ${run.error}` : run.error)]);
+        items.length < expectedCount ? `Expected ${expectedCount} ${name} test results, received ${items.length}. ${run.error}` : run.error)]);
     }
   };
+  const recordProbe = async ({ id, suite, title, command, args, validate }) => {
+    const run = await runCommand(id, command, args);
+    const output = await readFile(run.logPath, 'utf8');
+    let proof;
+    let message = run.error;
+    if (run.code === 0) {
+      try { proof = validate(output); } catch (error) { message = error.message; }
+    }
+    const attachment = await attachLog(id, run.logPath);
+    const item = testResult({
+      fullName: `voice.probe.${id}`, name: title, status: run.code === 0 && !message ? 'passed' : 'failed',
+      suite, framework: 'repository-probe', start: run.started, duration: run.duration,
+      message, attachment,
+    });
+    if (proof) {
+      const source = `${item.uuid}-proof.json`;
+      await writeFile(join(resultsRoot, source), `${JSON.stringify(proof, null, 2)}\n`);
+      item.attachments.push({ name: 'Verified boundary evidence', source, type: 'application/json' });
+    }
+    await emit([item]);
+  };
 
-  const playwrightDir = join(runRoot, 'playwright');
-  const playwright = await runCommand('playwright-knowledge-base', 'make', ['playwright-knowledge-base'], {
-    env: { PLAYWRIGHT_OUTPUT_DIR: playwrightDir },
+  const browserProjects = ['knowledge-base', 'knowledge-c2-mock', 'knowledge-live', 'voice', 'diagnostics', 'diagnostics-c2-mock', 'durable-c2-mock', 'task-diagram', 'grafana'];
+  if (process.env.VOICE_RUN_DURABLE_E2E === 'true') browserProjects.push('durable');
+  for (const project of browserProjects) {
+    const name = `playwright-${project}`;
+    const outputDir = join(runRoot, name);
+    const run = await runCommand(name, 'make', [name], { env: {
+      PLAYWRIGHT_OUTPUT_DIR: outputDir,
+      ...(project === 'voice' ? { VOICE_E2E_RETRIES: '1' } : {}),
+    } });
+    try {
+      const data = JSON.parse(await readFile(join(outputDir, 'results.json'), 'utf8'));
+      const attachment = await attachLog(name, run.logPath);
+      const items = playwrightResults(data, attachment);
+      await attachPlaywrightEvidence(data, items, outputDir, resultsRoot);
+      await attachNativePlaywrightSteps(join(outputDir, 'native-allure-results'), items);
+      await recordParsed(name, run, items);
+    } catch (error) {
+      const attachment = await attachLog(name, run.logPath);
+      await emit([gate(name, { ...run, code: 1 }, attachment, `Playwright results unavailable: ${error.message}`)]);
+    }
+  }
+
+  await recordProbe({
+    id: 'voice-edge-broker-mock', suite: 'Voice Edge broker mock',
+    title: 'normalizes typed Pi responses and failures through the C2 broker mock',
+    command: 'make', args: ['test-voice-edge-c2-mock'],
+    validate: (output) => {
+      const line = output.split('\n').find((value) => value.startsWith('C2_BROKER_EVIDENCE='));
+      if (!line || !/Ran 1 test .*\n\nOK/u.test(output)) throw new Error('Broker boundary result or receipt missing');
+      const evidence = JSON.parse(line.slice('C2_BROKER_EVIDENCE='.length));
+      if (evidence.boundary !== 'Voice Edge → Inference Broker'
+          || JSON.stringify(evidence.scenarios.map(({ scenario, brokerStatus, edgeStatus }) =>
+            [scenario, brokerStatus, edgeStatus])) !== JSON.stringify([
+          ['ready', 200, 200], ['unavailable', 502, 502],
+          ['invalid-response', 200, 502], ['empty-response', 200, 502],
+        ])) throw new Error('Broker boundary receipt did not cover expected scenarios');
+      return evidence;
+    },
+  });
+
+  await recordProbe({
+    id: 'broker-pi-stream-mock', suite: 'Broker Pi stream mock',
+    title: 'translates Pi deltas and failures through the C2 stream mock',
+    command: 'make', args: ['test-broker-pi-stream-c2-mock'],
+    validate: (output) => {
+      if (!/4 passed/u.test(output)) throw new Error('Four Pi streaming scenarios did not pass');
+      return { boundary: 'Inference Broker → Pi Voice',
+        scenarios: ['ready', 'malformed-event', 'turn-error', 'upstream-unavailable'] };
+    },
+  });
+
+  const patrolDir = join(runRoot, 'patrol-web');
+  const patrol = await runCommand('patrol-web', 'npm', ['--prefix', 'apps/client', 'run', 'test:patrol'], {
+    env: { PATROL_RUN_DIR: patrolDir },
   });
   try {
-    const data = JSON.parse(await readFile(join(playwrightDir, 'results.json'), 'utf8'));
-    const attachment = await attachLog('playwright-knowledge-base', playwright.logPath);
-    await recordParsed('playwright-knowledge-base', playwright, playwrightResults(data, attachment));
+    const targets = process.env.PATROL_LIVE_ONLY === 'true' ? ['live-edge']
+      : process.env.PATROL_LIVE_EDGE_URL ? ['voice', 'workspace', 'live-edge'] : ['voice', 'workspace'];
+    await recordParsed('patrol-web', patrol,
+      await patrolResults(patrolDir, resultsRoot, patrol.started, patrol.duration, targets), targets.length);
   } catch (error) {
-    const attachment = await attachLog('playwright-knowledge-base', playwright.logPath);
-    await emit([gate('playwright-knowledge-base', { ...playwright, code: 1 }, attachment, `Playwright JSON unavailable: ${error.message}`)]);
+    const attachment = await attachLog('patrol-web', patrol.logPath);
+    await emit([gate('patrol-web', { ...patrol, code: 1 }, attachment, `Patrol result unavailable: ${error.message}`)]);
   }
 
   const vitestJson = join(runRoot, 'vitest.json');
@@ -199,6 +431,12 @@ async function main() {
       ['--test', '--test-reporter=tap', 'tests/server.test.mjs'], { cwd: join(voiceRoot, 'apps/journal-review-mcp') });
     const attachment = await attachLog('journal-mcp-contract', node.logPath);
     await recordParsed('journal-mcp-contract', node, nodeTapResults(await readFile(node.logPath, 'utf8'), node.started, attachment));
+    const deployed = await runCommand('journal-mcp-deployed-roundtrip', process.execPath,
+      ['--test', '--test-reporter=tap', 'tests/deployed-roundtrip.test.mjs'], { cwd: join(voiceRoot, 'apps/journal-review-mcp') });
+    const deployedAttachment = await attachLog('journal-mcp-deployed-roundtrip', deployed.logPath);
+    await recordParsed('journal-mcp-deployed-roundtrip', deployed,
+      nodeTapResults(await readFile(deployed.logPath, 'utf8'), deployed.started, deployedAttachment,
+        { suite: 'Deployed MCP save round trip', id: 'journal-review-mcp-deployed' }));
   }
 
   const junit = join(runRoot, 'gateway-junit.xml');
@@ -214,6 +452,46 @@ async function main() {
   await recordParsed('knowledge-core-rust', rust,
     rustTestResults(await readFile(rust.logPath, 'utf8'), rust.started, rustAttachment));
 
+  await recordProbe({
+    id: 'personal-knowledge-wassette', suite: 'Deployed personal knowledge',
+    title: 'retrieves sourced personal knowledge through deployed Wassette',
+    command: 'python3', args: ['tests/e2e/personal-knowledge-regression.py'],
+    validate: (output) => {
+      const checks = [
+        'Wassette returned a relevant Oxigraph fact despite unmatched query terms',
+        'Wassette query-journal returned the journal entry, source transcript, and topic',
+      ];
+      for (const check of checks) if (!output.includes(`PASS ${check}`)) throw new Error(`Missing Wassette proof: ${check}`);
+      return { boundary: 'Wassette → Agent Gateway / Oxigraph', checks };
+    },
+  });
+
+  await recordProbe({
+    id: 'grafana-mcp-live', suite: 'Grafana MCP observability',
+    title: 'queries the live C4 dashboard and a fresh Tempo trace through Grafana MCP',
+    command: 'python3', args: ['tests/e2e/grafana-mcp.py'],
+    validate: (output) => {
+      const proof = JSON.parse(output);
+      if (proof.dashboard !== 'voice-c4-heatmap' || proof.traceApp !== 'ui://grafana/trace.html'
+        || !/^[a-f0-9]{32}$/u.test(proof.traceId) || proof.promql !== 'up{job="grafana-mcp"}') {
+        throw new Error('Grafana MCP proof lacks a fresh trace, trace App, dashboard, or PromQL result');
+      }
+      return proof;
+    },
+  });
+
+  await recordProbe({
+    id: 'c4-dashboard-contract', suite: 'C4 dashboard contract',
+    title: 'compiles the source-backed C4 operational dashboard',
+    command: 'bb', args: ['deploy/observability/c4-dashboard_test.clj'],
+    validate: (output) => {
+      if (!/Ran 4 tests containing 13 assertions\.[\s\S]*0 failures, 0 errors\./u.test(output)) {
+        throw new Error('C4 dashboard contract did not report its expected assertions');
+      }
+      return { diagramPanels: 16, evidencePanel: 1, assertions: 13 };
+    },
+  });
+
   const counts = emitted.reduce((result, item) => {
     result[item.status] = (result[item.status] ?? 0) + 1;
     return result;
@@ -226,6 +504,14 @@ async function main() {
     '--output', reportPath, '--clean', '--cwd', repoRoot,
   ]);
   if (allure.code !== 0) throw new Error(`Allure generation failed: ${allure.error}`);
+  const c2Source = await readFile(join(voiceRoot, 'docs/architecture/c2-container.mmd'), 'utf8');
+  const diagramNames = (await readdir(join(voiceRoot, 'docs/architecture')))
+    .filter((name) => /^(?:c[123]|d[123]|deployment-security).*\.mmd$/u.test(name)).sort();
+  const audit = coverageAudit(emitted, c2Source, diagramNames);
+  const auditJson = `${JSON.stringify(audit, null, 2)}\n`;
+  await writeFile(join(runRoot, 'coverage-audit.json'), auditJson);
+  await writeFile(join(reportPath, 'coverage-audit.json'), auditJson);
+  await writeFile(join(reportPath, 'coverage-audit.md'), coverageAuditMarkdown(audit, manifest));
   await mkdir(reportRoot, { recursive: true });
   await writeFile(join(reportRoot, 'latest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(JSON.stringify({ reportPath, commit, counts }));

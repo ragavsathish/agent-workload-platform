@@ -38,6 +38,30 @@ The mock serves the built Flutter client and deterministic `/api/pi-*` and
 To reuse an existing build, run `npm run dev:mock:serve`. Set `MOCK_HOST_PORT`
 to choose another loopback port.
 
+The same Babashka tool has an in-memory C2 journal integration slice. Its
+`OXIGRAPH` query route (`POST /oxigraph/query`), `EDGE` owner review routes
+(`/api/knowledge/journal/{entryId}/feedback` and `assertion-review`), and
+`GATEWAY` correction route (`POST /v1/digital-twin/journal/{entryId}/feedback`)
+share entries by exact journal entry ID. The gateway mock requires
+`Authorization: Bearer c2-mock-token` and a nonempty `identity`. Inspect
+`GET /__fixture/c2/boundaries` for the mapped C2 contracts and
+`GET /__fixture/c2/evidence` for bounded state and request events. The dev
+command loads `tool/c2_journal_scenario.json`; set `PATROL_C2_SCENARIO_FILE`
+to use another JSON array of journal entries. Each process starts with fresh
+memory, and `npm run test:mock` checks the query, edit, authorization, and
+shared-state behavior. The C2 handlers are split under
+[`tool/container_mock/`](tool/container_mock/README.md) by container boundary;
+the same server also models diagnostics success and failure scenarios.
+
+To run the browser review and diagnostic journeys against this shared state,
+from `products/voice-agent` run `make playwright-knowledge-c2-mock` and
+`make playwright-diagnostics-c2-mock`. The common
+`deploy/compose.c2-mock.yml` and its knowledge or diagnostics overlay start
+only the Babashka fixture and Playwright,
+serves the built React knowledge browser, and writes JSON, trace, and Allure
+evidence under `artifacts/test-reports/c2-mock/`. It uses an isolated Compose
+network and removes its containers when the test finishes.
+
 This is a UI/MCP contract fixture, not a simulated voice model or a durable
 task VM. Trace artifact links, the official Grafana MCP App, speech recognition,
 and task execution still require their integration services. The production

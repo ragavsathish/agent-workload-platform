@@ -1,0 +1,6 @@
+services:
+  c2-container-mock:
+    environment:
+      PATROL_DIAGNOSTICS_STATIC_ROOT: /diagnostics
+    volumes:
+      - ../apps/diagnostics/dist:/diagnostics:ro

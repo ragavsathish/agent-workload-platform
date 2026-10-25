@@ -108,7 +108,6 @@ def main() -> None:
         "--wait",
         "--force-recreate",
         "gitea",
-        "habitat",
         "otel-lgtm",
         "agent-gateway",
         "voice-edge",

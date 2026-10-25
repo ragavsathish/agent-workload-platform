@@ -13,10 +13,6 @@ compose_services:
     log_driver: local
     published_ports:
       - { container: 3000, host: 127.0.0.1, published: 3001 }
-  - name: habitat
-    read_only: true
-    log_driver: local
-    published_ports: []
   - name: s3mock
     read_only: true
     published_ports:
@@ -85,7 +81,7 @@ launch_agents:
   - com.sathish.pipecat-host-observability
   - com.sathish.pipecat-image-builder
   - com.sathish.pipecat-pi-voice
-  - com.sathish.pipecat-worker
+  - com.sathish.pipecat-pi-durable-owner
 
 compose_one_shot_services:
   - s3mock-init

@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "devDependencies": {
+    "@earendil-works/pi-ai": "^1.4.0",
+    "@earendil-works/pi-mcp": "^1.2.0",
+    "@playwright/test": "1.63.0-alpha-2026-08-05",
+    "allure-js-commons": "3.14.0",
+    "allure-playwright": "3.14.0"
+  }
+}

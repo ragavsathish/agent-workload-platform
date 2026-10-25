@@ -52,7 +52,12 @@
 (deftest assembles-the-source-backed-heat-map-in-process
   (let [dashboard (generate-c4-heatmap/build-dashboard)]
     (is (= "voice-c4-heatmap" (:uid dashboard)))
-    (is (= 16 (count (:panels dashboard))))
+    (is (= 17 (count (:panels dashboard))))
+    (is (some #(= "C3 · Pi Durable Owner" (:title %)) (:panels dashboard)))
+    (is (re-find #"Pi Durable Owner" (get-in dashboard [:panels 2 :options :content])))
+    (is (not (re-find #"HABITAT|Absurd Habitat|pipecat-task-worker"
+                      (pr-str dashboard))))
+    (is (some #(= "C3 · Journal & Knowledge" (:title %)) (:panels dashboard)))
     (is (re-find #"Grafana node backgrounds are intentionally neutral"
                  (get-in dashboard [:panels 1 :options :content])))))
 

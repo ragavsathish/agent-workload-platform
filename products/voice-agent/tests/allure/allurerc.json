@@ -1,5 +1,12 @@
 {
-  "name": "Voice Agent Knowledge Review",
+  "name": "Voice Agent Validation",
   "historyPath": "./artifacts/test-reports/knowledge-review-history.jsonl",
-  "appendHistory": true
+  "appendHistory": true,
+  "plugins": {
+    "awesome": {
+      "options": {
+        "groupBy": ["epic", "feature", "story"]
+      }
+    }
+  }
 }

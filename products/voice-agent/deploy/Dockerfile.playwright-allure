@@ -1,0 +1,6 @@
+FROM mcr.microsoft.com/playwright/mcp:v0.0.79@sha256:18c0a9c934004fe9580cc79f1e8e6e6cde7c667348b215335e8a23fd3e509804
+
+WORKDIR /tests
+COPY tests/e2e/package.json tests/e2e/package-lock.json ./
+# The pinned MCP image ships a Playwright prerelease; npm's stable peer range rejects it.
+RUN npm ci --include=dev --legacy-peer-deps --ignore-scripts --no-audit --no-fund

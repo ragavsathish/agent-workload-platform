@@ -30,19 +30,14 @@ class Settings:
     allowed_users: tuple[str, ...]
     workspace_roots: tuple[Path, ...]
     approval_ttl_seconds: int
-    queue: str
-    pi_binary: str
     pi_model: str | None
     pi_thinking: str
     pi_session_dir: Path
-    gondolin_extension: Path | None
-    allow_unsandboxed: bool
+    pi_execution_mode: str
     task_timeout_seconds: int
     max_output_bytes: int
     skills_dir: Path | None
-    pi_rpc_host_binary: Path = Path("/opt/homebrew/bin/pi-task-rpc")
-    pi_rpc_socket_dir: Path = Path(f"/tmp/awp-pi-rpc-{os.getuid()}")
-    pi_rpc_idle_seconds: float = 30.0
+    pi_durable_mcp_servers_file: Path | None = None
     artifact_endpoint_url: str = ""
     artifact_bucket: str = ""
     artifact_access_key: str = ""
@@ -66,24 +61,22 @@ class Settings:
     music_generation_base_url: str = ""
     music_generation_timeout_seconds: int = 600
     music_ffmpeg_binary: str = "/opt/homebrew/bin/ffmpeg"
+    pi_durable_owner_url: str = "http://host.docker.internal:9448"
+    pi_durable_owner_token_file: Path = Path("/run/secrets/agent-gateway-token")
 
     @classmethod
     def from_env(cls) -> Settings:
         roots = _csv("ORCHESTRATOR_WORKSPACE_ROOTS")
-        extension = _value("PI_GONDOLIN_EXTENSION")
         return cls(
             database_url=_value("DATABASE_URL"),
             approval_secret=_value("ORCHESTRATOR_APPROVAL_SECRET"),
             allowed_users=_csv("ORCHESTRATOR_ALLOWED_USERS"),
             workspace_roots=tuple(Path(root).expanduser().resolve() for root in roots),
             approval_ttl_seconds=int(os.getenv("ORCHESTRATOR_APPROVAL_TTL_SECONDS", "300")),
-            queue=_value("ABSURD_QUEUE", "agents"),
-            pi_binary=_value("PI_BINARY", "/opt/homebrew/bin/pi"),
             pi_model=_value("PI_MODEL") or None,
             pi_thinking=_value("PI_THINKING", "medium"),
             pi_session_dir=Path(_value("PI_SESSION_DIR", "~/.pi/agent/sessions")).expanduser(),
-            gondolin_extension=Path(extension).expanduser().resolve() if extension else None,
-            allow_unsandboxed=_bool_env("WORKER_ALLOW_UNSANDBOXED"),
+            pi_execution_mode=_value("WORKER_PI_EXECUTION_MODE", "gondolin").lower(),
             task_timeout_seconds=int(os.getenv("WORKER_TASK_TIMEOUT_SECONDS", "1800")),
             max_output_bytes=int(os.getenv("WORKER_MAX_OUTPUT_BYTES", "1048576")),
             skills_dir=(
@@ -91,16 +84,15 @@ class Settings:
                 if _value("PI_TASK_SKILLS_DIR")
                 else None
             ),
-            pi_rpc_host_binary=Path(
-                _value("PI_TASK_RPC_HOST_BINARY", "/opt/homebrew/bin/pi-task-rpc")
-            ).expanduser(),
-            pi_rpc_socket_dir=Path(
-                _value(
-                    "PI_TASK_RPC_SOCKET_DIR",
-                    f"/tmp/awp-pi-rpc-{os.getuid()}",
-                )
-            ).expanduser(),
-            pi_rpc_idle_seconds=float(os.getenv("PI_TASK_RPC_IDLE_SECONDS", "30")),
+            pi_durable_mcp_servers_file=(
+                Path(_value("PI_DURABLE_MCP_SERVERS_FILE")).expanduser()
+                if _value("PI_DURABLE_MCP_SERVERS_FILE")
+                else None
+            ),
+            pi_durable_owner_url=_value("PI_DURABLE_OWNER_URL", "http://host.docker.internal:9448"),
+            pi_durable_owner_token_file=Path(
+                _value("PI_DURABLE_OWNER_TOKEN_FILE", "/run/secrets/agent-gateway-token")
+            ),
             artifact_endpoint_url=_value("ARTIFACT_ENDPOINT_URL"),
             artifact_bucket=_value("ARTIFACT_BUCKET", "agent-artifacts"),
             artifact_access_key=_value("ARTIFACT_ACCESS_KEY", "local-test"),

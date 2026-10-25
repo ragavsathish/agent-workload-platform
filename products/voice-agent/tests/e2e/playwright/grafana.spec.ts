@@ -1,3 +1,4 @@
+import * as allure from 'allure-js-commons';
 import { test, expect, expectCleanBrowser } from './fixtures';
 
 const evidenceStrokes = new Set([
@@ -25,6 +26,7 @@ test('renders every operational C4 panel with accessible color semantics', async
   page,
   browserEvidence,
 }, testInfo) => {
+  const diagramPanels = await allure.step('Given the authenticated C4 dashboard is open with every modeled view', async () => {
   await page.goto('/metrics/d/voice-c4-heatmap/c4-operational-heat-map', {
     waitUntil: 'domcontentloaded',
   });
@@ -37,16 +39,20 @@ test('renders every operational C4 panel with accessible color semantics', async
     if (!response.ok) throw new Error(`Grafana dashboard API returned ${response.status}`);
     return response.json();
   });
-  const diagramPanels = dashboard.dashboard.panels.filter(
+  const panels = dashboard.dashboard.panels.filter(
     (panel) => panel.type === 'neildengg-grafmaid-panel',
   );
-  expect(diagramPanels).toHaveLength(15);
+  expect(panels).toHaveLength(16);
+  expect(panels.map((panel) => panel.title)).toContain('C3 · Journal & Knowledge');
   expect(dashboard.dashboard.refresh).toBe('30s');
   expect(dashboard.dashboard.links).toHaveLength(2);
   expect(dashboard.dashboard.annotations.list[0].name).toBe('Deployments and E2E runs');
-  expect(diagramPanels.filter((panel) => panel.targets.length > 0).map((panel) => panel.title))
+  expect(panels.filter((panel) => panel.targets.length > 0).map((panel) => panel.title))
     .toEqual(['C2 · Containers']);
+  return panels;
+  });
 
+  await allure.step('When I scroll through all C4 panels', async () => {
   for (const panel of diagramPanels) {
     const title = page.getByText(panel.title, { exact: true }).first();
     await title.scrollIntoViewIfNeeded();
@@ -60,7 +66,9 @@ test('renders every operational C4 panel with accessible color semantics', async
       return false;
     }), { message: `${panel.title} did not render an SVG` }).toBe(true);
   }
+  });
 
+  await allure.step('Then live C2 activity and all diagram colors remain readable', async () => {
   const voiceEdgePanel = diagramPanels.find((panel) => panel.title === 'C2 · Containers');
   expect(voiceEdgePanel).toBeDefined();
   const voiceEdgeExpression = voiceEdgePanel.targets[0].expr.replaceAll('$__range', '15m');
@@ -200,4 +208,5 @@ test('renders every operational C4 panel with accessible color semantics', async
     /panel plugin not found|failed to load plugin|unexpected error/i,
   );
   expectCleanBrowser(browserEvidence);
+  });
 });

@@ -5,6 +5,7 @@ providers:
     orgId: 1
     folder: Pipecat Voice
     type: file
+    updateIntervalSeconds: 30
     disableDeletion: true
     editable: false
     options:

@@ -6,7 +6,7 @@ import test from "node:test";
 
 import { RemoteTaskSession } from "./dist/voice-agent/remote-task-session.js";
 
-test("remote task session attaches and sends a conversational Pi RPC turn", async () => {
+test("remote task session attaches and sends a conversational follow-up", async () => {
   const taskId = "00000000-0000-0000-0000-000000000001";
   const directory = `/tmp/awp-rpc-test-${process.pid}-${Date.now()}`;
   const path = join(directory, `${taskId}.sock`);

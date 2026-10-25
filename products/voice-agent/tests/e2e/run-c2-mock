@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+voice_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+repo_root="$(cd "$voice_root/../.." && pwd)"
+case "${1:-}" in
+  knowledge-c2-mock) overlay="$voice_root/deploy/compose.c2-knowledge.yml" ;;
+  diagnostics-c2-mock) overlay="$voice_root/deploy/compose.c2-diagnostics.yml" ;;
+  durable-c2-mock) overlay="$voice_root/deploy/compose.c2-durable.yml" ;;
+  *) echo "Usage: run-c2-mock {knowledge-c2-mock|diagnostics-c2-mock|durable-c2-mock}" >&2; exit 2 ;;
+esac
+export PLAYWRIGHT_C2_PROJECT="$1"
+run_id="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+export PLAYWRIGHT_OUTPUT_DIR="${PLAYWRIGHT_OUTPUT_DIR:-$repo_root/artifacts/test-reports/c2-mock/$run_id}"
+mkdir -p "$PLAYWRIGHT_OUTPUT_DIR"
+
+compose=(docker compose --project-name "pipecat-c2-mock-$$"
+  -f "$voice_root/deploy/compose.c2-mock.yml" -f "$overlay")
+trap '"${compose[@]}" down --remove-orphans >/dev/null' EXIT
+
+"${compose[@]}" up --build --abort-on-container-exit \
+  --exit-code-from playwright-c2-e2e c2-container-mock playwright-c2-e2e

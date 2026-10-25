@@ -7,12 +7,13 @@ import io
 import json
 import os
 import re
+import shutil
 import stat
 import subprocess
 import tempfile
 import zipfile
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -139,12 +140,30 @@ class ArtifactStore:
         return key, match.group(1)
 
     @contextmanager
-    def materialize_workspace(self, uri: str, scratch_root: Path) -> Iterator[Path]:
+    def materialize_workspace(
+        self, uri: str, scratch_root: Path, *, persistent_root: Path | None = None
+    ) -> Iterator[Path]:
         key, expected_digest = self._parse_source_uri(uri)
         scratch_root.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.chmod(scratch_root, 0o700)
-        with tempfile.TemporaryDirectory(prefix="task-", dir=scratch_root) as temporary:
+        if persistent_root is not None:
+            if not persistent_root.resolve().is_relative_to(scratch_root.resolve()):
+                raise ValueError("persistent workspace must stay inside scratch root")
+            marker = persistent_root / "source-uri"
+            workspace = persistent_root / "workspace"
+            if marker.is_file():
+                if marker.read_text(encoding="utf-8") != uri or not workspace.is_dir():
+                    raise ValueError("persistent workspace source does not match task")
+                yield workspace
+                return
+            if persistent_root.exists():
+                shutil.rmtree(persistent_root)
+            root_context = nullcontext(persistent_root)
+        else:
+            root_context = tempfile.TemporaryDirectory(prefix="task-", dir=scratch_root)
+        with root_context as temporary:
             task_root = Path(temporary)
+            task_root.mkdir(parents=True, exist_ok=True, mode=0o700)
             bundle = task_root / "source.bundle"
             with bundle.open("wb") as output:
                 self.client.download_fileobj(self.bucket, key, output)
@@ -186,6 +205,9 @@ class ArtifactStore:
                 )
             else:
                 raise ValueError("workspace bundle must contain exactly one source ref")
+            if persistent_root is not None:
+                marker.write_text(uri, encoding="utf-8")
+                os.chmod(marker, 0o600)
             yield workspace
 
     def capture_result(

@@ -1,0 +1,17 @@
+---
+- name: Deploy the voice edge after a targeted source change
+  hosts: localhost
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: Rebuild and converge the voice edge container
+      community.docker.docker_compose_v2:
+        project_src: "{{ compose_project_src }}"
+        files: "{{ compose_files }}"
+        env_files: "{{ compose_env_files }}"
+        project_name: "{{ compose_project_name }}"
+        services: [voice-edge]
+        build: always
+        recreate: always
+        state: present
+        wait: true

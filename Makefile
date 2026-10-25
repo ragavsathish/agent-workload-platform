@@ -26,11 +26,10 @@ GONDOLIN_DEV_CONFIG := platform/agent-execution/gondolin-session/gondolin/dev.$(
 GONDOLIN_DEV_SERVICE := dev-runtime-$(GONDOLIN_PROFILE)
 GONDOLIN_DEV_IMAGE_CACHE ?= $(HOME)/.cache/gondolin/compose-index/$(notdir $(CURDIR))/$(GONDOLIN_ARCH)
 GONDOLIN_DEV_IMAGE_STORE ?= $(HOME)/.cache/gondolin/$(GONDOLIN_ARCH)
-GONDOLIN_ONBOARDING_IMAGE ?= artifacts/gondolin-dev-qemu-current/$(GONDOLIN_ARCH)
 GONDOLIN_DEV_CACHE_HANDOFF ?=
 GONDOLIN_COMPOSE_CACHE_HANDOFF ?= $(HOME)/.cache/gondolin/compose-cache-handoff
 GONDOLIN_IMAGE_BUILDER_HANDOFF ?= $(HOME)/Library/Application Support/PipecatEdge/gondolin-image-handoff
-.PHONY: help FORCE $(VOICE_AGENT_TARGETS) $(WASM_TARGETS) gondolin-session-build gondolin-builder-build gondolin-dev-build gondolin-dev-cache gondolin-dev-cache-import gondolin-check-pi-vm gondolin-docker-job-api-up gondolin-docker-job-api-down gondolin-docker-job-api-test
+.PHONY: help FORCE $(VOICE_AGENT_TARGETS) $(WASM_TARGETS) gondolin-session-build gondolin-builder-build gondolin-dev-build gondolin-dev-cache gondolin-dev-cache-import gondolin-docker-job-api-up gondolin-docker-job-api-down gondolin-docker-job-api-test
 
 help:
 	@printf '%s\n' \
@@ -52,7 +51,6 @@ help:
 		'  make gondolin-docker-job-api-up|down  Run or stop the host Docker API service' \
 		'  make gondolin-dev-cache  Prepare Compose image archives locally' \
 		'  make gondolin-dev-cache-import GONDOLIN_DEV_CACHE_HANDOFF=<path>  Import Gitea cache output' \
-		'  make gondolin-check-pi-vm  Check Pi VM startup, tool routing, and resume'
 
 $(VOICE_AGENT_TARGETS) $(WASM_TARGETS):
 	$(MAKE) -C $(VOICE_AGENT_DIR) $@
@@ -103,12 +101,6 @@ gondolin-dev-cache:
 gondolin-dev-cache-import:
 	@test -n "$(GONDOLIN_DEV_CACHE_HANDOFF)" || { echo "Set GONDOLIN_DEV_CACHE_HANDOFF to the completed Gitea handoff directory." >&2; exit 1; }
 	docker run --rm -v "$(CURDIR):$(CURDIR)" -v "$(HOME):$(HOME)" -w "$(CURDIR)/platform/agent-execution/gondolin-session/image-builder" golang:1.25-alpine go run . compose import "$(abspath $(GONDOLIN_DEV_CACHE_HANDOFF))" "$(abspath $(GONDOLIN_DEV_IMAGE_CACHE))" "$(abspath $(GONDOLIN_DEV_IMAGE_STORE))"
-
-gondolin-check-pi-vm:
-	bash platform/agent-execution/gondolin-session/tools/check-pi-vm.sh \
-		"$(abspath $(GONDOLIN_ONBOARDING_IMAGE))" \
-		"$(abspath $(GONDOLIN_DEV_IMAGE_CACHE))" \
-		"$(abspath $(GONDOLIN_DEV_IMAGE_STORE))"
 
 gondolin-docker-job-api-test:
 	docker run --rm -v "$(CURDIR)/platform/agent-execution/gondolin-session/image-builder:/src" -w /src golang:1.25-alpine go test ./...

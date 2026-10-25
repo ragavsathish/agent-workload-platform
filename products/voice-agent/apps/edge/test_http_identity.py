@@ -16,6 +16,7 @@ from opentelemetry.trace import (
 
 from bot import (
     broker_sessions_request,
+    knowledge_entry_path,
     owner_gateway_artifact,
     owner_gateway_audio,
     owner_gateway_request,
@@ -25,6 +26,17 @@ from bot import (
     validate_http_identity,
     validate_ingress_identity,
 )
+
+
+class KnowledgeReviewPathTest(unittest.TestCase):
+    def test_path_is_relative_to_the_versioned_gateway_base(self):
+        entry_id = f"{'a' * 32}:entry:1"
+        self.assertEqual(
+            knowledge_entry_path(entry_id, "feedback"),
+            f"/digital-twin/journal/{entry_id}/feedback",
+        )
+        with self.assertRaises(HTTPException):
+            knowledge_entry_path("invalid", "feedback")
 
 
 class TaskNarrationTest(unittest.IsolatedAsyncioTestCase):

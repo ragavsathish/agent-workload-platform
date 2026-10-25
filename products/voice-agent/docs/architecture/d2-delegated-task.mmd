@@ -2,69 +2,47 @@ sequenceDiagram
     autonumber
     actor User as Tailnet User
     participant Browser as Browser Client
-    participant Voice as Pi Voice Service
     participant Edge as Voice Edge
     participant Gateway as Agent Gateway
-    participant Broker as Inference Broker
+    participant DB as PostgreSQL
+    participant Owner as Pi Durable Owner
+    participant SQLite as Owner SQLite
+    participant Effects as Workspace and Artifact Effects
     participant Store as S3 Workspace / Result Store
-    participant Queue as PostgreSQL / Absurd
-    participant Worker as Pi Task Worker
-    participant Gitea as Gitea Actions and Packages
-    participant Builder as Shared Gondolin Builder
+    participant Pi as Pi Durable Conversation
+    participant Tools as Host or Gondolin Tools
     participant Model as Model Provider
-    participant Tools as Gondolin / Wassette
 
-    alt Browser task panel
-        User->>Browser: Submit or approve durable work
-        Browser->>Edge: Send owner-scoped lifecycle action
-        Edge->>Gateway: Forward lifecycle action with gateway capability
-    else Pi voice tool
-        User->>Voice: Ask Pi to delegate durable work
-        Voice->>Gateway: Propose or directly submit with owner identity
+    User->>Browser: Propose a scratch or repository task
+    Browser->>Edge: Send owner-scoped proposal
+    Edge->>Gateway: Forward authenticated request
+    Gateway->>DB: Persist proposal and signed plan
+    Gateway-->>Browser: Return reviewable proposal
+    User->>Browser: Approve proposal
+    Browser->>Edge: Send approval
+    Edge->>Gateway: Forward approval
+    Gateway->>Owner: Submit native agent-run task over private HTTP
+    Owner->>SQLite: Persist task and request ID
+    Owner-->>Gateway: Return stable public task ID
+    Gateway->>DB: Mark proposal approved
+    Owner->>Effects: Prepare task workspace
+    Effects->>Store: Materialize workspace
+    alt Host execution
+        Owner->>Pi: Reopen native task conversation
+        Pi->>Tools: Run host file and shell tools
+    else Gondolin execution
+        Owner->>Pi: Reopen native task conversation
+        Pi->>Tools: Run file and shell tools in task VM
     end
-    Gateway->>Store: Resolve allowlisted immutable Git bundle
-    Store-->>Gateway: Content-addressed workspace URI
-    Gateway->>Queue: Persist proposal and enqueue only approved work
-    Worker->>Queue: Claim one task
-    Worker->>Store: Download and verify workspace bundle
-    Store-->>Worker: Immutable Git bundle
-    opt Repository declares an uncached .pi/gondolin.json build
-        Worker->>Gitea: Dispatch repository workflow and checkpoint run ID
-        Gitea->>Builder: Assign job to capacity-one runner
-        Builder->>Gitea: Check out immutable revision
-        Builder->>Host API: Stream context and poll image-build job
-        Host API->>Host Docker: Build image through Docker Engine API
-        Host Docker->>Handoff: Save versioned image tar
-        Worker->>Gitea: Observe terminal workflow status
-        Worker->>Handoff: Read local image tar
-        Worker->>Worker: Import tar and register image ref
-    end
-    Worker->>Model: Run stateless Pi task-agent loop
-    Worker->>Tools: Execute isolated workspace or integration tools
-    Tools-->>Worker: Bounded tool result
-    loop While Pi runs
-        Worker->>Queue: Persist short progress phrase from event type and tool name
-        opt User selected Listen to progress in task view
-            Browser->>Edge: Poll progress after last event ID
-            Edge->>Gateway: Read owner-scoped progress
-            Gateway->>Queue: Fetch bounded progress events
-            Queue-->>Gateway: Progress IDs and safe spoken phrases
-            Gateway-->>Edge: Bounded progress feed
-            Edge-->>Browser: Progress IDs and safe spoken phrases
-            Browser->>Edge: Request speech for latest phrase
-            Edge->>Broker: Synthesize WAV
-            Broker-->>Edge: WAV audio
-            Edge-->>Browser: Play narrated progress
-        end
-    end
-    Model-->>Worker: Final spoken and Mermaid response
-    Worker->>Store: Upload bounded patch, status, and execution result
-    Worker->>Queue: Checkpoint terminal result
-    User->>Browser: Refresh status or request result
+    Pi->>Model: Generate response
+    Pi-->>Owner: Final response and tool changes
+    Owner->>Effects: Format response and capture result
+    Effects->>Store: Capture bounded artifacts
+    Effects-->>Owner: Return public result
+    Owner->>SQLite: Checkpoint terminal result
+    User->>Browser: Refresh task
     Browser->>Edge: Read task state
-    Edge->>Gateway: Get owner-filtered result
-    Gateway->>Queue: Fetch task snapshot
-    Queue-->>Gateway: State and bounded result
-    Gateway-->>Edge: Public task view
-    Edge-->>Browser: Result, Mermaid, and optional speech
-    Browser-->>User: Show or speak result
+    Edge->>Gateway: Query owner-scoped task
+    Gateway->>Owner: Get native task snapshot
+    Owner-->>Gateway: State and bounded result
+    Gateway-->>Browser: Public task view

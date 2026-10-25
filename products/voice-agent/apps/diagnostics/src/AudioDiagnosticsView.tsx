@@ -170,7 +170,7 @@ export const AudioDiagnosticsView = () => {
           </p>
         )}
         {sessions.map((session, index) => (
-          <article className="audio-session-card pi-surface" key={session.id}>
+          <article className="audio-session-card pi-surface" key={session.id} data-session-id={session.id}>
             <header>
               <div>
                 <span className="audio-session-number">Session {index + 1}</span>

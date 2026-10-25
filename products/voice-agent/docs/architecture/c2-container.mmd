@@ -11,40 +11,42 @@ flowchart TB
         subgraph VOICE["Interactive voice path"]
             direction LR
             BROWSER["Container<br/><b>Browser Voice Client</b><br/>Flutter Web · Pipecat JS transport adapter"]
+            KNOWLEDGE["Container<br/><b>Journal & Knowledge</b><br/>React · Cytoscape · browser WASM"]
             DIAGNOSTICS["Container<br/><b>Input Diagnostics</b><br/>React · Recharts · WaveSurfer"]
             INGRESS["Container<br/><b>Tailnet Ingress</b><br/>Tailscale Serve"]
             ROUTER["Container<br/><b>Path Router</b><br/>Traefik · exact-owner forward-auth"]
             EDGE["Container<br/><b>Voice Edge</b><br/>Python · Pipecat · RNNoise/VoxLock · FastAPI"]
             BROKER["Container<br/><b>Inference Broker</b><br/>Python · FastAPI · MLX"]
             PI["Container<br/><b>Pi Voice Service</b><br/>TypeScript · Pi coding agent"]
+            JOURNAL_MCP["Container<br/><b>Journal Review MCP</b><br/>Node.js · stdio MCP server and App resource"]
             VOICE_VM["Container<br/><b>Voice Tool Sandbox</b><br/>Gondolin · Git/Tea/AWS CLI · workspace RW · skills RO"]
             BROWSER -->|"signaling · audio · UI"| INGRESS
+            KNOWLEDGE -->|"same-origin query and review APIs"| INGRESS
             DIAGNOSTICS -->|"diagnostic APIs · replay audio"| INGRESS
             INGRESS -->|"localhost HTTP<br/>authenticated identity"| ROUTER
             ROUTER -->|"/ · WebSocket"| EDGE
             EDGE -->|"STT · Pi stream · TTS · context"| BROKER
             BROKER -->|"turns · transcript · context"| PI
             PI -->|"read · write · edit · shell"| VOICE_VM
+            PI -->|"render review · submit correction<br/>MCP over stdio"| JOURNAL_MCP
         end
 
         subgraph TASK["Durable delegated-work path"]
             direction LR
             GATEWAY["Container<br/><b>Agent Gateway</b><br/>Python · FastAPI"]
-            TASKS[("Container database<br/><b>Task Database and Queue</b><br/>PostgreSQL · Absurd schema")]
-            HABITAT["Container<br/><b>Durable Queue Dashboard</b><br/>Go · Absurd Habitat"]
-            WORKER["Container<br/><b>Pi Task Worker</b><br/>Python · Pi coding agent"]
-            TASK_PI["Container<br/><b>Pi Task Session</b><br/>Pi CLI · one process per claimed task"]
+            TASKS[("Container database<br/><b>Proposal and Song Database</b><br/>PostgreSQL · product state")]
+            OWNER["Container<br/><b>Pi Durable Owner</b><br/>Node.js · native tasks and conversations · private HTTP and socket"]
+            OWNER_STORE[("Container data store<br/><b>Pi Durable Owner Store</b><br/>one-writer SQLite · task state")]
             BUILDER_MANAGER["Container<br/><b>Builder VM Manager</b><br/>Node.js · launchd"]
             BUILDER_VM["Container<br/><b>Shared Image Builder</b><br/>Gondolin · Gitea Runner · Docker CLI"]
-            TASK_VM["Container<br/><b>Task Tool Sandbox</b><br/>Gondolin · one isolated workspace"]
-            GATEWAY -->|"persist · enqueue"| TASKS
-            HABITAT -->|"inspect · retry<br/>scoped SQL"| TASKS
-            TASKS -->|"claim · checkpoint"| WORKER
-            WORKER -->|"dispatch · observe · cancel image workflow"| GITEA
+            TASK_VM["Container<br/><b>Task Tool Sandbox</b><br/>Gondolin mode · one isolated workspace"]
+            GATEWAY -->|"persist proposal and song state"| TASKS
+            GATEWAY -->|"submit · query · abort<br/>bearer HTTP"| OWNER
+            OWNER -->|"prepare image through bounded effect"| GITEA
             GITEA -->|"assign trusted workflow job"| BUILDER_VM
             BUILDER_MANAGER -->|"resume · checkpoint"| BUILDER_VM
-            WORKER -->|"starts one bounded run"| TASK_PI
-            TASK_PI -->|"read · write · edit · shell · browser"| TASK_VM
+            OWNER -->|"native checkpoints and results"| OWNER_STORE
+            OWNER -->|"Gondolin mode · isolated tools"| TASK_VM
         end
 
         subgraph DATA["Runtime data and operations"]
@@ -53,6 +55,7 @@ flowchart TB
             GITEA[("Container data store<br/><b>Git and Workflow State</b><br/>rootless Gitea · refs · Actions runs")]
             DOCKER_JOB_API["Container<br/><b>Docker Job API</b><br/>Go · authenticated HTTP · Docker Engine client"]
             HOST_DOCKER["External system<br/><b>Host Docker Engine</b><br/>shared layer cache · builds and pulls"]
+            HOST_TOOLS["External environment<br/><b>Mac Host Tools</b><br/>worker account filesystem and processes"]
             IMAGE_HANDOFF[("Host filesystem<br/><b>Image Handoff</b><br/>versioned Docker image tar files")]
             ARTIFACTS[("Container data store<br/><b>Workspace and Result Store</b><br/>S3-compatible object storage")]
             OXIGRAPH[("Container data store<br/><b>Knowledge Graph Store</b><br/>Oxigraph · loopback SPARQL 1.1 · persistent RDF")]
@@ -64,10 +67,13 @@ flowchart TB
         end
 
         EDGE -->|"browser task API"| GATEWAY
+        EDGE -->|"serves built React bundle"| KNOWLEDGE
+        JOURNAL_MCP -->|"authenticated review command"| GATEWAY
         EDGE -->|"identity-checked App resource<br/>and trace-data proxy"| GRAFANA_MCP
         PI -->|"deferred MCP over stdio<br/>credential-scrubbed environment"| WASSETTE
         WASSETTE -->|"composed task lifecycle tools<br/>read-only personal knowledge"| GATEWAY
-        TASK_PI -->|"MCP over stdio<br/>allowlisted task tools"| WASSETTE
+        OWNER -->|"MCP over stdio<br/>allowlisted task tools"| WASSETTE
+        OWNER -->|"host mode · Durable CodingTools"| HOST_TOOLS
         PI -->|"authenticated streamable HTTP<br/>deferred observability tools"| GRAFANA_MCP
         EDGE -->|"official trace MCP App"| BROWSER
         PI -->|"session · workspace · skills"| VOICE_DATA
@@ -75,37 +81,38 @@ flowchart TB
         VOICE_VM -->|"AWS CLI · S3Mock-only HTTP"| ARTIFACTS
         VOICE_VM -->|"raw SPARQL query/update CLI<br/>synthetic loopback route"| OXIGRAPH
         GATEWAY -->|"resolve workspace"| ARTIFACTS
-        GATEWAY -->|"fixed read-only SPARQL<br/>profile and learning facts"| OXIGRAPH
-        ARTIFACTS -->|"materialize · capture result"| WORKER
+        GATEWAY -->|"bounded fact queries<br/>journal and review updates"| OXIGRAPH
+        ROUTER -->|"/oxigraph/query<br/>owner-scoped SPARQL SELECT"| OXIGRAPH
+        ARTIFACTS -->|"materialize · capture result"| OWNER
         BUILDER_VM -->|"workflow checkout · run state"| GITEA
         BUILDER_VM -->|"context · job status<br/>authenticated HTTP hook"| DOCKER_JOB_API
         DOCKER_JOB_API -->|"Docker Engine API<br/>Unix socket"| HOST_DOCKER
         HOST_DOCKER -->|"save built image tar"| IMAGE_HANDOFF
-        WORKER -->|"load local image tar"| IMAGE_HANDOFF
+        OWNER -->|"load local image tar"| IMAGE_HANDOFF
         BUILDER_MANAGER -->|"host API writes image tar"| VOICE_DATA
         EDGE -.->|"metrics · traces"| OTEL
         BROKER -.->|"metrics · traces"| OTEL
         PI -.->|"metrics · traces"| OTEL
         GATEWAY -.->|"metrics · traces"| OTEL
-        WORKER -.->|"metrics · traces"| OTEL
+        OWNER -.->|"metrics · traces"| OTEL
         BUILDER_MANAGER -.->|"metrics · traces"| OTEL
         BUILDER_VM -.->|"Gitea Runner OTLP<br/>job traces · runner metrics"| OTEL
         PI -.->|"register voice VM PID"| HOST_METRICS
-        WORKER -.->|"register task VM PID"| HOST_METRICS
+        OWNER -.->|"register task VM PID"| HOST_METRICS
         DOCKER_METRICS -->|"private scrape<br/>Docker VM resources"| OTEL
         HOST_METRICS -->|"loopback scrape<br/>Mac · each Gondolin VM"| OTEL
         GRAFANA_MCP -->|"service account<br/>dashboards · Prometheus · Tempo"| OTEL
         GRAFANA_MCP -.->|"MCP metrics · OTLP traces"| OTEL
         ROUTER -->|"/metrics/"| OTEL
         ROUTER -->|"/git/"| GITEA
-        ROUTER -->|"/queue/"| HABITAT
     end
 
     USER -->|"tailnet HTTPS · WebRTC"| BROWSER
+    USER -->|"tailnet HTTPS · journal review"| KNOWLEDGE
     USER -->|"tailnet HTTPS"| DIAGNOSTICS
     INGRESS -.->|"control protocol"| TSC
     PI -->|"provider API"| MODELS
-    WORKER -->|"provider API"| MODELS
+    OWNER -->|"provider API"| MODELS
     WASSETTE -->|"declared component capabilities"| INTEGRATIONS
 
     classDef person fill:#084c8d,color:#fff,stroke:#05345f,stroke-width:2px;
@@ -113,6 +120,6 @@ flowchart TB
     classDef container fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
     class USER person;
-    class TSC,MODELS,INTEGRATIONS,HOST_DOCKER external;
-    class BROWSER,DIAGNOSTICS,INGRESS,ROUTER,EDGE,BROKER,PI,VOICE_VM,GATEWAY,HABITAT,WORKER,TASK_PI,BUILDER_MANAGER,BUILDER_VM,TASK_VM,DOCKER_JOB_API,DOCKER_METRICS,HOST_METRICS,WASSETTE,OTEL,GRAFANA_MCP container;
-    class TASKS,VOICE_DATA,GITEA,ARTIFACTS,OXIGRAPH,IMAGE_HANDOFF data;
+    class TSC,MODELS,INTEGRATIONS,HOST_DOCKER,HOST_TOOLS external;
+    class BROWSER,KNOWLEDGE,DIAGNOSTICS,INGRESS,ROUTER,EDGE,BROKER,PI,JOURNAL_MCP,VOICE_VM,GATEWAY,OWNER,BUILDER_MANAGER,BUILDER_VM,TASK_VM,DOCKER_JOB_API,DOCKER_METRICS,HOST_METRICS,WASSETTE,OTEL,GRAFANA_MCP container;
+    class TASKS,OWNER_STORE,VOICE_DATA,GITEA,ARTIFACTS,OXIGRAPH,IMAGE_HANDOFF data;

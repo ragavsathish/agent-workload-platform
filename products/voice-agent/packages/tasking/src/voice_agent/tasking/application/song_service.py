@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import uuid
-from contextlib import closing
-from dataclasses import asdict
 from typing import Any
 
 import psycopg
-from absurd_sdk import Absurd, TaskResultSnapshot
 from psycopg.rows import dict_row
 from voice_agent.tasking.application.service import bounded_trace_context
 from voice_agent.tasking.domain.song_lifecycle import (
@@ -25,6 +22,7 @@ from voice_agent.tasking.domain.workspaces import (
 )
 from voice_agent.tasking.infrastructure.artifacts import ArtifactStore
 from voice_agent.tasking.infrastructure.config import Settings
+from voice_agent.tasking.infrastructure.pi_durable_owner import PiDurableOwner
 
 
 class SongGenerationError(ValueError):
@@ -42,6 +40,7 @@ class SongService:
     def __init__(self, settings: Settings):
         settings.require_api()
         self.settings = settings
+        self.owner = PiDurableOwner(settings.pi_durable_owner_url, settings.pi_durable_owner_token_file)
         self.artifacts = (
             ArtifactStore(
                 endpoint_url=settings.artifact_endpoint_url,
@@ -82,25 +81,14 @@ class SongService:
                 else resolve_workspace(workspace, self.settings.workspace_roots)
             )
         generation_id = str(uuid.uuid4())
-        with closing(
-            Absurd(self.settings.database_url, queue_name=self.settings.queue)
-        ) as absurd:
-            spawned = absurd.spawn(
-                "song-lyrics",
-                {
-                    "generation_id": generation_id,
-                    "identity": identity,
-                    "brief": cleaned_brief,
-                    "workspace": str(resolved_workspace),
-                    "style": cleaned_style,
-                    "duration_seconds": duration_seconds,
-                    "trace_context": bounded_trace_context(trace_context),
-                },
-                max_attempts=1,
-                queue=self.settings.queue,
-                cancellation={"max_duration": self.settings.task_timeout_seconds + 60},
-                idempotency_key=f"song-lyrics:{generation_id}",
-            )
+        task_id = self.owner.submit(
+            "song-lyrics",
+            {"generation_id": generation_id, "identity": identity,
+             "brief": cleaned_brief, "workspace": str(resolved_workspace),
+             "style": cleaned_style, "duration_seconds": duration_seconds,
+             "trace_context": bounded_trace_context(trace_context)},
+            str(uuid.uuid5(uuid.NAMESPACE_URL, f"song-lyrics:{generation_id}")),
+        )
         with (
             psycopg.connect(self.settings.database_url) as conn,
             conn.cursor(row_factory=dict_row) as cursor,
@@ -119,7 +107,7 @@ class SongService:
                     str(resolved_workspace),
                     cleaned_style,
                     duration_seconds,
-                    str(spawned["task_id"]),
+                    task_id,
                 ),
             )
             row = cursor.fetchone()
@@ -164,24 +152,13 @@ class SongService:
                 raise SongGenerationError(rejection)
             if readiness != "ready" or manifest is None:
                 raise RuntimeError("ready song render decision omitted its manifest")
-            with closing(
-                Absurd(self.settings.database_url, queue_name=self.settings.queue)
-            ) as absurd:
-                spawned = absurd.spawn(
-                    "song-render",
-                    {
-                        "generation_id": generation_id,
-                        "identity": identity,
-                        "manifest": manifest.to_dict(),
-                        "trace_context": bounded_trace_context(trace_context),
-                    },
-                    max_attempts=1,
-                    queue=self.settings.queue,
-                    cancellation={
-                        "max_duration": self.settings.music_generation_timeout_seconds + 180
-                    },
-                    idempotency_key=f"song-render:{generation_id}",
-                )
+            task_id = self.owner.submit(
+                "song-render",
+                {"generation_id": generation_id, "identity": identity,
+                 "manifest": manifest.to_dict(),
+                 "trace_context": bounded_trace_context(trace_context)},
+                str(uuid.uuid5(uuid.NAMESPACE_URL, f"song-render:{generation_id}")),
+            )
             cursor.execute(
                 """
                 UPDATE voice_song_generations
@@ -189,7 +166,7 @@ class SongService:
                 WHERE id = %s
                 RETURNING *
                 """,
-                (str(spawned["task_id"]), generation_id),
+                (task_id, generation_id),
             )
             row = cursor.fetchone()
         if row is None:
@@ -213,11 +190,8 @@ class SongService:
             if row is None:
                 raise SongGenerationError("song generation not found")
             if row["cancelled_at"] is None:
-                with closing(
-                    Absurd(self.settings.database_url, queue_name=self.settings.queue)
-                ) as absurd:
-                    task_id = row["render_task_id"] or row["lyrics_task_id"]
-                    absurd.cancel_task(str(task_id))
+                task_id = row["render_task_id"] or row["lyrics_task_id"]
+                self.owner.abort(str(task_id))
                 cursor.execute(
                     """
                     UPDATE voice_song_generations
@@ -259,15 +233,8 @@ class SongService:
         return row
 
     def _snapshot(self, task_id: object) -> SongTaskSnapshot:
-        with closing(
-            Absurd(self.settings.database_url, queue_name=self.settings.queue)
-        ) as absurd:
-            snapshot: TaskResultSnapshot | None = absurd.fetch_task_result(str(task_id))
-        return (
-            parse_song_task(asdict(snapshot))
-            if snapshot
-            else pending_song_task()
-        )
+        snapshot = self.owner.get(str(task_id))
+        return parse_song_task(snapshot) if snapshot else pending_song_task()
 
     def _view(self, row: dict[str, Any]) -> dict[str, Any]:
         lyrics = self._snapshot(row["lyrics_task_id"])

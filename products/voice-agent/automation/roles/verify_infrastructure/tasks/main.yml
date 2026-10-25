@@ -155,7 +155,6 @@
     - http://127.0.0.1:8080/api/features
     - http://127.0.0.1:8080/metrics/api/user
     - http://127.0.0.1:8080/git/api/v1/version
-    - http://127.0.0.1:8080/queue/api/queues
   loop_control:
     label: "{{ item }}"
   when: verify_infrastructure_tailscale_running
@@ -264,31 +263,6 @@
       - (verify_infrastructure_oxigraph_ask.content | from_json).boolean
     quiet: true
   tags: [data]
-
-- name: Verify Habitat database privileges
-  community.postgresql.postgresql_query:
-    login_host: 127.0.0.1
-    login_port: 54329
-    login_db: voice_agents
-    login_user: habitat_operator
-    login_password: "{{ lookup('ansible.builtin.file', voice_agent_root + '/deploy/secrets/habitat-database-password') | trim }}"
-    query: >-
-      SELECT
-        has_schema_privilege(current_user, 'absurd', 'USAGE') AS schema_usage,
-        has_table_privilege(current_user, 'absurd.queues', 'SELECT') AS queue_read,
-        has_table_privilege(current_user, 'voice_task_proposals', 'SELECT') AS proposal_read
-  register: verify_infrastructure_habitat_privileges
-  no_log: true
-  tags: [data, security]
-
-- name: Assert Habitat has only its intended database scope
-  ansible.builtin.assert:
-    that:
-      - verify_infrastructure_habitat_privileges.query_result[0].schema_usage
-      - verify_infrastructure_habitat_privileges.query_result[0].queue_read
-      - not verify_infrastructure_habitat_privileges.query_result[0].proposal_read
-    quiet: true
-  tags: [data, security]
 
 - name: Verify the public source mirror
   ansible.builtin.command:

@@ -1,0 +1,6 @@
+services:
+  c2-container-mock:
+    environment:
+      PATROL_KNOWLEDGE_STATIC_ROOT: /knowledge
+    volumes:
+      - ../apps/knowledge-base/dist:/knowledge:ro

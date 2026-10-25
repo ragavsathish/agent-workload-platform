@@ -1,0 +1,28 @@
+{
+  "name": "@agent-workload-platform/pi-durable-task",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/runtime.js",
+  "files": [
+    "dist/"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --noEmit",
+    "test": "pnpm run build && node --test dist/*.test.js"
+  },
+  "dependencies": {
+    "@agent-workload-platform/gondolin-session": "workspace:*",
+    "@agent-workload-platform/otel": "workspace:*",
+    "@earendil-works/chord": "1.4.0",
+    "@earendil-works/pi-ai": "1.4.0",
+    "@earendil-works/pi-coding-agent": "1.4.0",
+    "@earendil-works/pi-durable": "1.4.0",
+    "@earendil-works/pi-mcp": "1.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.11",
+    "typescript": "5.9.3"
+  }
+}

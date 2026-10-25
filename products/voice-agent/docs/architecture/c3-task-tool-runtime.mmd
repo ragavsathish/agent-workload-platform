@@ -1,40 +1,37 @@
 flowchart LR
-    WORKER[External container<br/><b>Pi Task Worker</b><br/>starts one bounded Pi CLI process]
-    WORKSPACE[(External data<br/><b>Task Workspace</b><br/>mounted at /workspace)]
-    SKILLS[(External data<br/><b>Trusted Skills</b><br/>optional read-only /skills)]
-    MEMORY[(External data store<br/><b>Browser Memory</b><br/>local JSONL MCP storage)]
-    GITHUB[External system<br/><b>GitHub API</b><br/>optional scoped integration]
-    WASSETTE_RUNTIME[External container<br/><b>Wassette Integration Runtime</b><br/>native per-session MCP subprocess]
+    TASK["External component<br/><b>Product Task</b><br/>approved instruction and workspace"]
+    SQLITE[("External data store<br/><b>Task Pi SQLite</b><br/>native conversation and tool checkpoints")]
+    WORKSPACE[("External data<br/><b>Task Workspace</b><br/>host path mounted at VM /workspace")]
+    SKILLS[("External data<br/><b>Trusted Skills</b><br/>host path or read-only VM /skills")]
+    MODEL["External system<br/><b>Model Provider</b>"]
+    GONDOLIN["External container<br/><b>Gondolin Task VM</b><br/>isolated guest file and shell tools"]
+    MCP["External systems<br/><b>Allowlisted MCP Servers</b><br/>product integrations"]
 
-    subgraph RUNTIME["Container: Pi Task Session · Pi CLI + in-process Gondolin extension"]
-        direction TB
-        CONFIG["Component<br/><b>Project Runtime Resolver</b><br/>reads .pi/gondolin.json and in-repo network policy"]
-        LIFECYCLE["Component<br/><b>Extension Lifecycle</b><br/>start, prompt augmentation, and shutdown"]
-        VM["Component<br/><b>Gondolin Tool Client</b><br/>isolated bash and optional Playwright MCP"]
-        MEM["Component<br/><b>Memory MCP Client</b><br/>optional durable browser knowledge"]
-        WASSETTE["Component<br/><b>Wassette MCP Client</b><br/>loads configured component and grants explicit capabilities"]
-        POLICY["Component<br/><b>GitHub Tool Policy</b><br/>read allowlist; writes require explicit enablement"]
-        REGISTRY["Component<br/><b>Tool Registrar</b><br/>normalizes schemas and bounds returned output"]
-
-        CONFIG --> LIFECYCLE --> VM
-        LIFECYCLE --> MEM
-        LIFECYCLE --> WASSETTE --> POLICY
-        VM --> REGISTRY
-        MEM --> REGISTRY
-        POLICY --> REGISTRY
+    subgraph OWNER["Container: Pi Durable Owner · task-session components"]
+        MODE["Component<br/><b>Mode Selector</b><br/>host or Gondolin deployment setting"]
+        SESSION["Component<br/><b>Pi Durable Session</b><br/>native submission, tool replay, and model turns"]
+        REGISTRY["Component<br/><b>Tool Registry</b><br/>CodingTools and allowlisted MCP"]
+        HOST["Component<br/><b>NodeExecutionEnv</b><br/>Mac host file and shell tools"]
+        GUEST["Component<br/><b>GondolinExecutionEnv</b><br/>guest file and shell capability"]
+        BRIDGE["Component<br/><b>Task Socket Bridge</b><br/>bounded voice follow-up"]
+        MODE --> SESSION --> REGISTRY
+        MODE -->|"host"| HOST
+        MODE -->|"gondolin"| GUEST
+        SESSION --> BRIDGE
     end
 
-    WORKER -->|"start one process"| LIFECYCLE
-    CONFIG -->|"select image, CPU, memory, egress"| VM
-    VM -->|"read-write mount"| WORKSPACE
-    VM -->|"read-only mount"| SKILLS
-    MEM -->|"MCP operations"| MEMORY
-    WASSETTE -->|"MCP over stdio"| WASSETTE_RUNTIME
-    WASSETTE_RUNTIME -->|"network and environment capabilities"| GITHUB
+    TASK --> MODE
+    SESSION --> SQLITE
+    SESSION --> MODEL
+    REGISTRY --> MCP
+    HOST --> WORKSPACE
+    GUEST --> GONDOLIN --> WORKSPACE
+    GONDOLIN --> SKILLS
+    HOST --> SKILLS
 
     classDef component fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
     classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
-    class CONFIG,LIFECYCLE,VM,MEM,WASSETTE,POLICY,REGISTRY component;
-    class WORKER,GITHUB,WASSETTE_RUNTIME external;
-    class WORKSPACE,SKILLS,MEMORY data;
+    class MODE,SESSION,REGISTRY,HOST,GUEST,BRIDGE component;
+    class TASK,MODEL,GONDOLIN,MCP external;
+    class SQLITE,WORKSPACE,SKILLS data;

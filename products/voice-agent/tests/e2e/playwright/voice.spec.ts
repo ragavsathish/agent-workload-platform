@@ -1,3 +1,4 @@
+import * as allure from 'allure-js-commons';
 import {
   test,
   expect,
@@ -10,49 +11,67 @@ test('keeps the primary voice controls usable on a phone viewport', async ({
   page,
   browserEvidence,
 }, testInfo) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/', { waitUntil: 'networkidle' });
-  await enableFlutterSemantics(page);
+  await allure.step('Given the voice home is open on a phone viewport', async () => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/', { waitUntil: 'networkidle' });
+    await enableFlutterSemantics(page);
+  });
 
-  for (const name of ['Replays', 'System health', 'Chat', 'Knowledge', 'Start conversation']) {
-    const button = page.getByRole('button', { name, exact: true });
-    await expect(button).toBeVisible();
-    const box = await button.boundingBox();
-    expect(box).not.toBeNull();
-    if (!box) throw new Error(`${name} button has no layout box`);
-    expect(box.width).toBeGreaterThanOrEqual(44);
-    expect(box.height).toBeGreaterThanOrEqual(44);
-    expect(box.x).toBeGreaterThanOrEqual(0);
-    expect(box.x + box.width).toBeLessThanOrEqual(390);
-    expect(box.y + box.height).toBeLessThanOrEqual(844);
-  }
+  await allure.step('Then primary controls are visible and have usable touch targets', async () => {
+    for (const name of ['Replays', 'System health', 'Chat', 'Knowledge', 'Start conversation']) {
+      const button = page.getByRole('button', { name, exact: true });
+      await expect(button).toBeVisible();
+      const box = await button.boundingBox();
+      expect(box).not.toBeNull();
+      if (!box) throw new Error(`${name} button has no layout box`);
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(390);
+      expect(box.y + box.height).toBeLessThanOrEqual(844);
+    }
+  });
 
-  const layout = await page.evaluate(() => ({
-    viewportWidth: window.innerWidth,
-    documentWidth: document.documentElement.scrollWidth,
-  }));
-  expect(layout).toEqual({ viewportWidth: 390, documentWidth: 390 });
+  await allure.step('Then the page fits the viewport without horizontal overflow', async () => {
+    const layout = await page.evaluate(() => ({
+      viewportWidth: window.innerWidth,
+      documentWidth: document.documentElement.scrollWidth,
+    }));
+    expect(layout).toEqual({ viewportWidth: 390, documentWidth: 390 });
+  });
 
   await testInfo.attach('voice-mobile', {
     body: await page.screenshot(),
     contentType: 'image/png',
   });
-  expectCleanBrowser(browserEvidence);
+  await allure.step('And the browser reports no unexpected errors', async () => {
+    expectCleanBrowser(browserEvidence);
+  });
 });
 
 test('opens journal knowledge from Pi home and returns through the Pi logo', async ({ page }) => {
-  await page.goto('/', { waitUntil: 'networkidle' });
-  await enableFlutterSemantics(page);
+  await allure.step('Given Pi home is open', async () => {
+    await page.goto('/', { waitUntil: 'networkidle' });
+    await enableFlutterSemantics(page);
+  });
 
-  const knowledgePagePromise = page.waitForEvent('popup');
-  await page.getByRole('button', { name: 'Knowledge', exact: true }).click();
-  const knowledgePage = await knowledgePagePromise;
-  await expect(knowledgePage).toHaveURL(/\/knowledge\/$/);
-  await expect(knowledgePage.getByRole('heading', { name: 'Journal & knowledge' })).toBeVisible();
+  const knowledgePage = await allure.step('When I open Knowledge', async () => {
+    const knowledgePagePromise = page.waitForEvent('popup');
+    await page.getByRole('button', { name: 'Knowledge', exact: true }).click();
+    return knowledgePagePromise;
+  });
+  await allure.step('Then the journal knowledge page is visible', async () => {
+    await expect(knowledgePage).toHaveURL(/\/knowledge\/$/);
+    await expect(knowledgePage.getByRole('heading', { name: 'Journal & knowledge' })).toBeVisible();
+  });
 
-  await knowledgePage.locator('a.knowledge-brand').click();
-  await expect(knowledgePage).toHaveURL(/\/$/);
-  await expect(knowledgePage).toHaveTitle('Pi Voice');
+  await allure.step('When I select the Pi logo', async () => {
+    await knowledgePage.locator('a.knowledge-brand').click();
+  });
+  await allure.step('Then Pi home reopens', async () => {
+    await expect(knowledgePage).toHaveURL(/\/$/);
+    await expect(knowledgePage).toHaveTitle('Pi Voice');
+  });
 });
 
 test('renders the official Grafana trace MCP App inside voice chat', async ({
@@ -64,46 +83,54 @@ test('renders the official Grafana trace MCP App inside voice chat', async ({
     'Grafana remains an explicit authenticated tailnet-ingress test',
   );
   const traceId = process.env.GRAFANA_TRACE_ID;
-  expect(traceId).toMatch(/^[0-9a-f]{32}$/);
-  await page.goto('/', { waitUntil: 'networkidle' });
-  const result = await page.evaluate(async ({ id }) => {
-    const host = document.createElement('div');
-    host.id = 'grafana-trace-app-host';
-    Object.assign(host.style, { width: '1000px', height: '720px' });
-    document.body.replaceChildren(host);
-    return JSON.parse(await window.voiceBridge.mountMcpApp(
-      host.id,
-      JSON.stringify({
-        kind: 'grafana-trace',
-        title: 'Latest voice trace',
-        traceId: id,
-        datasourceUid: 'tempo',
-      }),
-      'ui://grafana/trace.html',
-    ));
-  }, { id: traceId });
-  expect(result).toEqual({ ok: true });
+  await allure.step('Given an authenticated voice page and a trace ID', async () => {
+    expect(traceId).toMatch(/^[0-9a-f]{32}$/);
+    await page.goto('/', { waitUntil: 'networkidle' });
+  });
+  await allure.step('When I mount the Grafana trace MCP App', async () => {
+    const result = await page.evaluate(async ({ id }) => {
+      const host = document.createElement('div');
+      host.id = 'grafana-trace-app-host';
+      Object.assign(host.style, { width: '1000px', height: '720px' });
+      document.body.replaceChildren(host);
+      return JSON.parse(await window.voiceBridge.mountMcpApp(
+        host.id,
+        JSON.stringify({
+          kind: 'grafana-trace',
+          title: 'Latest voice trace',
+          traceId: id,
+          datasourceUid: 'tempo',
+        }),
+        'ui://grafana/trace.html',
+      ));
+    }, { id: traceId });
+    expect(result).toEqual({ ok: true });
+  });
 
-  const frame = page.frameLocator('iframe[title="Grafana trace"]');
-  await expect(frame.getByText('Loading trace...')).toBeHidden({ timeout: 15_000 });
-  await expect(frame.locator('body')).toContainText('mcp-grafana');
-  const appBackground = await frame.locator('body').evaluate(
-    (body) => getComputedStyle(body).backgroundColor,
-  );
-  const headingColor = await frame.getByText('Span waterfall').evaluate(
-    (heading) => getComputedStyle(heading).color,
-  );
-  expect(appBackground).not.toBe('rgb(255, 255, 255)');
-  expect(headingColor).not.toBe('rgb(0, 0, 0)');
-  await expect(frame.getByRole('link', { name: /Open in Grafana/ })).toHaveAttribute(
-    'href',
-    /\/metrics\//,
-  );
+  await allure.step('Then the trace waterfall and Grafana link are visible', async () => {
+    const frame = page.frameLocator('iframe[title="Grafana trace"]');
+    await expect(frame.getByText('Loading trace...')).toBeHidden({ timeout: 15_000 });
+    await expect(frame.locator('body')).toContainText('mcp-grafana');
+    const appBackground = await frame.locator('body').evaluate(
+      (body) => getComputedStyle(body).backgroundColor,
+    );
+    const headingColor = await frame.getByText('Span waterfall').evaluate(
+      (heading) => getComputedStyle(heading).color,
+    );
+    expect(appBackground).not.toBe('rgb(255, 255, 255)');
+    expect(headingColor).not.toBe('rgb(0, 0, 0)');
+    await expect(frame.getByRole('link', { name: /Open in Grafana/ })).toHaveAttribute(
+      'href',
+      /\/metrics\//,
+    );
+  });
   await testInfo.attach('grafana-trace-mcp-app', {
     body: await page.screenshot(),
     contentType: 'image/png',
   });
-  expectCleanBrowser(browserEvidence);
+  await allure.step('And the browser reports no unexpected errors', async () => {
+    expectCleanBrowser(browserEvidence);
+  });
 });
 
 test('completes a deployed voice session and retains its diagnostics', async ({
@@ -121,7 +148,7 @@ test('completes a deployed voice session and retains its diagnostics', async ({
   let initialEntryIds;
   let initialReplayIds;
 
-  await test.step('open the deployed Flutter client', async () => {
+  await allure.step('Given the deployed Flutter client is open', async () => {
     await page.goto('/', { waitUntil: 'networkidle' });
     await enableFlutterSemantics(page);
     const transcript = await fetchJson(page, '/api/pi-transcript');
@@ -138,7 +165,7 @@ test('completes a deployed voice session and retains its diagnostics', async ({
     );
   });
 
-  await test.step('start a conversation and preserve mute through the response', async () => {
+  await allure.step('When I start a conversation and mute during the response', async () => {
     await page.getByRole('button', { name: 'Start conversation' }).click();
     await expect.poll(async () => {
       const live = await fetchJson(page, '/api/audio-diagnostics/live');
@@ -154,7 +181,7 @@ test('completes a deployed voice session and retains its diagnostics', async ({
     await expect(page.getByRole('button', { name: 'Mute', exact: true })).toBeVisible();
   });
 
-  await test.step('observe the completed transcript turn', async () => {
+  await allure.step('Then the completed transcript turn is visible', async () => {
     let completedTurn = null;
     await expect.poll(async () => {
       const snapshot = await fetchJson(page, '/api/pi-transcript');
@@ -180,7 +207,7 @@ test('completes a deployed voice session and retains its diagnostics', async ({
     evidence.responseObserved = Boolean(completedTurn?.assistant);
   });
 
-  await test.step('verify remote audio playback and live microphone diagnostics', async () => {
+  await allure.step('And remote audio playback and microphone diagnostics are live', async () => {
     await expect(page.getByRole('button', { name: 'Mute', exact: true })).toBeVisible();
     evidence.audioPlayback = await page.evaluate(() => {
       const output = document.querySelector('audio[data-pipecat-output="true"]');
@@ -206,12 +233,15 @@ test('completes a deployed voice session and retains its diagnostics', async ({
     expect(evidence.liveWaveformPoints).toBeGreaterThan(0);
   });
 
-  await test.step('end the conversation and observe a retained replay', async () => {
+  await allure.step('When I end the conversation', async () => {
     await page.getByRole('button', { name: 'Mute', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Unmute', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Unmute', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Mute', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'End conversation' }).click();
+  });
+
+  await allure.step('Then the voice session retains a replay and metrics', async () => {
     await expect(page.getByRole('button', { name: 'Start conversation' })).toBeVisible();
     await expect(page.getByRole('group', { name: /Pi Voice/ })).toHaveAccessibleName(/Ready/);
 
@@ -259,5 +289,7 @@ test('completes a deployed voice session and retains its diagnostics', async ({
     body: Buffer.from(`${JSON.stringify(evidence, null, 2)}\n`),
     contentType: 'application/json',
   });
-  expectCleanBrowser(browserEvidence);
+  await allure.step('And the browser reports no unexpected errors', async () => {
+    expectCleanBrowser(browserEvidence);
+  });
 });

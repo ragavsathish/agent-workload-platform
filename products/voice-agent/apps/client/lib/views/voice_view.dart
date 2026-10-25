@@ -463,10 +463,9 @@ class _Header extends StatelessWidget {
         ),
       ],
     );
-    final desktopActions = Wrap(
+    final desktopActions = Row(
+      mainAxisSize: MainAxisSize.min,
       spacing: 8,
-      runSpacing: 8,
-      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         _VoiceState(stateLabel),
         const ThemeToggleButton(),
@@ -498,7 +497,7 @@ class _Header extends StatelessWidget {
     );
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxWidth < 600;
+        final compact = constraints.maxWidth < 900;
         return PiAppHeader(
           identity: compact
               ? Row(
@@ -557,7 +556,7 @@ class _Header extends StatelessWidget {
                     ),
                   ],
                 )
-              : Flexible(child: desktopActions),
+              : desktopActions,
         );
       },
     );

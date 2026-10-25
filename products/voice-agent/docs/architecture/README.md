@@ -5,31 +5,47 @@ Audience: maintainers, reviewers, and operators of the Voice Agent product.
 The Mermaid architecture files are the parseable source of truth. Rendered PNG files are generated
 views and must not be edited by hand. C4 boundaries and terminology define the static views; sequence
 notation is used for runtime views because it preserves order without crossing relationship labels.
+The [Allure validation report](../../tests/allure/README.md) keeps user journeys first and labels
+each test with the C4 containers and source views it targets.
+The [Pi Durable task-owner cutover](absurd-to-pi-durable.md) records the native owner,
+private interface, and C2/deployed verification.
 
 | View | Question answered | Source | Render |
 |---|---|---|---|
 | C1 system context | Who uses the Voice Agent and which external systems does it depend on? | [c1-system-context.mmd](c1-system-context.mmd) | [PNG](c1-system-context.png) |
 | C2 containers | Which independently running parts own voice, Pi, task, artifact, and telemetry responsibilities? | [c2-container.mmd](c2-container.mmd) | [PNG](c2-container.png) |
 | C3 Browser Voice Client | Which Flutter components own conversation control, diagrams, tasks, and transcript? | [c3-browser-client.mmd](c3-browser-client.mmd) | [PNG](c3-browser-client.png) |
+| C3 Journal & Knowledge | Which React components connect journal exploration, source evidence, graph navigation, and owner review? | [c3-journal-knowledge.mmd](c3-journal-knowledge.mmd) | [PNG](c3-journal-knowledge.png) |
 | C3 Input Diagnostics | Which React components own live input monitoring, selected-filter replay, and model charts? | [c3-input-diagnostics.mmd](c3-input-diagnostics.mmd) | [PNG](c3-input-diagnostics.png) |
 | C3 Voice Edge | How does Pipecat turn browser audio into an authenticated, observable voice pipeline? | [c3-voice-edge.mmd](c3-voice-edge.mmd) | [PNG](c3-voice-edge.png) |
 | C3 Inference Broker | Which narrow adapters expose native STT, TTS, Pi streaming, context, and fallback inference? | [c3-inference-broker.mmd](c3-inference-broker.mmd) | [PNG](c3-inference-broker.png) |
 | C3 Pi Voice Service | How are persistent Pi turns, tools, transcript, context, skills, and the voice VM coordinated? | [c3-pi-voice-service.mmd](c3-pi-voice-service.mmd) | [PNG](c3-pi-voice-service.png) |
 | C3 Voice Tool Sandbox | How are Pi's file and shell tools constrained by Gondolin mounts and egress policy? | [c3-voice-tool-sandbox.mmd](c3-voice-tool-sandbox.mmd) | [PNG](c3-voice-tool-sandbox.png) |
-| C3 Agent Gateway | Where are capability authentication, owner identity, approval, queue, and public-view policy enforced? | [c3-agent-gateway.mmd](c3-agent-gateway.mmd) | [PNG](c3-agent-gateway.png) |
-| C3 Pi Task Worker | How does an approved durable task become an isolated Pi run and bounded result artifacts? | [c3-pi-task-worker.mmd](c3-pi-task-worker.mmd) | [PNG](c3-pi-task-worker.png) |
+| C3 Agent Gateway | Where are capability authentication, owner identity, approval, Pi Durable submission, and public-view policy enforced? | [c3-agent-gateway.mmd](c3-agent-gateway.mmd) | [PNG](c3-agent-gateway.png) |
+| C3 Pi Durable Owner | How does an approved task become a native task and bounded Pi result? | [c3-pi-task-worker.mmd](c3-pi-task-worker.mmd) | [PNG](c3-pi-task-worker.png) |
 | C3 Image Build Orchestration | How does a task reuse a local image handoff or dispatch a host-Docker build? | [c3-image-build-worker.mmd](c3-image-build-worker.mmd) | [PNG](c3-image-build-worker.png) |
 | C3 Shared Image Builder | How does a warm Gondolin runner VM request host Docker jobs without receiving its socket? | [c3-disposable-image-builder.mmd](c3-disposable-image-builder.mmd) | [PNG](c3-disposable-image-builder.png) |
-| C3 Pi Task Session | How does a task-specific Pi process discover and constrain Gondolin, memory, browser, and Wassette tools? | [c3-task-tool-runtime.mmd](c3-task-tool-runtime.mmd) | [PNG](c3-task-tool-runtime.png) |
+| C3 Pi Durable task tools | How does the owner select host or Gondolin tool execution and register MCP tools for a task conversation? | [c3-task-tool-runtime.mmd](c3-task-tool-runtime.mmd) | [PNG](c3-task-tool-runtime.png) |
 | C3 Host Observability | How are macOS and per-Gondolin-runner resource metrics derived without guest access? | [c3-host-observability.mmd](c3-host-observability.mmd) | [PNG](c3-host-observability.png) |
 | D1 interactive voice turn | Where does one microphone turn go before audio and Mermaid return to the browser? | [d1-interactive-voice-turn.mmd](d1-interactive-voice-turn.mmd) | [PNG](d1-interactive-voice-turn.png) |
 | D2 delegated task | How does requested project work become an isolated durable task and result? | [d2-delegated-task.mmd](d2-delegated-task.mmd) | [PNG](d2-delegated-task.png) |
 | D3 context management | How does the browser observe and compact the persistent Pi context without reading transcript content? | [d3-context-management.mmd](d3-context-management.mmd) | [PNG](d3-context-management.png) |
 | Deployment/security | Where do the parts run and which trust boundaries do they cross? | [deployment-security.mmd](deployment-security.mmd) | [PNG](deployment-security.png) |
 
+The local [C2 container mocks](../../apps/client/tool/container_mock/README.md)
+model journal, diagnostics, durable tasks, typed Pi completions, and Pi streaming
+slices of the `OXIGRAPH`, `EDGE`, `GATEWAY`, `BROKER`, and `PI` boundaries in
+memory. The browser query and owner review routes share entries by journal entry
+ID with the gateway correction route; [the client guide](../../apps/client/README.md)
+shows how to run it. It is a contract fixture outside the deployed system boundary.
+Use the deployed MCP and browser journeys for evidence about the real containers.
+The [Allure C4 coverage audit](../../tests/allure/README.md) separates deployed,
+fixture, and contract evidence for every source view and C2 element. A mapped
+mock case represents a boundary without running the downstream container.
+
 Each C3 view zooms into exactly one first-party C2 container. Components belonging to another
 container stay outside that boundary even when the same repository owns them. Off-the-shelf
-containers and data stores—Tailscale, Traefik, PostgreSQL, S3Mock, Gitea, Habitat, and OTel
+containers and data stores—Tailscale, Traefik, PostgreSQL, S3Mock, Gitea, Pi Durable, and OTel
 LGTM—remain external dependencies at C3 because this repository configures rather than implements
 their internals. The C3 audience is maintainers and security reviewers deciding where behavior,
 policy, or telemetry changes belong.
@@ -49,7 +65,7 @@ Grafana provisions the **C4 Operational Heat Map** dashboard. At build time,
 `deploy/observability/generate-c4-heatmap.clj` reads the authoritative Mermaid and evidence sources
 and calls the deterministic `deploy/observability/c4-dashboard.clj` compiler directly to generate
 the provisioned dashboard JSON. Grafana uses
-the pinned Grafmaid panel plugin to render C1, C2, all twelve C3 views, and the deployment view.
+the pinned Grafmaid panel plugin to render C1, C2, all thirteen C3 views, and the deployment view.
 On the C2 container view, source-backed evidence colors borders and fixed PromQL queries color
 instrumented fills for missing or stale telemetry, idle services, and activity intensity in the
 selected dashboard range. C1, C3, and deployment backgrounds remain neutral gray so only the C2
@@ -76,7 +92,7 @@ write capability.
 The adapter speaks RTVI, while Tailscale Serve is the only browser ingress. It exposes the voice UI on tailnet HTTPS
 after tailnet authorization. Tailscale terminates TLS and supplies the authenticated identity to a
 localhost-only Traefik router. Traefik maps `/` to the Voice Edge, `/metrics/` to Grafana,
-`/git/` to Gitea, and `/queue/` to Habitat on one HTTPS origin; there is no Caddy or public/LAN
+and `/git/` to Gitea on one HTTPS origin; there is no Caddy or public/LAN
 application port.
 
 The active conversational backend is the native **Pi Voice Service**. The edge calls it through the
@@ -96,11 +112,19 @@ owns the task lifecycle tools. A separate personal-knowledge component owns the 
 digital-twin query and receives a reader-only token; it cannot enqueue work or write RDF. Both receive
 only their component-specific settings through a mode-0600 env file. This path is separate from the
 Gondolin VM used by Pi's native file and shell tools.
-Delegated work is separate. The **Agent Gateway** owns identity and task-lifecycle policy. PostgreSQL
-stores both the proposal records and Absurd durable queue schema. S3Mock stores immutable Git bundles
-and bounded task outputs. The native **Pi Task Worker** materializes a selected bundle into temporary
-task space, or allocates an empty task-scoped `scratch` workspace when no repository was selected,
-then invokes Pi with the Gondolin extension. Scratch tasks use a worker-controlled default image and
+Journal ingestion and owner review use separate authenticated Gateway routes. Those routes issue
+bounded Oxigraph updates for entries, feedback, and assertion decisions; the personal-knowledge
+Wassette component retains read-only access.
+Delegated work is separate. The **Agent Gateway** owns identity and task-lifecycle policy.
+PostgreSQL stores public proposals, songs, and safe progress. The **Pi Durable Owner**
+receives approved tasks over a private authenticated HTTP endpoint and is the sole writer
+to the native task SQLite store. A narrow Python effect helper materializes a selected
+S3 bundle or creates task-scoped scratch space and later captures artifacts. The owner
+runs Pi Durable conversations directly in both modes. `WORKER_PI_EXECUTION_MODE=gondolin`
+runs their file and shell tools in an isolated task VM; `WORKER_PI_EXECUTION_MODE=host`
+runs those tools on the Mac. The switch changes tool execution while the
+public approval, identity, task, and artifact APIs keep their existing shape.
+Sandboxed scratch tasks use a worker-controlled default image and
 publish a bounded workspace ZIP rather than a Git patch. Missing named repositories fail explicitly;
 they never silently become scratch tasks. Optional external integrations are exposed through
 Wassette with explicit permissions. When `.pi/gondolin.json` declares a project image build, the
@@ -110,8 +134,10 @@ contexts, image reference, and build options—not the whole repository revision
 commits reuse a locally retained image archive while every declared build-input change invalidates
 the cache. Gitea schedules jobs and stores run state; the host Docker daemon builds images and writes
 versioned tar files to a shared host folder.
-The worker requires the installed Git skills bundle for every durable Pi session: Pi receives it
-through its explicit `--skill` option, and Gondolin mounts the same directory read-only at `/skills`.
+The worker supplies the installed Git skills bundle to both modes. Gondolin receives it
+as a read-only mount at `/skills`; host Pi Durable
+receives its location in the conversation's native agent instructions and can read the files
+through its host execution environment.
 For optional task narration, the worker projects safe tool events and explicitly marked public
 `Progress:` messages from the Pi task session into a bounded progress feed. It stores those phrases
 in PostgreSQL; the gateway returns them only for the owning identity. The browser polls this bounded
@@ -131,10 +157,8 @@ generic package. The task worker checkpoints the workflow run ID, verifies the p
 registers the image before Pi starts. No macOS Docker socket is exposed to the worker or VM. Because
 the VM cache is shared, only administrator-approved repositories may target its runner label.
 
-**Absurd Habitat** is an off-the-shelf queue operator UI deployed as its own container. It reads and
-operates the Absurd schema directly with a dedicated database role, so its query/retry path is
-deliberately separate from the Agent Gateway's domain command and approval APIs. The role has no
-access to proposal records, and Habitat has no direct host port.
+The former Absurd queue worker and Habitat operator UI are retired. Operators can
+inspect, abort, and retry native tasks through the owner's private Unix socket.
 
 ## Model-to-code traceability
 
@@ -145,6 +169,8 @@ access to proposal records, and Habitat has no direct host port.
 | Mobile Client foundation | `apps/client/ios/`; `apps/client/android/`; `apps/client/lib/platform/voice_session.dart`; native adapters are not implemented yet |
 | Input Diagnostics | `apps/diagnostics/`; React bundle emitted to `apps/diagnostics/dist/` |
 | Journal & Knowledge | `apps/knowledge-base/`; React and Cytoscape bundle emitted to `apps/knowledge-base/dist/` |
+| Journal & Knowledge components | `apps/knowledge-base/src/KnowledgeBaseView.tsx`; `apps/knowledge-base/src/journal-api.ts`; shared `apps/client/knowledge_ui/` components; browser WASM from `components/personal-knowledge-ts/core/` |
+| Journal Review MCP | `apps/journal-review-mcp/src/`; packaged as the Pi Voice Service's stdio MCP subprocess by `apps/pi-agent/tool/package-journal-review-mcp.mjs` |
 | Engineering Evidence and C4 Explorer | `deploy/observability/generate-c4-heatmap.clj`; `deploy/observability/c4-dashboard.clj`; provisioned Grafana dashboard generated from these Mermaid sources |
 | Grafana MCP | Official pinned `grafana/mcp-grafana` Compose service; Viewer service account; authenticated loopback streamable HTTP; PromQL tools and Tempo trace MCP App |
 | Tailnet Ingress | `deploy/compose.yml`; `tools/ops/login.py` |
@@ -161,11 +187,11 @@ access to proposal records, and Habitat has no direct host port.
 | Voice Tool Sandbox and Runtime Data | `apps/pi-agent/voice-agent/voice-gondolin.ts`; `platform/agent-execution/gondolin-session/session.ts`; `automation/roles/host_services`; `deploy/launchd/com.sathish.pipecat-pi-voice.plist` |
 | Agent Gateway | `apps/gateway/src/voice_gateway/main.py`; `apps/gateway/Dockerfile` |
 | Agent Gateway components | `apps/gateway/src/voice_gateway/main.py`; `packages/tasking/src/voice_agent/tasking/application/service.py`; `domain/approval.py`; `infrastructure/artifacts.py` |
-| Task Database and Queue | `packages/tasking/migrations/`; `packages/tasking/src/voice_agent/tasking/application/service.py`; Compose Postgres service |
-| Durable Queue Dashboard | `deploy/habitat/Containerfile`; `deploy/habitat/entrypoint.sh`; Habitat service in `deploy/compose.yml`; `/queue/` route in `deploy/traefik/routes.yml` |
+| Proposal and Song Database | `packages/tasking/migrations/`; `packages/tasking/src/voice_agent/tasking/application/service.py`; Compose Postgres service |
 | Workspace and Result Store | `packages/tasking/src/voice_agent/tasking/infrastructure/artifacts.py`; Compose S3Mock service |
-| Pi Task Worker | `apps/worker/src/voice_worker/main.py`; worker LaunchAgent |
-| Pi Task Worker components | `apps/worker/src/voice_worker/main.py`; `packages/tasking/src/voice_agent/tasking/application/pi_response.py`; `domain/execution_images.py`; `infrastructure/artifacts.py` |
+| Task Executor | `apps/worker/src/voice_worker/native_task.py`; launched by Pi Durable Owner |
+| Pi Durable Owner | `platform/agent-execution/pi-durable-task/owner.ts`; `owner-server.ts`; owner LaunchAgent; private SQLite, HTTP, and Unix socket |
+| Task Executor components | `apps/worker/src/voice_worker/main.py`; `packages/tasking/src/voice_agent/tasking/application/pi_response.py`; `domain/execution_images.py`; `infrastructure/artifacts.py` |
 | Image Build Orchestration | `apps/worker/src/voice_worker/main.py`; `infrastructure/gitea_actions.py`; `domain/execution_images.py`; `infrastructure/ensure_execution_image.py` |
 | Shared Image Builder | image-builder LaunchAgent; `platform/agent-execution/gondolin-session/image-builder/` |
 | Git Source and Workflow Dispatch | Compose Gitea service; `tools/ops/gitea_sync.py`; `packages/tasking/src/voice_agent/tasking/infrastructure/gitea_actions.py` |

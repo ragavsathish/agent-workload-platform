@@ -134,8 +134,8 @@ export async function loadSettings(
       "PROMETHEUS_ENDPOINT_URL",
     ),
     remoteTaskSocketDir: resolve(
-      env.PI_TASK_RPC_SOCKET_DIR
-        || `/tmp/awp-pi-rpc-${process.getuid?.() ?? "owner"}`,
+      env.PI_TASK_SESSION_SOCKET_DIR
+        || `/tmp/awp-pi-task-${process.getuid?.() ?? "owner"}`,
     ),
     playwrightTraceArtifactRoot: resolve(env.PLAYWRIGHT_TRACE_ARTIFACT_ROOT || tmpdir()),
     playwrightTraceOutputRoot: resolve(

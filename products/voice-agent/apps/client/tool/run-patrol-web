@@ -7,7 +7,7 @@ if [[ "${GONDOLIN_COMPOSE_PROFILE:-}" == "full-mock" ]]; then
 fi
 build_dir="$tool_dir/build"
 run_id="$(date -u +%Y%m%dT%H%M%SZ)-$$"
-run_dir="$build_dir/patrol-runs/$run_id"
+run_dir="${PATROL_RUN_DIR:-$build_dir/patrol-runs/$run_id}"
 results_dir="$run_dir/results"
 fixture_ready_file="$run_dir/fixture-ready.json"
 fixture_nonce="$(node -e 'process.stdout.write(require("node:crypto").randomUUID())')"
@@ -87,6 +87,14 @@ if [[ "$fixture_ready" -eq 1 ]]; then
   run_target workspace patrol_test/workspace_web_test.dart \
     --dart-define "VOICE_API_ORIGIN=http://127.0.0.1:$fixture_port"
   workspace_status=$?
+  if ! curl --fail --silent --show-error \
+    "http://127.0.0.1:$fixture_port/__fixture/evidence" \
+    -o "$run_dir/fixture-evidence.json"; then
+    workspace_status=1
+  elif [[ "$workspace_status" -eq 0 ]]; then
+    node "$tool_dir/tool/verify-patrol-fixture.mjs" \
+      "$run_dir/fixture-evidence.json" "$fixture_nonce" || workspace_status=1
+  fi
 else
   echo "Patrol fixture did not become ready" >&2
   workspace_status=1

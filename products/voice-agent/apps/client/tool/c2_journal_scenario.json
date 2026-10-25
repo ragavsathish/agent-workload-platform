@@ -1,0 +1,22 @@
+[
+  {
+    "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:entry:1",
+    "kind": "idea",
+    "text": "Review the source turn before treating a journal note as personal knowledge.",
+    "createdAt": "2026-10-25T08:00:00Z",
+    "sourceId": "c2-voice-capture-1",
+    "sourceLabel": "Voice session · local C2 mock",
+    "transcript": "Review the source turn before treating this note as personal knowledge.",
+    "topics": ["Learning", "Review"]
+  },
+  {
+    "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:entry:1",
+    "kind": "decision",
+    "text": "Keep corrections linked to their original journal entry ID.",
+    "createdAt": "2026-10-24T09:00:00Z",
+    "sourceId": "c2-voice-capture-2",
+    "sourceLabel": "Voice session · local C2 mock",
+    "transcript": "Keep corrections linked to the original journal entry.",
+    "topics": ["Knowledge graph"]
+  }
+]

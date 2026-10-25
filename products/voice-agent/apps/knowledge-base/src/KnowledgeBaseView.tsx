@@ -324,7 +324,7 @@ export const KnowledgeBaseView = () => {
   };
 
   useEffect(() => {
-    if (connection !== 'live' || !selectedId) return;
+    if (connection !== 'live' || !selectedId || !entries.some(({ id }) => id === selectedId)) return;
     let active = true;
     void fetchAssertionReview(selectedId).then((review) => {
       if (!active || !review) return;
@@ -336,7 +336,7 @@ export const KnowledgeBaseView = () => {
       } }));
     }).catch(() => { /* A missing review or read failure does not block journal browsing. */ });
     return () => { active = false; };
-  }, [connection, selectedId]);
+  }, [connection, entries, selectedId]);
 
   const reloadSavedJournal = async () => {
     const endpoint = configuredOxigraphEndpoint();
@@ -536,7 +536,7 @@ export const KnowledgeBaseView = () => {
               {dateGroups.map(([key, groupEntries]) => <section className="date-group" key={key} aria-labelledby={`date-${key}`}>
                 <div className="date-heading"><h3 id={`date-${key}`}>{dateGroupLabel(key)}</h3><span>{groupEntries.length}</span></div>
                 {groupEntries.map((entry) => (
-                  <div role="listitem" key={entry.id}>
+                  <div role="listitem" key={entry.id} data-entry-id={entry.id}>
                     <KnowledgeNoteCard note={entry} selected={selectedEntry?.id === entry.id} onSelect={() => chooseEntry(entry)} />
                   </div>
                 ))}
@@ -560,7 +560,8 @@ export const KnowledgeBaseView = () => {
             onReset={clearAll} />
         )}
 
-        <aside className="entry-detail pi-surface" aria-label="Selected journal note">
+        <aside className="entry-detail pi-surface" aria-label="Selected journal note"
+          data-entry-id={selectedEntry?.id}>
           {selectedEntry ? (
             <>
               <div className="detail-head"><div className="detail-icon" aria-hidden="true">✳</div><div><p className="pi-kicker">JOURNAL NOTE</p><span>{selectedEntry.type.toUpperCase()}</span></div></div>

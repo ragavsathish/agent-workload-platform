@@ -1,0 +1,7 @@
+services:
+  c2-container-mock:
+    environment:
+      PATROL_FIXTURE_STATIC_ROOT: /flutter
+      PATROL_DURABLE_C2: "true"
+    volumes:
+      - ../apps/client/build/web:/flutter:ro

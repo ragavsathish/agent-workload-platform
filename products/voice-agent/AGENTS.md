@@ -16,7 +16,7 @@
 - Grant each Wassette component only its required capabilities. Split components that need unrelated destinations or credentials.
 - Use a container when the workload needs native dependencies, subprocesses, broader filesystem behavior, or networking that cannot be represented safely as a WASI component.
 - The Pi Voice Service owns one persistent Gondolin voice VM across conversational and orchestrator session changes.
-- Each durable task Pi invocation gets its own task-scoped Gondolin VM with bounded workspace, credentials, network access, lifecycle, and cleanup.
+- Durable Pi tool execution follows `WORKER_PI_EXECUTION_MODE`: `gondolin` uses a task-scoped VM; `host` uses Pi's native host tools. Keep task approval, identity, queue, and result semantics independent of this deployment choice.
 - Read the [architecture guide](docs/architecture/README.md) before changing voice or durable-task VM ownership and lifecycle.
 - For Playwright traces, present existing traces directly. Run narrated-video generation in the container worker; Wassette is optional and justified only when it provides required host-side capability isolation.
 

@@ -3,7 +3,6 @@ name = "pipecat-agent-gateway"
 version = "0.1.0"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-    "absurd-sdk>=0.5,<0.6",
     "boto3>=1.40,<2",
     "fastapi>=0.115,<1",
     "opentelemetry-exporter-otlp-proto-http>=1.38,<2",

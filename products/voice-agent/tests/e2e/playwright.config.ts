@@ -10,12 +10,13 @@ module.exports = defineConfig({
   expect: { timeout: 15_000 },
   fullyParallel: false,
   workers: 1,
-  retries: process.env.CI ? 1 : 0,
+  retries: process.env.VOICE_E2E_RETRIES === '1' || Boolean(process.env.CI) ? 1 : 0,
   forbidOnly: Boolean(process.env.CI),
   reporter: [
     ['line'],
     ['html', { outputFolder: path.join(outputDir, 'report'), open: 'never' }],
     ['json', { outputFile: path.join(outputDir, 'results.json') }],
+    ['allure-playwright', { resultsDir: path.join(outputDir, 'native-allure-results'), detail: false }],
   ],
   use: {
     baseURL: process.env.VOICE_E2E_URL || 'http://127.0.0.1:8080',
@@ -64,6 +65,26 @@ module.exports = defineConfig({
       },
     },
     {
+      name: 'knowledge-c2-mock',
+      testMatch: /knowledge-c2-mock\.spec\.ts/,
+      use: { viewport: { width: 1440, height: 1000 } },
+    },
+    {
+      name: 'knowledge-live',
+      testMatch: /knowledge-live\.spec\.ts/,
+      use: { viewport: { width: 1440, height: 1000 } },
+    },
+    {
+      name: 'diagnostics-c2-mock',
+      testMatch: /diagnostics-c2-mock\.spec\.ts/,
+      use: { viewport: { width: 390, height: 844 } },
+    },
+    {
+      name: 'durable-c2-mock',
+      testMatch: /durable-c2-mock\.spec\.ts/,
+      use: { viewport: { width: 390, height: 844 }, actionTimeout: 15_000 },
+    },
+    {
       name: 'grafana',
       testMatch: /grafana\.spec\.ts/,
       use: {
@@ -74,6 +95,15 @@ module.exports = defineConfig({
       name: 'task-diagram',
       testMatch: /task-diagram\.spec\.ts/,
       use: { viewport: { width: 390, height: 844 } },
+    },
+    {
+      name: 'durable',
+      testMatch: /durable\.spec\.ts/,
+      use: { viewport: { width: 390, height: 844 }, actionTimeout: 15_000 },
+    },
+    {
+      name: 'pi-durable-mcp-integration',
+      testMatch: /pi-durable-mcp\.integration\.spec\.ts/,
     },
     {
       name: 'readme-demo',

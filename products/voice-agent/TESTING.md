@@ -80,7 +80,7 @@ BLACKBOX_UTTERANCES_JSON='["Propose a task in the default workspace to report re
 
 Multiple utterances share one WebRTC peer and one Voice Session. The remote-session target uses that
 boundary for propose, approve, attach, and follow-up turns, then requires fresh successful
-`pi-task-rpc` attachment and command metrics. This prevents an ordinary local response from passing
+Pi Voice remote-session attachment and command metrics. This prevents an ordinary local response from passing
 as a remote Agent Task conversation.
 
 Voice Edge admits one active Voice Session at a time because the Pi Voice Service intentionally owns
@@ -154,12 +154,12 @@ Expected security properties:
 
 - a proposal is `pending` in Postgres before a later explicit approval;
 - “propose and approve” in one turn remains pending;
-- approval creates one Absurd task id and does not expose the signed approval token to voice-edge;
+- approval creates one Pi Durable task id and does not expose the signed approval token to voice-edge;
 - missing/replayed session tokens and hostile origins fail the WebSocket handshake;
 - missing gateway bearer credentials return 401, wrong identities return 403, and workspace escapes
   return 400;
 - malformed audio and oversized broker requests are rejected before model execution;
-- worker/provider failures remain durable in the Absurd tables and never cause an unsandboxed
+- owner/provider failures remain durable in Pi Durable SQLite and never cause an unsandboxed
   fallback.
 
 The test is deliberately exploratory: inspect transcript segmentation and the exact plan persisted

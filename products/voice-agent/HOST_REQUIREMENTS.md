@@ -44,7 +44,7 @@ The worker does not require Documents, Desktop, or Downloads access. Scratch wor
 task. Publishing a repository is an explicit interactive action; only that invoking terminal needs
 access when the source happens to be under a macOS privacy-protected folder.
 
-`make install-host-services` builds and installs the Rust Pi task RPC supervisor,
+`make install-host-services` installs the Pi Durable owner and
 copies the generic Gondolin extension into
 `~/Library/Application Support/PipecatEdge/gondolin-agent`, the product-owned Pi
 Voice Service into `voice-pi-agent`, and the pinned VM image into
@@ -65,8 +65,8 @@ into an image. It installs eight LaunchAgents in `~/Library/LaunchAgents`:
 - image builder: trusted Gitea workflow supplies a build context from an isolated Gondolin VM to the host Docker API; image archives stay in a local host handoff folder;
 - Pi Voice Service: persistent owner conversation, Gondolin-isolated native tools, and deferred
   host-side Wassette MCP tools on `127.0.0.1:9446`;
-- Pi worker: consumes approved tasks from Postgres and invokes Gondolin/Wassette and the
-  installed Pi task RPC supervisor.
+- Pi Durable owner: accepts approved tasks from the Gateway and runs their
+  Pi sessions with host or Gondolin tools.
 
 The worker routes Pi's standard `read`, `write`, `edit`, and `bash` tools
 through the micro-VM with only the immutable task workspace mounted at
@@ -96,10 +96,10 @@ public-read token; it never receives the Gitea publisher credential.
 
 | Address | Owner | Purpose |
 |---|---|---|
-| tailnet HTTPS 443 | Tailscale Serve | owner-only HTTPS; `/`, `/metrics/`, `/git/`, and `/queue/` only |
+| tailnet HTTPS 443 | Tailscale Serve | owner-only HTTPS; `/`, `/metrics/`, and `/git/` only |
 | host loopback `127.0.0.1:8080` | Traefik local-test ingress | browser tests without Tailscale; enabled only when `EDGE_ALLOW_LOCAL_INGRESS=true` |
 | shared Tailscale/Traefik loopback | Traefik and Pipecat voice edge | exact-owner forward-auth and browser UI behind Serve |
-| `127.0.0.1:54329` | Docker Postgres | native Pi worker queue access |
+| `127.0.0.1:54329` | Docker Postgres | proposal, song, and progress storage |
 | `127.0.0.1:9090` | Docker S3Mock | native worker immutable inputs and task result artifacts |
 | `127.0.0.1:3001` | Docker Gitea | committed source mirror; anonymous read, bootstrap publisher writes |
 | `127.0.0.1:3300` | Docker Grafana | authenticated local metrics and traces UI |
@@ -138,16 +138,16 @@ the configured owner through the edge forward-auth endpoint,
 and Grafana accepts it only from the fixed Tailscale container IP. Direct loopback access continues
 to require the generated Grafana admin password.
 
-Absurd Habitat is reachable only through `/queue/`; it has no published host port. It connects to
-Postgres over the private data network with a dedicated operator role limited to the Absurd queue
-schema. That role can inspect and operate durable queue state but cannot read task proposals.
+Pi Durable owns task state in a private SQLite store. Its local Unix socket is
+mode 0600; the Gateway calls the loopback HTTP interface with a bearer token.
+No task-operator endpoint is published through Tailscale.
 
 The phone must run Tailscale and join the same tailnet. The tailnet policy must grant only the owner
 access to the voice node on TCP 443; use `deploy/tailscale-policy.hujson.example` as the minimum
 policy. Tailscale Serve terminates trusted HTTPS, strips client-supplied Tailscale identity headers,
 adds the authenticated tailnet identity, and forwards over shared loopback to Traefik. Traefik
 requires the exact configured owner before routing `/` to Pipecat, `/metrics/` to Grafana, `/git/`
-to Gitea, or `/queue/` to Habitat.
+to Gitea.
 The application requires the exact MagicDNS origin and a signed,
 one-use WebSocket path token. This is a single-user deployment: `make login` pins exactly one owner
 login, and tailnet ACLs authenticate the devices allowed to reach it. There is no fallback listener

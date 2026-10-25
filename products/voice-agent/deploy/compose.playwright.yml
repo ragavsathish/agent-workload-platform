@@ -39,27 +39,32 @@ services:
     restart: "no"
 
   playwright-e2e:
-    image: mcr.microsoft.com/playwright/mcp:v0.0.79@sha256:18c0a9c934004fe9580cc79f1e8e6e6cde7c667348b215335e8a23fd3e509804
+    image: pipecat-playwright-allure:local
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.playwright-allure
     profiles: [e2e]
     networks: [control]
     extra_hosts:
       - "pipecat-edge.tailf6d713.ts.net:172.30.90.2"
     environment:
-      NODE_PATH: /app/node_modules
+      NODE_PATH: /tests/node_modules:/app/node_modules
       PLAYWRIGHT_PROJECT: voice
       VOICE_E2E_INGRESS: tailscale
       VOICE_E2E_URL: https://pipecat-edge.tailf6d713.ts.net
       VOICE_E2E_AUDIO: /fixtures/voice.wav
       VOICE_E2E_OUTPUT: /output
+      VOICE_E2E_RETRIES: ${VOICE_E2E_RETRIES:-0}
       GRAFANA_TRACE_ID: ${GRAFANA_TRACE_ID:-}
     entrypoint: ["sh", "-c"]
     command:
       - >-
-        exec node /app/node_modules/playwright/cli.js test
-        --config=/tests/playwright.config.ts
+        exec node /tests/node_modules/playwright/cli.js test
+        --config=/tests/source/playwright.config.ts
         --project="$${PLAYWRIGHT_PROJECT:-voice}"
     volumes:
-      - ../tests/e2e:/tests:ro
+      - ../tests/e2e/playwright.config.ts:/tests/source/playwright.config.ts:ro
+      - ../tests/e2e/playwright:/tests/source/playwright:ro
       - ${PLAYWRIGHT_AUDIO_FILE:?set PLAYWRIGHT_AUDIO_FILE}:/fixtures/voice.wav:ro
       - ${PLAYWRIGHT_OUTPUT_DIR:?set PLAYWRIGHT_OUTPUT_DIR}:/output
     read_only: true
@@ -74,27 +79,32 @@ services:
     restart: "no"
 
   playwright-local-e2e:
-    image: mcr.microsoft.com/playwright/mcp:v0.0.79@sha256:18c0a9c934004fe9580cc79f1e8e6e6cde7c667348b215335e8a23fd3e509804
+    image: pipecat-playwright-allure:local
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.playwright-allure
     profiles: [e2e]
     network_mode: service:tailscale
     depends_on:
       tailscale:
         condition: service_started
     environment:
-      NODE_PATH: /app/node_modules
+      NODE_PATH: /tests/node_modules:/app/node_modules
       PLAYWRIGHT_PROJECT: voice
       VOICE_E2E_INGRESS: local
       VOICE_E2E_URL: http://127.0.0.1:8081
       VOICE_E2E_AUDIO: /fixtures/voice.wav
       VOICE_E2E_OUTPUT: /output
+      VOICE_E2E_RETRIES: ${VOICE_E2E_RETRIES:-0}
     entrypoint: ["sh", "-c"]
     command:
       - >-
-        exec node /app/node_modules/playwright/cli.js test
-        --config=/tests/playwright.config.ts
+        exec node /tests/node_modules/playwright/cli.js test
+        --config=/tests/source/playwright.config.ts
         --project="$${PLAYWRIGHT_PROJECT:-voice}"
     volumes:
-      - ../tests/e2e:/tests:ro
+      - ../tests/e2e/playwright.config.ts:/tests/source/playwright.config.ts:ro
+      - ../tests/e2e/playwright:/tests/source/playwright:ro
       - ${PLAYWRIGHT_AUDIO_FILE:?set PLAYWRIGHT_AUDIO_FILE}:/fixtures/voice.wav:ro
       - ${PLAYWRIGHT_OUTPUT_DIR:?set PLAYWRIGHT_OUTPUT_DIR}:/output
     read_only: true

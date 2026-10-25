@@ -218,6 +218,11 @@ export class GondolinSession {
     });
   }
 
+  /** Guest filesystem capability for a Pi Durable ExecutionEnv adapter. */
+  async filesystem(): Promise<VM["fs"]> {
+    return (await this.ensureVm()).fs;
+  }
+
   async close(): Promise<void> {
     const vm = this.vm ?? await this.vmPromise?.catch(() => undefined);
     this.vm = undefined;

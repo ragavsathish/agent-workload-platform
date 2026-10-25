@@ -21,8 +21,8 @@ present.
 
 The digital twin listens outside the Pi voice service. A separate launch agent scans persisted Pi
 sessions and fans each completed owner turn into independently retryable `digital-twin-journal` and
-`digital-twin-classify` Absurd tasks. The stable Pi session and message IDs form each branch's
-idempotency identity, so listener restarts and queue retries cannot create duplicate journal facts
+`digital-twin-classify` Pi Durable tasks. The stable Pi session and message IDs form each branch's
+idempotency identity, so listener restarts and task resumes cannot create duplicate journal facts
 or review candidates. Each persisted prompt carries user-versus-developer origin metadata; the
 listener excludes developer bootstrap turns before they reach either extraction branch.
 

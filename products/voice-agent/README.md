@@ -53,8 +53,8 @@ ownership and planned extractions are documented in
 - Tailscale Serve terminates trusted tailnet HTTPS, enforces tailnet access, strips spoofed
   identity headers, and injects the authenticated login before forwarding to Traefik over shared
   loopback. Before routing, Traefik asks the edge to match that login against the configured owner.
-  It routes `/` to Pipecat, `/metrics/` to Grafana, `/git/` to Gitea, and `/queue/` to the
-  upstream Absurd Habitat operator UI. Funnel and public Docker ports are not enabled.
+  It routes `/` to Pipecat, `/metrics/` to Grafana, `/git/` to Gitea, and `/oxigraph/query` to the
+  bounded knowledge query route. Funnel and public Docker ports are not enabled.
   Grafana provisions a generated **C4 Operational Heat Map** containing C1, C2, every C3 view, and
   deployment, plus the dated source-backed code evidence snapshot. A deterministic local adapter
   compiles the authoritative Mermaid sources before Compose starts. Grafana renders the repository's
@@ -127,7 +127,7 @@ stdout; `Ctrl-C` stops following output but leaves the services running. Use
 
 `make login` performs interactive Tailscale authentication when needed, binds the exact login and
 MagicDNS origin, enables one tailnet-only HTTPS origin on port 443, and prints the voice, metrics,
-Git, and durable-queue URLs.
+Git, and task URLs.
 
 ## Browser URL
 
@@ -191,7 +191,7 @@ with `KeepAlive`. `make down` stops native services before stopping Compose. `ma
 reads launchd state without changing it; `make verify` checks service readiness.
 
 Postgres and S3Mock are published only on host loopback so the native Pi worker can consume the
-queue and immutable workspace bundles. The bearer-protected agent gateway is also published on
+Pi Durable task state and immutable workspace bundles. The bearer-protected agent gateway is also published on
 host loopback so the optional Pi voice backend can use bounded task-lifecycle and read-only
 personal-knowledge operations.
 The same gateway exposes a review-gated durable music workflow. Creating a generation starts an
@@ -224,10 +224,10 @@ instruments the digest-verified VoxLock ONNX graph at build time to expose that 
 only frequency-band aggregates, not model tensors. The live view polls a bounded microphone
 envelope rather than sending replayable audio samples. Synthesized speech exists only in memory while
 streaming. Transcripts remain in the in-memory conversation context for the active call and are
-discarded with it. Postgres stores only an explicitly proposed task instruction. Queue workers retain
-each durable Pi task as a local Pi session JSONL so the owner can attach the voice conversation to the
-still-running task. The native Rust `pi-task-rpc` supervisor owns Pi's JSONL protocol, process
-lifecycle, and a mode-0600 Unix socket that accepts only bounded conversational RPC commands; its
+discarded with it. Postgres stores only an explicitly proposed task instruction. The Pi Durable
+owner retains each task conversation in native SQLite so the voice agent can attach to the
+still-running or recently settled task. The owner manages a mode-0600 Unix socket that accepts
+only bounded conversational commands; its
 outbound projection includes assistant text and command status, never model reasoning, tool arguments,
 or tool results. Native launch services still write stdout and stderr to `/dev/null`, and the synthetic
 black-box runner reports event counts, never transcript text.
@@ -301,12 +301,10 @@ so never add those lines together. Similarly, use the product dashboard and trac
 resource spike with a voice operation rather than attributing every system-wide spike to voice.
 Both native endpoints bind only to Mac loopback; OTel reaches them through Docker's host gateway.
 
-The upstream Absurd **Habitat** operator UI is available at
-<https://pipecat-edge.tailf6d713.ts.net/queue/>. It reads queue, task, run, event, and checkpoint
-state directly from Postgres and can perform native queue operations such as retry. Habitat has no
-published Docker port and receives a separate `habitat_operator` credential whose grants are
-limited to the Absurd schema; it cannot read voice task proposals. This operational view does not
-replace the gateway's proposal, approval, or tenant-policy boundary.
+The Pi Durable owner keeps task state in a private SQLite store and exposes a
+mode-0600 local socket for native inspection, abort, and retry. The Gateway uses
+its authenticated loopback HTTP interface to submit and query approved tasks.
+The owner endpoint is not routed through Tailscale ingress.
 
 Grafana, Grafana MCP, and OTLP/HTTP bind only to Mac loopback. OTLP/gRPC, Prometheus, Tempo, and Loki ports are not
 published. Gateway and edge stdout is retained only in bounded local Docker logs for `make logs`;
@@ -315,7 +313,7 @@ applications do not send the OpenTelemetry logs signal. Telemetry is stored in t
 private local monitoring, not production.
 
 The same authenticated origin serves the voice UI at `/`, the committed source mirror at `/git/`,
-and Habitat at `/queue/`. Tailscale authenticates the connection and strips spoofed identity
+and the knowledge query route at `/oxigraph/query`. Tailscale authenticates the connection and strips spoofed identity
 headers; Traefik then uses the edge's forward-auth endpoint to require the exact configured owner
 before any route is served. Prometheus, OTLP, the Agent Gateway, S3Mock, Postgres, and the Traefik
 dashboard have no tailnet route.
@@ -359,25 +357,15 @@ provide unrestricted RDF access; they should be replaced by reviewed domain oper
 becomes a multi-user deployment.
 
 When a durable task is running, ask the voice agent to attach using the returned lowercase `task_id`.
-The first turn invokes `attach_task_session`; later voice turns are sent directly to that task's Pi RPC
-process and therefore use its existing context, workspace, tools, and Gondolin VM. No worker LLM,
+The first turn invokes `attach_task_session`; later voice turns are sent directly to that task's
+Pi Durable conversation in the owner process and therefore use its existing context, workspace,
+tools, and Gondolin VM. No worker LLM,
 database transcript projection, or polling loop sits between the two sessions. Disconnecting voice
-releases the attachment, and an unattached settled task exits after the bounded RPC idle grace.
-Run `make pi-rpc-host-release` to produce a platform-labelled executable and SHA-256 manifest under
-`apps/pi-rpc-host/dist`. `make install-host-services` builds and installs that
-executable under `PipecatEdge/bin`; the worker's configured
-`PI_TASK_RPC_HOST_BINARY` points to the installed copy.
-Run `make pi-rpc-host-smoke` for a local, non-installing check of the worker, Rust supervisor, Pi,
-and Gondolin path. It reads the local worker environment, uses temporary session and socket
-directories under `/tmp`, emits only bounded status JSON, and does not restart deployed services.
-The worker propagates W3C trace context into the Rust process. With `OTEL_EXPORTER_OTLP_ENDPOINT`
-configured, Grafana Tempo shows `pipecat-task-worker.agent-task.pi-rpc` parenting
-`pi-task-rpc.session`, `pi-task-rpc.client.attached`, and `pi-task-rpc.command` spans. Search with
-`{ resource.service.name = "pi-task-rpc" }`; errors use OpenTelemetry error status and
-`app.outcome`, while Prometheus exposes the matching `pipecat_operation_total` and
-`pipecat_operation_duration_seconds` series. Telemetry contains operational names, bounded outcome
-labels, allowed command kinds, counts, and task UUID correlation only—never prompt, response,
-reasoning, tool, workspace-path, or exception text.
+releases the attachment, and an unattached settled task closes after the bounded idle grace.
+`make test-pi-durable-mcp` exercises the native conversation, a real Gondolin VM write when
+local assets exist, and follow-up through the voice agent's task socket client.
+With `OTEL_EXPORTER_OTLP_ENDPOINT` configured, the Pi Durable owner emits payload-free
+`remote.attach` and `remote.prompt` operation counters.
 Kokoro speaks the final text produced
 by Pi after any tool calls complete. `PI_VOICE_MODEL` selects the model; when blank, Pi uses its
 configured default. The VM image includes AWS CLI and receives mock-only credentials plus a

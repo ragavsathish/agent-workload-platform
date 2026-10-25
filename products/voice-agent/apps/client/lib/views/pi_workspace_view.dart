@@ -1709,19 +1709,22 @@ class _TaskBoard extends StatelessWidget {
             separatorBuilder: (_, _) => const SizedBox(height: 12),
             itemBuilder: (_, index) {
               final task = tasks[index];
-              return _TaskCard(
-                api: api,
-                task: task,
-                busy: busyTask == task.id,
-                listening: listeningTaskId == task.id,
-                latestProgress: listeningTaskId == task.id
-                    ? latestTaskProgress
-                    : null,
-                diagramExpanded: expanded.contains('task:${task.id}'),
-                onToggleDiagram: () => onToggleDiagram('task:${task.id}'),
-                onAction: (action) => onAction(task, action),
-                onListen: () => onListen(task),
-                onToggleNarration: () => onToggleNarration(task),
+              return Semantics(
+                identifier: 'task-${task.id}',
+                child: _TaskCard(
+                  api: api,
+                  task: task,
+                  busy: busyTask == task.id,
+                  listening: listeningTaskId == task.id,
+                  latestProgress: listeningTaskId == task.id
+                      ? latestTaskProgress
+                      : null,
+                  diagramExpanded: expanded.contains('task:${task.id}'),
+                  onToggleDiagram: () => onToggleDiagram('task:${task.id}'),
+                  onAction: (action) => onAction(task, action),
+                  onListen: () => onListen(task),
+                  onToggleNarration: () => onToggleNarration(task),
+                ),
               );
             },
           ),

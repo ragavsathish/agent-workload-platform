@@ -7,29 +7,32 @@
 
 (def ^:private evidence
   [["c1-system-context" [["voice_agent" "partial"]]]
-   ["c2-container" [["BROWSER" "strong"] ["DIAGNOSTICS" "partial"] ["INGRESS" "strong"] ["ROUTER" "strong"]
+   ["c2-container" [["BROWSER" "strong"] ["KNOWLEDGE" "partial"] ["DIAGNOSTICS" "partial"] ["INGRESS" "strong"] ["ROUTER" "strong"]
                     ["EDGE" "strong"] ["BROKER" "partial"] ["PI" "partial"] ["VOICE_VM" "partial"]
-                    ["GATEWAY" "partial"] ["TASKS" "observed"] ["HABITAT" "observed"] ["WORKER" "weak"]
-                    ["TASK_PI" "weak"] ["TASK_VM" "partial"] ["WASSETTE" "partial"] ["BUILDER_MANAGER" "strong"]
+                    ["JOURNAL_MCP" "partial"] ["GATEWAY" "partial"] ["TASKS" "observed"] ["OWNER" "partial"]
+                    ["OWNER_STORE" "observed"]
+                    ["TASK_VM" "partial"] ["WASSETTE" "partial"] ["BUILDER_MANAGER" "strong"]
                     ["BUILDER_VM" "strong"] ["VOICE_DATA" "partial"] ["GITEA" "partial"] ["ARTIFACTS" "partial"]
                     ["OXIGRAPH" "observed"] ["DOCKER_METRICS" "strong"] ["HOST_METRICS" "strong"] ["OTEL" "strong"]
                     ["GRAFANA_MCP" "strong"]]]
    ["c3-browser-client" [["BROWSER" "strong"]]]
+   ["c3-journal-knowledge" [["VIEW" "partial"]]]
    ["c3-input-diagnostics" [["DIAGNOSTICS" "partial"]]]
    ["c3-voice-edge" [["EDGE" "strong"]]]
    ["c3-inference-broker" [["BROKER" "partial"]]]
    ["c3-pi-voice-service" [["PI" "partial"]]]
    ["c3-voice-tool-sandbox" [["VM" "partial"]]]
    ["c3-agent-gateway" [["GATEWAY" "partial"]]]
-   ["c3-pi-task-worker" [["WORKER" "weak"]]]
+   ["c3-pi-task-worker" [["OWNER" "partial"]]]
    ["c3-image-build-worker" [["WORKER" "weak"]]]
    ["c3-disposable-image-builder" [["MANAGER" "strong"] ["RUNNER" "strong"] ["OTEL" "strong"]]]
-   ["c3-task-tool-runtime" [["RUNTIME" "partial"]]]
+   ["c3-task-tool-runtime" [["OWNER" "partial"]]]
    ["c3-host-observability" [["OBS" "strong"]]]
    ["deployment-security" [["EDGE" "strong"] ["GATEWAY" "partial"] ["BROKER" "partial"] ["PI" "partial"]
-                            ["VOICE_TOOLS" "partial"] ["WORKER" "weak"] ["TASK_PI" "weak"] ["TASK_TOOLS" "partial"]
+                            ["VOICE_TOOLS" "partial"] ["OWNER" "partial"] ["WORKER" "partial"]
+                            ["OWNER_STORE" "observed"] ["TASK_PI" "weak"] ["TASK_TOOLS" "partial"]
                             ["VOICE_WASSETTE" "partial"] ["TASK_WASSETTE" "partial"] ["BUILDER_MANAGER" "strong"]
-                            ["RUNNER" "strong"] ["POSTGRES" "observed"] ["HABITAT" "observed"]
+                            ["RUNNER" "strong"] ["POSTGRES" "observed"]
                             ["S3" "partial"] ["GITEA" "partial"] ["OXIGRAPH" "observed"] ["DOCKER_METRICS" "strong"]
                             ["HOST_METRICS" "strong"] ["OTEL" "strong"] ["GRAFANA_MCP" "strong"]]]])
 
@@ -38,7 +41,6 @@
                     ["BROKER" ["B" "pipecat-mlx-inference"]]
                     ["GATEWAY" ["C" "pipecat-agent-gateway"]]
                     ["PI" ["D" "pipecat-pi-voice"]]
-                    ["WORKER" ["E" "pipecat-task-worker"]]
                     ["BUILDER_MANAGER" ["F" "pipecat-image-builder"]]
                     ["BUILDER_VM" ["G" "pipecat-gitea-runner"]]]]])
 
@@ -46,13 +48,14 @@
   [["c1-system-context" "C1 · System context"]
    ["c2-container" "C2 · Containers"]
    ["c3-browser-client" "C3 · Browser Voice Client"]
+   ["c3-journal-knowledge" "C3 · Journal & Knowledge"]
    ["c3-input-diagnostics" "C3 · Input Diagnostics"]
    ["c3-voice-edge" "C3 · Voice Edge"]
    ["c3-inference-broker" "C3 · Inference Broker"]
    ["c3-pi-voice-service" "C3 · Pi Voice Service"]
    ["c3-voice-tool-sandbox" "C3 · Voice Tool Sandbox"]
    ["c3-agent-gateway" "C3 · Agent Gateway"]
-   ["c3-pi-task-worker" "C3 · Pi Task Worker"]
+   ["c3-pi-task-worker" "C3 · Pi Durable Owner"]
    ["c3-image-build-worker" "C3 · Image Build Orchestration"]
    ["c3-disposable-image-builder" "C3 · Shared Image Builder"]
    ["c3-task-tool-runtime" "C3 · Pi Task Session"]
@@ -99,6 +102,18 @@
         [element [ref-id service-name]] elements]
     {:diagram-id diagram :element-id element :ref-id ref-id :service-name service-name}))
 
+(defn- assert-current-elements! [diagrams records]
+  (let [sources (into {} (map (juxt :id :mermaid) diagrams))]
+    (doseq [{:keys [diagram-id element-id]} records
+            :let [source (get sources diagram-id)]
+            :when (and source (str/starts-with? source "flowchart"))]
+      (let [declared (set (map second
+                              (re-seq #"(?m)^\s*(?:subgraph\s+)?([A-Za-z][A-Za-z0-9_]*)\s*(?:\[|\(|\{)"
+                                      source)))]
+        (when-not (contains? declared element-id)
+          (throw (ex-info "C4 heat-map evidence refers to a removed diagram element"
+                          {:diagram-id diagram-id :element-id element-id})))))))
+
 (defn build-dashboard []
   (let [architecture (fs/path "docs/architecture")
         diagrams (mapv (fn [[id title]]
@@ -117,6 +132,7 @@
                :diagrams diagrams
                :evidence (vec (evidence-records))
                :activity (vec (activity-records))}
+        _ (assert-current-elements! diagrams (concat (:evidence input) (:activity input)))
         dashboard (c4-dashboard/compile-dashboard input)]
     (when-not (and (= "voice-c4-heatmap" (:uid dashboard))
                    (= (inc (count views)) (count (:panels dashboard))))

@@ -23,6 +23,7 @@
     "eval:classifier:view": "promptfoo view"
   },
   "dependencies": {
+    "@agent-workload-platform/pi-durable-task": "workspace:*",
     "@agent-workload-platform/gondolin-session": "workspace:*",
     "@agent-workload-platform/journal-review-mcp": "workspace:*",
     "@agent-workload-platform/otel": "workspace:*",

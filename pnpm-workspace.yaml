@@ -2,6 +2,7 @@ packages:
   - vendor/excalidraw-mcp
   - vendor/mermaid-to-excalidraw
   - platform/agent-execution/gondolin-session
+  - platform/agent-execution/pi-durable-task
   - platform/observability/otel
   - products/voice-agent/apps/pi-agent
   - products/voice-agent/apps/journal-review-mcp
