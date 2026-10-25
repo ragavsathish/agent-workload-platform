@@ -189,6 +189,10 @@ must produce no skill candidate. Treat the JSON output as a review queue, not as
 
 ## Classifier evaluation
 
+For production-derived assertion labels, start with the
+[owner assertion learning workflow](docs/owner-assertion-learning-workflow.md). Its Codex export is an
+unreviewed private queue; journal summaries and classifier predictions are not gold labels.
+
 The classifier bake-off uses pinned Promptfoo `0.124.1` with 200 synthetic, claim-level gold
 examples: 50 for each assertion kind. The same ontology criteria are compared across:
 
