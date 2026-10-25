@@ -10,8 +10,8 @@ WASM_ACTIONS := setup build check install clean
 .PHONY: automation-blackbox-voice automation-observability
 .PHONY: login status grafana-password grafana-mcp-token warm-models benchmark-mlx publish-workspace
 .PHONY: blackbox-voice blackbox-e2e blackbox-personal-knowledge blackbox-remote-session
-.PHONY: playwright-voice playwright-diagnostics playwright-diagnostics-c2-mock playwright-knowledge-base playwright-knowledge-c2-mock playwright-knowledge-live playwright-durable-c2-mock playwright-task-diagram playwright-durable playwright-grafana playwright-readme-demo playwright-tailnet-voice test-voice-edge-c2-mock test-broker-pi-stream-c2-mock
-.PHONY: allure-knowledge-review allure-voice-agent allure-durable allure-publish allure-c4-coverage
+.PHONY: playwright-voice playwright-diagnostics playwright-diagnostics-c2-mock playwright-knowledge-base playwright-knowledge-c2-mock playwright-knowledge-live playwright-durable-c2-mock playwright-task-diagram playwright-durable playwright-durable-cli playwright-grafana playwright-readme-demo playwright-tailnet-voice test-voice-edge-c2-mock test-broker-pi-stream-c2-mock
+.PHONY: allure-knowledge-review allure-voice-agent allure-durable allure-durable-cli allure-publish allure-c4-coverage
 .PHONY: playwright-tailnet-diagnostics host-preflight install-host-services storage-collector-build
 .PHONY: native-start native-stop native-restart native-status
 .PHONY: config-init config-check
@@ -292,8 +292,14 @@ playwright-task-diagram:
 playwright-durable:
 	$(MAKE) automation-playwright PLAYWRIGHT_PROJECT=durable
 
+playwright-durable-cli:
+	PLAYWRIGHT_OUTPUT_DIR="$${PLAYWRIGHT_OUTPUT_DIR:-$(CURDIR)/artifacts/test-reports/durable-cli-$$(date -u +%Y%m%dT%H%M%SZ)}" $(MAKE) automation-playwright PLAYWRIGHT_PROJECT=durable-cli
+
 allure-durable:
 	VOICE_RUN_DURABLE_E2E=true $(MAKE) allure-voice-agent
+
+allure-durable-cli:
+	VOICE_RUN_DURABLE_CLI_E2E=true $(MAKE) allure-voice-agent
 
 allure-voice-agent:
 	node tests/allure/run-knowledge-review.mjs

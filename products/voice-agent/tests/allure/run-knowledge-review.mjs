@@ -379,6 +379,7 @@ async function main() {
     'voice-telemetry', 'diagnostics', 'diagnostics-c2-mock', 'durable-c2-mock',
     'flutter-responsive-c2-mock', 'task-diagram', 'grafana'];
   if (process.env.VOICE_RUN_DURABLE_E2E === 'true') browserProjects.push('durable');
+  if (process.env.VOICE_RUN_DURABLE_CLI_E2E === 'true') browserProjects.push('durable-cli');
   for (const project of browserProjects) {
     const name = `playwright-${project}`;
     const outputDir = join(runRoot, name);

@@ -30,6 +30,7 @@ function inferBehavior(suite, title) {
   if (suite === 'Playwright · diagnostics') return behavior('Voice conversation', 'Input diagnostics', 'Inspect a conversation replay and audio levels');
   if (suite === 'Playwright · task-diagram') return behavior('Durable work', 'Task diagrams', 'Open a persisted task diagram');
   if (suite === 'Playwright · durable') return behavior('Durable work', 'Task execution', 'Approve work and retrieve its artifact');
+  if (suite === 'Playwright · durable-cli') return behavior('Durable work', 'Task execution', 'Submit with Pi Durable CLI and follow work in Flutter');
   if (suite === 'Playwright · grafana') return behavior('Operations', 'Architecture dashboard', 'Inspect the live C4 health map');
   if (suite === 'Playwright · tailnet-owner-integration') return behavior('Gateway access', 'Capabilities', 'Reject a different tailnet user at protected routes');
   if (suite === 'Patrol web') {

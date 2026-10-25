@@ -126,6 +126,11 @@ module.exports = defineConfig({
       use: { viewport: { width: 390, height: 844 }, actionTimeout: 15_000 },
     },
     {
+      name: 'durable-cli',
+      testMatch: /durable-cli\.spec\.ts/,
+      use: { viewport: { width: 390, height: 844 }, actionTimeout: 15_000 },
+    },
+    {
       name: 'pi-durable-mcp-integration',
       testMatch: /pi-durable-mcp\.integration\.spec\.ts/,
     },

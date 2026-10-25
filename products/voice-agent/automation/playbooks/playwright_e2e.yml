@@ -9,12 +9,14 @@
       - diagnostics
       - grafana
       - durable
+      - durable-cli
     playwright_output_defaults:
       voice: /tmp/pipecat-playwright-voice
       voice-telemetry: /tmp/pipecat-playwright-voice-telemetry
       diagnostics: /tmp/pipecat-react-diagnostics
       grafana: /tmp/pipecat-grafana
       durable: /tmp/pipecat-durable
+      durable-cli: /tmp/pipecat-durable-cli
   tasks:
     - name: Validate the requested browser project
       ansible.builtin.assert:
@@ -119,6 +121,42 @@
 
     - name: Run the browser test with its network bridge
       block:
+        - name: Require an owner identity for the native CLI journey
+          ansible.builtin.assert:
+            that:
+              - lookup('ansible.builtin.env', 'DURABLE_CLI_TEST_IDENTITY') | length > 2
+            fail_msg: Set DURABLE_CLI_TEST_IDENTITY to the login used in the Flutter web UI.
+          when: playwright_project == 'durable-cli'
+
+        - name: Select a unique native CLI proof marker
+          ansible.builtin.set_fact:
+            durable_cli_marker: "cli-e2e-{{ 99999999 | random }}"
+          when: playwright_project == 'durable-cli'
+
+        - name: Submit native Pi Durable work through the local CLI
+          ansible.builtin.command:
+            argv:
+              - node
+              - "{{ voice_agent_root }}/../../platform/agent-execution/pi-durable-task/dist/cli.js"
+              - submit
+              - --identity
+              - "{{ lookup('ansible.builtin.env', 'DURABLE_CLI_TEST_IDENTITY') }}"
+              - --workspace
+              - scratch
+              - --instruction
+              - >-
+                In this scratch workspace, create {{ durable_cli_marker }}.txt containing
+                exactly {{ durable_cli_marker }} followed by a newline. Verify the file
+                contents, then report completion. Do not access the network or modify other files.
+          register: durable_cli_submission
+          changed_when: true
+          when: playwright_project == 'durable-cli'
+
+        - name: Record the native task ID for the browser journey
+          ansible.builtin.set_fact:
+            durable_cli_task_id: "{{ (durable_cli_submission.stdout | from_json).task_id }}"
+          when: playwright_project == 'durable-cli'
+
         - name: Start the browser tailnet bridge
           community.docker.docker_compose_v2:
             project_src: "{{ compose_project_src }}"
@@ -155,6 +193,8 @@
             no_deps: true
             env:
               PLAYWRIGHT_PROJECT: "{{ playwright_project }}"
+              DURABLE_CLI_TEST_TASK_ID: "{{ durable_cli_task_id | default('') }}"
+              DURABLE_CLI_TEST_MARKER: "{{ durable_cli_marker | default('') }}"
           environment:
             PLAYWRIGHT_AUDIO_FILE: "{{ playwright_audio_file }}"
             PLAYWRIGHT_OUTPUT_DIR: "{{ playwright_output_dir }}"

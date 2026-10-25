@@ -21,6 +21,12 @@ through the owner browser route, approves it in the task board, waits for the is
 and downloads the workspace ZIP through the browser. The test verifies that ZIP contains the
 unique file requested in the task. This opt-in run uses the authenticated tailnet browser bridge
 and starts a real Pi task; the routine report omits it to avoid creating work on every run.
+For the direct CLI journey, set `DURABLE_CLI_TEST_IDENTITY` to the exact Voice Edge login and run
+`make playwright-durable-cli`. Ansible submits a fresh native task through the local Pi Durable
+CLI, then Playwright verifies its owner-visible Flutter card, Listen to agent control, progress,
+completed result, and ZIP contents with measured Given/When/Then Allure steps. The run keeps
+Playwright traces and JSON proof in its output directory. `make allure-durable-cli` adds this
+opt-in journey to the combined Allure report using the same owner identity.
 The report also contains `coverage-audit.md`, a generated matrix of passed cases by journey and
 layer plus a C4 view and C2 element table. Those tables separate deployed, fixture, and
 contract evidence so a mock does not count as execution of the production worker or store.
