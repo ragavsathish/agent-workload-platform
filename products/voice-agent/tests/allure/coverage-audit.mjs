@@ -48,7 +48,22 @@ export function coverageAudit(items, mermaid, diagramNames = []) {
   const journeys = new Map();
   const containers = new Map(c2Elements(mermaid).map((name) => [name, blankCounts()]));
   const views = new Map(diagramNames.map((name) => [name, blankCounts()]));
+  const verifiedPaths = {
+    ownerIngress: false,
+    voiceTelemetry: false,
+  };
   for (const item of items) {
+    if (item.status === 'passed') {
+      const suite = label(item, 'suite');
+      if (suite === 'Playwright · tailnet-owner-integration'
+        && item.name === 'tailnet routes reject another user before reaching Grafana or Oxigraph') {
+        verifiedPaths.ownerIngress = true;
+      }
+      if (suite === 'Playwright · voice-telemetry'
+        && item.name === 'completes a deployed voice session and retains its diagnostics') {
+        verifiedPaths.voiceTelemetry = true;
+      }
+    }
     const epic = label(item, 'epic');
     const feature = label(item, 'feature');
     const layer = label(item, 'validationLayer');
@@ -84,6 +99,7 @@ export function coverageAudit(items, mermaid, diagramNames = []) {
       `${left.intendedUse}/${left.journey}`.localeCompare(`${right.intendedUse}/${right.journey}`)),
     c2Elements: [...containers].map(([name, counts]) => ({ name, ...counts })),
     views: [...views].map(([name, counts]) => ({ name, ...counts })),
+    verifiedPaths,
   };
 }
 
@@ -103,8 +119,8 @@ export function coverageAuditMarkdown(audit, { runId, commit, counts }) {
   const remainingPaths = [
     ...(!durableSystemPath ? ['- Approve a real durable task, observe isolated Pi execution, and retrieve its artifact through the browser. The current Patrol workspace check uses a protocol fixture.'] : []),
     '- Open a journal review MCP App from a live Pi turn, correct the note in that App, and verify the owner-visible result. The App browser and deployed MCP save checks currently run separately.',
-    '- Verify exact-owner tailnet ingress with negative identity cases. The authenticated Grafana browser journey proves rendering, but does not prove rejection of a different user.',
-    '- Correlate a fresh user voice turn with its own OTel trace and metric delta. The Grafana MCP probe proves a fresh trace for its own call; the voice journey checks replay and metrics without proving that telemetry link.',
+    ...(!audit.verifiedPaths?.ownerIngress ? ['- Verify exact-owner tailnet ingress with negative identity cases.'] : []),
+    ...(!audit.verifiedPaths?.voiceTelemetry ? ['- Correlate a fresh user voice turn with its own OTel trace and metric delta.'] : []),
   ];
   return `# Voice Agent test coverage audit\n\nRun: ${runId} · Git: ${commit} · ${counts.passed ?? 0} passed, ${counts.skipped ?? 0} skipped, ${counts.failed ?? 0} failed.\n\n` +
     'This matrix counts cases in this Allure run. A passed supporting check does not establish an end-to-end journey. Fixture-backed browser tests are integration evidence, and a skipped case does not count as passed.\n\n' +
@@ -119,5 +135,5 @@ export function coverageAuditMarkdown(audit, { runId, commit, counts }) {
     `${c2Rows.join('\n')}\n\n` +
     `### C2 elements without deployed evidence in this run\n\n${missing.length ? missing.map((name) => `- ${name}`).join('\n') : 'None'}\n\n` +
     'These are report gaps, not proof that the element has no tests elsewhere. A mapped case identifies its target view or container; only its evidence mode says whether the production runtime ran.\n\n' +
-    `## Highest-value remaining paths\n\n${remainingPaths.join('\n')}\n`;
+    `## Highest-value remaining paths\n\n${remainingPaths.length ? remainingPaths.join('\n') : 'None'}\n`;
 }

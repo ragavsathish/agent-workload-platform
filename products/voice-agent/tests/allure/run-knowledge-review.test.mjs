@@ -9,6 +9,20 @@ import { inferC4Scope } from './c4-traceability.mjs';
 import { c2Elements, coverageAudit, coverageAuditMarkdown, evidenceMode, validateC4Traceability } from './coverage-audit.mjs';
 import { attachNativePlaywrightSteps, attachPlaywrightEvidence, nativePytestResults, readNativePytestResults, nodeTapResults, patrolResults, playwrightResults, pytestJunitResults, rustTestResults, vitestResults } from './run-knowledge-review.mjs';
 
+test('removes completed ingress and telemetry journeys from remaining paths only when they pass', () => {
+  const item = (suite, name, status) => ({ name, status,
+    labels: [{ name: 'suite', value: suite }] });
+  const owner = item('Playwright · tailnet-owner-integration',
+    'tailnet routes reject another user before reaching Grafana or Oxigraph', 'passed');
+  const voice = item('Playwright · voice-telemetry',
+    'completes a deployed voice session and retains its diagnostics', 'passed');
+  const render = (items) => coverageAuditMarkdown(coverageAudit(items, ''),
+    { runId: 'test', commit: 'test', counts: { passed: items.length, skipped: 0, failed: 0 } });
+  assert.doesNotMatch(render([owner, voice]), /Verify exact-owner|Correlate a fresh user voice turn/u);
+  assert.match(render([{ ...owner, status: 'failed' }, voice]), /Verify exact-owner/u);
+  assert.match(render([owner, { ...voice, status: 'failed' }]), /Correlate a fresh user voice turn/u);
+});
+
 test('groups known behaviors and marks new test intent for review', () => {
   assert.deepEqual(inferIntent('Playwright · knowledge-base', 'saves a note correction, assertion review, and removal through the owner route'), {
     epic: 'Knowledge and review', feature: 'Correct and review journal knowledge', story: '03 · App and fixture integration (grey box)',
