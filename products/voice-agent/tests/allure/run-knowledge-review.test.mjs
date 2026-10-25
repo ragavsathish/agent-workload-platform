@@ -7,7 +7,7 @@ import test from 'node:test';
 import { inferIntent } from './intent-taxonomy.mjs';
 import { inferC4Scope } from './c4-traceability.mjs';
 import { c2Elements, coverageAudit, coverageAuditMarkdown, evidenceMode } from './coverage-audit.mjs';
-import { attachNativePlaywrightSteps, attachPlaywrightEvidence, nodeTapResults, patrolResults, playwrightResults, pytestJunitResults, rustTestResults, vitestResults } from './run-knowledge-review.mjs';
+import { attachNativePlaywrightSteps, attachPlaywrightEvidence, nativePytestResults, readNativePytestResults, nodeTapResults, patrolResults, playwrightResults, pytestJunitResults, rustTestResults, vitestResults } from './run-knowledge-review.mjs';
 
 test('groups known behaviors and marks new test intent for review', () => {
   assert.deepEqual(inferIntent('Playwright · knowledge-base', 'saves a note correction, assertion review, and removal through the owner route'), {
@@ -149,6 +149,36 @@ test('keeps a mocked downstream C2 target separate from deployed evidence', () =
   assert.equal(audit.c2Elements[0].fixturePassed, 1);
   assert.equal(audit.c2Elements[0].deployedPassed, 0);
   assert.equal(audit.views[0].fixturePassed, 1);
+});
+
+test('retains native Pytest Gherkin steps and evidence in the combined Allure report', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'owner-allure-'));
+  const native = join(directory, 'native');
+  const combined = join(directory, 'combined');
+  await mkdir(native);
+  await mkdir(combined);
+  try {
+    const proof = { name: 'owner-query-evidence', source: 'proof-attachment.json', type: 'application/json' };
+    const step = { name: 'Then the public result is returned', status: 'passed',
+      attachments: [proof], start: 10, stop: 12 };
+    await writeFile(join(native, 'proof-attachment.json'), '{"state":"completed"}');
+    await writeFile(join(native, 'case-result.json'), JSON.stringify({
+      name: 'test_owner_client_lifecycle', fullName: 'owner.test_owner_client_lifecycle',
+      status: 'passed', start: 5, stop: 15, steps: [step],
+    }));
+    const [item] = await readNativePytestResults(native, combined,
+      { suite: 'Pi Durable owner C2 mock', id: 'pi-durable-owner-c2' });
+    assert.equal(item.steps[0].name, step.name);
+    assert.deepEqual(item.steps[0].attachments, [proof]);
+    assert.equal(await readFile(join(combined, proof.source), 'utf8'), '{"state":"completed"}');
+    assert.equal(item.labels.find(({ name }) => name === 'validationLayer').value, 'integration');
+    assert.equal(item.labels.find(({ name }) => name === 'c4Level').value, 'C2 fixture-backed integration');
+    assert.throws(() => nativePytestResults([{ name: 'missing', fullName: 'owner.missing',
+      status: 'passed', start: 1, stop: 2, steps: [] }],
+    { suite: 'Pi Durable owner C2 mock', id: 'pi-durable-owner-c2' }), /No native Gherkin/u);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('converts Playwright cases with stable identities and failed status', () => {

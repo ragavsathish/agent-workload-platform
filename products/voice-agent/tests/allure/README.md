@@ -123,6 +123,11 @@ and voice follow-up through the task socket. It attaches bounded JSON or text ev
 The faux model replaces the external model provider; the real VM case runs when the
 local Gondolin image is available. These cases exercise the owner-side integration
 and tool boundary, not a deployed Gateway task or Pi Durable's internal behavior.
+The combined report also runs the Python owner client against the Babashka C2 owner
+service. Allure Pytest records native Given/When/Then steps for idempotent creation,
+single and batch result queries, abort, retry, and owner failure. JSON receipts stay
+attached to the steps; this fixture-backed integration does not count as a deployed
+Pi Durable owner run.
 
 The voice suite uses a recorded microphone fixture. Its Grafana MCP App case is skipped on local
 ingress; run the separate tailnet ingress journey for that case. The report shows one run of these

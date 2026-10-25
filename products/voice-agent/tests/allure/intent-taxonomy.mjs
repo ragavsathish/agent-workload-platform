@@ -8,6 +8,7 @@ function inferBehavior(suite, title) {
   if (suite === 'Playwright · knowledge-live') return behavior('Knowledge and review', 'Review decisions', 'Correct a test-owned entry in the deployed graph');
   if (suite === 'Playwright · diagnostics-c2-mock') return behavior('Voice conversation', 'Input diagnostics', 'Inspect conversation diagnostics');
   if (suite === 'Playwright · durable-c2-mock') return behavior('Durable work', 'Task execution', 'Approve scratch work and inspect C2 failures');
+  if (suite === 'Pi Durable owner C2 mock') return behavior('Durable work', 'Task execution', 'Create, query, abort, and retry tasks through the owner client');
   if (suite === 'Playwright · knowledge-base') {
     if (/saves a note correction/u.test(name)) return behavior('Knowledge and review', 'Review decisions', 'Save a correction and review assertions');
     if (/browses|filters|cytoscape/u.test(name)) return behavior('Knowledge and review', 'Journal exploration', 'Explore and filter journal knowledge');
@@ -123,6 +124,7 @@ function layerFor(suite, title) {
   if (suite === 'Playwright · knowledge-live') return 'deployedIntegration';
   if (suite === 'Playwright · diagnostics-c2-mock') return 'integration';
   if (suite === 'Playwright · durable-c2-mock') return 'integration';
+  if (suite === 'Pi Durable owner C2 mock') return 'integration';
   if (suite === 'Playwright · knowledge-base') return 'integration';
   if (suite === 'Playwright · task-diagram') return 'integration';
   if (suite === 'Patrol web' && /workspace/u.test(title.toLowerCase())) return 'integration';

@@ -34,6 +34,8 @@ export function inferC4Scope(suite, title) {
   if (suite === 'Playwright · durable-c2-mock') return scope('C2 fixture-backed integration',
     ['Browser Voice Client', 'Voice Edge', 'Agent Gateway', 'Task Database and Queue',
       'Pi Task Worker', 'Workspace and Result Store'], ['containers', 'browser', 'delegatedTask']);
+  if (suite === 'Pi Durable owner C2 mock') return scope('C2 fixture-backed integration',
+    ['Pi Task Worker', 'Pi Task Session'], ['containers', 'delegatedTask']);
   if (suite === 'Playwright · knowledge-base') {
     return scope('C3 browser integration with route fixtures',
       ['Journal & Knowledge'], ['knowledge']);

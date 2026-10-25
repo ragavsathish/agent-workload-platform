@@ -261,6 +261,36 @@ export function pytestJunitResults(xml, started, attachment) {
   return results;
 }
 
+export function nativePytestResults(results, { suite, id }) {
+  return results.map((result) => {
+    const item = testResult({
+      fullName: `voice.pytest.${id}.${result.fullName}`,
+      name: result.name, status: result.status, suite, framework: 'pytest',
+      start: result.start, duration: result.stop - result.start,
+      message: result.statusDetails?.message ?? '',
+    });
+    if (item.status !== 'skipped' && !(result.steps ?? []).some((step) =>
+      /^(?:Given|When|Then|And|But)\b/u.test(step.name))) {
+      throw new Error(`No native Gherkin Allure steps for ${item.fullName}`);
+    }
+    item.steps = result.steps ?? [];
+    if (result.attachments?.length) item.attachments = result.attachments;
+    return item;
+  });
+}
+
+export async function readNativePytestResults(nativeDir, combinedDir, options) {
+  const results = [];
+  for (const file of await readdir(nativeDir)) {
+    if (file.endsWith('-result.json')) {
+      results.push(JSON.parse(await readFile(join(nativeDir, file), 'utf8')));
+    } else if (!file.endsWith('-container.json')) {
+      await copyFile(join(nativeDir, file), join(combinedDir, file));
+    }
+  }
+  return nativePytestResults(results, options);
+}
+
 export function rustTestResults(output, started, attachment) {
   return [...output.matchAll(/^test (.+?) \.\.\. (ok|FAILED|ignored)$/gmu)].map((match) => testResult({
     fullName: `voice.rust.personal-knowledge-core.${match[1]}`,
@@ -446,6 +476,21 @@ async function main() {
     await recordParsed('gateway', gateway, pytestJunitResults(await readFile(junit, 'utf8'), gateway.started, gatewayAttachment));
   } catch (error) {
     await emit([gate('gateway pytest', { ...gateway, code: 1 }, gatewayAttachment, `Pytest JUnit unavailable: ${error.message}`)]);
+  }
+  const ownerResults = join(runRoot, 'pi-durable-owner-native-allure');
+  const owner = await runCommand('pi-durable-owner-c2', 'uv', [
+    'run', '--project', 'apps/gateway', 'pytest', '-q',
+    'packages/tasking/tests/infrastructure/test_pi_durable_owner_mock.py',
+    `--alluredir=${ownerResults}`,
+  ], { env: { PYTHONPATH: 'apps/gateway/src:packages/tasking/src:packages/telemetry/src' } });
+  const ownerAttachment = await attachLog('pi-durable-owner-c2', owner.logPath);
+  try {
+    const items = await readNativePytestResults(ownerResults, resultsRoot,
+      { suite: 'Pi Durable owner C2 mock', id: 'pi-durable-owner-c2' });
+    await recordParsed('pi-durable-owner-c2', owner, items, 2);
+  } catch (error) {
+    await emit([gate('pi-durable-owner-c2', { ...owner, code: 1 }, ownerAttachment,
+      `Native Pytest Allure results unavailable: ${error.message}`)]);
   }
   const rust = await runCommand('knowledge-core-rust', 'cargo', ['test', '--manifest-path', 'components/personal-knowledge-ts/core/Cargo.toml']);
   const rustAttachment = await attachLog('knowledge-core-rust', rust.logPath);
