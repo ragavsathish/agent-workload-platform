@@ -11,6 +11,7 @@ WASM_ACTIONS := setup build check install clean
 .PHONY: login status grafana-password grafana-mcp-token warm-models benchmark-mlx publish-workspace
 .PHONY: blackbox-voice blackbox-e2e blackbox-personal-knowledge blackbox-remote-session
 .PHONY: playwright-voice playwright-diagnostics playwright-knowledge-base playwright-grafana playwright-readme-demo playwright-tailnet-voice
+.PHONY: allure-knowledge-review
 .PHONY: playwright-tailnet-diagnostics host-preflight install-host-services storage-collector-build
 .PHONY: native-start native-stop native-restart native-status
 .PHONY: config-init config-check
@@ -52,6 +53,8 @@ help:
 		'                      Verify MLflow model versioning through local S3Mock' \
 		'  make playwright-readme-demo' \
 		'                      Rebuild the narrated README product tour locally' \
+		'  make allure-knowledge-review' \
+		'                      Run knowledge and MCP tests with a local Allure report' \
 		'  make verify         Verify deployed infrastructure' \
 		'  make wasm-ACTION    Run setup, build, check, install, or clean for all components' \
 		'  make wasm-ACTION-COMPONENT' \
@@ -245,6 +248,9 @@ playwright-diagnostics:
 
 playwright-knowledge-base:
 	tests/e2e/run-playwright-local knowledge-base
+
+allure-knowledge-review:
+	node tests/allure/run-knowledge-review.mjs
 
 playwright-grafana:
 	$(MAKE) automation-playwright PLAYWRIGHT_PROJECT=grafana

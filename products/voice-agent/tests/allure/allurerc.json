@@ -1,0 +1,5 @@
+{
+  "name": "Voice Agent Knowledge Review",
+  "historyPath": "./artifacts/test-reports/knowledge-review-history.jsonl",
+  "appendHistory": true
+}
