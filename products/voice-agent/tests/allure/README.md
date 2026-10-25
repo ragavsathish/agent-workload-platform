@@ -129,6 +129,11 @@ through Traefik's tailnet entry point and requires 403 for metrics and Oxigraph 
 the configured owner still receives 200 for a bounded graph query. The test runs
 inside Traefik's network namespace, so it checks Traefik and forward-auth, not
 Tailscale Serve's identity stamping.
+The `voice-telemetry` project completes one recorded-audio turn through the tailnet
+bridge with a unique W3C trace ID. It verifies that the same trace contains the
+Voice Edge session span and that the completed-turn OTel counter increased, then
+attaches the trace ID, span names, and before/after metric values. The ordinary
+local voice project keeps its browser and replay checks without requiring Grafana.
 The combined report also runs the Python owner client against the Babashka C2 owner
 service. Allure Pytest records native Given/When/Then steps for idempotent creation,
 single and batch result queries, abort, retry, and owner failure. JSON receipts stay

@@ -5,11 +5,13 @@
   vars:
     playwright_supported_projects:
       - voice
+      - voice-telemetry
       - diagnostics
       - grafana
       - durable
     playwright_output_defaults:
       voice: /tmp/pipecat-playwright-voice
+      voice-telemetry: /tmp/pipecat-playwright-voice-telemetry
       diagnostics: /tmp/pipecat-react-diagnostics
       grafana: /tmp/pipecat-grafana
       durable: /tmp/pipecat-durable
@@ -53,7 +55,7 @@
         state: file
         suffix: .wav
       register: playwright_audio_temp
-      when: playwright_project == 'voice'
+      when: playwright_project in ['voice', 'voice-telemetry']
 
     - name: Build the voice browser fixture
       ansible.builtin.command:
@@ -83,7 +85,7 @@
           - -y
           - "{{ playwright_audio_temp.path }}"
       changed_when: true
-      when: playwright_project == 'voice'
+      when: playwright_project in ['voice', 'voice-telemetry']
 
     - name: Fetch a real trace for the voice browser test
       ansible.builtin.command:
@@ -99,7 +101,7 @@
       ansible.builtin.set_fact:
         playwright_audio_file: >-
           {{ playwright_audio_temp.path
-             if playwright_project == 'voice'
+             if playwright_project in ['voice', 'voice-telemetry']
              else playwright_fixture }}
         playwright_trace_id: >-
           {{ (playwright_trace_probe.stdout | from_json).traceId
@@ -169,4 +171,4 @@
           ansible.builtin.file:
             path: "{{ playwright_audio_temp.path }}"
             state: absent
-          when: playwright_project == 'voice'
+          when: playwright_project in ['voice', 'voice-telemetry']

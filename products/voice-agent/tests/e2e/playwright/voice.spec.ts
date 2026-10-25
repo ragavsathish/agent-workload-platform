@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import * as allure from 'allure-js-commons';
 import {
   test,
@@ -6,6 +7,18 @@ import {
   fetchJson,
   expectCleanBrowser,
 } from './fixtures';
+
+async function completedTurnMetric(page) {
+  return page.evaluate(async () => {
+    const expression = 'pipecat_operation_total{service_name="pipecat-voice-edge",app_operation="pipecat.turn.completed"}';
+    const query = new URLSearchParams({ query: expression });
+    const response = await fetch(`/metrics/api/datasources/proxy/uid/prometheus/api/v1/query?${query}`);
+    if (!response.ok) throw new Error(`Prometheus turn query returned ${response.status}`);
+    const payload = await response.json();
+    return (payload.data?.result ?? []).reduce((sum, series) =>
+      sum + Number(series.value?.[1] ?? 0), 0);
+  });
+}
 
 test('keeps the primary voice controls usable on a phone viewport', async ({
   page,
@@ -137,6 +150,11 @@ test('completes a deployed voice session and retains its diagnostics', async ({
   page,
   browserEvidence,
 }, testInfo) => {
+  test.setTimeout(240_000);
+  const traceEnabled = process.env.VOICE_E2E_INGRESS === 'tailscale';
+  const traceId = traceEnabled ? randomBytes(16).toString('hex') : null;
+  let offerRequests = 0;
+  let initialTurnMetric = 0;
   const evidence = {
     transcriptObserved: false,
     responseObserved: false,
@@ -144,13 +162,31 @@ test('completes a deployed voice session and retains its diagnostics', async ({
     replayMetricPoints: 0,
     liveWaveformPoints: 0,
     audioPlayback: null,
+    traceId,
+    offerRequests: 0,
+    completedTurnMetricBefore: 0,
+    completedTurnMetricAfter: 0,
+    traceSpanNames: [],
   };
   let initialEntryIds;
   let initialReplayIds;
 
   await allure.step('Given the deployed Flutter client is open', async () => {
+    if (traceEnabled) {
+      await page.route('**/api/offer', async (route) => {
+        offerRequests += 1;
+        await route.continue({ headers: {
+          ...route.request().headers(),
+          traceparent: `00-${traceId}-0123456789abcdef-01`,
+        } });
+      });
+    }
     await page.goto('/', { waitUntil: 'networkidle' });
     await enableFlutterSemantics(page);
+    if (traceEnabled) {
+      initialTurnMetric = await completedTurnMetric(page);
+      evidence.completedTurnMetricBefore = initialTurnMetric;
+    }
     const transcript = await fetchJson(page, '/api/pi-transcript');
     initialEntryIds = new Set(
       (Array.isArray(transcript?.entries) ? transcript.entries : [])
@@ -285,11 +321,43 @@ test('completes a deployed voice session and retains its diagnostics', async ({
     }
   });
 
+  if (traceEnabled) {
+    await allure.step('And the same turn has a Tempo trace and an OTel metric increment', async () => {
+      expect(offerRequests).toBeGreaterThan(0);
+      evidence.offerRequests = offerRequests;
+      await expect.poll(() => completedTurnMetric(page), {
+        timeout: 60_000, intervals: [1000, 3000, 5000],
+      }).toBeGreaterThan(initialTurnMetric);
+      evidence.completedTurnMetricAfter = await completedTurnMetric(page);
+      await expect.poll(async () => {
+        const response = await page.request.get(
+          `/metrics/api/datasources/proxy/uid/tempo/api/traces/${traceId}`,
+        );
+        if (!response.ok()) return false;
+        const payload = await response.json();
+        const names = (payload.batches ?? []).flatMap((batch) =>
+          (batch.scopeSpans ?? []).flatMap((scope) => (scope.spans ?? []).map((span) => span.name)));
+        evidence.traceSpanNames = names.filter((name) => typeof name === 'string').slice(0, 30);
+        return names.some((name) => typeof name === 'string' && name.includes('voice.session'));
+      }, { timeout: 60_000, intervals: [1000, 3000, 5000] }).toBe(true);
+    });
+  }
+
+  await allure.step('And the browser reports no unexpected errors', async () => {
+    const expectedNavigationAborts = browserEvidence.requestFailures.filter((failure) =>
+      failure.method === 'GET' && failure.error === 'net::ERR_ABORTED'
+      && new URL(failure.url).origin === new URL(page.url()).origin
+      && ['/api/pi-context', '/api/pi-transcript', '/api/pi-sessions']
+        .includes(new URL(failure.url).pathname));
+    expect(expectedNavigationAborts.length).toBeLessThanOrEqual(3);
+    evidence.expectedNavigationAborts = expectedNavigationAborts.map((failure) =>
+      new URL(failure.url).pathname);
+    expectCleanBrowser({ ...browserEvidence,
+      requestFailures: browserEvidence.requestFailures.filter((failure) =>
+        !expectedNavigationAborts.includes(failure)) });
+  });
   await testInfo.attach('voice-session-evidence', {
     body: Buffer.from(`${JSON.stringify(evidence, null, 2)}\n`),
     contentType: 'application/json',
-  });
-  await allure.step('And the browser reports no unexpected errors', async () => {
-    expectCleanBrowser(browserEvidence);
   });
 });

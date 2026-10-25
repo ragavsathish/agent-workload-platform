@@ -66,6 +66,15 @@ test('maps tests to existing C4 boundaries without claiming fixture-backed infra
     containers: ['Input Diagnostics', 'Voice Edge'],
     views: ['c2-container.mmd', 'c3-input-diagnostics.mmd'],
   });
+  assert.deepEqual(inferC4Scope('Playwright · voice-telemetry',
+    'completes a deployed voice session and retains its diagnostics'), {
+    level: 'C1/C2 system journey',
+    containers: ['Tailnet Ingress', 'Path Router', 'Browser Voice Client', 'Voice Edge',
+      'Inference Broker', 'Pi Voice Service', 'Metrics and Traces'],
+    views: ['c1-system-context.mmd', 'c2-container.mmd', 'c3-browser-client.mmd',
+      'c3-voice-edge.mmd', 'c3-inference-broker.mmd', 'c3-pi-voice-service.mmd',
+      'd1-interactive-voice-turn.mmd', 'deployment-security.mmd'],
+  });
   assert.deepEqual(inferC4Scope('Voice Edge broker mock', 'normalizes typed Pi responses and failures through the C2 broker mock'), {
     level: 'C2 fixture-backed integration',
     containers: ['Voice Edge', 'Inference Broker'],

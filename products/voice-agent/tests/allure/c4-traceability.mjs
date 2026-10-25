@@ -59,6 +59,10 @@ export function inferC4Scope(suite, title) {
       'Workspace and Result Store'], ['context', 'containers', 'owner', 'taskTools', 'delegatedTask']);
   if (suite === 'Playwright · grafana') return scope('C2 authenticated dashboard journey',
     ['Tailnet Ingress', 'Path Router', 'Metrics and Traces'], ['containers', 'deployment']);
+  if (suite === 'Playwright · voice-telemetry') return scope('C1/C2 system journey',
+    ['Tailnet Ingress', 'Path Router', 'Browser Voice Client', 'Voice Edge',
+      'Inference Broker', 'Pi Voice Service', 'Metrics and Traces'],
+    ['context', 'containers', 'browser', 'edge', 'broker', 'piVoice', 'voiceTurn', 'deployment']);
   if (suite === 'Playwright · tailnet-owner-integration') return scope('C2 deployed ingress integration',
     ['Path Router', 'Voice Edge', 'Knowledge Graph Store'],
     ['containers', 'edge', 'deployment']);

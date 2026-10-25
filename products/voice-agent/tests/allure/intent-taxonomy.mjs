@@ -24,6 +24,8 @@ function inferBehavior(suite, title) {
     if (/grafana trace/u.test(name)) return behavior('Embedded apps', 'Trace inspection', 'Open a Grafana trace in voice chat');
     if (/deployed voice session/u.test(name)) return behavior('Voice conversation', 'Voice session', 'Complete a session and retain diagnostics');
   }
+  if (suite === 'Playwright · voice-telemetry') return behavior('Voice conversation', 'Voice session',
+    'Complete a tailnet voice turn with correlated Tempo and OTel evidence');
   if (suite === 'Playwright · diagnostics') return behavior('Voice conversation', 'Input diagnostics', 'Inspect a conversation replay and audio levels');
   if (suite === 'Playwright · task-diagram') return behavior('Durable work', 'Task diagrams', 'Open a persisted task diagram');
   if (suite === 'Playwright · durable') return behavior('Durable work', 'Task execution', 'Approve work and retrieve its artifact');

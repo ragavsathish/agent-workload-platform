@@ -25,7 +25,7 @@ WASM_ACTIONS := setup build check install clean
 .PHONY: digital-twin-mlflow-up digital-twin-mlflow-verify
 .PHONY: db-init gitea-sync broker pi-durable-owner pull-model
 .PHONY: test-pi-durable-mcp
-.PHONY: test-tailnet-owner
+.PHONY: test-tailnet-owner playwright-voice-telemetry
 
 COMPOSE = docker compose --env-file deploy/.env -f deploy/compose.yml
 MLFLOW_COMPOSE = $(COMPOSE) -f deploy/compose.mlflow.yml
@@ -303,6 +303,9 @@ playwright-readme-demo:
 
 playwright-tailnet-voice:
 	$(MAKE) automation-playwright PLAYWRIGHT_PROJECT=voice
+
+playwright-voice-telemetry:
+	$(MAKE) automation-playwright PLAYWRIGHT_PROJECT=voice-telemetry
 
 playwright-tailnet-diagnostics:
 	$(MAKE) automation-playwright PLAYWRIGHT_PROJECT=diagnostics

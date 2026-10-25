@@ -51,6 +51,25 @@ module.exports = defineConfig({
       },
     },
     {
+      name: 'voice-telemetry',
+      testMatch: /voice\.spec\.ts/,
+      grep: /completes a deployed voice session and retains its diagnostics/,
+      use: {
+        viewport: { width: 1440, height: 1000 },
+        permissions: ['microphone'],
+        launchOptions: {
+          executablePath: '/ms-playwright/chromium-1237/chrome-linux/chrome',
+          args: [
+            '--no-sandbox', '--disable-dev-shm-usage',
+            '--autoplay-policy=no-user-gesture-required',
+            '--use-fake-ui-for-media-stream',
+            '--use-fake-device-for-media-stream',
+            `--use-file-for-fake-audio-capture=${process.env.VOICE_E2E_AUDIO || '/fixtures/voice.wav'}`,
+          ],
+        },
+      },
+    },
+    {
       name: 'diagnostics',
       testMatch: /diagnostics\.spec\.ts/,
       use: {
