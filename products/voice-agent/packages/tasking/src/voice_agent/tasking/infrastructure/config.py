@@ -34,7 +34,6 @@ class Settings:
     pi_thinking: str
     pi_session_dir: Path
     pi_execution_mode: str
-    task_timeout_seconds: int
     max_output_bytes: int
     skills_dir: Path | None
     pi_durable_mcp_servers_file: Path | None = None
@@ -77,7 +76,6 @@ class Settings:
             pi_thinking=_value("PI_THINKING", "medium"),
             pi_session_dir=Path(_value("PI_SESSION_DIR", "~/.pi/agent/sessions")).expanduser(),
             pi_execution_mode=_value("WORKER_PI_EXECUTION_MODE", "gondolin").lower(),
-            task_timeout_seconds=int(os.getenv("WORKER_TASK_TIMEOUT_SECONDS", "1800")),
             max_output_bytes=int(os.getenv("WORKER_MAX_OUTPUT_BYTES", "1048576")),
             skills_dir=(
                 Path(_value("PI_TASK_SKILLS_DIR")).expanduser().resolve()

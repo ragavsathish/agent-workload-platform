@@ -60,7 +60,6 @@ def settings(tmp_path: Path, *, sandboxed: bool) -> Settings:
         pi_thinking="medium",
         pi_session_dir=tmp_path / "sessions",
         pi_execution_mode="gondolin",
-        task_timeout_seconds=60,
         max_output_bytes=1024,
         skills_dir=tmp_path / "skills",
     )

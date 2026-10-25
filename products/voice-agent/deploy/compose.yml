@@ -361,7 +361,6 @@ services:
       ORCHESTRATOR_DEFER_WORKSPACE_VALIDATION: "true"
       PI_DURABLE_OWNER_URL: http://host.docker.internal:9448
       PI_DURABLE_OWNER_TOKEN_FILE: /run/secrets/agent-gateway-token
-      WORKER_TASK_TIMEOUT_SECONDS: ${WORKER_TASK_TIMEOUT_SECONDS:-1800}
       ARTIFACT_ENDPOINT_URL: http://s3mock:9090
       ARTIFACT_BUCKET: ${ARTIFACT_BUCKET:-agent-artifacts}
       ARTIFACT_ACCESS_KEY: ${ARTIFACT_ACCESS_KEY:-local-test}
