@@ -70,6 +70,12 @@ test('journal and graph stay usable across mobile, tablet, and desktop', async (
         .getByRole('button', { name: 'Map' }).click();
       await expect(page.locator('.knowledge-graph.map-panel')).toBeVisible();
       await expect(page.locator('.map-canvas canvas').first()).toBeVisible();
+      const nodeControl = await page.locator('.map-node-list button').first().evaluate((button) => ({
+        height: button.getBoundingClientRect().height,
+        fontSize: Number.parseFloat(getComputedStyle(button).fontSize),
+      }));
+      expect(nodeControl.height).toBeGreaterThanOrEqual(44);
+      expect(nodeControl.fontSize).toBeGreaterThanOrEqual(11);
       await captureResponsiveLayout(page, testInfo, 'knowledge-map', viewport);
     });
   }
