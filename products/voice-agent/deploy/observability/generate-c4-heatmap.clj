@@ -9,7 +9,7 @@
   [["c1-system-context" [["voice_agent" "partial"]]]
    ["c2-container" [["BROWSER" "strong"] ["KNOWLEDGE" "partial"] ["DIAGNOSTICS" "partial"] ["INGRESS" "strong"] ["ROUTER" "strong"]
                     ["EDGE" "strong"] ["BROKER" "partial"] ["PI" "partial"] ["VOICE_VM" "partial"]
-                    ["JOURNAL_MCP" "partial"] ["GATEWAY" "partial"] ["TASKS" "observed"] ["OWNER" "partial"]
+                    ["JOURNAL_MCP" "partial"] ["GATEWAY" "partial"] ["OWNER" "partial"]
                     ["OWNER_STORE" "observed"]
                     ["TASK_VM" "partial"] ["WASSETTE" "partial"] ["BUILDER_MANAGER" "strong"]
                     ["BUILDER_VM" "strong"] ["VOICE_DATA" "partial"] ["GITEA" "partial"] ["ARTIFACTS" "partial"]
@@ -32,7 +32,7 @@
                             ["VOICE_TOOLS" "partial"] ["OWNER" "partial"] ["WORKER" "partial"]
                             ["OWNER_STORE" "observed"] ["TASK_PI" "weak"] ["TASK_TOOLS" "partial"]
                             ["VOICE_WASSETTE" "partial"] ["TASK_WASSETTE" "partial"] ["BUILDER_MANAGER" "strong"]
-                            ["RUNNER" "strong"] ["POSTGRES" "observed"]
+                            ["RUNNER" "strong"]
                             ["S3" "partial"] ["GITEA" "partial"] ["OXIGRAPH" "observed"] ["DOCKER_METRICS" "strong"]
                             ["HOST_METRICS" "strong"] ["OTEL" "strong"] ["GRAFANA_MCP" "strong"]]]])
 

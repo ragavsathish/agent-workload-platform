@@ -1,6 +1,6 @@
 flowchart TB
     owner["Owner / Reviewer<br/><small>[Person · HITL authority]</small><br/>Reviews candidates and governs ontology changes"]
-    sessions[("Pi Session Store<br/><small>[External container: PostgreSQL]</small><br/>Persists completed owner turns with origin metadata")]
+    sessions[("Pi Voice Session Store<br/><small>[External file store: Pi JSONL sessions]</small><br/>Persists completed owner turns with origin metadata")]
 
     subgraph runtime["Digital Twin Ingestion Runtime — Component view (C3 scope)"]
         direction TB

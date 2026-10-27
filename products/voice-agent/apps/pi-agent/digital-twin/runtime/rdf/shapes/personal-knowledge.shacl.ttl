@@ -1,0 +1,68 @@
+@prefix pk: <urn:voice-agent:personal-knowledge:ontology#> .
+@prefix oa: <http://www.w3.org/ns/oa#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix schema: <https://schema.org/> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+pk:DailyJournalShape a sh:NodeShape ;
+    sh:targetClass pk:DailyJournal ;
+    sh:property [ sh:path pk:journalDate ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:date ] ;
+    sh:property [ sh:path pk:timeZone ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path prov:wasGeneratedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:class prov:Activity ] ;
+    sh:property [ sh:path prov:wasDerivedFrom ; sh:minCount 1 ; sh:class prov:Entity ] ;
+    sh:property [ sh:path schema:hasPart ; sh:class pk:JournalEntry ] .
+
+pk:JournalEntryShape a sh:NodeShape ;
+    sh:targetClass pk:JournalEntry ;
+    sh:property [ sh:path schema:text ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path pk:journalEntryKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:class skos:Concept ] ;
+    sh:property [ sh:path prov:wasDerivedFrom ; sh:minCount 1 ; sh:class prov:Entity ] ;
+    sh:property [ sh:path prov:wasGeneratedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:class prov:Activity ] .
+
+pk:ClassificationActivityShape a sh:NodeShape ;
+    sh:targetClass pk:ClassificationActivity ;
+    sh:property [ sh:path prov:used ; sh:minCount 1 ; sh:class schema:Message ] ;
+    sh:property [ sh:path prov:wasAssociatedWith ; sh:minCount 1 ; sh:class prov:SoftwareAgent ] .
+
+pk:ClassificationDecisionShape a sh:NodeShape ;
+    sh:targetClass pk:ClassificationDecision ;
+    sh:property [ sh:path pk:predictedKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:class skos:Concept ] ;
+    sh:property [ sh:path pk:confidence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:decimal ; sh:minInclusive 0 ; sh:maxInclusive 1 ] ;
+    sh:property [ sh:path pk:profileFieldConfidence ; sh:maxCount 1 ; sh:datatype xsd:decimal ; sh:minInclusive 0 ; sh:maxInclusive 1 ] ;
+    sh:property [ sh:path pk:hasProbability ; sh:class pk:ProbabilityAssignment ] ;
+    sh:property [ sh:path prov:wasGeneratedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:class pk:ClassificationActivity ] ;
+    sh:property [ sh:path pk:decisionFor ; sh:minCount 1 ; sh:maxCount 1 ; sh:class schema:Message ] .
+
+pk:ProbabilityAssignmentShape a sh:NodeShape ;
+    sh:targetClass pk:ProbabilityAssignment ;
+    sh:property [ sh:path pk:probabilityFor ; sh:minCount 1 ; sh:maxCount 1 ; sh:class skos:Concept ] ;
+    sh:property [ sh:path pk:probabilityValue ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:decimal ; sh:minInclusive 0 ; sh:maxInclusive 1 ] .
+
+pk:ClassificationAnnotationShape a sh:NodeShape ;
+    sh:targetClass oa:Annotation ;
+    sh:property [ sh:path oa:motivatedBy ; sh:hasValue oa:classifying ] ;
+    sh:property [ sh:path oa:hasTarget ; sh:minCount 1 ; sh:maxCount 1 ; sh:or ( [ sh:class schema:Message ] [ sh:class pk:ReflectionExcerpt ] ) ] ;
+    sh:property [ sh:path oa:hasBody ; sh:minCount 1 ; sh:maxCount 1 ; sh:class pk:ClassificationDecision ] .
+
+pk:CandidateAssertionShape a sh:NodeShape ;
+    sh:targetClass pk:CandidateAssertion ;
+    sh:property [ sh:path schema:text ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path pk:evidenceQuote ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path prov:wasDerivedFrom ; sh:minCount 1 ; sh:class schema:Message ] ;
+    sh:property [ sh:path pk:assertionKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:class skos:Concept ] ;
+    sh:property [ sh:path pk:reviewState ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( <urn:voice-agent:personal-knowledge:concept:review-state:pending> <urn:voice-agent:personal-knowledge:concept:review-state:accepted> <urn:voice-agent:personal-knowledge:concept:review-state:rejected> ) ] .
+
+pk:ProfileFactShape a sh:NodeShape ;
+    sh:targetClass pk:ProfileFact ;
+    sh:property [ sh:path schema:text ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path pk:reviewState ; sh:minCount 1 ; sh:maxCount 1 ; sh:hasValue <urn:voice-agent:personal-knowledge:concept:review-state:accepted> ] ;
+    sh:property [ sh:path prov:wasGeneratedBy ; sh:minCount 1 ; sh:class pk:ReviewEvent ] .
+
+pk:ReviewEventShape a sh:NodeShape ;
+    sh:targetClass pk:ReviewEvent ;
+    sh:property [ sh:path pk:reviewedResource ; sh:minCount 1 ; sh:maxCount 1 ; sh:class prov:Entity ] ;
+    sh:property [ sh:path pk:action ; sh:minCount 1 ; sh:maxCount 1 ; sh:class skos:Concept ] ;
+    sh:property [ sh:path prov:wasAssociatedWith ; sh:minCount 1 ; sh:maxCount 1 ; sh:class prov:Person ] ;
+    sh:property [ sh:path prov:endedAtTime ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTimeStamp ] .

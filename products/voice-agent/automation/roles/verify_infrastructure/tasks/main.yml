@@ -154,7 +154,6 @@
   loop:
     - http://127.0.0.1:8080/api/features
     - http://127.0.0.1:8080/metrics/api/user
-    - http://127.0.0.1:8080/git/api/v1/version
   loop_control:
     label: "{{ item }}"
   when: verify_infrastructure_tailscale_running
@@ -174,21 +173,24 @@
   when: verify_infrastructure_tailscale_running
   tags: [ingress]
 
-- name: Verify Tailscale Serve points exclusively to Traefik
+- name: Verify Tailscale Serve routes voice through Traefik and Gitea through Caddy
   ansible.builtin.assert:
     that:
       - "'https://' in verify_infrastructure_tailscale_serve.stdout"
       - "'http://127.0.0.1:8080' in verify_infrastructure_tailscale_serve.stdout"
+      - "'/git proxy unix:/run/gitea-ingress/gitea.sock' in verify_infrastructure_tailscale_serve.stdout"
       - "':8443' not in verify_infrastructure_tailscale_serve.stdout"
     quiet: true
   when: verify_infrastructure_tailscale_running
   tags: [ingress]
 
 - name: Inspect LaunchAgents without changing their state
-  community.general.launchd:
-    name: "{{ item }}"
-    state: started
-  check_mode: true
+  ansible.builtin.command:
+    argv:
+      - launchctl
+      - print
+      - "gui/{{ ansible_facts.user_uid }}/{{ item }}"
+  changed_when: false
   loop: "{{ launch_agents }}"
   register: verify_infrastructure_launch_agent_facts
   loop_control:
@@ -198,9 +200,8 @@
 - name: Verify every declared LaunchAgent is running
   ansible.builtin.assert:
     that:
-      - not item.changed
-      - item.status.current_state == "started"
-      - item.status.status_code == "0"
+      - item.rc == 0
+      - "'state = running' in item.stdout"
     fail_msg: "LaunchAgent {{ item.item }} is not running."
     quiet: true
   loop: "{{ verify_infrastructure_launch_agent_facts.results }}"
@@ -286,6 +287,7 @@
     - { secret: gitea-agent-token, login: voice-agent }
     - { secret: gitea-voice-admin-token, login: voice-admin }
     - { secret: gitea-builder-token, login: image-builder }
+    - { secret: gitea-builder-admin-token, login: builder-admin }
     - { secret: gitea-dispatcher-token, login: workflow-dispatcher }
   loop_control:
     label: "{{ item.login }}"
@@ -297,7 +299,7 @@
   ansible.builtin.assert:
     that:
       - (item.content | from_json).login == item.item.login
-      - ((item.content | from_json).is_admin | default(false)) == (item.item.login == 'voice-admin')
+      - ((item.content | from_json).is_admin | default(false)) == (item.item.login in ['voice-admin', 'builder-admin'])
     quiet: true
   loop: "{{ verify_infrastructure_gitea_identities.results }}"
   loop_control:

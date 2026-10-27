@@ -37,10 +37,12 @@
        :response (response 503 {:detail "Owner unavailable"})}
       :else
       (let [{:keys [command requestId input taskId taskIds id]} payload
-            existing (get-in state [:tasks taskId])
+            task-key (or taskId requestId)
+            existing (get-in state [:tasks task-key])
             submitted (get-in state [:tasks requestId])
             invalid? (or (not (string? id))
-                         (not (contains? #{"submit" "get" "get_many" "abort" "retry" "inspect"} command))
+                         (not (contains? #{"submit" "get" "get_many" "describe" "describe_product"
+                                           "cancel_product" "abort" "retry" "inspect"} command))
                          (and (= command "get_many")
                               (or (not (vector? taskIds)) (> (count taskIds) 100)
                                   (not-every? string? taskIds)))
@@ -58,6 +60,18 @@
                      (= command "get") {:success true :data (when existing
                                                               (-> (select-keys existing [:state :result :failure])
                                                                   (update :state #(if (= % "parked") "pending" %))))}
+                     (= command "describe_product")
+                     {:success true :data (when existing
+                                            (merge (select-keys existing [:kind :params :created_at :cancelled_at])
+                                                   {:task_id task-key}))}
+                     (= command "describe")
+                     {:success true :data (when existing
+                                            {:task_id task-key :identity (get-in existing [:params :identity])
+                                             :instruction (get-in existing [:params :instruction])
+                                             :workspace (get-in existing [:params :workspace])
+                                             :created_at (:created_at existing)
+                                             :session_album_key "kind-of-blue"
+                                             :session_name "Kind of Blue · c2-owner"})}
                      (= command "get_many")
                      {:success true :data (into {} (map (fn [task-id]
                        [task-id (when-let [task (get-in state [:tasks task-id])]
@@ -67,6 +81,11 @@
                                              {:success true :data {:disposition (if (#{"completed" "failed" "cancelled"} (:state existing))
                                                                                     "terminal" "marked")}}
                                              {:success false :error "task not found"})
+                     (= command "cancel_product")
+                     (if (and existing (= "song-lyrics" (:kind existing))
+                              (= (get-in existing [:params :identity]) (:identity payload)))
+                       {:success true :data {:cancelled true}}
+                       {:success false :error "song generation not found"})
                      (= command "retry") (if existing
                                              {:success true :data {:retried true}}
                                              {:success false :error "task not found"})
@@ -84,14 +103,21 @@
                           "agent-run" {:exit_code 0 :response {:text "Mock Pi completed."
                                                                  :spoken "Mock Pi completed."
                                                                  :presentation nil :resourceUri nil}}
-                          "song-lyrics" {:manifest {:title "Mock song" :lyrics "Verse"}}
+                          "song-lyrics" {:manifest {:title "Mock song" :style "Acoustic"
+                                                    :lyrics "[Verse 1]\nA song begins"
+                                                    :duration_seconds 90 :bpm 92 :key_scale "D Minor"}}
                           "song-render" {:artifacts {:audio "s3://agent-artifacts/mock.wav"}}
                           {:mode (get-in input [:params :mode]) :decision {:outcome "written"}})
             updated (cond
                       (and (= command "submit") (:success result) (nil? submitted))
-                      (assoc-in state [:tasks requestId] {:input input :state task-state
+                      (assoc-in state [:tasks requestId] {:input input :kind (:kind input)
+                                                          :params (:params input)
+                                                          :created_at "2026-10-27T12:00:00Z"
+                                                          :cancelled_at nil :state task-state
                                                           :result (when (= task-state "completed") task-result)
                                                           :failure (when (= task-state "failed") "mock task failed")})
+                      (and (= command "cancel_product") (:success result))
+                      (assoc-in state [:tasks task-key :cancelled_at] "2026-10-27T12:01:00Z")
                       (and (= command "abort") (:success result) (= "running" (:state existing)))
                       (assoc-in state [:tasks taskId :state] "cancelled")
                       (and (= command "retry") (:success result) (= "parked" (:state existing)))

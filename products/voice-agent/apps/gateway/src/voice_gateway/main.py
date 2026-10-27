@@ -1,23 +1,25 @@
 """Narrow host capability API for the isolated voice VM.
 
-The gateway exposes task lifecycle operations and bounded, read-only personal
-knowledge queries for the authenticated owner identity. It owns the database,
-knowledge-store connection, and approval secrets; none crosses into the VM.
+The gateway exposes direct task lifecycle operations and bounded, read-only personal
+knowledge queries for the authenticated owner identity. Database and knowledge-store
+connections remain outside the VM.
 """
 
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import re
 import secrets
 import urllib.request
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from io import StringIO
 from pathlib import Path
 from typing import Annotated, Literal
 from uuid import uuid4
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv
@@ -25,10 +27,10 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi import Path as ApiPath
 from fastapi.responses import Response
 from opentelemetry.propagate import inject
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from voice_agent.shared.telemetry import configure_telemetry
 from voice_agent.tasking.application.pi_response import parse_pi_event_stream, response_from_text
-from voice_agent.tasking.application.service import ProposalError, TaskService
+from voice_agent.tasking.application.service import TaskError, TaskService
 from voice_agent.tasking.application.song_service import SongGenerationError, SongService
 from voice_agent.tasking.infrastructure.config import Settings
 
@@ -217,7 +219,16 @@ SELECT ?id ?kind ?profileField ?label ?evidence ?confidence ?lowConfidence ?mode
       awp:status ?status ;
       schema:isBasedOn ?source ;
       schema:dateCreated ?capturedAt .
-    ?source schema:identifier ?sourceRef ; awp:model ?model .
+    OPTIONAL {
+      GRAPH <urn:awp:digital-twin:graph:review> {
+        ?source schema:identifier ?sourceRef ; awp:model ?model .
+      }
+    }
+    OPTIONAL {
+      GRAPH <urn:awp:digital-twin:graph:assertion-classification> {
+        ?source schema:identifier ?sourceRef ; awp:model ?model .
+      }
+    }
     OPTIONAL { ?candidate awp:lowConfidence ?lowConfidence }
     FILTER(?status = "pending")
   }
@@ -231,7 +242,7 @@ class IdentityRequest(BaseModel):
     identity: str = Field(min_length=3, max_length=320)
 
 
-class ProposalRequest(IdentityRequest):
+class TaskSubmissionRequest(IdentityRequest):
     instruction: str = Field(min_length=1, max_length=20_000)
     workspace: str = Field(min_length=1, max_length=4_096)
 
@@ -263,6 +274,83 @@ class JournalCapture(IdentityRequest):
     captured_at: datetime = Field(alias="capturedAt")
     transcript: str = Field(min_length=1, max_length=20_000)
     entries: list[JournalEntry] = Field(max_length=12)
+
+    @field_validator("captured_at")
+    @classmethod
+    def captured_at_must_have_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("capturedAt must include a timezone")
+        return value
+
+
+class DailyJournalSource(BaseModel):
+    source_ref: str = Field(alias="sourceRef", min_length=1, max_length=512)
+    speaker: Literal["owner"]
+    captured_at: datetime = Field(alias="capturedAt")
+    transcript: str = Field(min_length=1, max_length=20_000)
+
+    @field_validator("captured_at")
+    @classmethod
+    def captured_at_must_have_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("capturedAt must include a timezone")
+        return value
+
+
+class DailyJournalCapture(IdentityRequest):
+    id: str = Field(pattern=r"^[a-f0-9]{32}$")
+    task_id: str | None = Field(default=None, alias="taskId", max_length=100)
+    journal_date: date = Field(alias="journalDate")
+    time_zone: str = Field(alias="timeZone", min_length=1, max_length=64)
+    captured_at: datetime = Field(alias="capturedAt")
+    title: str = Field(min_length=1, max_length=200)
+    story: str = Field(min_length=1, max_length=8_000)
+    sources: list[DailyJournalSource] = Field(min_length=1, max_length=300)
+
+    @field_validator("story")
+    @classmethod
+    def story_must_be_prose(cls, value: str) -> str:
+        if re.search(r"(?m)^\s*(?:#{1,6}\s|[-*]\s|\d+[.)]\s)", value):
+            raise ValueError("daily journal story must be prose, not a list or outline")
+        return value
+
+    @model_validator(mode="after")
+    def validate_sources_and_timezone(self) -> DailyJournalCapture:
+        if self.captured_at.tzinfo is None or self.captured_at.utcoffset() is None:
+            raise ValueError("capturedAt must include a timezone")
+        try:
+            zone = ZoneInfo(self.time_zone)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError("timeZone must be a valid IANA timezone") from exc
+        refs = [source.source_ref for source in self.sources]
+        if len(set(refs)) != len(refs):
+            raise ValueError("sourceRefs must be unique")
+        if any(source.captured_at.astimezone(zone).date() != self.journal_date for source in self.sources):
+            raise ValueError("every source must fall within journalDate in timeZone")
+        if sum(len(source.transcript) for source in self.sources) > 200_000:
+            raise ValueError("daily journal sources exceed 200,000 characters")
+        return self
+
+
+class DailyJournalTaskRequest(IdentityRequest):
+    journal_date: date = Field(alias="journalDate")
+    time_zone: str = Field(alias="timeZone", min_length=1, max_length=64)
+    sources: list[DailyJournalSource] = Field(min_length=1, max_length=300)
+
+    @model_validator(mode="after")
+    def validate_sources_and_timezone(self) -> DailyJournalTaskRequest:
+        try:
+            zone = ZoneInfo(self.time_zone)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError("timeZone must be a valid IANA timezone") from exc
+        refs = [source.source_ref for source in self.sources]
+        if len(set(refs)) != len(refs):
+            raise ValueError("sourceRefs must be unique")
+        if any(source.captured_at.astimezone(zone).date() != self.journal_date for source in self.sources):
+            raise ValueError("every source must fall within journalDate in timeZone")
+        if sum(len(source.transcript) for source in self.sources) > 200_000:
+            raise ValueError("daily journal sources exceed 200,000 characters")
+        return self
 
 
 class JournalFeedback(IdentityRequest):
@@ -339,6 +427,13 @@ class ReviewCapture(IdentityRequest):
     captured_at: datetime = Field(alias="capturedAt")
     classification: ReviewClassification
     candidates: list[ReviewCandidate] = Field(min_length=1, max_length=8)
+
+    @field_validator("captured_at")
+    @classmethod
+    def captured_at_must_have_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("capturedAt must include a timezone")
+        return value
 
 
 class ReviewDecision(IdentityRequest):
@@ -431,7 +526,7 @@ def _public_task_result(task_result: object) -> object:
 
 
 def voice_view(result: dict[str, object]) -> dict[str, object]:
-    """Remove host capabilities and raw Pi events from the owner-facing view."""
+    """Remove legacy capability fields and raw Pi events from the owner-facing view."""
     view = dict(result)
     view.pop("approval_token", None)
     view["result"] = _public_task_result(view.get("result"))
@@ -485,26 +580,52 @@ def _rdf_literal(value: str) -> str:
 
 def _journal_update(capture: JournalCapture) -> str:
     source = f"urn:awp:digital-twin:journal:{capture.id}"
+    activity = f"urn:awp:digital-twin:activity:journal:{capture.id}"
     captured_at = capture.captured_at.isoformat()
+    kind_iris = {
+        "thought": "thought",
+        "idea": "idea",
+        "question": "question",
+        "decision": "decision",
+        "goal": "goal",
+        "learning": "learning",
+        "unclassified": "unclassified",
+    }
     triples = [
-        f"<{source}> a schema:Message ;",
-        f"  schema:identifier {_rdf_literal(capture.source_ref)} ;",
-        f"  schema:text {_rdf_literal(capture.transcript)} ;",
-        f"  schema:dateSent {_rdf_literal(captured_at)}^^xsd:dateTime .",
+        f"<{source}> a schema:Message, prov:Entity ;\n"
+        + " ;\n".join(
+            [
+                f"  schema:identifier {_rdf_literal(capture.source_ref)}",
+                f"  schema:text {_rdf_literal(capture.transcript)}",
+                f"  schema:dateSent {_rdf_literal(captured_at)}^^xsd:dateTimeStamp",
+            ]
+        )
+        + " ."
     ]
     for entry in capture.entries:
         entry_iri = f"urn:awp:digital-twin:journal:{entry.id}"
+        kind_iri = f"urn:voice-agent:personal-knowledge:concept:journal-kind:{kind_iris[entry.type]}"
         properties = [
             f"  schema:identifier {_rdf_literal(entry.id)}",
             f"  schema:additionalType {_rdf_literal(entry.type)}",
+            f"  pk:journalEntryKind <{kind_iri}>",
             f"  schema:text {_rdf_literal(entry.text)}",
-            f"  schema:dateCreated {_rdf_literal(captured_at)}^^xsd:dateTime",
-            f"  schema:isBasedOn <{source}>",
+            f"  schema:dateCreated {_rdf_literal(captured_at)}^^xsd:dateTimeStamp",
+            f"  prov:wasDerivedFrom <{source}>",
+            f"  prov:wasGeneratedBy <{activity}>",
             *(f"  schema:keywords {_rdf_literal(topic)}" for topic in entry.topics),
         ]
-        triples.append(f"<{entry_iri}> a schema:CreativeWork ;\n" + " ;\n".join(properties) + " .")
+        triples.append(f"<{entry_iri}> a schema:CreativeWork, pk:JournalEntry, prov:Entity ;\n" + " ;\n".join(properties) + " .")
+    activity_properties = [
+        f"  prov:used <{source}>",
+        *(f"  prov:generated <urn:awp:digital-twin:journal:{entry.id}>" for entry in capture.entries),
+        f"  prov:endedAtTime {_rdf_literal(captured_at)}^^xsd:dateTimeStamp",
+    ]
+    triples.append(f"<{activity}> a prov:Activity ;\n" + " ;\n".join(activity_properties) + " .")
     return "\n".join(
         [
+            "PREFIX pk: <urn:voice-agent:personal-knowledge:ontology#>",
+            "PREFIX prov: <http://www.w3.org/ns/prov#>",
             "PREFIX schema: <https://schema.org/>",
             "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>",
             "INSERT DATA { GRAPH <urn:awp:digital-twin:graph:journal> {",
@@ -513,6 +634,64 @@ def _journal_update(capture: JournalCapture) -> str:
             "",
         ]
     )
+
+
+def _daily_journal_update(capture: DailyJournalCapture) -> str:
+    page = f"urn:voice-agent:personal-knowledge:journal:daily:{capture.id}"
+    activity = f"urn:voice-agent:personal-knowledge:activity:daily-journal:{capture.id}"
+    source_iris = {
+        source.source_ref: "urn:voice-agent:codex:message:"
+        + hashlib.sha256(source.source_ref.encode("utf-8")).hexdigest()
+        for source in capture.sources
+    }
+    owner_iri = "urn:voice-agent:personal-knowledge:owner:" + hashlib.sha256(
+        normalized_identity(capture.identity).encode("utf-8")
+    ).hexdigest()
+    source_triples = [
+        f"<{source_iris[source.source_ref]}> a schema:Message, prov:Entity ;\n"
+        + " ;\n".join([
+            f"  schema:identifier {_rdf_literal(source.source_ref)}",
+            f"  schema:sender <{owner_iri}>",
+            f"  schema:text {_rdf_literal(source.transcript)}",
+            f"  schema:dateSent {_rdf_literal(source.captured_at.isoformat())}^^xsd:dateTimeStamp",
+        ]) + " ."
+        for source in capture.sources
+    ]
+    markdown = [f"# {capture.title}", "", capture.story]
+    page_properties = [
+        f"  schema:identifier {_rdf_literal(f'codex-daily-journal:{capture.journal_date.isoformat()}:{capture.time_zone}')}",
+        f"  schema:name {_rdf_literal(capture.title)}",
+        f"  schema:text {_rdf_literal(chr(10).join(markdown))}",
+        f"  pk:journalDate {_rdf_literal(capture.journal_date.isoformat())}^^xsd:date",
+        f"  pk:timeZone {_rdf_literal(capture.time_zone)}",
+        f"  schema:dateCreated {_rdf_literal(capture.captured_at.isoformat())}^^xsd:dateTimeStamp",
+        *(f"  prov:wasDerivedFrom <{source_iris[source.source_ref]}>" for source in capture.sources),
+        f"  prov:wasGeneratedBy <{activity}>",
+    ]
+    page_triple = f"<{page}> a pk:DailyJournal, schema:DigitalDocument, prov:Entity ;\n" + " ;\n".join(page_properties) + " ."
+    activity_triple = f"<{activity}> a prov:Activity ;\n" + " ;\n".join([
+        *(f"  prov:used <{source_iris[source.source_ref]}>" for source in capture.sources),
+        f"  prov:generated <{page}>",
+        f"  prov:endedAtTime {_rdf_literal(capture.captured_at.isoformat())}^^xsd:dateTimeStamp",
+        *([f"  pk:piDurableTaskId {_rdf_literal(capture.task_id)}"] if capture.task_id else []),
+    ]) + " ."
+    triples = [
+        f"<{owner_iri}> a schema:Person, prov:Person ; schema:name \"Owner\" .",
+        *source_triples, page_triple, activity_triple,
+    ]
+    return "\n".join([
+        "PREFIX pk: <urn:voice-agent:personal-knowledge:ontology#>",
+        "PREFIX prov: <http://www.w3.org/ns/prov#>",
+        "PREFIX schema: <https://schema.org/>",
+        "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>",
+        f"DELETE WHERE {{ GRAPH <urn:pk:digital-twin:graph:journal> {{ <{page}> ?pagePredicate ?pageObject }} }};",
+        f"DELETE WHERE {{ GRAPH <urn:pk:digital-twin:graph:journal> {{ ?entry schema:isPartOf <{page}> ; ?entryPredicate ?entryObject }} }};",
+        f"DELETE WHERE {{ GRAPH <urn:pk:digital-twin:graph:journal> {{ <{activity}> ?activityPredicate ?activityObject }} }};",
+        "INSERT DATA { GRAPH <urn:pk:digital-twin:graph:journal> {",
+        *(f"  {triple.replace(chr(10), chr(10) + '  ')}" for triple in triples),
+        "} }",
+        "",
+    ])
 
 
 def _journal_entry_query(entry_id: str) -> str:
@@ -541,8 +720,11 @@ def _journal_feedback_update(
 ) -> str:
     entry = f"urn:awp:digital-twin:journal:{entry_id}"
     event = f"urn:awp:digital-twin:journal-feedback:{event_id}"
+    action_iri = f"urn:voice-agent:personal-knowledge:concept:review-action:{feedback.action.replace('_', '-') }"
+    actor = "urn:awp:digital-twin:owner:" + hashlib.sha256(feedback.identity.encode("utf-8")).hexdigest()
     status = "deleted" if feedback.action == "delete" else "reviewed"
     replacement_type = feedback.corrected_type or previous_type
+    new_kind = replacement_type.replace("_", "-")
     delete_text = "schema:text ?oldText ;" if feedback.corrected_text else ""
     delete_topics = "schema:keywords ?oldTopic ;" if feedback.corrected_topics is not None else ""
     insert_text = (
@@ -556,7 +738,11 @@ def _journal_feedback_update(
         f"  schema:identifier {_rdf_literal(event_id)}",
         f"  schema:actionStatus {_rdf_literal(feedback.action)}",
         f"  schema:isBasedOn <{entry}>",
-        f"  schema:dateCreated {_rdf_literal(created_at.isoformat())}^^xsd:dateTime",
+        f"  schema:dateCreated {_rdf_literal(created_at.isoformat())}^^xsd:dateTimeStamp",
+        f"  pk:reviewedResource <{entry}>",
+        f"  pk:action <{action_iri}>",
+        f"  prov:wasAssociatedWith <{actor}>",
+        f"  prov:endedAtTime {_rdf_literal(created_at.isoformat())}^^xsd:dateTimeStamp",
         f"  awp:previousType {_rdf_literal(previous_type)}",
         f"  awp:correctedType {_rdf_literal(replacement_type)}",
     ]
@@ -571,21 +757,25 @@ def _journal_feedback_update(
             "PREFIX schema: <https://schema.org/>",
             "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>",
             "PREFIX awp: <urn:awp:digital-twin:predicate:>",
+            "PREFIX pk: <urn:voice-agent:personal-knowledge:ontology#>",
+            "PREFIX prov: <http://www.w3.org/ns/prov#>",
             "DELETE { GRAPH <urn:awp:digital-twin:graph:journal> {",
-            f"  <{entry}> schema:additionalType ?oldType ; {delete_text} {delete_topics} awp:status ?oldStatus .",
+            f"  <{entry}> schema:additionalType ?oldType ; pk:journalEntryKind ?oldConcept ; {delete_text} {delete_topics} awp:status ?oldStatus .",
             "} }",
             "INSERT {",
             "  GRAPH <urn:awp:digital-twin:graph:journal> {",
-            f"    <{entry}> schema:additionalType {_rdf_literal(replacement_type)} ; {insert_text} awp:status {_rdf_literal(status)} .",
+            f"    <{entry}> schema:additionalType {_rdf_literal(replacement_type)} ; pk:journalEntryKind <urn:voice-agent:personal-knowledge:concept:journal-kind:{new_kind}> ; {insert_text} awp:status {_rdf_literal(status)} .",
             insert_topics,
             "  }",
             "  GRAPH <urn:awp:digital-twin:graph:journal-feedback> {",
-            f"    <{event}> a schema:ReviewAction ;",
+            f"    <{actor}> a prov:Person .",
+            f"    <{event}> a schema:ReviewAction, pk:ReviewEvent, prov:Activity ;",
             "    " + " ;\n    ".join(feedback_properties) + " .",
             "  }",
             "}",
             "WHERE { GRAPH <urn:awp:digital-twin:graph:journal> {",
             f"  <{entry}> schema:additionalType ?oldType .",
+            f"  OPTIONAL {{ <{entry}> pk:journalEntryKind ?oldConcept }}",
             f"  OPTIONAL {{ <{entry}> schema:text ?oldText }}",
             f"  OPTIONAL {{ <{entry}> schema:keywords ?oldTopic }}",
             f"  OPTIONAL {{ <{entry}> awp:status ?oldStatus }}",
@@ -600,11 +790,18 @@ def _assertion_review_update(
 ) -> str:
     entry = f"urn:awp:digital-twin:journal:{entry_id}"
     event = f"urn:awp:digital-twin:assertion-review:{event_id}"
+    actor = "urn:awp:digital-twin:owner:" + hashlib.sha256(
+        normalized_identity(review.identity).encode("utf-8")
+    ).hexdigest()
     properties = [
         f"  schema:isBasedOn <{entry}>",
-        f"  schema:dateCreated {_rdf_literal(created_at.isoformat())}^^xsd:dateTime",
+        f"  schema:dateCreated {_rdf_literal(created_at.isoformat())}^^xsd:dateTimeStamp",
         f"  schema:agent {_rdf_literal(normalized_identity(review.identity))}",
         f"  schema:description {_rdf_literal(review.reason.strip())}",
+        f"  pk:reviewedResource <{entry}>",
+        "  pk:action <urn:voice-agent:personal-knowledge:concept:review-action:review-prediction>",
+        f"  prov:wasAssociatedWith <{actor}>",
+        f"  prov:endedAtTime {_rdf_literal(created_at.isoformat())}^^xsd:dateTimeStamp",
         f"  awp:ownerAuthored {'true' if review.owner_authored else 'false'}",
     ]
     if review.expected_kind is not None:
@@ -618,8 +815,11 @@ def _assertion_review_update(
             "PREFIX schema: <https://schema.org/>",
             "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>",
             "PREFIX awp: <urn:awp:digital-twin:predicate:>",
+            "PREFIX pk: <urn:voice-agent:personal-knowledge:ontology#>",
+            "PREFIX prov: <http://www.w3.org/ns/prov#>",
             "INSERT DATA { GRAPH <urn:awp:digital-twin:graph:assertion-feedback> {",
-            f"  <{event}> a schema:ReviewAction ;",
+            f"  <{actor}> a prov:Person .",
+            f"  <{event}> a schema:ReviewAction, pk:ReviewEvent, prov:Activity ;",
             "  " + " ;\n  ".join(properties) + " .",
             "} }",
         ]
@@ -649,17 +849,25 @@ def _assertion_review_query(entry_id: str) -> str:
 def _journal_miss_update(feedback: JournalMissFeedback, event_id: str, created_at: datetime) -> str:
     source = f"urn:awp:digital-twin:journal:{feedback.capture_id}"
     event = f"urn:awp:digital-twin:journal-feedback:{event_id}"
+    actor = "urn:awp:digital-twin:owner:" + hashlib.sha256(feedback.identity.encode("utf-8")).hexdigest()
     return "\n".join(
         [
             "PREFIX schema: <https://schema.org/>",
             "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>",
             "PREFIX awp: <urn:awp:digital-twin:predicate:>",
+            "PREFIX pk: <urn:voice-agent:personal-knowledge:ontology#>",
+            "PREFIX prov: <http://www.w3.org/ns/prov#>",
             "INSERT DATA { GRAPH <urn:awp:digital-twin:graph:journal-feedback> {",
-            f"  <{event}> a schema:ReviewAction ;",
+            f"  <{actor}> a prov:Person .",
+            f"  <{event}> a schema:ReviewAction, pk:ReviewEvent, prov:Activity ;",
             f"    schema:identifier {_rdf_literal(event_id)} ;",
             '    schema:actionStatus "missed" ;',
             f"    schema:isBasedOn <{source}> ;",
-            f"    schema:dateCreated {_rdf_literal(created_at.isoformat())}^^xsd:dateTime ;",
+            f"    schema:dateCreated {_rdf_literal(created_at.isoformat())}^^xsd:dateTimeStamp ;",
+            f"    pk:reviewedResource <{source}> ;",
+            "    pk:action <urn:voice-agent:personal-knowledge:concept:review-action:missed-entry> ;",
+            f"    prov:wasAssociatedWith <{actor}> ;",
+            f"    prov:endedAtTime {_rdf_literal(created_at.isoformat())}^^xsd:dateTimeStamp ;",
             f"    awp:correctedType {_rdf_literal(feedback.expected_type)} ;",
             f"    schema:text {_rdf_literal(feedback.expected_text)} .",
             "} }",
@@ -671,36 +879,107 @@ def _journal_miss_update(feedback: JournalMissFeedback, event_id: str, created_a
 def _review_update(capture: ReviewCapture) -> str:
     source = f"urn:awp:digital-twin:review-source:{capture.id}"
     classification = capture.classification
-    triples = [
-        f"<{source}> a schema:Message ;",
-        f"  schema:identifier {_rdf_literal(capture.source_ref)} ;",
-        f"  schema:dateSent {_rdf_literal(capture.captured_at.isoformat())}^^xsd:dateTime ;",
-        f"  awp:model {_rdf_literal(classification.model)} ;",
-        f"  awp:profileFieldConfidence {classification.profile_field_confidence} .",
+    activity = f"urn:awp:digital-twin:activity:classification:{capture.id}"
+    decision = f"urn:awp:digital-twin:decision:{capture.id}"
+    annotation = f"urn:awp:digital-twin:annotation:{capture.id}"
+    agent = "urn:awp:digital-twin:agent:classifier:" + hashlib.sha256(
+        classification.model.encode("utf-8")
+    ).hexdigest()
+    kind_iris = {
+        "conversation_topic": "conversation-topic",
+        "skill_evidence": "skill-evidence",
+        "profile_update": "profile-update",
+    }
+    profile_field_iris = {
+        "job_title": "job-title",
+        "home_location": "home-location",
+        "credential": "credential",
+        "employment": "employment",
+        "none": "none",
+    }
+    inference_triples = [
+        f"<{source}> a schema:Message, prov:Entity ;\n"
+        + " ;\n".join([
+            f"  schema:identifier {_rdf_literal(capture.source_ref)}",
+            f"  schema:dateSent {_rdf_literal(capture.captured_at.isoformat())}^^xsd:dateTimeStamp",
+            f"  awp:model {_rdf_literal(classification.model)}",
+            f"  pk:profileFieldConfidence {classification.profile_field_confidence}",
+        ]) + " .",
+        f"<{agent}> a prov:SoftwareAgent ; schema:name {_rdf_literal(classification.model)} .",
+        f"<{activity}> a pk:ClassificationActivity, prov:Activity ;\n"
+        + " ;\n".join([
+            f"  prov:used <{source}>",
+            f"  prov:wasAssociatedWith <{agent}>",
+            f"  pk:modelName {_rdf_literal(classification.model)}",
+            f"  prov:endedAtTime {_rdf_literal(capture.captured_at.isoformat())}^^xsd:dateTimeStamp",
+        ]) + " .",
     ]
+    candidate_triples: list[str] = []
+    decision_properties = [
+        f"  pk:predictedKind <urn:voice-agent:personal-knowledge:concept:assertion-kind:{kind_iris[classification.kind]}>",
+        f"  pk:profileField <urn:voice-agent:personal-knowledge:concept:profile-field:{profile_field_iris[classification.profile_field]}>",
+        f"  pk:confidence {classification.confidence}",
+        f"  pk:profileFieldConfidence {classification.profile_field_confidence}",
+        f"  pk:decisionFor <{source}>",
+        f"  prov:wasGeneratedBy <{activity}>",
+    ]
+    for kind, probability in classification.probabilities.model_dump().items():
+        probability_iri = f"{decision}:probability:{kind}"
+        kind_iri = kind_iris.get(kind, kind)
+        decision_properties.append(f"  pk:hasProbability <{probability_iri}>")
+        inference_triples.append(
+            f"<{probability_iri}> a pk:ProbabilityAssignment ;\n"
+            f"  pk:probabilityFor <urn:voice-agent:personal-knowledge:concept:assertion-kind:{kind_iri}> ;\n"
+            f"  pk:probabilityValue {probability} ."
+        )
+    inference_triples.extend([
+        f"<{decision}> a pk:ClassificationDecision, prov:Entity ;\n"
+        + " ;\n".join(decision_properties) + " .",
+        f"<{annotation}> a oa:Annotation ;\n"
+        f"  oa:motivatedBy oa:classifying ;\n"
+        f"  oa:hasTarget <{source}> ;\n"
+        f"  oa:hasBody <{decision}> ;\n"
+        f"  prov:wasGeneratedBy <{activity}> .",
+    ])
     for candidate in capture.candidates:
         candidate_iri = f"urn:awp:digital-twin:review:{candidate.id}"
         properties = [
             f"  schema:identifier {_rdf_literal(candidate.id)}",
             f"  schema:additionalType {_rdf_literal(classification.kind)}",
+            f"  pk:assertionKind <urn:voice-agent:personal-knowledge:concept:assertion-kind:{kind_iris[classification.kind]}>",
+            f"  pk:profileField <urn:voice-agent:personal-knowledge:concept:profile-field:{profile_field_iris[classification.profile_field]}>",
             f"  schema:disambiguatingDescription {_rdf_literal(classification.profile_field)}",
             f"  schema:name {_rdf_literal(candidate.label)}",
             f"  schema:text {_rdf_literal(candidate.evidence_quote)}",
+            f"  pk:evidenceQuote {_rdf_literal(candidate.evidence_quote)}",
             f"  schema:isBasedOn <{source}>",
-            f"  schema:dateCreated {_rdf_literal(capture.captured_at.isoformat())}^^xsd:dateTime",
+            f"  prov:wasDerivedFrom <{source}>",
+            f"  prov:wasGeneratedBy <{activity}>",
+            f"  schema:dateCreated {_rdf_literal(capture.captured_at.isoformat())}^^xsd:dateTimeStamp",
             f"  awp:confidence {classification.confidence}",
             f"  awp:lowConfidence {str(classification.low_confidence).lower()}",
             '  awp:status "pending"',
+            "  pk:reviewState <urn:voice-agent:personal-knowledge:concept:review-state:pending>",
         ]
-        triples.append(f"<{candidate_iri}> a schema:Claim ;\n" + " ;\n".join(properties) + " .")
+        candidate_triples.append(f"<{candidate_iri}> a schema:Claim, pk:CandidateAssertion, prov:Entity ;\n" + " ;\n".join(properties) + " .")
+    generated_resources = [decision, annotation, *(f"urn:awp:digital-twin:review:{item.id}" for item in capture.candidates)]
+    inference_triples.append(f"<{activity}> prov:generated " + ", ".join(f"<{resource}>" for resource in generated_resources) + " .")
     return "\n".join(
         [
+            "PREFIX pk: <urn:voice-agent:personal-knowledge:ontology#>",
+            "PREFIX oa: <http://www.w3.org/ns/oa#>",
+            "PREFIX prov: <http://www.w3.org/ns/prov#>",
             "PREFIX schema: <https://schema.org/>",
             "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>",
             "PREFIX awp: <urn:awp:digital-twin:predicate:>",
-            "INSERT DATA { GRAPH <urn:awp:digital-twin:graph:review> {",
-            *(f"  {triple.replace(chr(10), chr(10) + '  ')}" for triple in triples),
-            "} }",
+            "INSERT DATA {",
+            "  GRAPH <urn:awp:digital-twin:graph:assertion-classification> {",
+            *(f"    {triple.replace(chr(10), chr(10) + '    ')}" for triple in inference_triples),
+            "  }",
+            "  GRAPH <urn:awp:digital-twin:graph:review> {",
+            *(f"    {triple.replace(chr(10), chr(10) + '    ')}" for triple in candidate_triples),
+            "  }",
+            "}",
             "",
         ]
     )
@@ -723,14 +1002,26 @@ def _review_candidate_query(candidate_id: str) -> str:
     )
 
 
-def _review_decision_update(candidate_id: str, decision: Literal["accept", "reject"]) -> str:
+def _review_decision_update(
+    candidate_id: str,
+    decision: Literal["accept", "reject"],
+    identity: str,
+) -> str:
     candidate = f"urn:awp:digital-twin:review:{candidate_id}"
     status = "accepted" if decision == "accept" else "rejected"
+    status_iri = f"urn:voice-agent:personal-knowledge:concept:review-state:{status}"
+    action_iri = f"urn:voice-agent:personal-knowledge:concept:review-action:{decision}"
+    event = f"urn:awp:digital-twin:assertion-review:{uuid4().hex}"
+    actor = "urn:awp:digital-twin:owner:" + hashlib.sha256(identity.encode("utf-8")).hexdigest()
+    reviewed_at = datetime.now(UTC).isoformat()
     accepted_insert = (
         "GRAPH <urn:awp:digital-twin:graph:accepted> {\n"
-        f"  <{candidate}> a schema:Claim ; schema:identifier {_rdf_literal(candidate_id)} ;\n"
+        f"  <{candidate}> a schema:Claim, pk:ProfileFact ;\n"
+        f"    schema:identifier {_rdf_literal(candidate_id)} ;\n"
         "    schema:additionalType ?kind ; schema:name ?label ; schema:text ?evidence ;\n"
-        "    schema:isBasedOn ?source .\n"
+        "    schema:isBasedOn ?source ; prov:wasDerivedFrom ?source ;\n"
+        f"    pk:assertionKind ?canonicalKind ; pk:reviewState <{status_iri}> ;\n"
+        f"    prov:wasGeneratedBy <{event}> .\n"
         "}"
         if decision == "accept"
         else ""
@@ -739,18 +1030,41 @@ def _review_decision_update(candidate_id: str, decision: Literal["accept", "reje
         [
             "PREFIX schema: <https://schema.org/>",
             "PREFIX awp: <urn:awp:digital-twin:predicate:>",
+            "PREFIX pk: <urn:voice-agent:personal-knowledge:ontology#>",
+            "PREFIX prov: <http://www.w3.org/ns/prov#>",
+            "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>",
             "DELETE { GRAPH <urn:awp:digital-twin:graph:review> {",
             f"  <{candidate}> awp:status ?oldStatus .",
+            f"  <{candidate}> pk:reviewState ?oldReviewState .",
             "} }",
             "INSERT {",
             "  GRAPH <urn:awp:digital-twin:graph:review> {",
-            f"    <{candidate}> awp:status {_rdf_literal(status)} .",
+            f"    <{candidate}> awp:status {_rdf_literal(status)} ; pk:reviewState <{status_iri}> .",
+            "  }",
+            "  GRAPH <urn:awp:digital-twin:graph:assertion-feedback> {",
+            f"    <{actor}> a prov:Person .",
+            f"    <{event}> a schema:ReviewAction, pk:ReviewEvent, prov:Activity ;",
+            f"      schema:identifier {_rdf_literal(event.rsplit(':', 1)[-1])} ;",
+            f"      schema:actionStatus {_rdf_literal(decision)} ;",
+            f"      schema:isBasedOn <{candidate}> ;",
+            f"      schema:dateCreated {_rdf_literal(reviewed_at)}^^xsd:dateTimeStamp ;",
+            f"      pk:reviewedResource <{candidate}> ; pk:action <{action_iri}> ;",
+            f"      prov:wasAssociatedWith <{actor}> ;",
+            f"      prov:endedAtTime {_rdf_literal(reviewed_at)}^^xsd:dateTimeStamp .",
             "  }",
             f"  {accepted_insert}",
             "}",
             "WHERE { GRAPH <urn:awp:digital-twin:graph:review> {",
             f"  <{candidate}> awp:status ?oldStatus ; schema:additionalType ?kind ;",
             "    schema:name ?label ; schema:text ?evidence ; schema:isBasedOn ?source .",
+            "  OPTIONAL { <" + candidate + "> pk:assertionKind ?candidateKind }",
+            "  OPTIONAL { <" + candidate + "> pk:reviewState ?oldReviewState }",
+            "  VALUES (?kind ?mappedKind) {",
+            '    ("conversation_topic" <urn:voice-agent:personal-knowledge:concept:assertion-kind:conversation-topic>)',
+            '    ("skill_evidence" <urn:voice-agent:personal-knowledge:concept:assertion-kind:skill-evidence>)',
+            '    ("profile_update" <urn:voice-agent:personal-knowledge:concept:assertion-kind:profile-update>)',
+            "  }",
+            "  BIND(COALESCE(?candidateKind, ?mappedKind) AS ?canonicalKind)",
             "} }",
             "",
         ]
@@ -835,7 +1149,30 @@ async def enqueue_digital_twin(
                 transcript=body.transcript,
                 captured_at=body.captured_at.isoformat(),
             )
-        except ProposalError as exc:
+        except TaskError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/v1/digital-twin/daily-journals", status_code=202)
+async def enqueue_daily_journal(
+    body: DailyJournalTaskRequest,
+    _: None = Depends(authenticate),
+):
+    with telemetry.observe("digital_twin.daily_journal.enqueue"):
+        try:
+            return await asyncio.to_thread(
+                service().enqueue_daily_journal,
+                identity=normalized_identity(body.identity),
+                journal_date=body.journal_date.isoformat(),
+                time_zone=body.time_zone,
+                sources=[{
+                    "sourceRef": source.source_ref,
+                    "speaker": source.speaker,
+                    "capturedAt": source.captured_at.isoformat(),
+                    "transcript": source.transcript,
+                } for source in body.sources],
+            )
+        except TaskError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -849,6 +1186,25 @@ async def write_digital_twin_journal(
         try:
             await asyncio.to_thread(_sparql_update, _journal_update(body))
             return {"captureId": body.id, "entries": len(body.entries)}
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/v1/digital-twin/daily-journal")
+async def write_digital_twin_daily_journal(
+    body: DailyJournalCapture,
+    _: None = Depends(authenticate_digital_twin_writer),
+):
+    normalized_identity(body.identity)
+    with telemetry.observe("digital_twin.daily_journal.write"):
+        try:
+            await asyncio.to_thread(_sparql_update, _daily_journal_update(body))
+            return {
+                "journalId": body.id,
+                "journalDate": body.journal_date.isoformat(),
+                "entries": 1,
+                "sources": len(body.sources),
+            }
         except RuntimeError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -1032,7 +1388,8 @@ async def decide_digital_twin_review(
                 raise HTTPException(status_code=409, detail="review candidate was already decided")
             if current == "pending":
                 await asyncio.to_thread(
-                    _sparql_update, _review_decision_update(candidate_id, body.decision)
+                    _sparql_update,
+                    _review_decision_update(candidate_id, body.decision, normalized_identity(body.identity)),
                 )
             return {"candidateId": candidate_id, "status": requested}
         except RuntimeError as exc:
@@ -1040,18 +1397,23 @@ async def decide_digital_twin_review(
 
 
 @app.post("/v1/tasks", status_code=201)
-async def propose(body: ProposalRequest, _: None = Depends(authenticate)):
-    with telemetry.observe("task.propose"):
+async def submit_task(body: TaskSubmissionRequest, _: None = Depends(authenticate)):
+    with telemetry.observe("task.submit"):
+        trace_context: dict[str, str] = {}
+        inject(trace_context)
         try:
             result = await asyncio.to_thread(
-                service().propose,
+                service().submit,
                 identity=normalized_identity(body.identity),
                 instruction=body.instruction,
                 workspace=body.workspace,
+                trace_context=trace_context,
             )
             return voice_view(result)
-        except (ProposalError, ValueError) as exc:
+        except (TaskError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail="Pi Durable task owner is unavailable") from exc
 
 
 @app.get("/v1/tasks")
@@ -1074,9 +1436,9 @@ async def list_tasks(
             raise HTTPException(status_code=503, detail="Pi Durable task owner is unavailable") from exc
 
 
-@app.get("/v1/tasks/{proposal_id}")
+@app.get("/v1/tasks/{task_id}")
 async def get_task(
-    proposal_id: str,
+    task_id: str,
     identity: str = Query(min_length=3, max_length=320),
     _: None = Depends(authenticate),
 ):
@@ -1085,16 +1447,16 @@ async def get_task(
             result = await asyncio.to_thread(
                 service().get,
                 identity=normalized_identity(identity),
-                proposal_id=proposal_id,
+                task_id=task_id,
             )
             return voice_view(result)
-        except ProposalError as exc:
+        except TaskError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@app.get("/v1/tasks/{proposal_id}/progress")
+@app.get("/v1/tasks/{task_id}/progress")
 async def get_task_progress(
-    proposal_id: str,
+    task_id: str,
     identity: str = Query(min_length=3, max_length=320),
     after: int = Query(default=0, ge=0),
     limit: int = Query(default=40, ge=1, le=100),
@@ -1105,17 +1467,17 @@ async def get_task_progress(
             return await asyncio.to_thread(
                 service().progress,
                 identity=normalized_identity(identity),
-                proposal_id=proposal_id,
+                task_id=task_id,
                 after=after,
                 limit=limit,
             )
-        except ProposalError as exc:
+        except TaskError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@app.get("/v1/tasks/{proposal_id}/artifacts/{name}")
+@app.get("/v1/tasks/{task_id}/artifacts/{name}")
 async def get_task_artifact(
-    proposal_id: str,
+    task_id: str,
     name: Annotated[str, ApiPath(pattern=r"^(workspace|patch)$")],
     identity: str = Query(min_length=3, max_length=320),
     _: None = Depends(authenticate),
@@ -1125,10 +1487,10 @@ async def get_task_artifact(
             content, filename, content_type = await asyncio.to_thread(
                 service().artifact,
                 identity=normalized_identity(identity),
-                proposal_id=proposal_id,
+                task_id=task_id,
                 name=name,
             )
-        except ProposalError as exc:
+        except TaskError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except (ClientError, ValueError) as exc:
             raise HTTPException(status_code=502, detail="task artifact is unavailable") from exc
@@ -1143,37 +1505,9 @@ async def get_task_artifact(
         )
 
 
-@app.post("/v1/tasks/{proposal_id}/approve")
-async def approve(
-    proposal_id: str,
-    body: IdentityRequest,
-    _: None = Depends(authenticate),
-):
-    with telemetry.observe("task.approve"):
-        identity = normalized_identity(body.identity)
-        try:
-            tasks = service()
-            pending = await asyncio.to_thread(tasks.get, identity=identity, proposal_id=proposal_id)
-            token = pending.get("approval_token")
-            if not isinstance(token, str):
-                raise ProposalError("proposal is not available for approval")
-            trace_context: dict[str, str] = {}
-            inject(trace_context)
-            result = await asyncio.to_thread(
-                tasks.approve,
-                identity=identity,
-                proposal_id=proposal_id,
-                token=token,
-                trace_context=trace_context,
-            )
-            return voice_view(result)
-        except ProposalError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@app.post("/v1/tasks/{proposal_id}/cancel")
+@app.post("/v1/tasks/{task_id}/cancel")
 async def cancel(
-    proposal_id: str,
+    task_id: str,
     body: IdentityRequest,
     _: None = Depends(authenticate),
 ):
@@ -1182,10 +1516,10 @@ async def cancel(
             result = await asyncio.to_thread(
                 service().cancel,
                 identity=normalized_identity(body.identity),
-                proposal_id=proposal_id,
+                task_id=task_id,
             )
             return voice_view(result)
-        except ProposalError as exc:
+        except TaskError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 

@@ -1,27 +1,22 @@
-from dataclasses import replace
-from datetime import UTC, datetime, timedelta
-from pathlib import Path
 import uuid
+from dataclasses import replace
+from pathlib import Path
 
+import allure
 import pytest
 from voice_agent.tasking.application import service as service_module
 from voice_agent.tasking.application.service import (
-    ProposalError,
+    TaskError,
     TaskService,
     bounded_trace_context,
-    persisted_plan_hash_is_valid,
 )
-from voice_agent.tasking.domain.approval import plan_hash
 from voice_agent.tasking.infrastructure.config import Settings
 
 
 def settings(tmp_path: Path) -> Settings:
     return Settings(
-        database_url="postgresql://test",
-        approval_secret="s" * 32,
         allowed_users=("owner@example.com",),
         workspace_roots=(tmp_path,),
-        approval_ttl_seconds=300,
         pi_model=None,
         pi_thinking="medium",
         pi_session_dir=tmp_path / "sessions",
@@ -29,6 +24,61 @@ def settings(tmp_path: Path) -> Settings:
         max_output_bytes=1_024,
         skills_dir=None,
     )
+
+
+@allure.epic("Durable work")
+@allure.feature("Task execution")
+@allure.story("Submit directly to the Pi Durable owner")
+def test_submit_creates_one_native_task_without_a_proposal_or_approval(
+    tmp_path: Path, monkeypatch
+) -> None:
+    service = TaskService(settings(tmp_path))
+    task_id = "11111111-1111-4111-8111-111111111111"
+    calls = []
+    native = {
+        "task_id": task_id,
+        "identity": "owner@example.com",
+        "instruction": "Create a file.",
+        "workspace": "scratch",
+        "session_album_key": "kind-of-blue",
+        "session_name": "Kind of Blue · 11111111",
+        "created_at": "2026-10-25T12:00:00+00:00",
+    }
+
+    def submit(kind, params, request_id):
+        calls.append((kind, params, request_id))
+        return task_id
+
+    monkeypatch.setattr(service.owner, "submit", submit)
+    monkeypatch.setattr(service.owner, "describe", lambda _task_id: native)
+    monkeypatch.setattr(
+        service.owner,
+        "get",
+        lambda _task_id: {"state": "pending", "result": None, "failure": None},
+    )
+
+    monkeypatch.setattr(service_module.uuid, "uuid4", lambda: uuid.UUID(task_id))
+    with allure.step("Given a validated scratch task request from the session"):
+        assert task_id
+    with allure.step("When the Gateway submits it directly to Pi Durable"):
+        view = service.submit(
+            identity="owner@example.com",
+            instruction="Create a file.",
+            workspace="scratch",
+        )
+    with allure.step("Then one native task ID is returned with no approval state"):
+        assert len(calls) == 1
+        kind, params, submitted_id = calls[0]
+        assert kind == "agent-run"
+        assert submitted_id == view["id"]
+        assert params["identity"] == "owner@example.com"
+        assert params["instruction"] == "Create a file."
+        assert params["workspace"] == "scratch"
+        assert params["native_cli"] is True
+        assert view["status"] == "submitted"
+        assert view["task_id"] == view["id"]
+        assert view["result"]["state"] == "pending"
+        assert "approval_token" not in view
 
 
 @pytest.mark.parametrize(
@@ -48,47 +98,45 @@ def test_artifact_requires_owned_task_and_declared_kind(
             assert kwargs == {"task_id": task_id, "name": name, "max_bytes": 16_777_216}
             return b"artifact", filename, "application/octet-stream"
 
-    service.artifacts = Store()
+    monkeypatch.setattr(service, "artifacts", Store())
 
-    def get_owned(identity, proposal_id):
+    def get_owned(identity, requested_id):
+        assert requested_id == task_id
         if identity != "owner@example.com":
-            raise ProposalError("proposal not found")
-        assert proposal_id == "proposal-1"
+            raise TaskError("task not found")
         return {"workspace": workspace, "task_id": task_id}
 
-    monkeypatch.setattr(service, "_get_owned", get_owned)
+    monkeypatch.setattr(service, "_get_native_owned", get_owned)
     artifact_uri = f"s3://agent-artifacts/tasks/{task_id}/{filename}"
     monkeypatch.setattr(
         service, "_task_result", lambda _: {"result": {"artifacts": {name: artifact_uri}}}
     )
 
-    assert service.artifact(
-        identity="owner@example.com", proposal_id="proposal-1", name=name
-    )[0] == b"artifact"
-    with pytest.raises(ProposalError, match="proposal not found"):
-        service.artifact(identity="stranger@example.com", proposal_id="proposal-1", name=name)
+    assert service.artifact(identity="owner@example.com", task_id=task_id, name=name)[0] == b"artifact"
+    with pytest.raises(TaskError, match="task not found"):
+        service.artifact(identity="stranger@example.com", task_id=task_id, name=name)
     other_name = "patch" if name == "workspace" else "workspace"
-    with pytest.raises(ProposalError, match="unavailable"):
-        service.artifact(
-            identity="owner@example.com", proposal_id="proposal-1", name=other_name
-        )
+    with pytest.raises(TaskError, match="unavailable"):
+        service.artifact(identity="owner@example.com", task_id=task_id, name=other_name)
     monkeypatch.setattr(
         service, "_task_result", lambda _: {"result": {"artifacts": {name: "s3://wrong"}}}
     )
-    with pytest.raises(ProposalError, match="unavailable"):
-        service.artifact(identity="owner@example.com", proposal_id="proposal-1", name=name)
+    with pytest.raises(TaskError, match="unavailable"):
+        service.artifact(identity="owner@example.com", task_id=task_id, name=name)
 
 
-def test_digital_twin_turn_uses_a_retryable_idempotent_task(
+def test_digital_twin_turn_uses_retryable_idempotent_pi_durable_tasks(
     tmp_path: Path, monkeypatch
 ) -> None:
     observed = []
-
     service = TaskService(settings(tmp_path))
-    def submit(kind, payload, request_id):
-        observed.append({"task": kind, "payload": payload, "request_id": request_id})
-        return "task-1"
-    monkeypatch.setattr(service.owner, "submit", submit)
+    monkeypatch.setattr(
+        service.owner,
+        "submit",
+        lambda kind, payload, request_id: observed.append(
+            {"task": kind, "payload": payload, "request_id": request_id}
+        ) or "task-1",
+    )
     result = service.enqueue_digital_twin(
         identity="owner@example.com",
         session_id="session-7",
@@ -97,102 +145,49 @@ def test_digital_twin_turn_uses_a_retryable_idempotent_task(
         captured_at="2026-10-17T10:00:00Z",
     )
 
-    assert result == {
-        "tasks": {
-            "journal": {
-                "task_id": "task-1",
-                "idempotency_key": "digital-twin:journal:session-7:user-3",
-            },
-            "classify": {
-                "task_id": "task-1",
-                "idempotency_key": "digital-twin:classify:session-7:user-3",
-            },
-        }
-    }
-    assert [call["task"] for call in observed] == [
-        "digital-twin-journal",
-        "digital-twin-classify",
-    ]
-    assert all(
-        call["payload"]["transcript"] == "I want durable memory." for call in observed
-    )
-    assert [call["payload"]["mode"] for call in observed] == ["journal", "classify"]
+    assert result["tasks"]["journal"]["task_id"] == "task-1"
+    assert [call["task"] for call in observed] == ["digital-twin-journal", "digital-twin-classify"]
+    assert all(call["payload"]["transcript"] == "I want durable memory." for call in observed)
     assert [call["request_id"] for call in observed] == [
         str(uuid.uuid5(uuid.NAMESPACE_URL, f"digital-twin:{mode}:session-7:user-3"))
         for mode in ("journal", "classify")
     ]
 
 
-def test_task_view_exposes_the_persisted_session_album(
+def test_daily_journal_is_one_idempotent_pi_durable_task(tmp_path: Path, monkeypatch) -> None:
+    observed = []
+    service = TaskService(settings(tmp_path))
+    monkeypatch.setattr(
+        service.owner,
+        "submit",
+        lambda kind, payload, request_id: observed.append((kind, payload, request_id)) or "daily-1",
+    )
+    sources = [{
+        "sourceRef": "session-1:message-1",
+        "speaker": "owner",
+        "capturedAt": "2026-10-17T10:00:00+03:00",
+        "transcript": "I learned to preserve evidence.",
+    }]
+
+    result = service.enqueue_daily_journal(
+        identity="owner@example.com", journal_date="2026-10-17",
+        time_zone="Europe/Helsinki", sources=sources,
+    )
+    repeated = service.enqueue_daily_journal(
+        identity="owner@example.com", journal_date="2026-10-17",
+        time_zone="Europe/Helsinki", sources=sources,
+    )
+
+    assert result == repeated
+    assert observed[0][0] == "digital-twin-daily-journal"
+    assert observed[0][1]["mode"] == "daily-journal"
+    assert observed[0][1]["sources"] == sources
+    assert observed[0][2] == str(uuid.uuid5(uuid.NAMESPACE_URL, result["idempotency_key"]))
+
+
+def test_native_task_view_checks_owner_and_lists_from_pi_durable(
     tmp_path: Path, monkeypatch
 ) -> None:
-    service = TaskService(settings(tmp_path))
-    monkeypatch.setattr(service, "_task_result", lambda _task_id: None)
-    now = datetime.now(UTC)
-
-    view = service._view(
-        {
-            "id": "7e635c29-8840-4aad-b840-f6d5a344ef68",
-            "identity": "owner@example.com",
-            "instruction": "Inspect the repository",
-            "workspace": str(tmp_path),
-            "session_album_key": "kind-of-blue",
-            "session_name": "Kind of Blue",
-            "plan_hash": "a" * 64,
-            "status": "pending",
-            "task_id": None,
-            "created_at": now,
-            "expires_at": now + timedelta(minutes=5),
-        },
-        include_token=False,
-    )
-
-    assert view["session_name"] == "Kind of Blue"
-    assert view["session_reference"] == {
-        "artist": "Miles Davis",
-        "spotify_url": "https://open.spotify.com/album/1weenld61qoidwYuZ1GESA",
-    }
-
-
-def test_plan_hash_accepts_legacy_rows_but_new_rows_bind_the_album() -> None:
-    row = {
-        "instruction": "Inspect the repository",
-        "workspace": "/workspace",
-        "session_album_key": "kind-of-blue",
-        "session_name": "Kind of Blue · Take 2",
-    }
-    legacy = plan_hash(
-        {"instruction": row["instruction"], "workspace": row["workspace"]}
-    )
-    album_only = plan_hash(
-        {
-            "instruction": row["instruction"],
-            "workspace": row["workspace"],
-            "session_album_key": row["session_album_key"],
-        }
-    )
-    current = plan_hash(row)
-
-    assert persisted_plan_hash_is_valid({**row, "plan_hash": legacy})
-    assert persisted_plan_hash_is_valid({**row, "plan_hash": album_only})
-    assert persisted_plan_hash_is_valid({**row, "plan_hash": current})
-    assert not persisted_plan_hash_is_valid(
-        {**row, "session_album_key": "blue-train", "plan_hash": current}
-    )
-    assert not persisted_plan_hash_is_valid(
-        {**row, "session_name": "Kind of Blue · Take 3", "plan_hash": current}
-    )
-
-
-def test_scratch_plan_does_not_resolve_a_repository(tmp_path: Path) -> None:
-    service = TaskService(settings(tmp_path))
-    assert service._plan("  Explore an idea  ", "scratch") == {
-        "instruction": "Explore an idea",
-        "workspace": "scratch",
-    }
-
-
-def test_native_cli_task_projects_to_flutter_and_checks_owner(tmp_path: Path, monkeypatch) -> None:
     service = TaskService(settings(tmp_path))
     task_id = "11111111-1111-4111-8111-111111111111"
     native = {
@@ -200,55 +195,54 @@ def test_native_cli_task_projects_to_flutter_and_checks_owner(tmp_path: Path, mo
         "identity": "owner@example.com",
         "instruction": "Inspect only",
         "workspace": "scratch",
-        "created_at": "2026-10-25T12:00:00Z",
+        "session_album_key": "kind-of-blue",
+        "session_name": "Kind of Blue · 11111111",
+        "created_at": "2026-10-25T12:00:00+00:00",
+        "result": {"state": "running", "result": None, "failure": None},
     }
-    monkeypatch.setattr(service, "_get_owned", lambda *_: (_ for _ in ()).throw(ProposalError("proposal not found")))
     monkeypatch.setattr(service.owner, "describe", lambda _task_id: native)
-    monkeypatch.setattr(service.owner, "get", lambda _task_id: {"state": "running", "result": None, "failure": None})
+    monkeypatch.setattr(service.owner, "get", lambda _task_id: native["result"])
+    monkeypatch.setattr(service.owner, "list_native", lambda identity, _limit: [native] if identity == "owner@example.com" else [])
 
-    view = service.get(identity="owner@example.com", proposal_id=task_id)
+    view = service.get(identity="owner@example.com", task_id=task_id)
     assert view["id"] == task_id
-    assert view["status"] == "approved"
+    assert view["status"] == "submitted"
     assert view["result"]["state"] == "running"
-    assert view["session_name"].startswith("Pi Durable")
-    with pytest.raises(ProposalError, match="task not found"):
-        service.get(identity="other@example.com", proposal_id=task_id)
-
-    class EmptyCursor:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_):
-            return False
-
-        def execute(self, *_):
-            return None
-
-        def fetchall(self):
-            return []
-
-    class EmptyConnection:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_):
-            return False
-
-        def cursor(self, **_):
-            return EmptyCursor()
-
-    monkeypatch.setattr(service_module.psycopg, "connect", lambda _: EmptyConnection())
-    monkeypatch.setattr(service.owner, "get_many", lambda _: {})
-    monkeypatch.setattr(service.owner, "list_native", lambda identity, limit: [native] if identity == "owner@example.com" else [])
+    assert view["session_name"] == "Kind of Blue · 11111111"
+    assert view["session_reference"]["artist"] == "Miles Davis"
     assert service.list(identity="owner@example.com")[0]["id"] == task_id
-    assert service.list(identity="other@example.com") == []
+    assert service.list(identity="stranger@example.com") == []
+    with pytest.raises(TaskError, match="task not found"):
+        service.get(identity="stranger@example.com", task_id=task_id)
+
+
+def test_cancel_aborts_an_owned_native_task(tmp_path: Path, monkeypatch) -> None:
+    service = TaskService(settings(tmp_path))
+    task_id = "11111111-1111-4111-8111-111111111111"
+    native = {
+        "task_id": task_id,
+        "identity": "owner@example.com",
+        "instruction": "Inspect only",
+        "workspace": "scratch",
+        "created_at": "2026-10-25T12:00:00+00:00",
+    }
+    calls = []
+    monkeypatch.setattr(service.owner, "describe", lambda _task_id: native)
+    monkeypatch.setattr(service.owner, "abort", lambda _task_id: calls.append(_task_id) or "marked")
+    monkeypatch.setattr(service.owner, "get", lambda _task_id: {"state": "cancelled", "result": None})
+
+    cancelled = service.cancel(identity="owner@example.com", task_id=task_id)
+    assert calls == [task_id]
+    assert cancelled["result"]["state"] == "cancelled"
 
 
 def test_scratch_only_configuration_needs_no_repository_allowlist(tmp_path: Path) -> None:
-    configured = replace(settings(tmp_path), workspace_roots=())
-    service = TaskService(configured)
-    assert service._plan("Explore an idea", "scratch")["workspace"] == "scratch"
-    with pytest.raises(ValueError, match="outside"):
+    service = TaskService(replace(settings(tmp_path), workspace_roots=()))
+    assert service._plan("  Explore an idea  ", "scratch") == {
+        "instruction": "Explore an idea",
+        "workspace": "scratch",
+    }
+    with pytest.raises(TaskError, match="outside"):
         service._plan("Explore an idea", str(tmp_path / "missing"))
 
 
@@ -272,11 +266,11 @@ def test_scratch_plan_does_not_query_the_artifact_store(tmp_path: Path, monkeypa
 
 def test_missing_named_repository_does_not_become_scratch(tmp_path: Path) -> None:
     service = TaskService(settings(tmp_path))
-    with pytest.raises(ValueError, match="choose 'scratch'"):
+    with pytest.raises(TaskError, match="choose 'scratch'"):
         service._plan("Explore an idea", str(tmp_path / "missing"))
 
 
-def test_durable_trace_context_keeps_only_bounded_w3c_fields() -> None:
+def test_trace_context_keeps_only_bounded_w3c_fields() -> None:
     assert bounded_trace_context(
         {
             "traceparent": "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01",

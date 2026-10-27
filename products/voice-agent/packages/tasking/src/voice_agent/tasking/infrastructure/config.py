@@ -25,11 +25,8 @@ def _value(name: str, default: str = "") -> str:
 
 @dataclass(frozen=True)
 class Settings:
-    database_url: str
-    approval_secret: str
     allowed_users: tuple[str, ...]
     workspace_roots: tuple[Path, ...]
-    approval_ttl_seconds: int
     pi_model: str | None
     pi_thinking: str
     pi_session_dir: Path
@@ -67,11 +64,8 @@ class Settings:
     def from_env(cls) -> Settings:
         roots = _csv("ORCHESTRATOR_WORKSPACE_ROOTS")
         return cls(
-            database_url=_value("DATABASE_URL"),
-            approval_secret=_value("ORCHESTRATOR_APPROVAL_SECRET"),
             allowed_users=_csv("ORCHESTRATOR_ALLOWED_USERS"),
             workspace_roots=tuple(Path(root).expanduser().resolve() for root in roots),
-            approval_ttl_seconds=int(os.getenv("ORCHESTRATOR_APPROVAL_TTL_SECONDS", "300")),
             pi_model=_value("PI_MODEL") or None,
             pi_thinking=_value("PI_THINKING", "medium"),
             pi_session_dir=Path(_value("PI_SESSION_DIR", "~/.pi/agent/sessions")).expanduser(),
@@ -159,10 +153,6 @@ class Settings:
 
     def require_api(self) -> None:
         missing = []
-        if not self.database_url:
-            missing.append("DATABASE_URL")
-        if len(self.approval_secret) < 32:
-            missing.append("ORCHESTRATOR_APPROVAL_SECRET (at least 32 characters)")
         if self.artifact_workspaces:
             if not self.artifact_bucket:
                 missing.append("ARTIFACT_BUCKET")

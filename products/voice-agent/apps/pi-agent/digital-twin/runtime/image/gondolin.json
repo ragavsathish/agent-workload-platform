@@ -1,5 +1,5 @@
 {
-  "image": "digital-twin-ingest:v1",
+    "image": "digital-twin-ingest:story-v3",
   "build": {
     "context": "products/voice-agent/apps/pi-agent/digital-twin/runtime/image",
     "dockerfile": "products/voice-agent/apps/pi-agent/digital-twin/runtime/image/Dockerfile",

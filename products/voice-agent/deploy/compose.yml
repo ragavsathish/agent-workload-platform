@@ -16,17 +16,15 @@ services:
       GITEA__server__LOCAL_ROOT_URL: http://gitea:3000/
       GITEA__server__PUBLIC_URL_DETECTION: auto
       GITEA__server__ROOT_URL: ${GITEA_ROOT_URL:-http://127.0.0.1:3001/}
+      GITEA__server__REVERSE_PROXY_AUTHENTICATION_USER: X-WEBAUTH-USER
       GITEA__service__DISABLE_REGISTRATION: "true"
+      GITEA__service__ENABLE_REVERSE_PROXY_AUTHENTICATION: "true"
+      GITEA__service__ENABLE_REVERSE_PROXY_AUTO_REGISTRATION: "false"
       GITEA__service__REQUIRE_SIGNIN_VIEW: "false"
-    ports: ["127.0.0.1:3001:3000"]
     volumes:
       - gitea-data:/var/lib/gitea
       - gitea-config:/etc/gitea
-    networks:
-      control:
-        ipv4_address: 172.30.90.5
-      data:
-      host-access:
+    networks: [gitea-backend]
     read_only: true
     tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=64m,uid=1000,gid=1000"]
     cap_drop: [ALL]
@@ -40,6 +38,34 @@ services:
       timeout: 3s
       retries: 30
       start_period: 10s
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  gitea-ingress:
+    image: docker.io/library/caddy:2.10.2@sha256:c3d7ee5d2b11f9dc54f947f68a734c84e9c9666c92c88a7f30b9cba5da182adb
+    restart: unless-stopped
+    depends_on:
+      gitea:
+        condition: service_healthy
+    environment:
+      TAILSCALE_GITEA_ADMIN_LOGIN: ${TAILSCALE_GITEA_ADMIN_LOGIN:-unset@example.invalid}
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+    ports: ["127.0.0.1:3001:3000"]
+    volumes:
+      - ./gitea-ingress/Caddyfile:/etc/caddy/Caddyfile:ro
+      - gitea-ingress-socket:/run/gitea-ingress
+    networks: [gitea-backend, host-access]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=16m"]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.25
     logging:
       driver: local
       options:
@@ -132,24 +158,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-
-  postgres:
-    image: postgres@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: voice_agents
-      POSTGRES_USER: voice_agents
-      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-password
-    secrets: [postgres-password]
-    ports: ["127.0.0.1:54329:5432"]
-    volumes: [postgres-data:/var/lib/postgresql/data]
-    networks: [data, host-access]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U voice_agents -d voice_agents"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-    security_opt: [no-new-privileges:true]
 
   oxigraph-init:
     image: busybox:1.37.0@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
@@ -341,8 +349,6 @@ services:
       dockerfile: apps/gateway/Dockerfile
     restart: unless-stopped
     depends_on:
-      postgres:
-        condition: service_healthy
       s3mock:
         condition: service_healthy
       otel-lgtm:
@@ -353,9 +359,6 @@ services:
       AGENT_GATEWAY_HOST: 0.0.0.0
       AGENT_GATEWAY_PORT: "9444"
       AGENT_GATEWAY_TOKEN_FILE: /run/secrets/agent-gateway-token
-      DATABASE_URL_FILE: /run/secrets/database-url
-      ORCHESTRATOR_APPROVAL_SECRET_FILE: /run/secrets/approval-secret
-      ORCHESTRATOR_APPROVAL_TTL_SECONDS: ${ORCHESTRATOR_APPROVAL_TTL_SECONDS:-300}
       ORCHESTRATOR_ALLOWED_USERS: ${ORCHESTRATOR_ALLOWED_USERS:-}
       ORCHESTRATOR_WORKSPACE_ROOTS: ${ORCHESTRATOR_WORKSPACE_ROOTS:-}
       ORCHESTRATOR_DEFER_WORKSPACE_VALIDATION: "true"
@@ -373,7 +376,7 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-lgtm:4318
       OTEL_LOGS_EXPORTER: none
       OTEL_METRIC_EXPORT_INTERVAL: "5000"
-    secrets: [agent-gateway-token, digital-twin-reader-token, digital-twin-writer-token, database-url, approval-secret]
+    secrets: [agent-gateway-token, digital-twin-reader-token, digital-twin-writer-token]
     # Native Pi voice RPC receives only these bearer-protected, loopback-bound
     # task and read-only personal-knowledge capabilities. They are never exposed
     # on the Mac LAN.
@@ -413,6 +416,7 @@ services:
       TS_DEBUG_FIREWALL_MODE: nftables
     volumes:
       - tailscale-state:/var/lib/tailscale
+      - gitea-ingress-socket:/run/gitea-ingress:ro
     ports:
       - "127.0.0.1:${VOICE_LOCAL_PORT:-8080}:8081"
     devices:
@@ -423,7 +427,6 @@ services:
       - "inference-broker:host-gateway"
       - "agent-gateway:172.30.90.3"
       - "otel-lgtm:172.30.90.4"
-      - "gitea:172.30.90.5"
     networks:
       control:
         ipv4_address: 172.30.90.2
@@ -444,8 +447,6 @@ services:
     image: traefik:3.7.13@sha256:24841fe2de7304c149343d877d2923b4c8800a38ba015dea9174c23b20e344a0
     restart: unless-stopped
     depends_on:
-      gitea:
-        condition: service_healthy
       otel-lgtm:
         condition: service_healthy
       tailscale:
@@ -533,8 +534,8 @@ volumes:
   grafana-mcp-token:
   oxigraph-data:
   s3mock-data:
-  postgres-data:
   tailscale-state:
+  gitea-ingress-socket:
   voice-diagnostics:
 
 networks:
@@ -543,6 +544,8 @@ networks:
       config:
         - subnet: 172.30.90.0/24
   data:
+    internal: true
+  gitea-backend:
     internal: true
   monitoring:
     internal: true
@@ -564,12 +567,6 @@ secrets:
     file: ./secrets/digital-twin-reader-token
   digital-twin-writer-token:
     file: ./secrets/digital-twin-writer-token
-  postgres-password:
-    file: ./secrets/postgres-password
-  database-url:
-    file: ./secrets/database-url
-  approval-secret:
-    file: ./secrets/approval-secret
   grafana-admin-password:
     file: ./secrets/grafana-admin-password
   grafana-mcp-caller-token:

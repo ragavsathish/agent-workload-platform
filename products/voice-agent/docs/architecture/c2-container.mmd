@@ -34,13 +34,11 @@ flowchart TB
         subgraph TASK["Durable delegated-work path"]
             direction LR
             GATEWAY["Container<br/><b>Agent Gateway</b><br/>Python · FastAPI"]
-            TASKS[("Container database<br/><b>Proposal and Song Database</b><br/>PostgreSQL · product state")]
             OWNER["Container<br/><b>Pi Durable Owner</b><br/>Node.js · native tasks and conversations · private HTTP and socket"]
             OWNER_STORE[("Container data store<br/><b>Pi Durable Owner Store</b><br/>one-writer SQLite · task state")]
             BUILDER_MANAGER["Container<br/><b>Builder VM Manager</b><br/>Node.js · launchd"]
             BUILDER_VM["Container<br/><b>Shared Image Builder</b><br/>Gondolin · Gitea Runner · Docker CLI"]
             TASK_VM["Container<br/><b>Task Tool Sandbox</b><br/>Gondolin mode · one isolated workspace"]
-            GATEWAY -->|"persist proposal and song state"| TASKS
             GATEWAY -->|"submit · query · abort<br/>bearer HTTP"| OWNER
             OWNER -->|"prepare image through bounded effect"| GITEA
             GITEA -->|"assign trusted workflow job"| BUILDER_VM

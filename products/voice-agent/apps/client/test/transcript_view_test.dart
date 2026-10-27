@@ -158,7 +158,7 @@ void main() {
       ),
       isNotEmpty,
     );
-    expect(find.text('Waiting for approval · now'), findsOneWidget);
+    expect(find.text('Queued · now'), findsOneWidget);
   });
 
   testWidgets('mobile switches to tasks without changing the voice surface', (

@@ -47,18 +47,6 @@ services:
     volumes: !override
       - oxigraph-dev-data:/data
 
-  postgres:
-    network_mode: host
-    networks: !reset []
-    ports: !reset []
-    secrets: !reset []
-    environment: !override
-      POSTGRES_DB: voice_agents
-      POSTGRES_USER: voice_agents
-      POSTGRES_PASSWORD: disposable-task-vm-only
-    volumes: !override
-      - postgres-dev-data:/var/lib/postgresql/data
-
   gitea:
     network_mode: host
     networks: !reset []
@@ -92,8 +80,6 @@ services:
     profiles: [production]
   grafana-mcp-bootstrap:
     profiles: [production]
-  habitat:
-    profiles: [production]
   oxigraph-init:
     profiles: !reset []
     volumes: !override
@@ -114,6 +100,5 @@ volumes:
   otel-dev-data:
   s3-dev-data:
   oxigraph-dev-data:
-  postgres-dev-data:
   gitea-dev-data:
   gitea-dev-config:

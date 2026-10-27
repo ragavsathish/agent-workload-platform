@@ -76,6 +76,34 @@ export function guestHookCommand(guestPath: string, args: readonly string[] = []
   return [interpreter, guestPath, ...args];
 }
 
+/** Restrict a repository VM's Gitea route before forwarding it to host loopback. */
+export function rewriteGiteaRepositoryRequest(
+  request: Request, guest: URL, upstream: URL, owner: string, repository: string,
+): Request | Response {
+  const requested = new URL(request.url);
+  if (requested.hostname === upstream.hostname) {
+    return new Response("Direct Gitea upstream denied", { status: 403 });
+  }
+  if (requested.hostname !== guest.hostname) return request;
+  if (requested.origin !== guest.origin) {
+    return new Response("Gitea destination denied", { status: 403 });
+  }
+  const gitPath = `/${owner}/${repository}.git`;
+  const apiPath = `/api/v1/repos/${owner}/${repository}`;
+  const pathname = requested.pathname;
+  const repositoryRoute = pathname === gitPath || pathname.startsWith(`${gitPath}/`)
+    || pathname === apiPath || pathname.startsWith(`${apiPath}/`);
+  const identityRoute = (pathname === "/api/v1/user" || pathname === "/api/v1/version")
+    && request.method === "GET";
+  if (!repositoryRoute && !identityRoute) {
+    return new Response("Gitea repository route denied", { status: 403 });
+  }
+  requested.protocol = upstream.protocol;
+  requested.hostname = upstream.hostname;
+  requested.port = upstream.port;
+  return new Request(requested, request);
+}
+
 export type GondolinSessionOptions = {
   imagePath: string;
   mounts?: Record<string, string | { hostPath: string; readonly?: boolean }>;

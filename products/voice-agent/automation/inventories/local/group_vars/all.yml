@@ -11,6 +11,10 @@ compose_services:
   - name: gitea
     read_only: true
     log_driver: local
+    published_ports: []
+  - name: gitea-ingress
+    read_only: true
+    log_driver: local
     published_ports:
       - { container: 3000, host: 127.0.0.1, published: 3001 }
   - name: s3mock
@@ -22,11 +26,6 @@ compose_services:
     log_driver: local
     published_ports:
       - { container: 9460, host: 127.0.0.1, published: 9460 }
-  - name: postgres
-    read_only: false
-    cap_drop_all: false
-    published_ports:
-      - { container: 5432, host: 127.0.0.1, published: 54329 }
   - name: oxigraph
     read_only: true
     log_driver: local
@@ -79,7 +78,6 @@ launch_agents:
   - com.sathish.pipecat-digital-twin-classifier
   - com.sathish.pipecat-digital-twin-listener
   - com.sathish.pipecat-host-observability
-  - com.sathish.pipecat-image-builder
   - com.sathish.pipecat-pi-voice
   - com.sathish.pipecat-pi-durable-owner
 

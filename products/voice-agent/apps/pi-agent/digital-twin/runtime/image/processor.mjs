@@ -9,6 +9,10 @@ const CANDIDATE_EXTRACTION_SYSTEM_PROMPT = readFileSync(
   new URL("./prompts/candidate-extraction/SYSTEM.md", import.meta.url),
   "utf8",
 ).trim();
+const DAILY_JOURNAL_SYSTEM_PROMPT = readFileSync(
+  new URL("./prompts/daily-journal/SYSTEM.md", import.meta.url),
+  "utf8",
+).trim();
 
 const ENTRY_TYPES = new Set([
   "thought", "idea", "question", "decision", "goal", "learning", "unclassified",
@@ -118,14 +122,34 @@ async function readInput() {
   process.stdin.setEncoding("utf8");
   for await (const chunk of process.stdin) input += chunk;
   const value = JSON.parse(input);
-  for (const name of ["identity", "sessionId", "messageId", "transcript", "capturedAt"]) {
+  for (const name of ["identity"]) {
     if (typeof value[name] !== "string" || !value[name].trim()) {
       throw new Error(`${name} must be a non-empty string`);
     }
   }
-  if (value.transcript.length > 20_000) throw new Error("transcript is too large");
   const mode = value.mode ?? "journal";
-  if (mode !== "journal" && mode !== "classify") throw new Error("unknown ingestion mode");
+  if (mode === "daily-journal") {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value.journalDate) || typeof value.timeZone !== "string") {
+      throw new Error("daily journal requires journalDate and timeZone");
+    }
+    if (value.taskId !== undefined && (typeof value.taskId !== "string"
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value.taskId))) {
+      throw new Error("daily journal taskId must be a UUID");
+    }
+    if (!Array.isArray(value.sources) || value.sources.length < 1 || value.sources.length > 300) {
+      throw new Error("daily journal source list is invalid");
+    }
+    const total = value.sources.reduce((size, source) => size + (typeof source.transcript === "string" ? source.transcript.length : 0), 0);
+    if (total > 200_000) throw new Error("daily journal source bundle is too large");
+  } else {
+    for (const name of ["sessionId", "messageId", "transcript", "capturedAt"]) {
+      if (typeof value[name] !== "string" || !value[name].trim()) {
+        throw new Error(`${name} must be a non-empty string`);
+      }
+    }
+    if (value.transcript.length > 20_000) throw new Error("transcript is too large");
+    if (mode !== "journal" && mode !== "classify") throw new Error("unknown ingestion mode");
+  }
   return { ...value, mode };
 }
 
@@ -136,7 +160,15 @@ async function postJson(url, body, headers = {}) {
     body: JSON.stringify(body),
   });
   const payload = await response.json().catch(() => undefined);
-  if (!response.ok) throw new Error(`request to ${new URL(url).pathname} failed with ${response.status}`);
+  if (!response.ok) {
+    const detail = Array.isArray(payload?.detail)
+      ? payload.detail.map((item) => {
+        const location = Array.isArray(item.loc) ? item.loc.join(".") : "request";
+        return `${location}: ${item.msg}`;
+      }).join("; ")
+      : typeof payload?.detail === "string" ? payload.detail : "";
+    throw new Error(`request to ${new URL(url).pathname} failed with ${response.status}${detail ? ` (${detail})` : ""}`);
+  }
   return payload;
 }
 
@@ -295,6 +327,91 @@ async function captureJournal() {
   };
 }
 
+function localDate(timestamp, timeZone) {
+  const date = new Date(timestamp);
+  if (!Number.isFinite(date.getTime())) throw new Error("daily journal source timestamp is invalid");
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+async function captureDailyJournal() {
+  const refs = new Set();
+  const sources = input.sources.map((source) => {
+    if (!source || source.speaker !== "owner"
+      || typeof source.sourceRef !== "string" || !source.sourceRef.trim()
+      || typeof source.capturedAt !== "string" || !source.capturedAt.trim()
+      || typeof source.transcript !== "string" || !source.transcript.trim()
+      || source.transcript.length > 20_000) {
+      throw new Error("daily journal source message is invalid");
+    }
+    if (refs.has(source.sourceRef)) throw new Error("daily journal source references must be unique");
+    refs.add(source.sourceRef);
+    if (localDate(source.capturedAt, input.timeZone) !== input.journalDate) {
+      throw new Error("daily journal source timestamp is outside journalDate");
+    }
+    return {
+      sourceRef: source.sourceRef,
+      speaker: "owner",
+      capturedAt: source.capturedAt,
+      transcript: source.transcript,
+    };
+  });
+  const modelBase = required("DIGITAL_TWIN_MODEL_BASE_URL").replace(/\/$/, "");
+  const model = required("DIGITAL_TWIN_MODEL");
+  const writerToken = required("DIGITAL_TWIN_WRITER_TOKEN");
+  const format = {
+    type: "object", additionalProperties: false,
+    required: ["title", "story"],
+    properties: {
+      title: { type: "string", minLength: 1, maxLength: 200 },
+      story: { type: "string", minLength: 1, maxLength: 8_000 },
+    },
+  };
+  const response = await postJson(`${modelBase}/api/chat`, {
+    model, stream: false, think: false, format, options: { temperature: 0 },
+    messages: [
+      { role: "system", content: DAILY_JOURNAL_SYSTEM_PROMPT },
+      { role: "user", content: JSON.stringify({
+        journalDate: input.journalDate,
+        timeZone: input.timeZone,
+        sources,
+      }) },
+    ],
+  });
+  if (typeof response?.message?.content !== "string") {
+    throw new Error("model returned no daily journal content");
+  }
+  const generated = JSON.parse(response.message.content);
+  if (typeof generated.title !== "string" || !generated.title.trim() || generated.title.length > 200
+    || typeof generated.story !== "string" || !generated.story.trim()
+    || generated.story.length > 8_000) {
+    throw new Error("model returned an invalid daily journal page");
+  }
+  const story = generated.story.trim();
+  if (/^(?:#{1,6}\s|[-*]\s|\d+[.)]\s)/mu.test(story)) {
+    throw new Error("daily journal story must be prose, not a list or outline");
+  }
+  const id = createHash("sha256")
+    .update(`${input.journalDate}\0${input.timeZone}`)
+    .digest("hex")
+    .slice(0, 32);
+  const capture = {
+    id, identity: input.identity, journalDate: input.journalDate, timeZone: input.timeZone,
+    ...(typeof input.taskId === "string" ? { taskId: input.taskId } : {}),
+    capturedAt: new Date().toISOString(), title: generated.title.trim(), story, sources,
+  };
+  const writer = await postJson(required("DIGITAL_TWIN_DAILY_JOURNAL_WRITER_URL"), capture, {
+    authorization: `Bearer ${writerToken}`,
+  });
+  return {
+    mode: "daily-journal", journalId: id, journalDate: input.journalDate,
+    sources: sources.length, storyCharacters: story.length, writer,
+  };
+}
+
 function checkedChoice(answer, allowed, name) {
   if (!answer || typeof answer !== "object" || !allowed.has(answer.choice)
     || typeof answer.confidence !== "number" || answer.confidence < 0 || answer.confidence > 1
@@ -404,5 +521,7 @@ async function classifyAndExtract() {
   };
 }
 
-const result = input.mode === "journal" ? await captureJournal() : await classifyAndExtract();
+const result = input.mode === "daily-journal"
+  ? await captureDailyJournal()
+  : input.mode === "journal" ? await captureJournal() : await classifyAndExtract();
 process.stdout.write(`${JSON.stringify(result)}\n`);

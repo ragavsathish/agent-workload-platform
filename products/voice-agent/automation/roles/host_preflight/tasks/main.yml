@@ -34,18 +34,6 @@
     argv: [docker, compose, version]
   changed_when: false
 
-- name: Inspect the Homebrew PostgreSQL client
-  ansible.builtin.stat:
-    path: /opt/homebrew/opt/libpq/bin/psql
-  register: host_preflight_psql
-
-- name: Require the Homebrew PostgreSQL client
-  ansible.builtin.assert:
-    that:
-      - host_preflight_psql.stat.exists
-      - host_preflight_psql.stat.executable
-    fail_msg: Install the PostgreSQL client with `brew install libpq`.
-
 - name: Read repository filesystem capacity
   ansible.builtin.command:
     argv: [df, -Pk, "{{ voice_agent_root }}"]
@@ -83,7 +71,6 @@
   loop:
     - INFERENCE_BROKER_TOKEN
     - AGENT_GATEWAY_TOKEN
-    - POSTGRES_PASSWORD
     - OLLAMA_MODEL
     - MLX_STT_MODEL
     - MLX_TTS_MODEL

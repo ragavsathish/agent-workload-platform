@@ -11,9 +11,9 @@ Flutter or React assets. The mocks are outside the deployed Voice Agent system.
 | `diagnostics.clj` | Voice Edge diagnostic replay API | React diagnostics | Ready, empty, truncated, unavailable list, unavailable metrics, unknown session, invalid method |
 | `broker.clj` | Inference Broker Pi completion API | Voice Edge typed-turn adapter | Ready, upstream unavailable, malformed completion, empty response, rejected request, unauthorized request |
 | `pi_voice.clj` | Pi Voice streaming endpoint | Production Inference Broker | Ready deltas, malformed event, in-stream error, unavailable upstream |
-| `durable.clj` | Durable task proposal, approval, result, and artifact API | Flutter task board | Scratch completion, worker failure, owner outage, repository unavailable, approval conflict, cancellation, invalid proposal, missing artifact |
+| `durable.clj` | Direct Pi Durable task submission, result, and artifact API | Flutter task board | Scratch completion, worker failure, owner outage, repository unavailable, invalid submission, missing artifact |
 | `pi_durable_owner.clj` | Private Pi Durable task owner protocol | Agent Gateway | Completion, duplicate request, changed input, failure, abort, retry, owner outage, invalid token |
-| `../patrol_fixture_domain.clj` | Voice Edge conversation, transcript, session and task routes | Flutter Patrol web | Conversation, stop, context, session changes, task approval/cancellation |
+| `../patrol_fixture_domain.clj` | Voice Edge conversation, transcript, session and task routes | Flutter Patrol web | Conversation, stop, context, session changes, task listing/cancellation |
 
 `GET /__fixture/c2/boundaries` lists the mocked contracts. Module-specific
 evidence endpoints return the selected state and recorded requests. For a

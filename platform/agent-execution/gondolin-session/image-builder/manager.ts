@@ -71,6 +71,7 @@ export function createBuilderServiceAccess(
   giteaEndpoint: string,
   otelEndpoint: string,
   dockerJobService?: DockerJobHostService,
+  giteaAdminToken?: string,
 ) {
   const giteaUpstream = loopbackEndpoint(giteaEndpoint, "Gitea");
   const otelUpstream = loopbackEndpoint(otelEndpoint, "OTel");
@@ -91,6 +92,11 @@ export function createBuilderServiceAccess(
   return createHttpHooks({
     allowedHosts: ["*"],
     allowedInternalHosts: [giteaUpstream.hostname, otelUpstream.hostname, composeCacheGuest.hostname],
+    ...(giteaAdminToken ? {
+      secrets: {
+        GITEA_ADMIN_TOKEN: { value: giteaAdminToken, hosts: [giteaUpstream.hostname] },
+      },
+    } : {}),
     onRequest: async (request) => {
       const requested = new URL(request.url);
       const dockerJobResponse = await dockerJobService?.handle(request);
@@ -146,6 +152,7 @@ type BuilderManagerOptions = {
   imagePath: string;
   otelEndpoint: string;
   registrationToken: string;
+  giteaAdminToken: string;
 };
 
 export class BuilderManager {
@@ -175,13 +182,17 @@ export class BuilderManager {
       this.options.giteaEndpoint,
       this.options.otelEndpoint,
       dockerJobService,
+      this.options.giteaAdminToken,
     );
     const vmOptions = {
       sandbox: { imagePath: this.options.imagePath, netEnabled: true },
       dns: { mode: "synthetic" as const, syntheticHostMapping: "per-host" as const },
       httpHooks: service.httpHooks,
       maxHttpResponseBodyBytes: BUILDER_MAX_HTTP_RESPONSE_BYTES,
-      env: service.env,
+      // Runner jobs may execute code from repositories other than nops. Do not
+      // place the privileged placeholder in the VM-wide environment; only a
+      // host-controlled IaC invocation may receive service.env.GITEA_ADMIN_TOKEN.
+      env: {},
       memory: process.env.GONDOLIN_BUILDER_MEMORY ?? "8G",
       cpus: Number(process.env.GONDOLIN_BUILDER_CPUS ?? "4"),
       rootfs: {
@@ -273,6 +284,7 @@ async function main() {
     imagePath: required("GONDOLIN_BUILDER_ASSETS"),
     otelEndpoint: required("OTEL_EXPORTER_OTLP_ENDPOINT"),
     registrationToken: required("GITEA_RUNNER_REGISTRATION_TOKEN"),
+    giteaAdminToken: required("GITEA_ADMIN_TOKEN"),
   });
   const telemetry = configureTelemetry("pipecat-image-builder");
   let stopPromise: Promise<void> | undefined;

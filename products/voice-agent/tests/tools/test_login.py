@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from tools.ops.login import finalize_edge
+from tools.ops.login import finalize_edge, has_tailnet_admin
 
 
 def test_binds_edge_and_ingress_urls_to_tailscale_identity(tmp_path: Path) -> None:
@@ -27,3 +27,11 @@ def test_binds_edge_and_ingress_urls_to_tailscale_identity(tmp_path: Path) -> No
     assert "ORCHESTRATOR_ALLOWED_USERS=owner@example.com" in deployed
     assert "GRAFANA_ROOT_URL=https://voice.example.ts.net/metrics/" in deployed
     assert "GITEA_ROOT_URL=https://voice.example.ts.net/git/" in deployed
+    assert "TAILSCALE_GITEA_ADMIN_LOGIN=owner@example.com" in deployed
+
+
+def test_admin_listing_requires_exact_account_and_email() -> None:
+    listing = "ID Username Email IsActive\n10 tailnet-admin owner@example.com true\n"
+    assert has_tailnet_admin(listing, "owner@example.com")
+    assert not has_tailnet_admin(listing, "other@example.com")
+    assert not has_tailnet_admin("10 voice-admin owner@example.com true\n", "owner@example.com")

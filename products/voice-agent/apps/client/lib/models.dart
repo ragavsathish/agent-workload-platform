@@ -200,7 +200,6 @@ class AgentTask {
 
   bool get isActive =>
       status == 'pending' ||
-      (status == 'approved' && state == 'approved') ||
       const {'pending', 'running', 'sleeping'}.contains(state);
 
   factory AgentTask.fromJson(JsonMap json) {

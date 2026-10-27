@@ -28,20 +28,6 @@ services:
     networks: !reset []
     volumes: !override [oxigraph-dev-data:/data]
 
-  habitat:
-    profiles: !reset []
-    network_mode: host
-    networks: !reset []
-    ports: !reset []
-    environment:
-      HABITAT_DB_HOST: 127.0.0.1
-
-  postgres:
-    environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?missing postgres password}
-    volumes:
-      - /var/lib/gondolin-full-mock-secrets/compose-full-mock-init.sql:/docker-entrypoint-initdb.d/20-habitat-role.sql:ro
-
   fluent-bit:
     profiles: !reset []
     network_mode: host
@@ -84,8 +70,6 @@ services:
     networks: !reset []
     ports: !reset []
     depends_on: !override
-      postgres:
-        condition: service_healthy
       s3mock:
         condition: service_healthy
       otel-lgtm:
@@ -104,8 +88,6 @@ services:
     networks: !reset []
     depends_on: !override
       gitea:
-        condition: service_healthy
-      habitat:
         condition: service_healthy
       otel-lgtm:
         condition: service_started
@@ -156,14 +138,6 @@ secrets:
     file: /var/lib/gondolin-full-mock-secrets/digital-twin-reader-token
   digital-twin-writer-token:
     file: /var/lib/gondolin-full-mock-secrets/digital-twin-writer-token
-  postgres-password:
-    file: /var/lib/gondolin-full-mock-secrets/postgres-password
-  database-url:
-    file: /var/lib/gondolin-full-mock-secrets/database-url
-  habitat-database-password:
-    file: /var/lib/gondolin-full-mock-secrets/habitat-database-password
-  approval-secret:
-    file: /var/lib/gondolin-full-mock-secrets/approval-secret
   grafana-admin-password:
     file: /var/lib/gondolin-full-mock-secrets/grafana-admin-password
   grafana-mcp-caller-token:

@@ -1,0 +1,35 @@
+{
+	admin off
+	auto_https off
+}
+
+# Only Tailscale Serve can reach this Unix socket. It removes caller-supplied
+# Tailscale identity headers before adding the verified caller identity.
+:80 {
+	bind unix//run/gitea-ingress/gitea.sock|0666
+
+	@owner header Tailscale-User-Login {$TAILSCALE_GITEA_ADMIN_LOGIN}
+	handle @owner {
+		reverse_proxy gitea:3000 {
+			header_up X-WEBAUTH-USER tailnet-admin
+			header_up -Tailscale-User-Login
+			header_up X-Forwarded-Proto https
+		}
+	}
+	handle {
+		reverse_proxy gitea:3000 {
+			header_up -X-WEBAUTH-USER
+			header_up -Tailscale-User-Login
+			header_up X-Forwarded-Proto https
+		}
+	}
+}
+
+# Local Git clients and automation retain their API endpoint, with identity
+# headers removed before the request can reach Gitea.
+:3000 {
+	reverse_proxy gitea:3000 {
+		header_up -X-WEBAUTH-USER
+		header_up -Tailscale-User-Login
+	}
+}

@@ -1,4 +1,0 @@
--- Rendered into deploy/secrets by start-dev-stack.clj for a fresh test database.
-CREATE ROLE habitat_operator LOGIN PASSWORD '__HABITAT_PASSWORD__';
-GRANT CONNECT, CREATE ON DATABASE voice_agents TO habitat_operator;
-GRANT USAGE, CREATE ON SCHEMA public TO habitat_operator;

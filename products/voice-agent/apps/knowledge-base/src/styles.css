@@ -81,6 +81,15 @@ button.tag-chip:hover { border-color: var(--pi-color-accent); color: var(--pi-co
 .detail-more { margin-left: auto; width: 34px; height: 34px; border: 0; border-radius: 7px; background: transparent; color: var(--pi-color-text-muted); font-size: 20px; cursor: pointer; }
 .detail-more:hover { background: var(--pi-color-surface-raised); color: var(--pi-color-text); }
 .entry-detail > h2 { margin: 21px 0 14px; font-size: 16px; line-height: 1.45; letter-spacing: -.015em; }
+.daily-journal-content { margin: 18px 0; color: var(--pi-color-text); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.daily-journal-content h3 { margin: 22px 0 8px; color: var(--pi-color-text); font-size: 14px; line-height: 1.4; }
+.daily-journal-content p { margin: 0 0 12px; }
+.daily-journal-content ul { margin: 0 0 14px; padding-left: 22px; }
+.daily-journal-content li { margin: 4px 0; }
+.daily-journal-content blockquote { margin: 12px 0; padding-left: 12px; border-left: 2px solid var(--pi-color-accent); color: var(--pi-color-text-muted); }
+.daily-journal-content code, .daily-journal-task code { padding: 2px 4px; border-radius: 4px; background: var(--pi-color-surface-raised); font-size: .92em; }
+.daily-journal-content hr { border: 0; border-top: 1px solid var(--pi-color-border); }
+.daily-journal-task, .daily-journal-context { color: var(--pi-color-text-muted); font-size: 11px; line-height: 1.55; }
 .detail-date { display: flex; align-items: center; gap: 7px; color: var(--pi-color-text-muted); font-size: 10px; }
 .detail-date span { color: var(--pi-color-info); font-size: 14px; }
 .detail-section { margin-top: 23px; }

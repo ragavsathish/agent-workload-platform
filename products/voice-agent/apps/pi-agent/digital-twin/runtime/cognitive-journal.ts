@@ -279,30 +279,44 @@ function assertIri(value: string, name: string): string {
 
 export function cognitiveJournalSparql(
   capture: CognitiveJournalCapture,
-  graph = "urn:awp:digital-twin:graph:journal",
+  graph = "urn:pk:digital-twin:graph:journal",
 ): string {
   const graphIri = assertIri(graph, "journal graph");
-  const sourceIri = assertIri(`urn:awp:digital-twin:journal:${capture.id}`, "journal source");
+  const sourceIri = assertIri(`urn:pk:digital-twin:journal:${capture.id}`, "journal source");
+  const activityIri = assertIri(`urn:pk:digital-twin:activity:journal:${capture.id}`, "journal activity");
   const triples = [
-    `<${sourceIri}> a schema:Message ;`,
-    `  schema:identifier ${rdfLiteral(capture.sourceRef)} ;`,
-    `  schema:text ${rdfLiteral(capture.transcript)} ;`,
-    `  schema:dateSent ${rdfLiteral(capture.capturedAt)}^^xsd:dateTime .`,
+    `<${sourceIri}> a schema:Message, prov:Entity ;\n` + [
+      `  schema:identifier ${rdfLiteral(capture.sourceRef)}`,
+      `  schema:text ${rdfLiteral(capture.transcript)}`,
+      `  schema:dateSent ${rdfLiteral(capture.capturedAt)}^^xsd:dateTimeStamp`,
+    ].join(" ;\n") + " .",
   ];
 
   for (const entry of capture.entries) {
-    const entryIri = assertIri(`urn:awp:digital-twin:journal:${entry.id}`, "journal entry");
+    const entryIri = assertIri(`urn:pk:digital-twin:journal:${entry.id}`, "journal entry");
+    const kindIri = assertIri(`urn:voice-agent:personal-knowledge:concept:journal-kind:${String(entry.type).replaceAll("_", "-")}`, "journal entry kind");
     const properties = [
       `  schema:additionalType ${rdfLiteral(entry.type)}`,
+      `  pk:journalEntryKind <${kindIri}>`,
       `  schema:text ${rdfLiteral(entry.text)}`,
-      `  schema:dateCreated ${rdfLiteral(capture.capturedAt)}^^xsd:dateTime`,
-      `  schema:isBasedOn <${sourceIri}>`,
+      `  schema:dateCreated ${rdfLiteral(capture.capturedAt)}^^xsd:dateTimeStamp`,
+      `  prov:wasDerivedFrom <${sourceIri}>`,
+      `  prov:wasGeneratedBy <${activityIri}>`,
       ...entry.topics.map((topic) => `  schema:keywords ${rdfLiteral(topic)}`),
     ];
-    triples.push(`<${entryIri}> a schema:CreativeWork ;\n${properties.join(" ;\n")} .`);
+    triples.push(`<${entryIri}> a schema:CreativeWork, pk:JournalEntry, prov:Entity ;\n${properties.join(" ;\n")} .`);
   }
 
+  const activityProperties = [
+    `  prov:used <${sourceIri}>`,
+    ...capture.entries.map(({ id }) => `  prov:generated <urn:pk:digital-twin:journal:${id}>`),
+    `  prov:endedAtTime ${rdfLiteral(capture.capturedAt)}^^xsd:dateTimeStamp`,
+  ];
+  triples.push(`<${activityIri}> a prov:Activity ;\n${activityProperties.join(" ;\n")} .`);
+
   return [
+    "PREFIX pk: <urn:voice-agent:personal-knowledge:ontology#>",
+    "PREFIX prov: <http://www.w3.org/ns/prov#>",
     "PREFIX schema: <https://schema.org/>",
     "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>",
     `INSERT DATA { GRAPH <${graphIri}> {`,

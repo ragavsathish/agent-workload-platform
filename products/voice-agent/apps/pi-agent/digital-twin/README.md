@@ -33,7 +33,7 @@ guest has no workspace mount or public internet access. Synthetic networking per
 - the configured loopback Von/Clef-compatible classifier endpoint; and
 - fixed-shape journal and review writers exposed by the agent gateway under a separate credential.
 
-The guest never receives Postgres credentials, the general agent-gateway credential, or Oxigraph's
+The guest receives no database credentials, the general agent-gateway credential, or Oxigraph's
 SPARQL endpoint. The host writer validates the structured payload. Journal entries go only to the
 journal graph; classifier output goes only to the pending-review graph.
 
@@ -46,23 +46,37 @@ write a versioned tar to the local image handoff. The host installer imports tha
 make digital-twin-image-build
 ```
 
-This folder defines a local-first RDF knowledge graph for a person. Oxigraph stores four named
-graphs so consumers can distinguish durable CV evidence, provisional conversation evidence, and
-source-grounded learning evidence:
+This folder implements a local-first RDF knowledge graph for a person. The vocabulary and SHACL
+profile live in `runtime/rdf/ontology/` and `runtime/rdf/shapes/personal-knowledge.shacl.ttl`;
+the proposal and mapping are documented in
+[`docs/ontology-application-profile.md`](docs/ontology-application-profile.md). The app profile
+reuses established vocabularies and defines only the Voice Agent personal-knowledge terms missing from them.
+Oxigraph uses named graphs to separate source, journal, inference, review, accepted knowledge, and
+feedback lifecycles:
 
-| File | Named graph | Purpose |
+| File / writer | Named graph | Purpose |
 | --- | --- | --- |
-| `cv.ttl` | `urn:awp:digital-twin:graph:cv` | Identity, employment, education, and skills stated in CVs |
-| `conversation.ttl` | `urn:awp:digital-twin:graph:conversation` | Topics and preferences explicitly expressed in chat |
-| `learning.ttl` | `urn:awp:digital-twin:graph:learning` | Learning resources, watch events, covered topics, and source claims |
-| `provenance.ttl` | `urn:awp:digital-twin:graph:provenance` | Source and generation records for the other graphs |
+| `private/cv.ttl` | `urn:awp:digital-twin:graph:cv` | Identity, employment, education, and skills stated in CVs |
+| `private/conversation.ttl` | `urn:awp:digital-twin:graph:conversation` | Topics and preferences explicitly expressed in chat |
+| `private/learning.ttl` | `urn:awp:digital-twin:graph:learning` | Learning resources, watch events, covered topics, and source claims |
+| `private/provenance.ttl` | `urn:awp:digital-twin:graph:provenance` | Source and generation records for the other graphs |
+| Journal and classifier writers | `urn:awp:digital-twin:graph:journal` | Source messages and structured journal records |
+| Classifier writer | `urn:awp:digital-twin:graph:review` | Evidence-bound candidate assertions awaiting owner review |
+| Owner review writer | `urn:awp:digital-twin:graph:accepted` | Owner-accepted profile facts |
+| Journal and assertion feedback writers | `urn:awp:digital-twin:graph:journal-feedback`, `urn:awp:digital-twin:graph:assertion-feedback` | Append-only owner review and correction events |
+| Classifier projection | `urn:awp:digital-twin:graph:assertion-classification` | Earlier unreviewed classifier predictions; retained for compatibility during projection migration |
+| `runtime/rdf/ontology/*.ttl` | `urn:awp:digital-twin:graph:ontology` | Voice Agent personal-knowledge profile and SKOS concepts |
 
-The model deliberately uses only three established vocabularies:
+The profile primarily reuses these established vocabularies:
 
 - [Schema.org](https://schema.org/) for the profile, education, skills, messages, and documents.
 - [W3C Organization Ontology](https://www.w3.org/TR/vocab-org/) for employment memberships and
   organizational roles.
-- [PROV-O](https://www.w3.org/TR/prov-o/) with Dublin Core Terms for source lineage.
+- [PROV-O](https://www.w3.org/TR/prov-o/) for source lineage and generation activities.
+- [Dublin Core Terms](https://www.dublincore.org/specifications/dublin-core/dcmi-terms/) for document metadata.
+- [W3C Web Annotation](https://www.w3.org/TR/annotation-model/) for source-targeted classifier annotations.
+- [SKOS](https://www.w3.org/TR/skos-reference/) for controlled journal, assertion, and review concepts.
+- [SHACL](https://www.w3.org/TR/shacl/) for validating the application profile.
 
 Two operational named graphs complete the review lifecycle:
 
@@ -71,9 +85,11 @@ Two operational named graphs complete the review lifecycle:
 
 ## Lightweight cognitive journal
 
-Thoughts and ideas use a separate append-only journal graph. They remain lightweight
-`schema:CreativeWork` entries with a type, text, retrieval topics, timestamp, and one automatic
-source reference. They do not require full PROV-O records or verbatim evidence matching.
+Thoughts and ideas use a separate journal graph. New journal writes are typed with the Voice Agent personal-knowledge vocabulary,
+use SKOS concept IRIs for their kinds, and include PROV-O source and generation links. Legacy
+`schema:additionalType` string values are still emitted temporarily so current readers continue to
+work while the graph projection is migrated. Journal entries remain separate from candidate
+assertions and accepted profile facts.
 
 Capture transcript text from standard input and append the extracted journal entries to private
 Oxigraph storage:
@@ -93,6 +109,40 @@ make digital-twin-query QUERY=apps/pi-agent/digital-twin/runtime/rdf/queries/jou
 
 The CV, conversation, videos, and repositories are sources, not ontologies. Conversation statements
 and learning evidence remain separate and should not become durable profile facts without review.
+
+### Daily Codex journal pages
+
+Submit one day's owner messages to `POST /v1/digital-twin/daily-journals` with the authenticated
+owner identity, an IANA timezone, local journal date, and source references, timestamps, and text.
+The gateway admits one idempotent `digital-twin-daily-journal` task to Pi Durable. The task uses the
+checked-in detailed daily-journal prompt and writes through the bounded
+`POST /v1/digital-twin/daily-journal` endpoint.
+
+The resulting `pk:DailyJournal` is one private narrative page, grounded in the supplied owner
+messages and linked to every source and the generating PROV activity. It is written as selective,
+connected prose rather than a list of tasks or extracted quote fragments. Earlier generated child
+notes remain in RDF for provenance, but the journal list no longer presents them as separate notes.
+Re-running a task replaces the page's generated projection while leaving its source messages and
+review history intact.
+
+### Legacy projection migration
+
+Preview eligible legacy daily pages and assertion-classifier annotations without writing:
+
+```bash
+make digital-twin-migrate-preview
+```
+
+After reviewing the candidate counts, add typed projections with the timezone used for the journal:
+
+```bash
+make digital-twin-migrate TIME_ZONE=Europe/Helsinki
+```
+
+The migration is additive and idempotent. It leaves legacy triples in place, only maps classifier
+records that link to a source `schema:Message` and have a recognized class plus valid confidence,
+and never creates candidate assertions or accepted profile facts. A daily page with an unparseable
+date or no source link is skipped. The migration command has not been run against the live store.
 
 ### Journal observation and feedback
 
@@ -256,7 +306,7 @@ Put the four Turtle files in `runtime/rdf/private/`. That directory is ignored b
 files may contain personal data. The checked-in `runtime/rdf/example/` files document the shape
 without containing the real profile.
 
-Load all four graphs into the private Oxigraph container:
+Load the four private profile graphs and the checked-in vocabulary graph into Oxigraph:
 
 ```bash
 make digital-twin-load

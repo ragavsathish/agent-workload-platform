@@ -48,7 +48,6 @@ Playbooks use purpose-built modules for state and inspection:
 
 - `community.docker` for Compose lifecycle, container facts, and container exec;
 - `community.general.launchd` for macOS jobs;
-- `community.postgresql` for database assertions;
 - `ansible.builtin.uri` for HTTP, Grafana, Gitea, Prometheus, and SPARQL;
 - built-in file, fact, command, and assertion modules for host checks.
 

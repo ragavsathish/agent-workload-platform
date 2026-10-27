@@ -50,6 +50,15 @@ class PiDurableOwner:
     def describe(self, task_id: str) -> dict[str, Any] | None:
         return self._call("describe", taskId=task_id)
 
+    def describe_product(self, task_id: str) -> dict[str, Any] | None:
+        return self._call("describe_product", taskId=task_id)
+
+    def cancel_product(self, task_id: str, identity: str) -> None:
+        self._call("cancel_product", taskId=task_id, identity=identity)
+
+    def progress(self, task_id: str, after: int = 0, limit: int = 40) -> list[dict[str, Any]]:
+        return self._call("progress", taskId=task_id, after=after, limit=limit)
+
     def list_native(self, identity: str, limit: int = 50) -> list[dict[str, Any]]:
         return self._call("list_native", identity=identity, limit=limit)
 

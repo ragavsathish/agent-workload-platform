@@ -24,7 +24,9 @@ from .main import (
 
 def execute(kind: str, params: dict[str, Any], request_id: str, settings: Settings) -> dict[str, Any]:
     """Run effects under a stable native task ID so resumed Pi work is idempotent."""
-    if kind not in {"song-render", "digital-twin-journal", "digital-twin-classify"}:
+    if kind not in {
+        "song-render", "digital-twin-journal", "digital-twin-classify", "digital-twin-daily-journal"
+    }:
         raise ValueError(f"unsupported product task: {kind}")
     validate_worker(settings)
     artifacts = (
@@ -37,8 +39,13 @@ def execute(kind: str, params: dict[str, Any], request_id: str, settings: Settin
         if settings.artifact_workspaces
         else None
     )
-    if kind in {"digital-twin-journal", "digital-twin-classify"}:
-        result = run_digital_twin(settings, params)
+    if kind in {"digital-twin-journal", "digital-twin-classify", "digital-twin-daily-journal"}:
+        digital_twin_params = (
+            {**params, "taskId": request_id}
+            if kind == "digital-twin-daily-journal"
+            else params
+        )
+        result = run_digital_twin(settings, digital_twin_params)
         record_journal_decision(result)
         return result
     if kind == "song-render":

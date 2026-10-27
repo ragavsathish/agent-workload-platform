@@ -65,9 +65,30 @@ def finalize_edge(status: dict[str, Any], edge_env: Path, deploy_env: Path) -> s
             "ORCHESTRATOR_ALLOWED_USERS": login,
             "GRAFANA_ROOT_URL": f"https://{dns_name}/metrics/",
             "GITEA_ROOT_URL": f"https://{dns_name}/git/",
+            "TAILSCALE_GITEA_ADMIN_LOGIN": login,
         },
     )
     return f"https://{dns_name}"
+
+
+def has_tailnet_admin(listing: str, email: str) -> bool:
+    return any(
+        len(fields) >= 3 and fields[1] == "tailnet-admin" and fields[2].lower() == email
+        for fields in (line.split() for line in listing.splitlines())
+    )
+
+
+def ensure_tailnet_admin(email: str) -> None:
+    listing = run(*COMPOSE, "exec", "-T", "gitea", "gitea", "admin", "user", "list",
+                  "--admin", capture_output=True).stdout
+    if has_tailnet_admin(listing, email):
+        return
+    run(
+        *COMPOSE, "exec", "-T", "gitea", "gitea", "admin", "user", "create",
+        "--username", "tailnet-admin", "--email", email, "--admin", "--random-password",
+        "--random-password-length", "48", "--must-change-password=false",
+        capture_output=True,
+    )
 
 
 def main() -> None:
@@ -108,11 +129,14 @@ def main() -> None:
         "--wait",
         "--force-recreate",
         "gitea",
+        "gitea-ingress",
         "otel-lgtm",
         "agent-gateway",
         "voice-edge",
         "traefik",
     )
+    owner_login = str(status["User"][str(status["Self"]["UserID"])]["LoginName"]).lower()
+    ensure_tailnet_admin(owner_login)
     tailscale = [
         *COMPOSE,
         "exec",
@@ -124,6 +148,7 @@ def main() -> None:
     ]
     run(*tailscale, "reset")
     run(*tailscale, "--bg", "--https=443", "http://127.0.0.1:8080")
+    run(*tailscale, "--bg", "--https=443", "--set-path=/git", "unix:/run/gitea-ingress/gitea.sock")
     print(f"Voice UI: {url}")
     print(f"Grafana: {url}/metrics/")
     print(f"Gitea: {url}/git/")

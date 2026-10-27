@@ -20,7 +20,7 @@ from voice_agent.tasking.domain.workspaces import is_scratch_workspace, resolve_
 from voice_agent.tasking.infrastructure.artifacts import ArtifactStore
 from voice_agent.tasking.infrastructure.config import Settings
 
-from .main import prepare_repository_image, task_progress_publisher, validate_worker
+from .main import prepare_repository_image, validate_worker
 
 _TASK_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 _REPOSITORY_SOURCE = re.compile(
@@ -139,11 +139,6 @@ def main() -> None:
         result = prepare(payload, settings)
     elif action == "finish":
         result = finish(payload, settings)
-    elif action == "progress":
-        spoken = str(payload["spoken"]).strip()[:240]
-        if spoken and _TASK_ID.fullmatch(str(payload["requestId"])):
-            task_progress_publisher(settings.database_url, str(payload["requestId"]))(spoken)
-        result = {}
     else:
         raise ValueError("invalid workspace effect action")
     sys.stdout.write(json.dumps(result))

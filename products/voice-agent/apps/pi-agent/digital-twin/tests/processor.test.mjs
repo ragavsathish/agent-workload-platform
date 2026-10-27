@@ -6,7 +6,10 @@ import { fileURLToPath } from "node:url";
 
 const processor = fileURLToPath(new URL("../runtime/image/processor.mjs", import.meta.url));
 
-async function fixtureServer(classifierConfidence = 0.93, journalEntries) {
+async function fixtureServer(classifierConfidence = 0.93, journalEntries, dailyJournal = {
+  title: "The work found its shape",
+  story: "I started with a broad idea and narrowed it to a concrete change. The useful part was seeing how the pieces fit together.\n\nBy the end, I had a clearer next step and a better sense of what mattered.",
+}) {
   const requests = [];
   const server = createServer(async (request, response) => {
     let body = "";
@@ -30,7 +33,9 @@ async function fixtureServer(classifierConfidence = 0.93, journalEntries) {
       }));
     } else if (request.url === "/api/chat") {
       const system = parsed.messages[0].content;
-      const content = system.includes("cognitive journal")
+      const content = system.includes("daily journal essay")
+        ? dailyJournal
+        : system.includes("cognitive journal")
         ? { entries: journalEntries ?? [{
           type: "idea",
           text: "Playwright could improve test reliability.",
@@ -41,6 +46,8 @@ async function fixtureServer(classifierConfidence = 0.93, journalEntries) {
       response.end(JSON.stringify({ message: { content: JSON.stringify(content) } }));
     } else if (request.url === "/v1/digital-twin/journal") {
       response.end(JSON.stringify({ captureId: parsed.id, entries: parsed.entries.length }));
+    } else if (request.url === "/v1/digital-twin/daily-journal") {
+      response.end(JSON.stringify({ journalId: parsed.id, entries: 1 }));
     } else if (request.url === "/v1/digital-twin/reviews") {
       response.end(JSON.stringify({ captureId: parsed.id, candidates: parsed.candidates.length }));
     } else {
@@ -63,6 +70,7 @@ async function runProcessor(
   transcript = mode === "journal"
     ? "I think Playwright could improve test reliability."
     : "I use Playwright.",
+  extra = {},
 ) {
   const child = spawn(process.execPath, [processor], {
     env: {
@@ -73,6 +81,7 @@ async function runProcessor(
       DIGITAL_TWIN_CLASSIFIER_MODEL: "clef-test",
       DIGITAL_TWIN_REVIEW_THRESHOLD: "0.82",
       DIGITAL_TWIN_WRITER_URL: `${baseUrl}/v1/digital-twin/journal`,
+      DIGITAL_TWIN_DAILY_JOURNAL_WRITER_URL: `${baseUrl}/v1/digital-twin/daily-journal`,
       DIGITAL_TWIN_REVIEW_WRITER_URL: `${baseUrl}/v1/digital-twin/reviews`,
       DIGITAL_TWIN_WRITER_TOKEN: "writer-secret",
     },
@@ -89,11 +98,60 @@ async function runProcessor(
     messageId: "message-1",
     transcript,
     capturedAt: "2026-10-17T10:00:00Z",
+    ...extra,
   }));
   const code = await new Promise((resolve) => child.once("close", resolve));
   assert.equal(code, 0, Buffer.concat(stderr).toString());
   return JSON.parse(Buffer.concat(stdout).toString());
 }
+
+test("daily journal task writes one coherent prose page with source provenance", async () => {
+  const fixture = await fixtureServer();
+  try {
+    const result = await runProcessor(fixture.baseUrl, "daily-journal", undefined, {
+      taskId: "8e71e663-0fcb-4e5e-b4a3-d74c3b730000",
+      journalDate: "2026-10-17",
+      timeZone: "Europe/Helsinki",
+      sources: [{
+        sourceRef: "session-1:message-1",
+        speaker: "owner",
+        capturedAt: "2026-10-17T10:00:00+03:00",
+        transcript: "I learned to keep evidence separate.",
+      }],
+    });
+    assert.equal(result.mode, "daily-journal");
+    assert.equal(result.sources, 1);
+    assert.equal(result.storyCharacters > 100, true);
+    const journal = fixture.requests.find((request) => request.path === "/v1/digital-twin/daily-journal");
+    assert.equal(journal.authorization, "Bearer writer-secret");
+    assert.equal(journal.body.taskId, "8e71e663-0fcb-4e5e-b4a3-d74c3b730000");
+    assert.equal(journal.body.sources[0].speaker, "owner");
+    assert.equal(journal.body.story, "I started with a broad idea and narrowed it to a concrete change. The useful part was seeing how the pieces fit together.\n\nBy the end, I had a clearer next step and a better sense of what mattered.");
+    assert.equal(journal.body.reflections, undefined);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("daily journal rejects an outline instead of writing it as a story", async () => {
+  const fixture = await fixtureServer(0.93, undefined, {
+    title: "A day of tasks",
+    story: "- Fixed the tests\n- Updated the prompt\n- Prepared a release",
+  });
+  try {
+    await assert.rejects(
+      runProcessor(fixture.baseUrl, "daily-journal", undefined, {
+        journalDate: "2026-10-17",
+        timeZone: "Europe/Helsinki",
+        sources: [{ sourceRef: "session-1:message-1", speaker: "owner", capturedAt: "2026-10-17T10:00:00+03:00", transcript: "I worked on the project." }],
+      }),
+      /daily journal story must be prose/,
+    );
+    assert.equal(fixture.requests.some((request) => request.path === "/v1/digital-twin/daily-journal"), false);
+  } finally {
+    await fixture.close();
+  }
+});
 
 test("journal job calls only Qwen and the fixed journal writer", async () => {
   const fixture = await fixtureServer();

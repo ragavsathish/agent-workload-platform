@@ -1,20 +1,88 @@
 PREFIX schema: <https://schema.org/>
-PREFIX awp: <urn:awp:digital-twin:predicate:>
+PREFIX legacy: <urn:pk:digital-twin:predicate:>
+PREFIX pk: <urn:voice-agent:personal-knowledge:ontology#>
+PREFIX prov: <http://www.w3.org/ns/prov#>
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
 
-SELECT ?id ?kind ?text ?createdAt ?sourceId ?sourceLabel ?transcript ?topic WHERE {
-  GRAPH <urn:awp:digital-twin:graph:journal> {
-    ?entry a schema:CreativeWork ;
-      schema:additionalType ?kind ;
-      schema:text ?text ;
-      schema:dateCreated ?createdAt ;
-      schema:isBasedOn ?source .
-    BIND(STRAFTER(STR(?entry), "urn:awp:digital-twin:journal:") AS ?id)
-    BIND(STRAFTER(STR(?source), "urn:awp:digital-twin:journal:") AS ?sourceId)
-    OPTIONAL { ?entry schema:keywords ?topic }
-    OPTIONAL { ?entry awp:status ?status }
-    FILTER(!BOUND(?status) || ?status != "deleted")
-    OPTIONAL { ?source schema:identifier ?sourceLabel }
-    OPTIONAL { ?source schema:text ?transcript }
+SELECT ?id ?kind ?recordKind ?text ?createdAt ?sourceId ?sourceLabel ?transcript ?topic WHERE {
+  {
+    GRAPH <urn:pk:digital-twin:graph:journal> {
+      ?entry a schema:CreativeWork ;
+        schema:additionalType ?kind ;
+        schema:text ?text ;
+        schema:dateCreated ?createdAt ;
+        schema:isBasedOn ?source .
+      FILTER(?kind IN ("thought", "idea", "question", "decision", "goal", "learning"))
+      BIND("journal_note" AS ?recordKind)
+      BIND(STRAFTER(STR(?entry), "urn:voice-agent:personal-knowledge:journal:") AS ?id)
+      BIND(STRAFTER(STR(?source), "urn:pk:digital-twin:journal:") AS ?sourceId)
+      OPTIONAL { ?entry schema:keywords ?topic }
+      OPTIONAL { ?entry legacy:status ?status }
+      FILTER NOT EXISTS { ?entry pk:journalEntryKind ?typedKind }
+      FILTER(!BOUND(?status) || ?status != "deleted")
+      FILTER NOT EXISTS {
+        ?dailyPage schema:hasPart ?entry .
+        { ?dailyPage a pk:DailyJournal } UNION { ?dailyPage legacy:recordKind "codex_daily_journal" }
+      }
+      OPTIONAL { ?source schema:identifier ?sourceLabel }
+      OPTIONAL { ?source schema:text ?transcript }
+    }
+  }
+  UNION
+  {
+    GRAPH <urn:pk:digital-twin:graph:journal> {
+      ?entry a pk:JournalEntry ;
+        pk:journalEntryKind ?kindConcept ;
+        schema:text ?text ;
+        schema:dateCreated ?createdAt ;
+        prov:wasDerivedFrom ?source .
+      BIND(STRAFTER(STR(?kindConcept), "concept:journal-kind:") AS ?kind)
+      BIND("journal_note" AS ?recordKind)
+      BIND(CONCAT("daily:", STR(?journalDate)) AS ?id)
+      BIND(STRAFTER(STR(?source), "urn:pk:digital-twin:journal:") AS ?sourceId)
+      OPTIONAL { ?entry schema:keywords ?topic }
+      OPTIONAL { ?entry legacy:status ?status }
+      FILTER(!BOUND(?status) || ?status != "deleted")
+      FILTER NOT EXISTS {
+        ?dailyPage schema:hasPart ?entry .
+        { ?dailyPage a pk:DailyJournal } UNION { ?dailyPage legacy:recordKind "codex_daily_journal" }
+      }
+      OPTIONAL { ?source schema:identifier ?sourceLabel }
+      OPTIONAL { ?source schema:text ?transcript }
+    }
+  }
+  UNION
+  {
+    GRAPH <urn:pk:digital-twin:graph:journal> {
+      ?entry a schema:CreativeWork ;
+        legacy:recordKind "codex_daily_journal" ;
+        schema:text ?text ;
+        schema:dateCreated ?createdAt ;
+        schema:identifier ?identifier .
+      OPTIONAL { ?entry pk:piDurableTaskId ?taskId }
+      OPTIONAL { ?entry schema:keywords ?topic }
+      BIND("unclassified" AS ?kind)
+      BIND("codex_daily_journal" AS ?recordKind)
+      BIND(STRAFTER(?identifier, "codex-daily-journal:") AS ?id)
+      BIND(COALESCE(?taskId, "unknown") AS ?sourceId)
+      BIND("Pi Durable daily journal" AS ?sourceLabel)
+    }
+  }
+  UNION
+  {
+    GRAPH <urn:pk:digital-twin:graph:journal> {
+      ?entry a pk:DailyJournal ;
+        schema:text ?text ;
+        pk:journalDate ?journalDate ;
+        prov:wasGeneratedBy ?activity .
+      OPTIONAL { ?activity pk:piDurableTaskId ?taskId }
+      BIND(STR(?journalDate) AS ?createdAt)
+      BIND("unclassified" AS ?kind)
+      BIND("codex_daily_journal" AS ?recordKind)
+      BIND(CONCAT("daily:", STR(?journalDate)) AS ?id)
+      BIND(COALESCE(?taskId, STR(?activity)) AS ?sourceId)
+      BIND("Pi Durable daily journal" AS ?sourceLabel)
+    }
   }
 }
 ORDER BY DESC(?createdAt) ?id ?topic

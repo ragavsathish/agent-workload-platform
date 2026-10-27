@@ -27,7 +27,6 @@ flowchart LR
             end
 
             subgraph DATA_NET["data · internal"]
-                POSTGRES[("PostgreSQL<br/>proposals · song state · progress")]
                 S3[("S3Mock<br/>workspaces · results")]
                 GITEA[("Gitea<br/>Git · Actions · workflow state")]
                 DOCKER_JOB_API["Docker Job API<br/>Go · authenticated jobs"]
@@ -46,7 +45,6 @@ flowchart LR
 
             EDGE -->|"task API"| GATEWAY
             EDGE -->|"identity-checked App and trace proxy"| GRAFANA_MCP
-            GATEWAY --> POSTGRES
             GATEWAY --> S3
             GATEWAY -->|"bounded fact queries<br/>journal and review updates"| OXIGRAPH
             ROUTER -->|"/git/"| GITEA
@@ -144,4 +142,4 @@ flowchart LR
     class BROWSER,BROKER,PI,WORKER,OWNER,TASK_PI,BUILDER_MANAGER,VOICE_WASSETTE,TASK_WASSETTE,HOST_METRICS,VOICE_TOOLS,TASK_TOOLS,RUNNER,CLIENT,DOCKER_JOB_API,DOCKER_METRICS,OTEL,GRAFANA_MCP runtime;
     class INGRESS,ROUTER,EDGE,GATEWAY security;
     class TRUST_RISK warning;
-    class POSTGRES,S3,GITEA,OXIGRAPH,RUNTIME,IMAGE_HANDOFF,TASK_STORE,OWNER_STORE data;
+    class S3,GITEA,OXIGRAPH,RUNTIME,IMAGE_HANDOFF,TASK_STORE,OWNER_STORE data;

@@ -1,10 +1,11 @@
 @prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix pk: <urn:voice-agent:personal-knowledge:ontology#> .
 @prefix org: <http://www.w3.org/ns/org#> .
 @prefix prov: <http://www.w3.org/ns/prov#> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix schema: <https://schema.org/> .
 @prefix sh: <http://www.w3.org/ns/shacl#> .
-@prefix twinshape: <urn:awp:digital-twin:shape:> .
+@prefix twinshape: <urn:pk:digital-twin:shape:> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
 twinshape:PersonShape a sh:NodeShape ;
@@ -46,11 +47,11 @@ twinshape:MessageShape a sh:NodeShape ;
     sh:or (
       [ sh:datatype xsd:date ]
       [ sh:datatype xsd:dateTime ]
+      [ sh:datatype xsd:dateTimeStamp ]
     )
   ] ;
   sh:property [
     sh:path schema:about ;
-    sh:minCount 1 ;
     sh:class schema:DefinedTerm ;
     sh:nodeKind sh:IRI
   ] ;
@@ -95,30 +96,16 @@ twinshape:WatchActionShape a sh:NodeShape ;
 
 twinshape:SourceClaimShape a sh:NodeShape ;
   sh:targetClass schema:Claim ;
-  sh:property [
-    sh:path schema:text ;
-    sh:minCount 1 ;
-    sh:maxCount 1 ;
-    sh:nodeKind sh:Literal
-  ] ;
-  sh:property [
-    sh:path schema:about ;
-    sh:minCount 1 ;
-    sh:class schema:DefinedTerm ;
-    sh:nodeKind sh:IRI
-  ] ;
-  sh:property [
-    sh:path prov:wasDerivedFrom ;
-    sh:minCount 1 ;
-    sh:class prov:Entity ;
-    sh:nodeKind sh:IRI
-  ] ;
-  sh:property [
-    sh:path prov:generatedAtTime ;
-    sh:minCount 1 ;
-    sh:maxCount 1 ;
-    sh:datatype xsd:dateTime
-  ] .
+  sh:or (
+    [ sh:class pk:CandidateAssertion ]
+    [ sh:class pk:ProfileFact ]
+    [
+      sh:property [ sh:path schema:text ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:Literal ] ;
+      sh:property [ sh:path schema:about ; sh:minCount 1 ; sh:class schema:DefinedTerm ; sh:nodeKind sh:IRI ] ;
+      sh:property [ sh:path prov:wasDerivedFrom ; sh:minCount 1 ; sh:class prov:Entity ; sh:nodeKind sh:IRI ] ;
+      sh:property [ sh:path prov:generatedAtTime ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ]
+    ]
+  ) .
 
 twinshape:MembershipShape a sh:NodeShape ;
   sh:targetClass org:Membership ;
@@ -142,19 +129,4 @@ twinshape:MembershipShape a sh:NodeShape ;
     sh:maxCount 1 ;
     sh:class org:Role ;
     sh:nodeKind sh:IRI
-  ] .
-
-twinshape:DerivedGraphShape a sh:NodeShape ;
-  sh:targetSubjectsOf prov:wasDerivedFrom ;
-  sh:property [
-    sh:path prov:wasDerivedFrom ;
-    sh:minCount 1 ;
-    sh:class prov:Entity ;
-    sh:nodeKind sh:IRI
-  ] ;
-  sh:property [
-    sh:path prov:generatedAtTime ;
-    sh:minCount 1 ;
-    sh:maxCount 1 ;
-    sh:datatype xsd:dateTime
   ] .

@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { configuredOxigraphEndpoint, fetchAssertionReview, fetchJournalEntries, saveAssertionReview, saveJournalFeedback, type JournalEntry } from './journal-api';
+import { configuredOxigraphEndpoint, fetchAssertionReview, fetchJournalEntries, fetchKnowledgeGraph, saveAssertionReview, saveJournalFeedback, type JournalEntry } from './journal-api';
 import { KnowledgeGraph } from '../../client/knowledge_ui/KnowledgeGraph';
+import type { KnowledgeGraphData } from '../../client/knowledge_ui/KnowledgeGraph';
 import { KnowledgeNoteCard } from '../../client/knowledge_ui/KnowledgeNoteCard';
-import { JournalCorrectionForm, JOURNAL_TYPES, type JournalCorrection } from '../../client/knowledge_ui/JournalCorrectionForm';
+import { JournalCorrectionForm, JOURNAL_TYPES, type JournalCorrection, type JournalType } from '../../client/knowledge_ui/JournalCorrectionForm';
 import { SourceCapture } from '../../client/knowledge_ui/SourceCapture';
 
 type Entry = JournalEntry;
-type ReviewDraft = { entryId: string; text: string; type: Entry['type']; topics: string };
+type ReviewDraft = { entryId: string; text: string; type: JournalType; topics: string };
 type AssertionKind = 'none' | 'conversation_topic' | 'skill_evidence' | 'profile_update';
 type ProfileField = 'none' | 'job_title' | 'home_location' | 'credential' | 'employment';
 type AssertionDraft = { entryId: string; ownerAuthored: 'unknown' | 'yes' | 'no'; kind: AssertionKind | ''; profileField: ProfileField; reason: string };
@@ -89,6 +90,28 @@ const dateLabel = (value: string) => new Intl.DateTimeFormat('en', {
   day: 'numeric', month: 'short', year: 'numeric',
 }).format(new Date(value));
 
+function inlineMarkdown(value: string) {
+  return value.split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/u).map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**')) return <strong key={index}>{part.slice(2, -2)}</strong>;
+    if (part.startsWith('*') && part.endsWith('*')) return <em key={index}>{part.slice(1, -1)}</em>;
+    if (part.startsWith('`') && part.endsWith('`')) return <code key={index}>{part.slice(1, -1)}</code>;
+    return part;
+  });
+}
+
+function DailyJournalContent({ text }: { text: string }) {
+  const blocks = text.trim().split(/\n\s*\n/u).filter(Boolean);
+  return <div className="daily-journal-content">{blocks.map((block, index) => {
+    const lines = block.split('\n');
+    const heading = lines[0]?.match(/^(#{1,6})\s+(.+)$/u);
+    if (heading) return <h3 key={index}>{inlineMarkdown(heading[2]!)}</h3>;
+    if (lines.every((line) => line.startsWith('- '))) return <ul key={index}>{lines.map((line, itemIndex) => <li key={itemIndex}>{inlineMarkdown(line.slice(2))}</li>)}</ul>;
+    if (lines.every((line) => line.startsWith('> '))) return <blockquote key={index}>{lines.map((line) => line.slice(2)).join('\n')}</blockquote>;
+    if (/^---+$/u.test(block.trim())) return <hr key={index} />;
+    return <p key={index}>{inlineMarkdown(block.replaceAll('\n', ' '))}</p>;
+  })}</div>;
+}
+
 const dateKey = (value: string | Date) => {
   const date = value instanceof Date ? value : new Date(value);
   return [date.getFullYear(), `${date.getMonth() + 1}`.padStart(2, '0'), `${date.getDate()}`.padStart(2, '0')].join('-');
@@ -123,6 +146,7 @@ export const KnowledgeBaseView = () => {
   const [topicQuery, setTopicQuery] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [entries, setEntries] = useState<Entry[]>(sampleEntries);
+  const [graphData, setGraphData] = useState<KnowledgeGraphData | undefined>();
   const [previewEdits, setPreviewEdits] = useState<Record<string, Pick<Entry, 'text' | 'type' | 'topics'>>>({});
   const [hiddenIds, setHiddenIds] = useState<string[]>([]);
   const [reviewDraft, setReviewDraft] = useState<ReviewDraft | null>(null);
@@ -163,6 +187,16 @@ export const KnowledgeBaseView = () => {
       setEntries([]);
       setConnection('error');
       setConnectionMessage(error instanceof Error ? error.message : 'Could not load the journal.');
+    });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const endpoint = configuredOxigraphEndpoint();
+    if (!endpoint) return;
+    const controller = new AbortController();
+    void fetchKnowledgeGraph(endpoint, controller.signal).then(setGraphData).catch((error: unknown) => {
+      if (!controller.signal.aborted) console.warn('Could not load RDF relationship graph.', error);
     });
     return () => controller.abort();
   }, []);
@@ -222,6 +256,9 @@ export const KnowledgeBaseView = () => {
   const selectedEntry = filteredEntries.find(({ id }) => id === selectedId)
     ?? filteredEntries[0]
     ?? null;
+  const showingDailyJournals = filteredEntries.length > 0
+    && filteredEntries.every((entry) => entry.recordKind === 'codex_daily_journal');
+  const selectedIsDailyJournal = selectedEntry?.recordKind === 'codex_daily_journal';
 
   useEffect(() => {
     if (filteredEntries.length > 0 && !filteredEntries.some(({ id }) => id === selectedId)) {
@@ -312,6 +349,7 @@ export const KnowledgeBaseView = () => {
   };
 
   const startReview = (entry: Entry) => {
+    if (entry.recordKind === 'codex_daily_journal' || entry.type === 'unclassified') return;
     setRemoveConfirmId(null);
     setAssertionDraft(null);
     setReviewDraft({ entryId: entry.id, text: entry.text, type: entry.type, topics: entry.topics.join(', ') });
@@ -444,9 +482,9 @@ export const KnowledgeBaseView = () => {
           <h1>Journal &amp; knowledge</h1>
           <p className="knowledge-subtitle">Browse personal notes, follow their source, and explore the topics that connect them.</p>
         </div>
-        <div className="knowledge-stat" aria-label={`${filteredEntries.length} notes shown`}>
+        <div className="knowledge-stat" aria-label={`${filteredEntries.length} ${showingDailyJournals ? 'journals' : 'notes'} shown`}>
           <strong>{filteredEntries.length.toString().padStart(2, '0')}</strong>
-          <span>NOTES SHOWN</span>
+          <span>{showingDailyJournals ? 'JOURNALS SHOWN' : 'NOTES SHOWN'}</span>
         </div>
       </section>
 
@@ -528,8 +566,8 @@ export const KnowledgeBaseView = () => {
       <section className={`knowledge-workspace ${mode === 'map' ? 'map-mode' : ''}`}>
         {mode === 'journal' ? (
           <section className="entry-list-panel pi-surface" aria-label="Journal note list">
-            <div className="panel-toolbar">
-              <div><h2>{selectedTopics.length === 1 ? selectedTopics[0] : 'All notes'}</h2><p>{filteredEntries.length} {filteredEntries.length === 1 ? 'note' : 'notes'} · newest first</p></div>
+              <div className="panel-toolbar">
+              <div><h2>{selectedTopics.length === 1 ? selectedTopics[0] : filteredEntries.length > 0 && filteredEntries.every((entry) => entry.recordKind === 'codex_daily_journal') ? 'Daily journals' : 'All notes'}</h2><p>{filteredEntries.length} {filteredEntries.length === 1 ? 'record' : 'records'} · newest first</p></div>
               <span className="sort-label">{dateGroups.length} {dateGroups.length === 1 ? 'DAY' : 'DAYS'}</span>
             </div>
             <div className="entry-list" ref={entryListRef} role="list" onScroll={(event) => { listScrollTopRef.current = event.currentTarget.scrollTop; }}>
@@ -545,7 +583,7 @@ export const KnowledgeBaseView = () => {
             </div>
           </section>
         ) : (
-          <KnowledgeGraph entries={filteredEntries} selectedId={selectedEntry?.id} theme={theme} scopeSummary={scopeSummary}
+          <KnowledgeGraph entries={filteredEntries} graphData={connection === 'live' ? graphData : undefined} selectedId={selectedEntry?.id} theme={theme} scopeSummary={scopeSummary}
             onSelectEntry={(entry) => { setSelectedId(entry.id); setNotice(`Selected journal note: ${entry.text}`); }}
             onSelectTopic={(topic) => { selectTopic(topic); setNotice(`Showing notes tagged ${topic}`); }}
             onSelectSource={(entry) => {
@@ -564,12 +602,12 @@ export const KnowledgeBaseView = () => {
           data-entry-id={selectedEntry?.id}>
           {selectedEntry ? (
             <>
-              <div className="detail-head"><div className="detail-icon" aria-hidden="true">✳</div><div><p className="pi-kicker">JOURNAL NOTE</p><span>{selectedEntry.type.toUpperCase()}</span></div></div>
-              <h2>{selectedEntry.text}</h2>
+              <div className="detail-head"><div className="detail-icon" aria-hidden="true">✳</div><div><p className="pi-kicker">{selectedIsDailyJournal ? 'DAILY CODEX JOURNAL' : 'JOURNAL NOTE'}</p><span>{selectedIsDailyJournal ? 'PI DURABLE OUTPUT' : selectedEntry.type.toUpperCase()}</span></div></div>
+              {selectedIsDailyJournal ? <DailyJournalContent text={selectedEntry.text} /> : <h2>{selectedEntry.text}</h2>}
               <div className="detail-date"><span aria-hidden="true">◷</span> Captured {dateLabel(selectedEntry.createdAt)}</div>
               <div className="detail-section"><h3>TOPIC TAGS</h3><div className="detail-tags">{selectedEntry.topics.map((topic) => <button key={topic} type="button" className="tag-chip clickable" onClick={() => selectTopic(topic)}>{topic}</button>)}</div></div>
-              <div className="detail-section source-section"><div className="section-title-row"><h3>SOURCE CAPTURE</h3><span className="source-badge">LINKED</span></div><SourceCapture source={selectedEntry.sourceLabel} sourceId={selectedEntry.sourceId} transcript={selectedEntry.transcript} /></div>
-              <section className="review-section" aria-label="Review selected note">
+              {selectedIsDailyJournal ? <div className="detail-section source-section"><div className="section-title-row"><h3>GENERATED BY PI DURABLE</h3><span className="source-badge">TASK</span></div><p className="daily-journal-task">Task ID <code>{selectedEntry.sourceId}</code></p><p className="daily-journal-context">One private narrative for the day, grounded in the linked Codex messages.</p></div> : <div className="detail-section source-section"><div className="section-title-row"><h3>SOURCE CAPTURE</h3><span className="source-badge">LINKED</span></div><SourceCapture source={selectedEntry.sourceLabel} sourceId={selectedEntry.sourceId} transcript={selectedEntry.transcript} /></div>}
+              {!selectedIsDailyJournal && <section className="review-section" aria-label="Review selected note">
                 <div className="review-heading"><h3>REVIEW THIS NOTE</h3><span>{connection === 'live' ? 'SAVED GRAPH' : 'LOCAL PREVIEW'}</span></div>
                 <p>{connection === 'live' ? 'Correct this journal note or remove it from the saved graph. The source capture remains available.' : 'Try a correction or remove this note from the map. Changes reset when you reload.'}</p>
                 {reviewDraft?.entryId === selectedEntry.id ? (
@@ -583,8 +621,8 @@ export const KnowledgeBaseView = () => {
                 ) : (
                   <div className="review-actions"><button className="pi-button review-primary" type="button" onClick={() => startReview(selectedEntry)}>Correct note</button><button className="pi-button" type="button" onClick={() => setRemoveConfirmId(selectedEntry.id)}>Remove node</button></div>
                 )}
-              </section>
-              <section className="review-section assertion-section" aria-label="Review source assertion">
+              </section>}
+              {!selectedIsDailyJournal && <section className="review-section assertion-section" aria-label="Review source assertion">
                 <div className="review-heading"><h3>ASSERTION LABEL</h3><span>{connection === 'live' ? 'REVIEW RECORD' : 'LOCAL PREVIEW'}</span></div>
                 <p>This journal capture has no verified owner-turn provenance or classifier prediction. Check the source before proposing a label.</p>
                 {assertionPreviews[selectedEntry.id] && <p className="review-result">{assertionPreviews[selectedEntry.id].ownerAuthored === 'no'
@@ -603,8 +641,8 @@ export const KnowledgeBaseView = () => {
                     <div className="review-actions"><button className="pi-button review-primary" type="button" disabled={saving || assertionDraft.ownerAuthored === 'unknown' || assertionDraft.reason.trim().length < 3 || (assertionDraft.ownerAuthored === 'yes' && (!assertionDraft.kind || (assertionDraft.kind === 'profile_update' && assertionDraft.profileField === 'none')))} onClick={applyAssertionPreview}>{saving ? 'Saving…' : connection === 'live' ? 'Save review' : 'Apply label preview'}</button><button className="pi-button" type="button" disabled={saving} onClick={() => setAssertionDraft(null)}>Cancel</button></div>
                   </div>
                 ) : <button className="pi-button assertion-start" type="button" onClick={() => startAssertionReview(selectedEntry)}>{assertionPreviews[selectedEntry.id] ? 'Revise label' : 'Review source'}</button>}
-              </section>
-              <div className="detail-footer"><span className="read-only-mark" aria-hidden="true">◉</span><span>{connection === 'live' ? 'Owner authenticated graph review' : 'Sample mode · graph writes unavailable'}</span></div>
+              </section>}
+              <div className="detail-footer"><span className="read-only-mark" aria-hidden="true">◉</span><span>{selectedIsDailyJournal ? 'Read-only · source records preserved' : connection === 'live' ? 'Owner authenticated graph review' : 'Sample mode · graph writes unavailable'}</span></div>
             </>
           ) : (
             <div className="pi-empty-state"><strong>Select a journal note</strong><span>Its source and topic connections will appear here.</span></div>

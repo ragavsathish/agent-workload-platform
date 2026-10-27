@@ -117,7 +117,7 @@ export function coverageAuditMarkdown(audit, { runId, commit, counts }) {
   const durableSystemPath = audit.journeys.some(({ intendedUse, journey, systemPathPassed }) =>
     intendedUse === 'Durable work' && journey === 'Continue durable work' && systemPathPassed > 0);
   const remainingPaths = [
-    ...(!durableSystemPath ? ['- Approve a real durable task, observe isolated Pi execution, and retrieve its artifact through the browser. The current Patrol workspace check uses a protocol fixture.'] : []),
+    ...(!durableSystemPath ? ['- Submit a real durable task from the voice session, observe isolated Pi execution, and retrieve its artifact through the browser. The current Patrol workspace check uses a protocol fixture.'] : []),
     '- Open a journal review MCP App from a live Pi turn, correct the note in that App, and verify the owner-visible result. The App browser and deployed MCP save checks currently run separately.',
     ...(!audit.verifiedPaths?.ownerIngress ? ['- Verify exact-owner tailnet ingress with negative identity cases.'] : []),
     ...(!audit.verifiedPaths?.voiceTelemetry ? ['- Correlate a fresh user voice turn with its own OTel trace and metric delta.'] : []),

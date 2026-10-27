@@ -40,7 +40,7 @@ export function digitalTwinVmConfig(environment: NodeJS.ProcessEnv): GondolinSes
   const classifierGuest = new URL(GUEST_CLASSIFIER_ORIGIN);
   classifierGuest.port = classifierUpstream.port;
   return {
-    imagePath: environment.DIGITAL_TWIN_IMAGE_REF?.trim() || "digital-twin-ingest:v1",
+    imagePath: environment.DIGITAL_TWIN_IMAGE_REF?.trim() || "digital-twin-ingest:story-v3",
     network: {
       allowedHosts: [],
       allowedInternalHosts: ["127.0.0.1"],
@@ -70,6 +70,7 @@ export function digitalTwinVmConfig(environment: NodeJS.ProcessEnv): GondolinSes
       DIGITAL_TWIN_REVIEW_THRESHOLD:
         environment.DIGITAL_TWIN_REVIEW_THRESHOLD?.trim() || "0.60",
       DIGITAL_TWIN_WRITER_URL: `${writerGuest.origin}/v1/digital-twin/journal`,
+      DIGITAL_TWIN_DAILY_JOURNAL_WRITER_URL: `${writerGuest.origin}/v1/digital-twin/daily-journal`,
       DIGITAL_TWIN_REVIEW_WRITER_URL: `${writerGuest.origin}/v1/digital-twin/reviews`,
       DIGITAL_TWIN_WRITER_TOKEN: required(environment, "DIGITAL_TWIN_WRITER_TOKEN"),
     },
@@ -89,7 +90,7 @@ export async function runDigitalTwinTask(
   try {
     const result = await session.run(["/usr/bin/node", "/app/processor.mjs"], {
       input: payload,
-      signal: AbortSignal.timeout(120_000),
+      signal: AbortSignal.timeout(300_000),
     });
     if (!result.ok) throw new Error(`digital twin guest failed: ${result.stderr.slice(-2_000)}`);
     const output: unknown = JSON.parse(result.stdout);

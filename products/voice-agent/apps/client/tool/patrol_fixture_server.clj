@@ -155,6 +155,15 @@
                                                         (println "Patrol live edge request failed:"
                                                                  (.getMessage error) (select-keys (ex-data error) [:status :detail]))
                                                         ::failed)))
+                                 session-instruction (when (and durable-mode (nil? live-edge-url))
+                                                       (second (re-matches
+                                                                #"(?is)^submit a scratch task:\s*(.+)$"
+                                                                (str message))))
+                                 session-tool-result (when session-instruction
+                                                       (let [result (durable/submit-from-session
+                                                                     @durable-state session-instruction)]
+                                                         (reset! durable-state (:state result))
+                                                         (:response result)))
                                  completed? (and (not= ::failed live-response)
                                                  (= ::timeout (deref gate (if live-edge-url 0 (long turn-delay-ms)) ::timeout)))
                                  value (locking lock
@@ -163,8 +172,20 @@
                                            (if live-edge-url
                                              (do (swap! state #(domain/complete-turn-with-response % id live-response))
                                                  live-response)
-                                             (do (swap! state #(domain/complete-turn % id (get headers "origin")))
-                                                 (domain/completed-turn-response message (get headers "origin"))))
+                                             (if session-tool-result
+                                               (let [task (when (= 201 (:status session-tool-result))
+                                                            (json/parse-string (:body session-tool-result) true))
+                                                     response {:spoken (if task
+                                                                         (str "Submitted directly to Pi Durable as task " (:id task) ".")
+                                                                         "I could not submit the task to Pi Durable.")
+                                                               :presentation {:kind "flow" :title "Durable task submitted"
+                                                                              :nodes [{:id "session" :label "Pi session"}
+                                                                                      {:id "owner" :label "Pi Durable"}]
+                                                                              :edges [{:from "session" :to "owner"}]}}]
+                                                 (swap! state #(domain/complete-turn-with-response % id response))
+                                                 response)
+                                               (do (swap! state #(domain/complete-turn % id (get headers "origin")))
+                                                   (domain/completed-turn-response message (get headers "origin")))))
                                            (domain/interrupted-turn-response)))]
                              (json-response (if (= ::failed live-response) 502 200) value)))))
                      (and (= method "POST") (= path "/api/pi-turn/abort"))
@@ -177,9 +198,9 @@
                      (and (= method "GET") (= path "/api/tasks")) (json-response 200 (:tasks @state))
                      (and (= method "POST") (= path "/api/tasks"))
                      (locking lock (transition! (domain/create-task @state (:instruction (body-map)) {:now #(str (java.time.Instant/now))}) 201))
-                     (and (= method "POST") (re-matches #"/api/tasks/[^/]+/(approve|cancel)" path))
-                     (let [[_ id action] (re-matches #"/api/tasks/([^/]+)/(approve|cancel)" path)
-                           status (if (= action "approve") "approved" "cancelled")]
+                     (and (= method "POST") (re-matches #"/api/tasks/[^/]+/cancel" path))
+                     (let [[_ id] (re-matches #"/api/tasks/([^/]+)/cancel" path)
+                           status "cancelled"]
                        (locking lock (transition! (domain/change-task-status @state id status) 200)))
                      (and knowledge-root (= method "GET") (str/starts-with? path "/knowledge/"))
                      (or (static/serve-static knowledge-root (subs path (count "/knowledge")))

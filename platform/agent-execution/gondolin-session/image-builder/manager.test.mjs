@@ -1,10 +1,32 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { DockerJobHostService } from "../dist/image-builder/manager.js";
+import { createBuilderServiceAccess, DockerJobHostService } from "../dist/image-builder/manager.js";
 
 const token = "a".repeat(64);
 const apiToken = "b".repeat(64);
+
+test("builder policy substitutes admin credential only for Gitea requests", async () => {
+  const adminToken = "builder-admin-private-token";
+  const service = createBuilderServiceAccess(
+    "http://127.0.0.1:3001", "http://127.0.0.1:4318", undefined, adminToken,
+  );
+  const placeholder = service.env.GITEA_ADMIN_TOKEN;
+  assert.ok(placeholder);
+  assert.notEqual(placeholder, adminToken);
+
+  const giteaRequest = await service.httpHooks.onRequest(new Request(
+    "http://gitea.local:3001/api/v1/user",
+    { headers: { Authorization: `token ${placeholder}` } },
+  ));
+  assert.equal(giteaRequest.url, "http://127.0.0.1:3001/api/v1/user");
+  assert.equal(giteaRequest.headers.get("authorization"), `token ${adminToken}`);
+
+  await assert.rejects(() => service.httpHooks.onRequest(new Request(
+    "https://example.com/",
+    { headers: { Authorization: `token ${placeholder}` } },
+  )));
+});
 
 test("Compose cache host hook forwards prepare and status requests to the Go API", async () => {
   const calls = [];

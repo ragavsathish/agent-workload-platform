@@ -11,6 +11,9 @@
       - { file: conversation.ttl, suffix: conversation }
       - { file: learning.ttl, suffix: learning }
       - { file: provenance.ttl, suffix: provenance }
+      - { file: personal-knowledge.ttl, suffix: personal-knowledge }
+      - { file: ../ontology/personal-knowledge.ttl, suffix: personal-knowledge-ontology }
+      - { file: ../ontology/concepts.ttl, suffix: personal-knowledge-concepts }
   tasks:
     - name: Validate the complete RDF fixture
       ansible.builtin.command:
@@ -23,6 +26,12 @@
           - "{{ voice_agent_root }}/apps/pi-agent/digital-twin/runtime/scripts/validate.py"
           - --shapes
           - "{{ voice_agent_root }}/apps/pi-agent/digital-twin/runtime/rdf/shapes/profile.shacl.ttl"
+          - --shapes
+          - "{{ voice_agent_root }}/apps/pi-agent/digital-twin/runtime/rdf/shapes/personal-knowledge.shacl.ttl"
+          - --vocabulary
+          - "{{ voice_agent_root }}/apps/pi-agent/digital-twin/runtime/rdf/ontology/personal-knowledge.ttl"
+          - --vocabulary
+          - "{{ voice_agent_root }}/apps/pi-agent/digital-twin/runtime/rdf/ontology/concepts.ttl"
           - "{{ digital_twin_fixture_dir }}"
       changed_when: false
 

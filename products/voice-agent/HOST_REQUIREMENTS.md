@@ -8,7 +8,7 @@
   telemetry, and model caches
 - Docker Desktop with Docker Compose
 - uv with Python 3.13 (and Python 3.12 for ACE-Step), Node.js/npm, Rust/Cargo,
-  Ollama, FFmpeg/FFprobe, curl, and Homebrew `libpq` and `fluent-bit`
+  Ollama, FFmpeg/FFprobe, curl, and `fluent-bit`
 - Pi, Wassette, the repository's built Gondolin agent extension, and any approved Wassette components
 - A Tailscale account shared with the browser device
 
@@ -18,8 +18,7 @@ Run `make host-preflight` for executable checks.
 ## Host configuration
 
 Create `deploy/.env` from the example. Generate distinct random values for
-`INFERENCE_BROKER_TOKEN`, `AGENT_GATEWAY_TOKEN`, `ORCHESTRATOR_APPROVAL_SECRET`, and
-`POSTGRES_PASSWORD`. `make up` generates and preserves a separate Grafana admin password unless
+`INFERENCE_BROKER_TOKEN` and `AGENT_GATEWAY_TOKEN`. `make up` generates and preserves a separate Grafana admin password unless
 `GRAFANA_ADMIN_PASSWORD` is set. Configure the exact allowed Ollama model, MLX models, logical workspaces, Pi
 binary, Pi model credentials, Gondolin extension, and Wassette permissions.
 
@@ -36,7 +35,7 @@ filesystem path. To authorize a new logical workspace, add its exact lowercase n
 `make publish-workspace WORKSPACE_ID=sdft-confsft-methods-paper REPOSITORY=/path/to/repository`.
 The publisher rejects names outside that explicit allowlist before writing artifacts, and task
 resolution rejects an allowlisted name until its immutable bundle pointer exists in loopback-only
-S3Mock. Refresh Pi's provider subscription/login before enabling approvals. A stale login is
+S3Mock. Refresh Pi's provider subscription/login before submitting durable work. A stale login is
 recorded as a durable failed task rather than falling back to an unapproved provider.
 
 The worker does not require Documents, Desktop, or Downloads access. Scratch workspaces live under
@@ -65,7 +64,7 @@ into an image. It installs eight LaunchAgents in `~/Library/LaunchAgents`:
 - image builder: trusted Gitea workflow supplies a build context from an isolated Gondolin VM to the host Docker API; image archives stay in a local host handoff folder;
 - Pi Voice Service: persistent owner conversation, Gondolin-isolated native tools, and deferred
   host-side Wassette MCP tools on `127.0.0.1:9446`;
-- Pi Durable owner: accepts approved tasks from the Gateway and runs their
+- Pi Durable owner: accepts native task submissions from the Gateway and runs their
   Pi sessions with host or Gondolin tools.
 
 The worker routes Pi's standard `read`, `write`, `edit`, and `bash` tools
@@ -80,8 +79,8 @@ start without host capabilities, and must be granted only the minimum filesystem
 environment access required for the selected component. The private component cache lives under
 `~/Library/Application Support/PipecatEdge/wassette-components`.
 
-The Compose gateway receives the database and approval secrets. The voice edge receives only the
-broker and gateway bearer tokens. Tailscale state and Postgres data use named Docker volumes.
+The Compose gateway receives its task-owner and artifact capabilities. The voice edge receives only the
+broker and gateway bearer tokens. Tailscale state uses a named Docker volume.
 S3Mock artifacts use another named volume inside Docker Desktop and never bind-mount a host folder.
 Rootless Gitea also uses named volumes and receives a committed repository mirror during `make up`;
 it does not bind-mount a host repository. The persistent voice VM contains AWS CLI and Git and may
@@ -99,7 +98,6 @@ public-read token; it never receives the Gitea publisher credential.
 | tailnet HTTPS 443 | Tailscale Serve | owner-only HTTPS; `/`, `/metrics/`, and `/git/` only |
 | host loopback `127.0.0.1:8080` | Traefik local-test ingress | browser tests without Tailscale; enabled only when `EDGE_ALLOW_LOCAL_INGRESS=true` |
 | shared Tailscale/Traefik loopback | Traefik and Pipecat voice edge | exact-owner forward-auth and browser UI behind Serve |
-| `127.0.0.1:54329` | Docker Postgres | proposal, song, and progress storage |
 | `127.0.0.1:9090` | Docker S3Mock | native worker immutable inputs and task result artifacts |
 | `127.0.0.1:3001` | Docker Gitea | committed source mirror; anonymous read, bootstrap publisher writes |
 | `127.0.0.1:3300` | Docker Grafana | authenticated local metrics and traces UI |
@@ -156,10 +154,11 @@ on the local Wi-Fi interface.
 ## Repeatability and updates
 
 Images use pinned upstream digests, Python dependencies use uv lockfiles, and the browser uses its
-npm lockfile. `make cycle-test` recreates the stack three times, re-runs schema convergence, checks
+npm lockfile. `make cycle-test` recreates the stack three times, checks
 persistent state, and leaves the verified stack running. Updates are intentional: review digest or
 lockfile changes, run `make check`, then `make up` and `make cycle-test`.
 
-`make down` preserves data. Removing the `pipecat-mlx-voice_postgres-data` or
-`pipecat-mlx-voice_tailscale-state` volume is destructive and is intentionally not wrapped by a
-Make target.
+`make down` preserves the remaining service data. Voice-agent task state is owned by the
+Pi Durable store; the retired PostgreSQL container and volume from the former task stack have been
+removed. Removing the `pipecat-mlx-voice_tailscale-state` volume is destructive and is
+intentionally not wrapped by a Make target.

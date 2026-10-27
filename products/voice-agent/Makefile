@@ -23,15 +23,15 @@ WASM_ACTIONS := setup build check install clean
 .PHONY: digital-twin-artifact-store digital-twin-artifact-add digital-twin-artifact-push
 .PHONY: digital-twin-artifact-pull digital-twin-artifact-status digital-twin-artifact-verify
 .PHONY: digital-twin-mlflow-up digital-twin-mlflow-verify
-.PHONY: db-init gitea-sync broker pi-durable-owner pull-model
-.PHONY: test-pi-durable-mcp
+.PHONY: gitea-sync broker pi-durable-owner pull-model
+.PHONY: test-pi-durable-mcp allure-pi-durable-products
 .PHONY: test-tailnet-owner playwright-voice-telemetry
 .PHONY: playwright-responsive-c2-mock
 .PHONY: playwright-flutter-responsive-c2-mock
 
 COMPOSE = docker compose --env-file deploy/.env -f deploy/compose.yml
 MLFLOW_COMPOSE = $(COMPOSE) -f deploy/compose.mlflow.yml
-ANSIBLE = ANSIBLE_CONFIG=automation/ansible.cfg uvx --from ansible-core --with requests --with 'psycopg[binary]' ansible-playbook
+ANSIBLE = ANSIBLE_CONFIG=automation/ansible.cfg uvx --from ansible-core --with requests ansible-playbook
 ANSIBLE_GALAXY = uvx --from ansible-core ansible-galaxy
 DVC_ROOT = apps/pi-agent/digital-twin
 DVC = AWS_ACCESS_KEY_ID="$${ARTIFACT_ACCESS_KEY:-local-test}" AWS_SECRET_ACCESS_KEY="$${ARTIFACT_SECRET_KEY:-local-test}" AWS_DEFAULT_REGION="$${AWS_DEFAULT_REGION:-us-east-1}" AWS_S3_ADDRESSING_STYLE=path uvx --from dvc==3.67.1 --with dvc-s3==3.3.0 dvc --cd $(DVC_ROOT)
@@ -94,8 +94,7 @@ up:
 
 start: deployment-prepare
 	$(COMPOSE) build
-	$(COMPOSE) up -d --wait --force-recreate postgres s3mock gitea
-	$(MAKE) db-init
+	$(COMPOSE) up -d --wait --force-recreate s3mock gitea
 	$(MAKE) install-host-services
 	$(COMPOSE) up -d --wait --force-recreate
 	$(MAKE) automation-verify
@@ -125,7 +124,7 @@ config-check:
 	@if rg -q '=replace-with-' deploy/host-env/*.env; then \
 		echo "Replace placeholder credentials in deploy/host-env before installation" >&2; exit 1; \
 	fi
-	@for name in broker-token agent-gateway-token digital-twin-reader-token digital-twin-writer-token postgres-password database-url approval-secret grafana-admin-password grafana-mcp-caller-token; do \
+	@for name in broker-token agent-gateway-token digital-twin-reader-token digital-twin-writer-token grafana-admin-password grafana-mcp-caller-token; do \
 		test -s "deploy/secrets/$$name" || { echo "Missing deploy/secrets/$$name; run make config-init" >&2; exit 1; }; \
 	done
 
@@ -241,7 +240,7 @@ blackbox-voice:
 
 blackbox-remote-session:
 	BLACKBOX_REQUIRE_REMOTE_ATTACH=true \
-	BLACKBOX_UTTERANCES_JSON='["Propose a task in the default workspace to inspect the README and architecture documentation and explain remote durable Pi session listening without changing files.","Approve that pending task now.","Attach to the task you just approved.","What are you doing, what have you learned so far, and are you still running?"]' \
+	BLACKBOX_UTTERANCES_JSON='["Submit a task in the default workspace to inspect the README and architecture documentation and explain remote durable Pi session listening without changing files.","Attach to the task you just submitted.","What are you doing, what have you learned so far, and are you still running?"]' \
 	$(MAKE) automation-blackbox-voice
 
 blackbox-e2e: blackbox-personal-knowledge
@@ -300,6 +299,9 @@ allure-durable:
 
 allure-durable-cli:
 	VOICE_RUN_DURABLE_CLI_E2E=true $(MAKE) allure-voice-agent
+
+allure-pi-durable-products:
+	PYTHONPATH=apps/gateway/src:packages/tasking/src:packages/telemetry/src uv run --project apps/gateway pytest -q packages/tasking/tests/infrastructure/test_pi_durable_product_workflows.py --alluredir="$${ALLURE_RESULTS_DIR:-artifacts/test-reports/pi-durable-products-$$(date -u +%Y%m%dT%H%M%SZ)}"
 
 allure-voice-agent:
 	node tests/allure/run-knowledge-review.mjs
@@ -369,10 +371,19 @@ digital-twin-query:
 digital-twin-validate:
 	uv run --with 'pyshacl>=0.30,<1' python apps/pi-agent/digital-twin/runtime/scripts/validate.py \
 		--shapes apps/pi-agent/digital-twin/runtime/rdf/shapes/profile.shacl.ttl \
+		--shapes apps/pi-agent/digital-twin/runtime/rdf/shapes/personal-knowledge.shacl.ttl \
+		--vocabulary apps/pi-agent/digital-twin/runtime/rdf/ontology/personal-knowledge.ttl \
+		--vocabulary apps/pi-agent/digital-twin/runtime/rdf/ontology/concepts.ttl \
 		$(or $(DATA),apps/pi-agent/digital-twin/runtime/rdf/private)
 
 digital-twin-test:
 	$(MAKE) automation-digital-twin-e2e
+
+digital-twin-migrate-preview:
+	uv run --project apps/gateway python tools/ops/digital_twin.py migrate
+
+digital-twin-migrate:
+	uv run --project apps/gateway python tools/ops/digital_twin.py migrate --apply --time-zone $(TIME_ZONE)
 
 digital-twin-identify-skills:
 	pnpm --dir apps/pi-agent digital-twin:skills
@@ -437,9 +448,6 @@ digital-twin-mlflow-up:
 
 digital-twin-mlflow-verify: digital-twin-mlflow-up
 	MLFLOW_TRACKING_URI=http://127.0.0.1:$${MLFLOW_PORT:-5001} MLFLOW_DISABLE_AGENT_HINT=1 uv run --with mlflow==3.17.1 python $(DVC_ROOT)/tools/verify-mlflow-registry.py
-
-db-init:
-	uv run --project apps/gateway --env-file deploy/.env python tools/ops/db_init.py
 
 gitea-sync:
 	uv run --project apps/gateway python tools/ops/gitea_sync.py

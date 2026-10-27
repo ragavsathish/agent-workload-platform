@@ -36,7 +36,7 @@
                                        :nodes [{:id "browser" :label "Browser"} {:id "pi" :label "Pi"}]
                                        :edges [{:from "browser" :to "pi"}]}})}]))
    :tasks [{:id "fixture-task" :instruction "Review the fixture deployment" :workspace "/workspace"
-            :plan_hash "fixture-plan" :status "pending" :created_at "2026-10-16T08:00:00Z"}]
+            :plan_hash "fixture-plan" :status "submitted" :created_at "2026-10-16T08:00:00Z"}]
    :historicalSessions
    {"fixture-history" {:title "Release review" :updatedAt "2026-10-15T18:30:00Z"
                         :entries [{:id "history-user" :timestamp (instant-ms "2026-10-15T18:29:00Z")

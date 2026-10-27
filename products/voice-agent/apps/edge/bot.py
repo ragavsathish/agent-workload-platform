@@ -505,18 +505,18 @@ async def owner_gateway_audio(request: Request, generation_id: str) -> bytes:
 
 
 async def owner_gateway_artifact(
-    request: Request, proposal_id: str, name: str
+    request: Request, task_id: str, name: str
 ) -> tuple[bytes, str, str]:
     """Proxy an owner-scoped task download without exposing the gateway bearer."""
     if name not in {"workspace", "patch"} or re.fullmatch(
-        r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", proposal_id
+        r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", task_id
     ) is None:
         raise HTTPException(status_code=404, detail="task artifact is unavailable")
     identity = validate_http_identity(request)
     headers = {"Authorization": f"Bearer {required_env('AGENT_GATEWAY_TOKEN')}"}
     url = (
         f"{required_env('AGENT_GATEWAY_BASE_URL').rstrip('/')}/tasks/"
-        f"{proposal_id}/artifacts/{name}"
+        f"{task_id}/artifacts/{name}"
     )
     with telemetry.observe("task.artifact.proxy"):
         inject(headers)
@@ -601,14 +601,14 @@ async def broker_task_narration(task_id: str, instruction: str, events: list[str
 
 
 async def summarize_owned_task_progress(
-    request: Request, proposal_id: str, after: int, through: int
+    request: Request, task_id: str, after: int, through: int
 ) -> str:
     """Read one owner-scoped progress page before invoking the narrator."""
     if after < 0 or through <= after:
         raise HTTPException(status_code=400, detail="invalid narration cursor")
-    task = await owner_gateway_request(request, "GET", f"/tasks/{proposal_id}")
+    task = await owner_gateway_request(request, "GET", f"/tasks/{task_id}")
     progress = await owner_gateway_request(
-        request, "GET", f"/tasks/{proposal_id}/progress", query={"after": after}
+        request, "GET", f"/tasks/{task_id}/progress", query={"after": after}
     )
     if not isinstance(task, dict) or not isinstance(progress, list):
         raise HTTPException(status_code=502, detail="invalid task progress")
@@ -635,7 +635,7 @@ async def summarize_owned_task_progress(
     instruction = task.get("instruction")
     if not isinstance(instruction, str):
         raise HTTPException(status_code=502, detail="invalid task instruction")
-    return await broker_task_narration(proposal_id, instruction, events)
+    return await broker_task_narration(task_id, instruction, events)
 
 
 async def run_bot(
@@ -712,27 +712,11 @@ async def run_bot(
                 raise RuntimeError("agent gateway returned an invalid task list")
             return payload
 
-    async def propose_agent_task(params: FunctionCallParams) -> None:
-        try:
-            result = await gateway_request(
-                "POST",
-                "/tasks",
-                json={
-                    "identity": identity,
-                    "instruction": str(params.arguments["instruction"]),
-                    "workspace": str(params.arguments["workspace"]),
-                },
-            )
-            await params.result_callback(result)
-        except Exception as exc:
-            logger.exception("Unable to propose agent task")
-            await params.result_callback({"error": str(exc)})
-
     async def get_agent_task(params: FunctionCallParams) -> None:
         try:
-            proposal_id = str(params.arguments["proposal_id"])
+            task_id = str(params.arguments["task_id"])
             result = await gateway_request(
-                "GET", f"/tasks/{proposal_id}", params={"identity": identity}
+                "GET", f"/tasks/{task_id}", params={"identity": identity}
             )
             await params.result_callback(result)
         except Exception as exc:
@@ -757,7 +741,7 @@ async def run_bot(
 
     async def submit_agent_task(params: FunctionCallParams) -> None:
         try:
-            proposal = await gateway_request(
+            result = await gateway_request(
                 "POST",
                 "/tasks",
                 json={
@@ -766,38 +750,17 @@ async def run_bot(
                     "workspace": str(params.arguments["workspace"]),
                 },
             )
-            proposal_id = proposal.get("id")
-            if not isinstance(proposal_id, str) or not proposal_id:
-                raise RuntimeError("agent gateway created a proposal without an ID")
-            result = await gateway_request(
-                "POST",
-                f"/tasks/{proposal_id}/approve",
-                json={"identity": identity},
-            )
             await params.result_callback(result)
         except Exception as exc:
             logger.exception("Unable to submit agent task")
             await params.result_callback({"error": str(exc)})
 
-    async def approve_agent_task(params: FunctionCallParams) -> None:
-        try:
-            proposal_id = str(params.arguments["proposal_id"])
-            result = await gateway_request(
-                "POST",
-                f"/tasks/{proposal_id}/approve",
-                json={"identity": identity},
-            )
-            await params.result_callback(result)
-        except Exception as exc:
-            logger.exception("Unable to approve agent task")
-            await params.result_callback({"error": str(exc)})
-
     async def cancel_agent_task(params: FunctionCallParams) -> None:
         try:
-            proposal_id = str(params.arguments["proposal_id"])
+            task_id = str(params.arguments["task_id"])
             result = await gateway_request(
                 "POST",
-                f"/tasks/{proposal_id}/cancel",
+                f"/tasks/{task_id}/cancel",
                 json={"identity": identity},
             )
             await params.result_callback(result)
@@ -805,32 +768,16 @@ async def run_bot(
             logger.exception("Unable to cancel agent task")
             await params.result_callback({"error": str(exc)})
 
-    proposal_id_property = {
+    task_id_property = {
         "type": "string",
-        "description": "The exact proposal ID returned by propose_agent_task.",
+        "description": "The exact task ID returned by submit_agent_task.",
     }
     gateway_tools: list[FunctionSchema | DirectFunction] = [
         FunctionSchema(
-            name="propose_agent_task",
-            description="Create a pending Pi task proposal. This does not start work.",
-            properties={
-                "instruction": {
-                    "type": "string",
-                    "description": "The complete and specific instruction for Pi.",
-                },
-                "workspace": {
-                    "type": "string",
-                    "description": "Allowlisted project name, or 'scratch' when no repository is selected. A missing named project never falls back automatically.",
-                },
-            },
-            required=["instruction", "workspace"],
-            handler=propose_agent_task,
-        ),
-        FunctionSchema(
             name="get_agent_task",
-            description="Read the status and bounded result of one owned Pi task proposal.",
-            properties={"proposal_id": proposal_id_property},
-            required=["proposal_id"],
+            description="Read the status and bounded result of one owned Pi Durable task.",
+            properties={"task_id": task_id_property},
+            required=["task_id"],
             handler=get_agent_task,
         ),
         FunctionSchema(
@@ -847,9 +794,7 @@ async def run_bot(
         ),
         FunctionSchema(
             name="submit_agent_task",
-            description=(
-                "Create and immediately approve durable project work for another Pi worker."
-            ),
+            description="Submit durable project work directly to Pi Durable for another Pi worker.",
             properties={
                 "instruction": {
                     "type": "string",
@@ -864,20 +809,10 @@ async def run_bot(
             handler=submit_agent_task,
         ),
         FunctionSchema(
-            name="approve_agent_task",
-            description=(
-                "Approve one pending proposal only after the user explicitly asks to approve "
-                "that task in a later turn."
-            ),
-            properties={"proposal_id": proposal_id_property},
-            required=["proposal_id"],
-            handler=approve_agent_task,
-        ),
-        FunctionSchema(
             name="cancel_agent_task",
-            description="Cancel one pending or running task owned by this tailnet identity.",
-            properties={"proposal_id": proposal_id_property},
-            required=["proposal_id"],
+            description="Cancel one running task owned by this tailnet identity.",
+            properties={"task_id": task_id_property},
+            required=["task_id"],
             handler=cancel_agent_task,
         ),
     ]
@@ -1340,22 +1275,22 @@ if __name__ == "__main__":
         )
         return JSONResponse(result, status_code=201, headers={"Cache-Control": "no-store"})
 
-    @app.post("/api/tasks/{proposal_id}/approve")
-    async def approve_browser_task(proposal_id: str, request: Request):
+    @app.get("/api/tasks/{task_id}")
+    async def get_browser_task(task_id: str, request: Request):
         return JSONResponse(
-            await owner_gateway_request(request, "POST", f"/tasks/{proposal_id}/approve"),
+            await owner_gateway_request(request, "GET", f"/tasks/{task_id}"),
             headers={"Cache-Control": "no-store"},
         )
 
-    @app.post("/api/tasks/{proposal_id}/cancel")
-    async def cancel_browser_task(proposal_id: str, request: Request):
+    @app.post("/api/tasks/{task_id}/cancel")
+    async def cancel_browser_task(task_id: str, request: Request):
         return JSONResponse(
-            await owner_gateway_request(request, "POST", f"/tasks/{proposal_id}/cancel"),
+            await owner_gateway_request(request, "POST", f"/tasks/{task_id}/cancel"),
             headers={"Cache-Control": "no-store"},
         )
 
-    @app.get("/api/tasks/{proposal_id}/progress")
-    async def browser_task_progress(proposal_id: str, request: Request):
+    @app.get("/api/tasks/{task_id}/progress")
+    async def browser_task_progress(task_id: str, request: Request):
         try:
             after = int(request.query_params.get("after", "0"))
         except ValueError as exc:
@@ -1366,14 +1301,14 @@ if __name__ == "__main__":
             await owner_gateway_request(
                 request,
                 "GET",
-                f"/tasks/{proposal_id}/progress",
+                f"/tasks/{task_id}/progress",
                 query={"after": after},
             ),
             headers={"Cache-Control": "no-store"},
         )
 
-    @app.post("/api/tasks/{proposal_id}/narration")
-    async def browser_task_narration(proposal_id: str, request: Request):
+    @app.post("/api/tasks/{task_id}/narration")
+    async def browser_task_narration(task_id: str, request: Request):
         try:
             body = await request.json()
         except ValueError as exc:
@@ -1383,14 +1318,14 @@ if __name__ == "__main__":
         if type(after) is not int or type(through) is not int:
             raise HTTPException(status_code=400, detail="invalid narration cursor")
         return JSONResponse(
-            {"spoken": await summarize_owned_task_progress(request, proposal_id, after, through)},
+            {"spoken": await summarize_owned_task_progress(request, task_id, after, through)},
             headers={"Cache-Control": "no-store"},
         )
 
-    @app.get("/api/tasks/{proposal_id}/artifacts/{name}")
-    async def browser_task_artifact(proposal_id: str, name: str, request: Request):
+    @app.get("/api/tasks/{task_id}/artifacts/{name}")
+    async def browser_task_artifact(task_id: str, name: str, request: Request):
         content, content_type, disposition = await owner_gateway_artifact(
-            request, proposal_id, name
+            request, task_id, name
         )
         return Response(
             content=content,
@@ -1402,9 +1337,9 @@ if __name__ == "__main__":
             },
         )
 
-    @app.get("/api/tasks/{proposal_id}/speech")
-    async def task_speech(proposal_id: str, request: Request):
-        task = await owner_gateway_request(request, "GET", f"/tasks/{proposal_id}")
+    @app.get("/api/tasks/{task_id}/speech")
+    async def task_speech(task_id: str, request: Request):
+        task = await owner_gateway_request(request, "GET", f"/tasks/{task_id}")
         spoken = task_spoken_text(task)
         return Response(
             content=await broker_speech(spoken),

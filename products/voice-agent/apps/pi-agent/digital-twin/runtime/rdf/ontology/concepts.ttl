@@ -1,0 +1,45 @@
+@prefix pk: <urn:voice-agent:personal-knowledge:ontology#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+<urn:voice-agent:personal-knowledge:taxonomy:journal-entry-kind> a skos:ConceptScheme ;
+    skos:prefLabel "Journal entry kinds"@en .
+<urn:voice-agent:personal-knowledge:taxonomy:assertion-kind> a skos:ConceptScheme ;
+    skos:prefLabel "Assertion kinds"@en .
+<urn:voice-agent:personal-knowledge:taxonomy:profile-field> a skos:ConceptScheme ;
+    skos:prefLabel "Profile fields"@en .
+<urn:voice-agent:personal-knowledge:taxonomy:review-state> a skos:ConceptScheme ;
+    skos:prefLabel "Review states"@en .
+<urn:voice-agent:personal-knowledge:taxonomy:review-action> a skos:ConceptScheme ;
+    skos:prefLabel "Review actions"@en .
+
+<urn:voice-agent:personal-knowledge:concept:journal-kind:thought> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:journal-entry-kind> ; skos:prefLabel "Thought"@en .
+<urn:voice-agent:personal-knowledge:concept:journal-kind:idea> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:journal-entry-kind> ; skos:prefLabel "Idea"@en .
+<urn:voice-agent:personal-knowledge:concept:journal-kind:question> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:journal-entry-kind> ; skos:prefLabel "Question"@en .
+<urn:voice-agent:personal-knowledge:concept:journal-kind:decision> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:journal-entry-kind> ; skos:prefLabel "Decision"@en .
+<urn:voice-agent:personal-knowledge:concept:journal-kind:goal> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:journal-entry-kind> ; skos:prefLabel "Goal"@en .
+<urn:voice-agent:personal-knowledge:concept:journal-kind:learning> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:journal-entry-kind> ; skos:prefLabel "Learning"@en .
+<urn:voice-agent:personal-knowledge:concept:journal-kind:unclassified> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:journal-entry-kind> ; skos:prefLabel "Unclassified"@en .
+
+<urn:voice-agent:personal-knowledge:concept:assertion-kind:conversation-topic> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:assertion-kind> ; skos:prefLabel "Conversation topic"@en .
+<urn:voice-agent:personal-knowledge:concept:assertion-kind:skill-evidence> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:assertion-kind> ; skos:prefLabel "Skill evidence"@en .
+<urn:voice-agent:personal-knowledge:concept:assertion-kind:profile-update> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:assertion-kind> ; skos:prefLabel "Profile update"@en .
+<urn:voice-agent:personal-knowledge:concept:assertion-kind:none> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:assertion-kind> ; skos:prefLabel "No assertion"@en .
+
+<urn:voice-agent:personal-knowledge:concept:profile-field:job-title> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:profile-field> ; skos:prefLabel "Job title"@en .
+<urn:voice-agent:personal-knowledge:concept:profile-field:home-location> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:profile-field> ; skos:prefLabel "Home location"@en .
+<urn:voice-agent:personal-knowledge:concept:profile-field:credential> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:profile-field> ; skos:prefLabel "Credential"@en .
+<urn:voice-agent:personal-knowledge:concept:profile-field:employment> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:profile-field> ; skos:prefLabel "Employment"@en .
+<urn:voice-agent:personal-knowledge:concept:profile-field:none> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:profile-field> ; skos:prefLabel "No profile field"@en .
+
+<urn:voice-agent:personal-knowledge:concept:review-state:pending> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:review-state> ; skos:prefLabel "Pending review"@en .
+<urn:voice-agent:personal-knowledge:concept:review-state:accepted> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:review-state> ; skos:prefLabel "Accepted"@en .
+<urn:voice-agent:personal-knowledge:concept:review-state:rejected> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:review-state> ; skos:prefLabel "Rejected"@en .
+<urn:voice-agent:personal-knowledge:concept:review-action:keep> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:review-action> ; skos:prefLabel "Keep"@en .
+<urn:voice-agent:personal-knowledge:concept:review-action:edit> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:review-action> ; skos:prefLabel "Edit"@en .
+<urn:voice-agent:personal-knowledge:concept:review-action:delete> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:review-action> ; skos:prefLabel "Delete"@en .
+<urn:voice-agent:personal-knowledge:concept:review-action:wrong-type> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:review-action> ; skos:prefLabel "Wrong type"@en .
+<urn:voice-agent:personal-knowledge:concept:review-action:accept> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:review-action> ; skos:prefLabel "Accept"@en .
+<urn:voice-agent:personal-knowledge:concept:review-action:reject> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:review-action> ; skos:prefLabel "Reject"@en .
+<urn:voice-agent:personal-knowledge:concept:review-action:review-prediction> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:review-action> ; skos:prefLabel "Review prediction"@en .
+<urn:voice-agent:personal-knowledge:concept:review-action:missed-entry> a skos:Concept ; skos:inScheme <urn:voice-agent:personal-knowledge:taxonomy:review-action> ; skos:prefLabel "Report missed entry"@en .

@@ -1,5 +1,5 @@
 flowchart LR
-    TASK[(External data store<br/><b>PostgreSQL</b><br/>agent task and durable checkpoints)]
+    TASK[External container<br/><b>Pi Durable Owner</b><br/>task admission and durable checkpoints]
     GITEA[External system<br/><b>Gitea Actions</b><br/>workflow dispatch and run state]
     HANDOFF[(Host filesystem<br/><b>Image Handoff</b><br/>versioned image tar files)]
 
@@ -15,7 +15,7 @@ flowchart LR
         ACTIONS -->|"successful run"| CACHE
     end
 
-    TASK -->|"claims task and checkpoints workflow run ID"| WORKER
+    TASK -->|"prepares image and checkpoints workflow run ID"| WORKER
     ACTIONS -->|"workflow dispatch, status, cancel"| GITEA
     HANDOFF -->|"versioned tar"| INSTALL
 
@@ -24,4 +24,5 @@ flowchart LR
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
     class PLAN,CACHE,ACTIONS,INSTALL component;
     class GITEA external;
-    class TASK,HANDOFF data;
+    class TASK external;
+    class HANDOFF data;

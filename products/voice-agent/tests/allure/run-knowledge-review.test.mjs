@@ -36,6 +36,14 @@ test('groups known behaviors and marks new test intent for review', () => {
     epic: 'Embedded apps', feature: 'Inspect a trace in Pi', story: '04 · Observability',
     capability: 'Trace inspection', behavior: 'Inspect a Playwright recording', validationLayer: 'observability',
   });
+  assert.deepEqual(inferIntent('Pi Durable product workflows', 'test_journal_and_classification_are_independent_native_tasks'), {
+    epic: 'Digital twin', feature: 'Process a completed owner turn', story: '03 · App and fixture integration (grey box)',
+    capability: 'Journal and classification', behavior: 'Submit both learning tasks independently to Pi Durable', validationLayer: 'integration',
+  });
+  assert.deepEqual(inferIntent('Pi Durable product workflows', 'test_song_lyrics_and_render_use_native_pi_durable_tasks'), {
+    epic: 'Media creation', feature: 'Create and review a song', story: '03 · App and fixture integration (grey box)',
+    capability: 'Song workflow', behavior: 'Create lyrics and request rendering as native Pi Durable tasks', validationLayer: 'integration',
+  });
   assert.equal(inferIntent('New suite', 'new behavior').needsReview, true);
   assert.equal(inferIntent('Playwright · knowledge-base', 'new knowledge behavior').needsReview, true);
 });
@@ -50,7 +58,7 @@ test('puts user journeys before their deployed, app, contract, and unit evidence
     ['Deployed MCP save round trip', 'deployed MCP correction reaches the gateway and Oxigraph, then removes its fixture', 'deployedIntegration'],
     ['Journal MCP contract', 'saves an exact-evidence correction through the gateway before marking it reviewed', 'integration'],
     ['Patrol web', 'Workspace and durable work', 'integration'],
-    ['Playwright · durable', 'approves real durable work and retrieves its workspace artifact', 'journey'],
+    ['Playwright · durable', 'submits work from the voice session and retrieves its workspace artifact', 'journey'],
     ['Gateway', 'test_journal_feedback_updates_private_review_state', 'contract'],
     ['Knowledge core', 'tests::assertion_review_requires_authorship_and_consistent_profile_field', 'unit'],
   ];
@@ -87,6 +95,11 @@ test('maps tests to existing C4 boundaries without claiming fixture-backed infra
     containers: ['Browser Voice Client', 'Voice Edge'],
     views: ['c2-container.mmd', 'c3-browser-client.mmd'],
   });
+  assert.deepEqual(inferC4Scope('Pi Durable product workflows', 'test_song_lyrics_and_render_use_native_pi_durable_tasks'), {
+    level: 'C2 fixture-backed integration',
+    containers: ['Agent Gateway', 'Pi Durable Owner'],
+    views: ['c2-container.mmd', 'c3-agent-gateway.mmd', 'c3-pi-task-worker.mmd', 'd2-delegated-task.mmd'],
+  });
   assert.deepEqual(inferC4Scope('Playwright · voice-telemetry',
     'completes a deployed voice session and retains its diagnostics'), {
     level: 'C1/C2 system journey',
@@ -109,10 +122,10 @@ test('maps tests to existing C4 boundaries without claiming fixture-backed infra
   assert.deepEqual(inferC4Scope('Patrol web', 'Workspace and durable work'), {
     level: 'C3 browser journey', containers: ['Browser Voice Client'], views: ['c3-browser-client.mmd'],
   });
-  assert.deepEqual(inferC4Scope('Playwright · durable', 'approves real durable work and retrieves its workspace artifact'), {
+  assert.deepEqual(inferC4Scope('Playwright · durable', 'submits work from the voice session and retrieves its workspace artifact'), {
     level: 'C1/C2 system journey',
     containers: ['Tailnet Ingress', 'Path Router', 'Browser Voice Client', 'Voice Edge', 'Agent Gateway',
-      'Proposal and Song Database', 'Pi Durable Owner', 'Pi Durable Owner Store', 'Task Tool Sandbox',
+      'Pi Durable Owner', 'Pi Durable Owner Store', 'Task Tool Sandbox',
       'Workspace and Result Store'],
     views: ['c1-system-context.mmd', 'c2-container.mmd', 'c3-pi-task-worker.mmd',
       'c3-task-tool-runtime.mmd', 'd2-delegated-task.mmd'],
@@ -177,7 +190,7 @@ test('audits C2 gaps and counts only passed evidence for each journey layer', ()
   ] }], model);
   assert.doesNotMatch(coverageAuditMarkdown(withDurable,
     { runId: 'test-run', commit: 'abc', counts: { passed: 2, skipped: 1 } }),
-  /Approve a real durable task/u);
+  /Submit a real durable task from the voice session/u);
 });
 
 test('keeps a mocked downstream C2 target separate from deployed evidence', () => {

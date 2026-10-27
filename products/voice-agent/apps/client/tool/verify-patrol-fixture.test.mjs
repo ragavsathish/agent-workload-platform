@@ -6,7 +6,6 @@ const paths = [
   '/api/pi-sessions/fixture-history/resume',
   '/api/pi-context/compact',
   '/api/pi-turn/abort',
-  '/api/tasks/fixture-task/approve',
   '/api/tasks',
   '/api/tasks/fixture-task-2/cancel',
   '/api/pi-sessions/new',
@@ -19,7 +18,7 @@ const evidence = {
   activeSessionId: 'fixture-live-2',
   events: paths.map((path) => ({ method: 'POST', path, status: 200 })),
   tasks: [
-    { id: 'fixture-task', status: 'approved' },
+    { id: 'fixture-task', status: 'submitted' },
     { id: 'fixture-task-2', status: 'cancelled', instruction: 'Publish the fixture report' },
   ],
 };
@@ -31,8 +30,8 @@ test('accepts a completed fixture journey', () => {
 test('rejects a missing browser action or failed mutation', () => {
   assert.throws(() => verifyPatrolFixture({
     ...evidence,
-    events: evidence.events.filter((event) => event.path !== '/api/tasks/fixture-task/approve'),
-  }, 'run-1'), /did not call.*approve/);
+    events: evidence.events.filter((event) => event.path !== '/api/tasks'),
+  }, 'run-1'), /did not call \/api\/tasks/);
   assert.throws(() => verifyPatrolFixture({
     ...evidence,
     events: [{ method: 'POST', path: '/api/tasks', status: 500 }, ...evidence.events],

@@ -34,12 +34,15 @@ export function inferC4Scope(suite, title) {
   if (suite === 'Playwright · diagnostics-c2-mock') return scope('C2 fixture-backed integration',
     ['Input Diagnostics', 'Voice Edge'], ['containers', 'diagnostics']);
   if (suite === 'Playwright · durable-c2-mock') return scope('C2 fixture-backed integration',
-    ['Browser Voice Client', 'Voice Edge', 'Agent Gateway', 'Proposal and Song Database',
-      'Pi Durable Owner', 'Workspace and Result Store'], ['containers', 'browser', 'owner', 'delegatedTask']);
+    ['Browser Voice Client', 'Voice Edge', 'Agent Gateway',
+      'Pi Durable Owner', 'Pi Durable Owner Store', 'Workspace and Result Store'],
+    ['containers', 'browser', 'owner', 'delegatedTask']);
   if (suite === 'Playwright · flutter-responsive-c2-mock') return scope('C2 fixture-backed browser integration',
     ['Browser Voice Client', 'Voice Edge'], ['containers', 'browser']);
   if (suite === 'Pi Durable owner C2 mock') return scope('C2 fixture-backed integration',
     ['Agent Gateway', 'Pi Durable Owner'], ['containers', 'owner', 'delegatedTask']);
+  if (suite === 'Pi Durable product workflows') return scope('C2 fixture-backed integration',
+    ['Agent Gateway', 'Pi Durable Owner'], ['containers', 'gateway', 'owner', 'delegatedTask']);
   if (suite === 'Playwright · pi-durable-mcp-integration') {
     if (/gondolin task vm/u.test(name)) return scope('C2 fixture-backed VM integration',
       ['Pi Durable Owner', 'Task Tool Sandbox'], ['containers', 'owner', 'taskTools', 'delegatedTask']);
@@ -57,7 +60,7 @@ export function inferC4Scope(suite, title) {
     ['Browser Voice Client'], ['browser']);
   if (suite === 'Playwright · durable') return scope('C1/C2 system journey',
     ['Tailnet Ingress', 'Path Router', 'Browser Voice Client', 'Voice Edge', 'Agent Gateway',
-      'Proposal and Song Database', 'Pi Durable Owner', 'Pi Durable Owner Store', 'Task Tool Sandbox',
+      'Pi Durable Owner', 'Pi Durable Owner Store', 'Task Tool Sandbox',
       'Workspace and Result Store'], ['context', 'containers', 'owner', 'taskTools', 'delegatedTask']);
   if (suite === 'Playwright · durable-cli') return scope('C1/C2 system journey',
     ['Tailnet Ingress', 'Path Router', 'Browser Voice Client', 'Voice Edge', 'Agent Gateway',

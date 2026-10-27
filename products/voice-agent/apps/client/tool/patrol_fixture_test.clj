@@ -77,25 +77,31 @@
         (server/stop-server! fixture)
         (http/stop! edge)))))
 
-(deftest fixture-evidence-records-browser-mutations-and-final-state
-  (let [fixture (server/start-server {:port 0 :nonce "fixture-test-nonce"})
+(deftest durable-c2-session-turn-invokes-task-tool-and-returns-native-task
+  (let [fixture (server/start-server {:port 0 :durable-mode true :turn-delay-ms 1})
         client (HttpClient/newHttpClient)
         base (str "http://127.0.0.1:" (:port fixture))
-        get-json (fn [path]
-                   (let [request (-> (HttpRequest/newBuilder (URI/create (str base path))) (.GET) (.build))
-                         response (.send client request (HttpResponse$BodyHandlers/ofString))]
-                     (is (= 200 (.statusCode response)))
-                     (json/parse-string (.body response) true)))]
+        send (fn [method path payload]
+               (let [builder (HttpRequest/newBuilder (URI/create (str base path)))
+                     _ (.header builder "Content-Type" "application/json")
+                     _ (if (= method "GET") (.GET builder)
+                           (.POST builder (HttpRequest$BodyPublishers/ofString
+                                           (json/generate-string payload))))
+                     request (.build builder)
+                     response (.send client request (HttpResponse$BodyHandlers/ofString))]
+                 [(.statusCode response) (json/parse-string (.body response) true)]))]
     (try
-      (let [request (-> (HttpRequest/newBuilder (URI/create (str base "/api/tasks/fixture-task/approve")))
-                        (.POST (HttpRequest$BodyPublishers/noBody)) (.build))
-            response (.send client request (HttpResponse$BodyHandlers/ofString))
-            evidence (get-json "/__fixture/evidence")]
-        (is (= 200 (.statusCode response)))
-        (is (= "fixture-test-nonce" (:nonce evidence)))
-        (is (= [{:method "POST" :path "/api/tasks/fixture-task/approve" :status 200}]
-               (:events evidence)))
-        (is (= "approved" (:status (first (:tasks evidence))))))
+      (is (= 200 (first (send "POST" "/__fixture/durable/scenario"
+                              {:scenario "direct-submit"}))))
+      (let [[status response] (send "POST" "/api/pi-message"
+                                    {:message "Submit a scratch task: create session-proof.txt containing exactly session-proof followed by a newline."})
+            [evidence-status evidence] (send "GET" "/__fixture/durable/evidence" {})]
+        (is (= 200 status))
+        (is (= 200 evidence-status))
+        (is (re-find #"Submitted directly to Pi Durable" (:spoken response)))
+        (is (= 1 (count (:tasks evidence))))
+        (is (= 201 (get-in evidence [:events 0 :status])))
+        (is (= "/api/tasks" (get-in evidence [:events 0 :path]))))
       (finally (server/stop-server! fixture)))))
 
 (deftest c2-mock-shares-journal-state-across-query-owner-route-and-gateway

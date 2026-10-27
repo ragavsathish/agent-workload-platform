@@ -18,7 +18,6 @@ export function verifyPatrolFixture(evidence, nonce) {
     '/api/pi-sessions/fixture-history/resume',
     '/api/pi-context/compact',
     '/api/pi-turn/abort',
-    '/api/tasks/fixture-task/approve',
     '/api/tasks',
     '/api/tasks/fixture-task-2/cancel',
     '/api/pi-sessions/new',
@@ -29,7 +28,7 @@ export function verifyPatrolFixture(evidence, nonce) {
     'the browser did not exercise all typed and MCP App turns');
 
   const tasks = new Map(evidence.tasks.map((task) => [task.id, task]));
-  assert.equal(tasks.get('fixture-task')?.status, 'approved');
+  assert.equal(tasks.get('fixture-task')?.status, 'submitted');
   assert.equal(tasks.get('fixture-task-2')?.status, 'cancelled');
   assert.equal(tasks.get('fixture-task-2')?.instruction, 'Publish the fixture report');
   return { mutationCount: events.length, taskCount: tasks.size, activeSessionId: evidence.activeSessionId };

@@ -5,7 +5,6 @@ sequenceDiagram
     participant Browser as Browser Client
     participant Edge as Voice Edge
     participant Gateway as Agent Gateway
-    participant DB as PostgreSQL
     participant Owner as Pi Durable Owner
     participant SQLite as Owner SQLite
     participant Effects as Workspace and Artifact Effects
@@ -14,19 +13,14 @@ sequenceDiagram
     participant Tools as Host or Gondolin Tools
     participant Model as Model Provider
 
-    alt Browser proposal
-        User->>Browser: Propose a scratch or repository task
-        Browser->>Edge: Send owner-scoped proposal
+    alt Voice session submission
+        User->>Browser: Request scratch or repository work
+        Browser->>Edge: Submit owner-scoped task
         Edge->>Gateway: Forward authenticated request
-        Gateway->>DB: Persist proposal and signed plan
-        Gateway-->>Browser: Return reviewable proposal
-        User->>Browser: Approve proposal
-        Browser->>Edge: Send approval
-        Edge->>Gateway: Forward approval
         Gateway->>Owner: Submit native agent-run task over private HTTP
         Owner->>SQLite: Persist task and request ID
         Owner-->>Gateway: Return stable public task ID
-        Gateway->>DB: Mark proposal approved
+        Gateway-->>Browser: Return task ID and current result state
     else Native CLI submission
         User->>CLI: Submit owner-scoped agent-run task
         CLI->>Owner: Submit directly over private Unix socket
@@ -58,6 +52,6 @@ sequenceDiagram
     opt Listen to agent
         Browser->>Edge: Poll bounded progress after cursor
         Edge->>Gateway: Read owner-scoped progress
-        Gateway->>DB: Read safe progress by native task ID
+        Gateway->>Owner: Read task checkpoint progress after cursor
         Gateway-->>Browser: Safe progress for narration
     end

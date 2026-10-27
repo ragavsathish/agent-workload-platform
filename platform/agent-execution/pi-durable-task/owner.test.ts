@@ -218,6 +218,46 @@ test("product task uses the native owner and preserves the public result", async
   }
 });
 
+test("daily journal payloads over 32 KB persist with Pi Durable progress across restart", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "pi-owner-progress-"));
+  const store = join(directory, "owner.sqlite");
+  const socket = join(directory, "owner.sock");
+  const packageDir = join(directory, "voice_worker");
+  await mkdir(packageDir);
+  await writeFile(join(packageDir, "__init__.py"), "");
+  await writeFile(join(packageDir, "native_task.py"),
+    "import json,sys,time\np=json.load(sys.stdin)\ntime.sleep(3)\njson.dump({'exit_code':0},sys.stdout)\n");
+  let child: ChildProcess | undefined;
+  try {
+    child = await startOwner(store, socket, 5, {
+      PI_DURABLE_TASK_PYTHON: "/usr/bin/python3", PYTHONPATH: directory,
+    });
+    const taskId = randomUUID();
+    const input = { kind: "digital-twin-daily-journal", requestId: taskId,
+      params: { identity: "owner@example.com", sources: [{ transcript: "x".repeat(40_000) }] } };
+    const accepted = await request(socket, "submit", { requestId: taskId, input });
+    assert.equal(accepted.success, true, accepted.error);
+    const product = await request(socket, "describe_product", { taskId });
+    assert.equal((product.data as { kind: string }).kind, "digital-twin-daily-journal");
+    await waitState(socket, taskId, "completed");
+    const feed = await request(socket, "progress", { taskId, after: 0, limit: 40 });
+    assert.equal(feed.success, true, feed.error);
+    const events = feed.data as Array<{ id: number; spoken: string; created_at: string }>;
+    assert.equal(events[0]?.id, 1);
+    assert.equal(events[0]?.spoken, "Starting digital twin daily journal.");
+    assert.ok(Number.isFinite(Date.parse(events[0]!.created_at)));
+    await stopOwner(child);
+    child = await startOwner(store, socket, 5, {
+      PI_DURABLE_TASK_PYTHON: "/usr/bin/python3", PYTHONPATH: directory,
+    });
+    const afterRestart = await request(socket, "progress", { taskId, after: 0, limit: 40 });
+    assert.deepEqual(afterRestart.data, events);
+  } finally {
+    if (child) await stopOwner(child, "SIGKILL");
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("a crashed task parks and the private retry calls native retryTask", async () => {
   const directory = await mkdtemp(join(tmpdir(), "pi-owner-retry-"));
   const store = join(directory, "owner.sqlite");

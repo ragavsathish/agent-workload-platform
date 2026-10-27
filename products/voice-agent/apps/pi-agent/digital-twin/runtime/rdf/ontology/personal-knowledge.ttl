@@ -1,0 +1,156 @@
+@prefix pk: <urn:voice-agent:personal-knowledge:ontology#> .
+@prefix oa: <http://www.w3.org/ns/oa#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix schema: <https://schema.org/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+<urn:voice-agent:personal-knowledge:ontology> a owl:Ontology ;
+    rdfs:label "Voice Agent personal knowledge application profile"@en ;
+    rdfs:comment "Small application-specific vocabulary layered on established RDF vocabularies."@en .
+
+pk:DailyJournal a owl:Class ;
+    rdfs:subClassOf schema:DigitalDocument, prov:Entity ;
+    rdfs:label "Daily journal"@en .
+
+pk:JournalEntry a owl:Class ;
+    rdfs:subClassOf schema:CreativeWork, prov:Entity ;
+    rdfs:label "Journal entry"@en .
+
+pk:ActivitySummary a owl:Class ;
+    rdfs:subClassOf pk:JournalEntry ;
+    rdfs:label "Activity summary"@en .
+
+pk:ReflectionExcerpt a owl:Class ;
+    rdfs:subClassOf pk:JournalEntry ;
+    rdfs:label "Reflection excerpt"@en .
+
+pk:ClassificationActivity a owl:Class ;
+    rdfs:subClassOf prov:Activity ;
+    rdfs:label "Classification activity"@en .
+
+pk:ClassificationDecision a owl:Class ;
+    rdfs:subClassOf prov:Entity ;
+    rdfs:label "Classification decision"@en .
+
+pk:ProbabilityAssignment a owl:Class ;
+    rdfs:subClassOf prov:Entity ;
+    rdfs:label "Probability assignment"@en .
+
+pk:CandidateAssertion a owl:Class ;
+    rdfs:subClassOf schema:Claim, prov:Entity ;
+    rdfs:label "Candidate assertion"@en .
+
+pk:SourceClaim a owl:Class ;
+    rdfs:subClassOf schema:Claim, prov:Entity ;
+    rdfs:label "Source claim"@en .
+
+pk:ProfileFact a owl:Class ;
+    rdfs:subClassOf schema:Claim, prov:Entity ;
+    rdfs:label "Profile fact"@en .
+
+pk:ReviewEvent a owl:Class ;
+    rdfs:subClassOf prov:Activity ;
+    rdfs:label "Review event"@en .
+
+pk:journalDate a owl:DatatypeProperty ;
+    rdfs:domain pk:DailyJournal ;
+    rdfs:range <http://www.w3.org/2001/XMLSchema#date> ;
+    rdfs:label "journal date"@en .
+
+pk:timeZone a owl:DatatypeProperty ;
+    rdfs:domain pk:DailyJournal ;
+    rdfs:range <http://www.w3.org/2001/XMLSchema#string> ;
+    rdfs:label "time zone"@en .
+
+pk:journalEntryKind a owl:ObjectProperty ;
+    rdfs:domain pk:JournalEntry ;
+    rdfs:range skos:Concept ;
+    rdfs:label "journal entry kind"@en .
+
+pk:assertionKind a owl:ObjectProperty ;
+    rdfs:range skos:Concept ;
+    rdfs:label "assertion kind"@en .
+
+pk:profileField a owl:ObjectProperty ;
+    rdfs:range skos:Concept ;
+    rdfs:label "profile field"@en .
+
+pk:predictedKind a owl:ObjectProperty ;
+    rdfs:subPropertyOf pk:assertionKind ;
+    rdfs:domain pk:ClassificationDecision ;
+    rdfs:range skos:Concept ;
+    rdfs:label "predicted assertion kind"@en .
+
+pk:confidence a owl:DatatypeProperty ;
+    rdfs:domain pk:ClassificationDecision ;
+    rdfs:range <http://www.w3.org/2001/XMLSchema#decimal> ;
+    rdfs:label "classifier confidence"@en .
+
+pk:profileFieldConfidence a owl:DatatypeProperty ;
+    rdfs:domain pk:ClassificationDecision ;
+    rdfs:range <http://www.w3.org/2001/XMLSchema#decimal> ;
+    rdfs:label "profile field confidence"@en .
+
+pk:probability a owl:DatatypeProperty ;
+    rdfs:domain pk:ClassificationDecision ;
+    rdfs:range <http://www.w3.org/2001/XMLSchema#decimal> ;
+    rdfs:label "class probability"@en .
+
+pk:probabilityFor a owl:ObjectProperty ;
+    rdfs:domain pk:ProbabilityAssignment ;
+    rdfs:range skos:Concept ;
+    rdfs:label "probability for class"@en .
+
+pk:probabilityValue a owl:DatatypeProperty ;
+    rdfs:domain pk:ProbabilityAssignment ;
+    rdfs:range <http://www.w3.org/2001/XMLSchema#decimal> ;
+    rdfs:label "probability value"@en .
+
+pk:hasProbability a owl:ObjectProperty ;
+    rdfs:domain pk:ClassificationDecision ;
+    rdfs:range pk:ProbabilityAssignment ;
+    rdfs:label "has class probability"@en .
+
+pk:modelName a owl:DatatypeProperty ;
+    rdfs:domain prov:Activity ;
+    rdfs:range <http://www.w3.org/2001/XMLSchema#string> ;
+    rdfs:label "model name"@en .
+
+pk:decisionThreshold a owl:DatatypeProperty ;
+    rdfs:domain pk:ClassificationDecision ;
+    rdfs:range <http://www.w3.org/2001/XMLSchema#decimal> ;
+    rdfs:label "decision threshold"@en .
+
+pk:decisionFor a owl:ObjectProperty ;
+    rdfs:domain pk:ClassificationDecision ;
+    rdfs:range schema:Message ;
+    rdfs:label "decision for source message"@en .
+
+pk:evidenceQuote a owl:DatatypeProperty ;
+    rdfs:domain pk:CandidateAssertion ;
+    rdfs:range <http://www.w3.org/2001/XMLSchema#string> ;
+    rdfs:label "evidence quote"@en .
+
+pk:reviewState a owl:ObjectProperty ;
+    rdfs:range skos:Concept ;
+    rdfs:label "review state"@en .
+
+pk:reviewedResource a owl:ObjectProperty ;
+    rdfs:domain pk:ReviewEvent ;
+    rdfs:range prov:Entity ;
+    rdfs:label "reviewed resource"@en .
+
+pk:action a owl:ObjectProperty ;
+    rdfs:domain pk:ReviewEvent ;
+    rdfs:range skos:Concept ;
+    rdfs:label "review action"@en .
+
+pk:piDurableTaskId a owl:DatatypeProperty ;
+    rdfs:domain prov:Activity ;
+    rdfs:range <http://www.w3.org/2001/XMLSchema#string> ;
+    rdfs:label "Pi Durable task identifier"@en .
+
+oa:classifying rdfs:label "classifying"@en .

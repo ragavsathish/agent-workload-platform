@@ -21,8 +21,8 @@ private interface, and C2/deployed verification.
 | C3 Inference Broker | Which narrow adapters expose native STT, TTS, Pi streaming, context, and fallback inference? | [c3-inference-broker.mmd](c3-inference-broker.mmd) | [PNG](c3-inference-broker.png) |
 | C3 Pi Voice Service | How are persistent Pi turns, tools, transcript, context, skills, and the voice VM coordinated? | [c3-pi-voice-service.mmd](c3-pi-voice-service.mmd) | [PNG](c3-pi-voice-service.png) |
 | C3 Voice Tool Sandbox | How are Pi's file and shell tools constrained by Gondolin mounts and egress policy? | [c3-voice-tool-sandbox.mmd](c3-voice-tool-sandbox.mmd) | [PNG](c3-voice-tool-sandbox.png) |
-| C3 Agent Gateway | Where are capability authentication, owner identity, approval, Pi Durable submission, and public-view policy enforced? | [c3-agent-gateway.mmd](c3-agent-gateway.mmd) | [PNG](c3-agent-gateway.png) |
-| C3 Pi Durable Owner | How does an approved task become a native task and bounded Pi result? | [c3-pi-task-worker.mmd](c3-pi-task-worker.mmd) | [PNG](c3-pi-task-worker.png) |
+| C3 Agent Gateway | Where are capability authentication, owner identity, Pi Durable submission, and public-view policy enforced? | [c3-agent-gateway.mmd](c3-agent-gateway.mmd) | [PNG](c3-agent-gateway.png) |
+| C3 Pi Durable Owner | How does a submitted task become a native task and bounded Pi result? | [c3-pi-task-worker.mmd](c3-pi-task-worker.mmd) | [PNG](c3-pi-task-worker.png) |
 | C3 Image Build Orchestration | How does a task reuse a local image handoff or dispatch a host-Docker build? | [c3-image-build-worker.mmd](c3-image-build-worker.mmd) | [PNG](c3-image-build-worker.png) |
 | C3 Shared Image Builder | How does a warm Gondolin runner VM request host Docker jobs without receiving its socket? | [c3-disposable-image-builder.mmd](c3-disposable-image-builder.mmd) | [PNG](c3-disposable-image-builder.png) |
 | C3 Pi Durable task tools | How does the owner select host or Gondolin tool execution and register MCP tools for a task conversation? | [c3-task-tool-runtime.mmd](c3-task-tool-runtime.mmd) | [PNG](c3-task-tool-runtime.png) |
@@ -45,7 +45,7 @@ mock case represents a boundary without running the downstream container.
 
 Each C3 view zooms into exactly one first-party C2 container. Components belonging to another
 container stay outside that boundary even when the same repository owns them. Off-the-shelf
-containers and data stores—Tailscale, Traefik, PostgreSQL, S3Mock, Gitea, Pi Durable, and OTel
+containers and data stores—Tailscale, Traefik, S3Mock, Gitea, Pi Durable, and OTel
 LGTM—remain external dependencies at C3 because this repository configures rather than implements
 their internals. The C3 audience is maintainers and security reviewers deciding where behavior,
 policy, or telemetry changes belong.
@@ -116,19 +116,19 @@ Journal ingestion and owner review use separate authenticated Gateway routes. Th
 bounded Oxigraph updates for entries, feedback, and assertion decisions; the personal-knowledge
 Wassette component retains read-only access.
 Delegated work is separate. The **Agent Gateway** owns identity and task-lifecycle policy.
-PostgreSQL stores public proposals, songs, and safe progress. The **Pi Durable Owner**
-receives approved tasks over a private authenticated HTTP endpoint and is the sole writer
-to the native task SQLite store. A narrow Python effect helper materializes a selected
+The **Pi Durable Owner** receives task submissions over a private authenticated HTTP endpoint
+and stores task state, progress, and song lifecycle metadata in its one-writer native store.
+A narrow Python effect helper materializes a selected
 S3 bundle or creates task-scoped scratch space and later captures artifacts. The owner
 runs Pi Durable conversations directly in both modes. `WORKER_PI_EXECUTION_MODE=gondolin`
 runs their file and shell tools in an isolated task VM; `WORKER_PI_EXECUTION_MODE=host`
 runs those tools on the Mac. The switch changes tool execution while the
-public approval, identity, task, and artifact APIs keep their existing shape.
+identity, task, and artifact APIs preserve their public response shape.
 The local Pi Durable CLI can also submit an owner-tagged `agent-run` task directly over the
 owner's private Unix socket. The owner stores its display metadata with the native task;
 the Gateway projects only tasks matching the authenticated identity into the Flutter board.
-The same bounded progress rows, narration route, result, and artifact lookup work by native
-task ID. CLI submission does not create a browser proposal or use its approval step.
+The same bounded progress events, narration route, result, and artifact lookup work by native
+task ID. Voice and CLI submissions both create native Pi Durable tasks directly.
 Sandboxed scratch tasks use a worker-controlled default image and
 publish a bounded workspace ZIP rather than a Git patch. Missing named repositories fail explicitly;
 they never silently become scratch tasks. Optional external integrations are exposed through
@@ -143,9 +143,9 @@ The worker supplies the installed Git skills bundle to both modes. Gondolin rece
 as a read-only mount at `/skills`; host Pi Durable
 receives its location in the conversation's native agent instructions and can read the files
 through its host execution environment.
-For optional task narration, the worker projects safe tool events and explicitly marked public
-`Progress:` messages from the Pi task session into a bounded progress feed. It stores those phrases
-in PostgreSQL; the gateway returns them only for the owning identity. The browser polls this bounded
+For optional task narration, the owner projects safe tool events and explicitly marked public
+`Progress:` messages from the Pi task session into a bounded progress feed in its native checkpoint.
+The gateway returns them only for the owning identity. The browser polls this bounded
 feed only after the user presses
 Listen to agent. Polling continues while audio plays; the browser queues new events in batches of
 at most 40. For each batch, the edge re-reads the owner's progress from the gateway and asks a
@@ -191,8 +191,7 @@ inspect, abort, and retry native tasks through the owner's private Unix socket.
 | Pi Context Usage and Compaction | `apps/client/lib/views/voice_view.dart`; `apps/edge/bot.py`; broker HTTP adapter; `apps/pi-agent/voice-agent-service.ts` |
 | Voice Tool Sandbox and Runtime Data | `apps/pi-agent/voice-agent/voice-gondolin.ts`; `platform/agent-execution/gondolin-session/session.ts`; `automation/roles/host_services`; `deploy/launchd/com.sathish.pipecat-pi-voice.plist` |
 | Agent Gateway | `apps/gateway/src/voice_gateway/main.py`; `apps/gateway/Dockerfile` |
-| Agent Gateway components | `apps/gateway/src/voice_gateway/main.py`; `packages/tasking/src/voice_agent/tasking/application/service.py`; `domain/approval.py`; `infrastructure/artifacts.py` |
-| Proposal and Song Database | `packages/tasking/migrations/`; `packages/tasking/src/voice_agent/tasking/application/service.py`; Compose Postgres service |
+| Agent Gateway components | `apps/gateway/src/voice_gateway/main.py`; `packages/tasking/src/voice_agent/tasking/application/service.py`; `infrastructure/artifacts.py` |
 | Workspace and Result Store | `packages/tasking/src/voice_agent/tasking/infrastructure/artifacts.py`; Compose S3Mock service |
 | Task Executor | `apps/worker/src/voice_worker/native_task.py`; launched by Pi Durable Owner |
 | Pi Durable Owner | `platform/agent-execution/pi-durable-task/owner.ts`; `owner-server.ts`; owner LaunchAgent; private SQLite, HTTP, and Unix socket |
@@ -207,7 +206,7 @@ inspect, abort, and retry native tasks through the owner's private Unix socket.
 ## Security perspective
 
 Browser-reachable application code runs in Docker Desktop. The edge and Tailscale container share one
-network namespace, while the gateway, Postgres, S3Mock, and OTel LGTM use explicit Compose networks.
+network namespace, while the gateway, S3Mock, and OTel LGTM use explicit Compose networks.
 Compose Fluent Bit reads the Docker Desktop VM's procfs and sysfs read-only and exports aggregate
 system metrics to OTel LGTM on a private monitoring network. Native Fluent Bit reports the physical
 Mac, while a loopback-only Node exporter derives per-Gondolin-runner CPU and RSS from registered QEMU

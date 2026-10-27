@@ -56,6 +56,24 @@
                                         :body (json/generate-string {:id "x" :command "inspect"})})
                       [:response :status]))))
 
+(deftest product-records-support-song-and-learning-workflows
+  (let [song-input {:kind "song-lyrics" :requestId "song-1"
+                    :params {:identity "owner@example.com" :generation_id "generation-1"}}
+        created (call (owner/initial-state) "submit" {:requestId "song-1" :input song-input})
+        described (call (:state created) "describe_product" {:taskId "song-1"})
+        cancelled (call (:state created) "cancel_product"
+                        {:taskId "song-1" :identity "owner@example.com"})
+        journal-input {:kind "digital-twin-journal" :requestId "journal-1"
+                       :params {:mode "journal" :sessionId "session-1"}}
+        journal (call (:state created) "submit" {:requestId "journal-1" :input journal-input})
+        journal-record (call (:state journal) "describe_product" {:taskId "journal-1"})]
+    (is (= "song-lyrics" (get-in (json/parse-string (get-in described [:response :body]) true)
+                                  [:data :kind])))
+    (is (= "2026-10-27T12:01:00Z" (get-in cancelled [:state :tasks "song-1" :cancelled_at])))
+    (is (= "digital-twin-journal" (get-in (json/parse-string
+                                           (get-in journal-record [:response :body]) true)
+                                          [:data :kind])))))
+
 (when (= *file* (System/getProperty "babashka.file"))
   (let [result (run-tests 'container-mock.pi-durable-owner-test)]
     (when (pos? (+ (:fail result) (:error result))) (System/exit 1))))

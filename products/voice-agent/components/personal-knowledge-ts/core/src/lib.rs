@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 pub const JOURNAL_QUERY: &str = include_str!("../journal.rq");
+pub const KNOWLEDGE_GRAPH_QUERY: &str = include_str!("../knowledge-graph.rq");
 const MAX_RESPONSE_BYTES: usize = 2_000_000;
 const MAX_BINDINGS: usize = 8_000;
 const ENTRY_KINDS: [&str; 6] = [
@@ -14,6 +15,7 @@ pub struct JournalEntry {
     pub id: String,
     pub text: String,
     pub kind: String,
+    pub record_kind: String,
     pub created_at: String,
     pub source_id: String,
     pub source_label: String,
@@ -63,7 +65,12 @@ pub fn decode_journal(payload: &str) -> Result<Vec<JournalEntry>, String> {
             continue;
         };
         let kind = kind.to_lowercase();
-        if !ENTRY_KINDS.contains(&kind.as_str()) || created_at.len() < 10 {
+        let record_kind = binding(&row, "recordKind")
+            .unwrap_or("journal_note")
+            .to_string();
+        if (!ENTRY_KINDS.contains(&kind.as_str()) && kind != "unclassified")
+            || created_at.len() < 10
+        {
             continue;
         }
 
@@ -72,6 +79,7 @@ pub fn decode_journal(payload: &str) -> Result<Vec<JournalEntry>, String> {
                 id: id.to_string(),
                 text: text.to_string(),
                 kind,
+                record_kind,
                 created_at: created_at.to_string(),
                 source_id: source_id.to_string(),
                 source_label: binding(&row, "sourceLabel")
@@ -198,7 +206,10 @@ pub fn encode_assertion_review(payload: &str) -> Result<String, String> {
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 mod browser_abi {
-    use super::{decode_journal, encode_assertion_review, encode_journal_feedback, JOURNAL_QUERY};
+    use super::{
+        decode_journal, encode_assertion_review, encode_journal_feedback, JOURNAL_QUERY,
+        KNOWLEDGE_GRAPH_QUERY,
+    };
     use serde_json::json;
     use std::slice;
 
@@ -210,6 +221,16 @@ mod browser_abi {
     #[no_mangle]
     pub extern "C" fn journal_query_len() -> u32 {
         JOURNAL_QUERY.len() as u32
+    }
+
+    #[no_mangle]
+    pub extern "C" fn knowledge_graph_query_ptr() -> u32 {
+        KNOWLEDGE_GRAPH_QUERY.as_ptr() as u32
+    }
+
+    #[no_mangle]
+    pub extern "C" fn knowledge_graph_query_len() -> u32 {
+        KNOWLEDGE_GRAPH_QUERY.len() as u32
     }
 
     #[no_mangle]
@@ -283,7 +304,10 @@ mod browser_abi {
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_journal, encode_assertion_review, encode_journal_feedback};
+    use super::{
+        decode_journal, encode_assertion_review, encode_journal_feedback, JOURNAL_QUERY,
+        KNOWLEDGE_GRAPH_QUERY,
+    };
 
     #[test]
     fn groups_topic_rows_into_one_journal_entry() {
@@ -296,7 +320,43 @@ mod tests {
         let entries = decode_journal(payload).expect("valid Oxigraph results");
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].kind, "idea");
+        assert_eq!(entries[0].record_kind, "journal_note");
         assert_eq!(entries[0].topics, ["Graph", "Journal"]);
+    }
+
+    #[test]
+    fn decodes_daily_journal_records_without_reclassifying_them() {
+        let payload = r##"{"results":{"bindings":[
+          {"id":{"value":"codex-daily-journal:2026-10-19"},"kind":{"value":"unclassified"},"recordKind":{"value":"codex_daily_journal"},"text":{"value":"# Daily journal — 2026-10-19"},"createdAt":{"value":"2026-10-19"},"sourceId":{"value":"e02fca15"},"sourceLabel":{"value":"Pi Durable task"}}
+        ]}}"##;
+
+        let entries = decode_journal(payload).expect("valid daily journal response");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].record_kind, "codex_daily_journal");
+        assert_eq!(entries[0].kind, "unclassified");
+        assert_eq!(entries[0].id, "codex-daily-journal:2026-10-19");
+    }
+
+    #[test]
+    fn fixed_query_includes_daily_journal_pages_as_a_separate_record_kind() {
+        assert!(JOURNAL_QUERY.contains("legacy:recordKind \"codex_daily_journal\""));
+        assert!(JOURNAL_QUERY.contains("?entry a pk:DailyJournal"));
+        assert!(JOURNAL_QUERY.contains("CONCAT(\"daily:\", STR(?journalDate)) AS ?id"));
+        assert!(JOURNAL_QUERY.contains("pk:piDurableTaskId ?taskId"));
+        assert!(JOURNAL_QUERY.contains("FILTER(?kind IN (\"thought\", \"idea\", \"question\", \"decision\", \"goal\", \"learning\"))"));
+        assert!(JOURNAL_QUERY.contains("BIND(\"unclassified\" AS ?kind)"));
+        assert!(JOURNAL_QUERY.contains("BIND(\"codex_daily_journal\" AS ?recordKind)"));
+        assert!(JOURNAL_QUERY.matches("?dailyPage schema:hasPart ?entry").count() >= 2);
+    }
+
+    #[test]
+    fn fixed_graph_query_reads_rdf_provenance_and_unreviewed_classifier_nodes() {
+        assert!(KNOWLEDGE_GRAPH_QUERY.contains("schema:hasPart ?to"));
+        assert!(KNOWLEDGE_GRAPH_QUERY.contains("prov:wasDerivedFrom ?to"));
+        assert!(
+            KNOWLEDGE_GRAPH_QUERY.contains("urn:pk:digital-twin:graph:assertion-classification")
+        );
+        assert!(KNOWLEDGE_GRAPH_QUERY.contains("systemone_assertion_classification"));
     }
 
     #[test]

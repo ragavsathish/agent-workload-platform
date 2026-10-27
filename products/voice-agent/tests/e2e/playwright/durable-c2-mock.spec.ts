@@ -9,11 +9,11 @@ test('durable task board stays usable across mobile, tablet, and desktop', async
   expect((await page.request.post('/__fixture/durable/scenario', {
     data: { scenario: 'scratch-success' },
   })).ok()).toBeTruthy();
-  const proposed = await page.request.post('/api/tasks', {
+  const submitted = await page.request.post('/api/tasks', {
     data: { workspace: 'scratch', instruction: 'Review this responsive task board' },
   });
-  expect(proposed.status()).toBe(201);
-  const task = await proposed.json();
+  expect(submitted.status()).toBe(201);
+  const task = await submitted.json();
   for (const viewport of responsiveViewports) {
     await allure.step(`Given the task board opens at ${viewport.name} resolution`, async () => {
       await page.setViewportSize(viewport);
@@ -30,7 +30,84 @@ test('durable task board stays usable across mobile, tablet, and desktop', async
   });
 });
 
-test('scratch task completes through the Flutter board and returns its workspace', async ({
+test('voice session submits directly to Pi Durable and I follow the task in Flutter', async ({
+  page, browserEvidence,
+}, testInfo) => {
+  const marker = `session-${randomUUID().slice(0, 8)}`;
+  const filename = `${marker}.txt`;
+  const instruction = `create ${filename} containing exactly ${marker} followed by a newline.`;
+  const proof: Record<string, unknown> = { marker, filename, instruction };
+
+  await allure.epic('Durable work');
+  await allure.feature('Task execution');
+  await allure.story('Submit from a voice session and follow the same native task in Flutter');
+
+  await allure.step('Given I am in my voice session and the Pi Durable owner is available', async () => {
+    const configured = await page.request.post('/__fixture/durable/scenario', {
+      data: { scenario: 'direct-submit' },
+    });
+    expect(configured.ok()).toBeTruthy();
+    await page.goto('/?view=transcript', { waitUntil: 'networkidle' });
+    await enableFlutterSemantics(page);
+  });
+
+  const task = await allure.step('When I ask Pi in this session to submit a scratch task', async () => {
+    await page.getByRole('textbox', { name: 'Message Pi…' })
+      .fill(`Submit a scratch task: ${instruction}`);
+    const responsePromise = page.waitForResponse((response) =>
+      response.url().endsWith('/api/pi-message') && response.request().method() === 'POST');
+    await page.getByRole('button', { name: 'Send message' }).click();
+    const response = await responsePromise;
+    expect(response.ok()).toBeTruthy();
+    const sessionResponse = await response.json();
+    expect(sessionResponse.spoken).toContain('Submitted directly to Pi Durable');
+
+    const evidence = await (await page.request.get('/__fixture/durable/evidence')).json();
+    expect(evidence.events).toContainEqual(expect.objectContaining({
+      method: 'POST', path: '/api/tasks', status: 201,
+    }));
+    const submitted = evidence.tasks[0];
+    expect(submitted.status).toBe('submitted');
+    expect(submitted.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(submitted.task_id).toBe(submitted.id);
+    proof.taskId = submitted.task_id;
+    proof.sessionResponse = sessionResponse;
+    return submitted;
+  });
+
+  await allure.step('Then the Flutter task board follows that same submitted task', async () => {
+    await page.getByRole('button', { name: /^Show tasks/ }).click();
+    const card = page.locator(`[flt-semantics-identifier="task-${task.id}"]`);
+    await expect(card).toBeVisible();
+    await expect(card).toHaveAccessibleName(new RegExp(marker));
+    await expect(card.getByRole('button', { name: 'Approve', exact: true })).toHaveCount(0);
+    const listed = await page.request.get('/api/tasks?limit=100');
+    expect(listed.ok()).toBeTruthy();
+    expect((await listed.json()).map((item: { id: string }) => item.id)).toContain(task.id);
+  });
+
+  await allure.step('Then the task result and its artifact are available through the web UI', async () => {
+    const latest = await page.request.get(`/api/tasks/${task.id}`);
+    expect(latest.ok()).toBeTruthy();
+    const result = await latest.json();
+    expect(result.result.state).toBe('completed');
+    const artifact = await page.request.get(`/api/tasks/${task.id}/artifacts/workspace`);
+    expect(artifact.ok()).toBeTruthy();
+    expect(zipEntry(await artifact.body(), filename).toString('utf8')).toBe(`${marker}\n`);
+    proof.result = result.result;
+    proof.artifactBytes = (await artifact.body()).length;
+    await testInfo.attach('voice-session-pi-durable-journey', {
+      body: Buffer.from(`${JSON.stringify(proof, null, 2)}\n`),
+      contentType: 'application/json',
+    });
+  });
+
+  await allure.step('And the browser reports no unexpected errors', async () => {
+    expectCleanFlutterBrowser(page, browserEvidence, 4);
+  });
+});
+
+test('directly submitted scratch task completes through the Flutter board and returns its workspace', async ({
   page, browserEvidence,
 }, testInfo) => {
   const marker = `c2-${randomUUID().slice(0, 8)}`;
@@ -45,7 +122,7 @@ test('scratch task completes through the Flutter board and returns its workspace
     await enableFlutterSemantics(page);
   });
 
-  const proposal = await allure.step('When I propose a scratch task through the owner route', async () => {
+  const task = await allure.step('When I submit a scratch task directly to the owner route', async () => {
     const response = await page.request.post('/api/tasks', {
       data: { workspace: 'scratch',
         instruction: `In this scratch workspace, create ${filename} containing exactly ${marker} followed by a newline.` },
@@ -53,36 +130,37 @@ test('scratch task completes through the Flutter board and returns its workspace
     expect(response.status()).toBe(201);
     const task = await response.json();
     expect(task.id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(task.status).toBe('pending');
-    proof.proposalId = task.id;
+    expect(task.status).toBe('submitted');
+    expect(task.task_id).toBe(task.id);
+    proof.taskId = task.id;
     return task;
   });
 
-  await allure.step('And I approve the exact proposal in the Flutter task board', async () => {
+  await allure.step('And I follow the same task in the Flutter task board', async () => {
     await page.getByRole('button', { name: /^Show tasks/ }).click();
-    const card = page.locator(`[flt-semantics-identifier="task-${proposal.id}"]`);
+    const card = page.locator(`[flt-semantics-identifier="task-${task.id}"]`);
     await expect(card).toBeVisible();
-    await card.getByRole('button', { name: 'Approve', exact: true }).click();
+    await expect(card.getByRole('button', { name: 'Approve', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: new RegExp(`${marker}.*COMPLETED`) }))
       .toBeVisible();
   });
 
   await allure.step('Then the completed task exposes a verifiable ZIP artifact', async () => {
-    const response = await page.request.get(`/api/tasks/${proposal.id}/artifacts/workspace`);
+    const response = await page.request.get(`/api/tasks/${task.id}/artifacts/workspace`);
     expect(response.ok()).toBeTruthy();
     expect(response.headers()['content-type']).toContain('application/zip');
     const archive = await response.body();
     expect(zipEntry(archive, filename).toString('utf8')).toBe(`${marker}\n`);
     const evidence = await (await page.request.get('/__fixture/durable/evidence')).json();
-    const task = evidence.tasks.find((item: { id: string }) => item.id === proposal.id);
-    expect(task.result.state).toBe('completed');
-    expect(task.result.result.artifacts).toContain('workspace');
+    const saved = evidence.tasks.find((item: { id: string }) => item.id === task.id);
+    expect(saved.result.state).toBe('completed');
+    expect(saved.result.result.artifacts).toContain('workspace');
     expect(evidence.events).toEqual(expect.arrayContaining([
-      expect.objectContaining({ path: `/api/tasks/${proposal.id}/approve`, status: 200 }),
-      expect.objectContaining({ path: `/api/tasks/${proposal.id}/artifacts/workspace`, status: 200 }),
+      expect.objectContaining({ path: '/api/tasks', method: 'POST', status: 201 }),
+      expect.objectContaining({ path: `/api/tasks/${task.id}/artifacts/workspace`, status: 200 }),
     ]));
     await testInfo.attach('c2-durable-evidence', {
-      body: Buffer.from(`${JSON.stringify({ ...proof, task, events: evidence.events,
+      body: Buffer.from(`${JSON.stringify({ ...proof, task: saved, events: evidence.events,
         artifactBytes: archive.length }, null, 2)}\n`), contentType: 'application/json',
     });
   });
@@ -93,34 +171,32 @@ test('scratch task completes through the Flutter board and returns its workspace
 });
 
 for (const [scenario, expected] of [
-  ['worker-failed', 200], ['repository-unavailable', 503], ['approval-conflict', 409],
-  ['owner-unavailable', 503],
+  ['worker-failed', 201], ['repository-unavailable', 503], ['owner-unavailable', 503],
 ] as const) {
   test(`${scenario} is visible at the task contract`, async ({ page }, testInfo) => {
     await allure.step(`Given the ${scenario} C2 scenario is selected`, async () => {
       expect((await page.request.post('/__fixture/durable/scenario', { data: { scenario } })).ok())
         .toBeTruthy();
     });
-    const task = await allure.step('When a task is proposed and approved', async () => {
-      const proposed = await page.request.post('/api/tasks', {
+    const response = await allure.step('When the session submits directly to the task contract', async () => {
+      const submitted = await page.request.post('/api/tasks', {
         data: { instruction: 'Review the workspace',
           workspace: scenario === 'repository-unavailable' ? 'repository' : 'scratch' },
       });
-      expect(proposed.status()).toBe(201);
-      const task = await proposed.json();
-      const approved = await page.request.post(`/api/tasks/${task.id}/approve`);
-      expect(approved.status()).toBe(expected);
-      return task;
+      expect(submitted.status()).toBe(expected);
+      return submitted;
     });
-    await allure.step('Then the task reports the expected failure or refuses approval', async () => {
+    await allure.step('Then the task contract reports the direct submission outcome', async () => {
+      if (expected === 503) {
+        expect((await response.json()).detail).toMatch(/unavailable/u);
+        return;
+      }
+      const task = await response.json();
       const tasks = await (await page.request.get('/api/tasks')).json();
       const latest = tasks.find((item: { id: string }) => item.id === task.id);
-      if (scenario === 'worker-failed') {
-        expect(latest.result.state).toBe('failed');
-        expect(latest.result.failure.type).toBe('WorkerFailed');
-      } else {
-        expect(latest.status).toBe('pending');
-      }
+      expect(latest.status).toBe('submitted');
+      expect(latest.result.state).toBe('failed');
+      expect(latest.result.failure.type).toBe('WorkerFailed');
       await testInfo.attach('c2-durable-failure', {
         body: Buffer.from(`${JSON.stringify({ scenario, task: latest }, null, 2)}\n`),
         contentType: 'application/json',
@@ -137,13 +213,11 @@ test('completed work with a missing artifact returns an explicit lookup failure'
       data: { scenario: 'artifact-missing' },
     })).status()).toBe(200);
   });
-  const task = await allure.step('When I propose and approve a scratch task', async () => {
-    const proposed = await page.request.post('/api/tasks', { data: { workspace: 'scratch',
+  const task = await allure.step('When I submit a scratch task directly', async () => {
+    const submitted = await page.request.post('/api/tasks', { data: { workspace: 'scratch',
       instruction: `In this scratch workspace, create ${filename} containing exactly ${marker} followed by a newline.` } });
-    expect(proposed.status()).toBe(201);
-    const task = await proposed.json();
-    expect((await page.request.post(`/api/tasks/${task.id}/approve`)).status()).toBe(200);
-    return task;
+    expect(submitted.status()).toBe(201);
+    return submitted.json();
   });
   await allure.step('Then the public result remains completed and artifact lookup returns 404', async () => {
     const latest = (await (await page.request.get('/api/tasks')).json())
@@ -157,8 +231,8 @@ test('completed work with a missing artifact returns an explicit lookup failure'
   });
 });
 
-test('cancelled or invalid work never exposes a workspace artifact', async ({ page }, testInfo) => {
-  await allure.step('Given a fresh durable service rejects an empty proposal', async () => {
+test('invalid work never reaches Pi Durable or exposes a workspace artifact', async ({ page }, testInfo) => {
+  await allure.step('Given a fresh durable service rejects an empty task submission', async () => {
     await page.request.post('/__fixture/durable/scenario', {
       data: { scenario: 'scratch-success' },
     });
@@ -166,22 +240,12 @@ test('cancelled or invalid work never exposes a workspace artifact', async ({ pa
       data: { workspace: 'scratch', instruction: '' },
     })).status()).toBe(400);
   });
-  const task = await allure.step('When I cancel a pending scratch proposal', async () => {
-    const proposed = await page.request.post('/api/tasks', {
-      data: { workspace: 'scratch', instruction: 'Review only' },
-    });
-    const task = await proposed.json();
-    expect((await page.request.post(`/api/tasks/${task.id}/cancel`)).status()).toBe(200);
-    return task;
-  });
-  await allure.step('Then approval conflicts and artifact lookup is denied', async () => {
-    expect((await page.request.post(`/api/tasks/${task.id}/approve`)).status()).toBe(409);
-    expect((await page.request.get(`/api/tasks/${task.id}/artifacts/workspace`)).status()).toBe(404);
-    const latest = (await (await page.request.get('/api/tasks')).json())
-      .find((item: { id: string }) => item.id === task.id);
-    expect(latest.status).toBe('cancelled');
+  await allure.step('Then no task record was created for invalid input', async () => {
+    const latest = await page.request.get('/api/tasks');
+    expect(latest.ok()).toBeTruthy();
+    expect(await latest.json()).toHaveLength(0);
     await testInfo.attach('c2-durable-cancelled', {
-      body: Buffer.from(`${JSON.stringify(latest, null, 2)}\n`), contentType: 'application/json',
+      body: Buffer.from(`${JSON.stringify({ tasks: await latest.json() }, null, 2)}\n`), contentType: 'application/json',
     });
   });
 });

@@ -116,6 +116,7 @@ def ensure_user(username: str, password: str, *, admin: bool = False) -> None:
                 username,
                 "--password",
                 password,
+                "--must-change-password=false",
             ]
         )
 
@@ -282,6 +283,7 @@ def main() -> None:
         ("workflow-dispatcher", secret("gitea-dispatcher-password"), False),
         ("voice-agent", secret("gitea-agent-password"), False),
         ("voice-admin", secret("gitea-voice-admin-password"), True),
+        ("builder-admin", secret("gitea-builder-admin-password"), True),
     ]
     for username, password, admin in users:
         ensure_user(username, password, admin=admin)
@@ -305,6 +307,7 @@ def main() -> None:
         "public-only,read:repository,read:issue,read:user,read:organization",
     )
     ensure_token("voice-admin", "voice-admin", "all")
+    ensure_token("builder-admin", "builder-admin", "all")
     base_image_pull_token = ensure_token("image-builder", "builder", "read:package,read:user")
     ensure_token("workflow-dispatcher", "dispatcher", "write:repository,read:user")
     publish_repository(publisher_password)

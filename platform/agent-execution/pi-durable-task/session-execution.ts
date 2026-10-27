@@ -2,7 +2,8 @@ import { readFile, mkdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { arch } from "node:os";
 import { join, resolve, sep } from "node:path";
-import { GondolinSession, guestHookCommand, resolveGuestHook, resolveGuestHooks } from "@agent-workload-platform/gondolin-session";
+import { GondolinSession, guestHookCommand, resolveGuestHook, resolveGuestHooks,
+  rewriteGiteaRepositoryRequest } from "@agent-workload-platform/gondolin-session";
 import type { GondolinSessionOptions } from "@agent-workload-platform/gondolin-session";
 import type { Models } from "@earendil-works/pi-ai";
 import { GondolinExecutionEnv } from "./gondolin-env.js";
@@ -160,15 +161,8 @@ export async function runPiSession(input: PiSessionInput, dependencies: PiSessio
         secrets: {
           GITEA_TOKEN: { value: gitea.token, hosts: [gitea.upstream.hostname] },
         },
-        onRequest: (request: Request) => {
-          const requested = new URL(request.url);
-          if (requested.hostname !== gitea.guest.hostname) return request;
-          if (requested.port !== gitea.guest.port) return new Response("Gitea destination denied", { status: 403 });
-          requested.protocol = gitea.upstream.protocol;
-          requested.hostname = gitea.upstream.hostname;
-          requested.port = gitea.upstream.port;
-          return new Request(requested, request);
-        },
+        onRequest: (request: Request) => rewriteGiteaRepositoryRequest(
+          request, gitea.guest, gitea.upstream, gitea.owner, gitea.repository),
       } : policy.network,
       ...(gitea ? { dns: { mode: "synthetic" as const, syntheticHostMapping: "per-host" as const } } : {}),
       environment: {

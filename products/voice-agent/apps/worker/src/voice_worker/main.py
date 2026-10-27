@@ -3,17 +3,14 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
 import pwd
 import subprocess
-import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, cast
 
-import psycopg
 from opentelemetry.context import attach, detach
 from opentelemetry.propagate import extract
 from voice_agent.shared.telemetry import configure_telemetry
@@ -27,11 +24,6 @@ from voice_agent.tasking.infrastructure.config import Settings
 from voice_agent.tasking.infrastructure.ensure_execution_image import ensure_execution_image
 
 telemetry = configure_telemetry("pipecat-task-worker")
-logger = logging.getLogger(__name__)
-
-
-DATABASE_RETRY_DELAY_SECONDS = 2.0
-MAX_TASK_PROGRESS_EVENTS = 2_000
 
 
 type RenderSong = Callable[[SongManifest], bytes]
@@ -110,33 +102,6 @@ def validate_worker(settings: Settings) -> None:
     os.chmod(settings.worker_scratch_root, 0o700)
     if settings.music_generation_enabled and not Path(settings.music_ffmpeg_binary).is_file():
         raise RuntimeError(f"FFmpeg binary not found: {settings.music_ffmpeg_binary}")
-
-
-def task_progress_publisher(database_url: str, task_id: str) -> Callable[[str], None]:
-    """Persist a bounded owner-readable feed of safe task action summaries."""
-    emitted = 0
-    last_spoken = ""
-    last_at = 0.0
-
-    def publish(spoken: str) -> None:
-        nonlocal emitted, last_spoken, last_at
-        now = time.monotonic()
-        if emitted >= MAX_TASK_PROGRESS_EVENTS or (spoken == last_spoken and now - last_at < 8):
-            return
-        try:
-            with psycopg.connect(database_url) as conn:
-                conn.execute(
-                    "INSERT INTO voice_task_progress (task_id, spoken) VALUES (%s, %s)",
-                    (task_id, spoken),
-                )
-        except psycopg.Error:
-            logger.warning("Unable to store task progress", exc_info=True)
-            return
-        emitted += 1
-        last_spoken = spoken
-        last_at = now
-
-    return publish
 
 
 def run_digital_twin(settings: Settings, payload: dict[str, Any]) -> dict[str, Any]:

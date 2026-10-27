@@ -212,6 +212,19 @@ test('Repository task VM receives only its repository writer', async ({}, testIn
         'pi/task-00000000-0000-4000-8000-000000000081',
         'http://gitea.local:3001/source-publisher/agent-workload-platform.git']);
     });
+    await allure.step('And the VM network route denies other Gitea repositories', async () => {
+      const route = vmOptions.network.onRequest;
+      const own = route(new Request('http://gitea.local:3001/source-publisher/agent-workload-platform.git/info/refs'));
+      assert.equal(new URL(own.url).hostname, '127.0.0.1');
+      const other = route(new Request('http://gitea.local:3001/source-publisher/sdft-confsft-methods-paper.git/info/refs'));
+      assert.equal(other.status, 403);
+      const otherApi = route(new Request('http://gitea.local:3001/api/v1/repos/source-publisher/sdft-confsft-methods-paper'));
+      assert.equal(otherApi.status, 403);
+      const listing = route(new Request('http://gitea.local:3001/api/v1/user/repos'));
+      assert.equal(listing.status, 403);
+      const direct = route(new Request('http://127.0.0.1:3001/api/v1/repos/source-publisher/sdft-confsft-methods-paper'));
+      assert.equal(direct.status, 403);
+    });
     await testInfo.attach('repository-vm-routing', { body: Buffer.from(JSON.stringify({
       repository: vmOptions.environment.GITEA_REPOSITORY,
       guestHost: 'gitea.local',

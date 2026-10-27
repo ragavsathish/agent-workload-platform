@@ -8,7 +8,6 @@ import sys
 import wave
 from array import array
 from pathlib import Path
-from urllib.parse import quote
 
 from dotenv import dotenv_values
 
@@ -72,8 +71,6 @@ def main() -> None:
     values = dotenv_values(root / "deploy/.env")
     broker = required(values, "INFERENCE_BROKER_TOKEN", 32)
     gateway = required(values, "AGENT_GATEWAY_TOKEN", 32)
-    approval = required(values, "ORCHESTRATOR_APPROVAL_SECRET", 32)
-    postgres = required(values, "POSTGRES_PASSWORD", 16)
 
     secrets_dir = root / "deploy/secrets"
     secrets_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -144,6 +141,11 @@ def main() -> None:
         gitea_builder_password = gitea_builder_password_path.read_text(encoding="utf-8").strip()
     else:
         gitea_builder_password = secrets.token_urlsafe(32)
+    gitea_builder_admin_password_path = secrets_dir / "gitea-builder-admin-password"
+    if gitea_builder_admin_password_path.is_file():
+        gitea_builder_admin_password = gitea_builder_admin_password_path.read_text(encoding="utf-8").strip()
+    else:
+        gitea_builder_admin_password = secrets.token_urlsafe(32)
     gitea_dispatcher_password_path = secrets_dir / "gitea-dispatcher-password"
     if gitea_dispatcher_password_path.is_file():
         gitea_dispatcher_password = gitea_dispatcher_password_path.read_text(
@@ -156,17 +158,13 @@ def main() -> None:
         "agent-gateway-token": gateway,
         "digital-twin-reader-token": reader_token,
         "digital-twin-writer-token": writer_token,
-        "approval-secret": approval,
-        "postgres-password": postgres,
-        "database-url": (
-            f"postgresql://voice_agents:{quote(postgres, safe='')}@postgres:5432/voice_agents"
-        ),
         "grafana-admin-password": grafana,
         "grafana-mcp-caller-token": grafana_mcp_caller,
         "gitea-admin-password": gitea,
         "gitea-agent-password": gitea_agent_password,
         "gitea-voice-admin-password": gitea_voice_admin_password,
         "gitea-builder-password": gitea_builder_password,
+        "gitea-builder-admin-password": gitea_builder_admin_password,
         "gitea-dispatcher-password": gitea_dispatcher_password,
     }
     for name, value in files.items():

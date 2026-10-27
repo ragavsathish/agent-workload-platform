@@ -13,11 +13,15 @@ import { closeTaskSessions } from "./remote-session.js";
 /** A bounded operational task used to prove owner lifecycle before API cutover. */
 export type ValidationInput = { text: string; holdMs: number };
 type ValidationResult = { exit_code: 0; response: { text: string; spoken: string; presentation: null; resourceUri: null } };
-export type ProductKind = "agent-run" | "song-lyrics" | "song-render" | "digital-twin-journal" | "digital-twin-classify";
+export type ProductKind = "agent-run" | "song-lyrics" | "song-render" | "digital-twin-journal" | "digital-twin-classify" | "digital-twin-daily-journal";
 export type ProductInput = { kind: ProductKind; params: Record<string, unknown>; requestId: string };
 type ProductResult = Record<string, unknown>;
+type ProgressEvent = { id: number; spoken: string; created_at: string };
+type ProductCheckpoint = { phase: "run" | "external"; progressCursor?: number };
 
-const Requests = defineDoc<{ entries: Record<string, { taskId: number; inputJson: string; createdAt?: string }> }>({
+const Requests = defineDoc<{ entries: Record<string, {
+  taskId: number; inputJson: string; createdAt?: string; cancelledAt?: string; progress?: ProgressEvent[];
+}> }>({
   kind: "voice.owner.requests",
   version: 1,
   scope: "session",
@@ -50,7 +54,11 @@ async function pythonEffect(module: string, input: Record<string, unknown>, sign
   return result as ProductResult;
 }
 
-async function executeProduct(input: ProductInput, signal: AbortSignal): Promise<ProductResult> {
+async function executeProduct(
+  input: ProductInput,
+  signal: AbortSignal,
+  onProgress: (spoken: string) => void,
+): Promise<ProductResult> {
   if (input.kind !== "agent-run" && input.kind !== "song-lyrics") {
     return pythonEffect("voice_worker.native_task", input, signal);
   }
@@ -58,7 +66,6 @@ async function executeProduct(input: ProductInput, signal: AbortSignal): Promise
   if (typeof prepared.workspace !== "string" || typeof prepared.instruction !== "string") {
     throw new Error("workspace preparation returned an invalid Pi session input");
   }
-  let progressQueue = Promise.resolve();
   let progressCount = 0;
   let lastSpoken = "";
   let lastAt = 0;
@@ -69,11 +76,7 @@ async function executeProduct(input: ProductInput, signal: AbortSignal): Promise
     progressCount += 1;
     lastSpoken = bounded;
     lastAt = now;
-    progressQueue = progressQueue.then(async () => {
-      await pythonEffect("voice_worker.workspace_effect", {
-        action: "progress", requestId: input.requestId, spoken: bounded,
-      }, signal);
-    }).catch(() => undefined);
+    onProgress(bounded);
   };
   progress("Preparing the task workspace.");
   const text = await runPiSession({
@@ -85,13 +88,12 @@ async function executeProduct(input: ProductInput, signal: AbortSignal): Promise
     onProgress: progress,
     signal,
   });
-  await progressQueue;
   return pythonEffect("voice_worker.workspace_effect", {
     ...input, action: "finish", workspace: prepared.workspace, text,
   }, signal);
 }
 
-const ProductTask = defineTask<ProductInput, { phase: "run" | "external" }, ProductResult>({
+const ProductTask = defineTask<ProductInput, ProductCheckpoint, ProductResult>({
   name: "voice.owner.product", version: 1,
   initial: () => ({ phase: "run" }),
   phases: {
@@ -100,8 +102,30 @@ const ProductTask = defineTask<ProductInput, { phase: "run" | "external" }, Prod
       if (task.input.kind === "song-render") {
         await runtime.commit(() => ({ status: "running", checkpoint: { phase: "external" } }), context);
       }
-      const result = await executeProduct(task.input, runtime.signal);
-      await runtime.commit(() => ({ status: "terminal", outcome: { status: "completed", result } }), context);
+      const phase: ProductCheckpoint["phase"] = task.input.kind === "song-render" ? "external" : "run";
+      let progressQueue = Promise.resolve();
+      const progress = (spoken: string) => {
+        progressQueue = progressQueue.then(async () => {
+          await runtime.commit(async (tx) => {
+            const requests = await tx.doc(Requests);
+            const entry = requests.entries[task.input.requestId];
+            if (!entry) throw new Error("product request metadata is missing");
+            const progressCursor = (entry.progress?.at(-1)?.id ?? 0) + 1;
+            const event = {
+              id: progressCursor,
+              spoken: spoken.slice(0, 240),
+              created_at: new Date().toISOString(),
+            };
+            entry.progress = [...(entry.progress ?? []), event].slice(-2_000);
+            return { status: "running", checkpoint: { phase, progressCursor } };
+          }, context);
+        });
+      };
+      progress(`Starting ${task.input.kind.replaceAll("-", " ")}.`);
+      const result = await executeProduct(task.input, runtime.signal, progress);
+      await progressQueue;
+      await runtime.commit(() => ({ status: "terminal",
+        outcome: { status: "completed", result } }), context);
     },
     external: async (_task, runtime, context) => {
       await runtime.commit(() => ({ status: "terminal", outcome: { status: "completed", result: {
@@ -162,7 +186,8 @@ export type OwnerSnapshot = {
   failure: string | null;
 };
 type NativeSubmission = {
-  task_id: string; identity: string; instruction: string; workspace: string; created_at: string;
+  task_id: string; identity: string; instruction: string; workspace: string;
+  session_album_key?: string; session_name?: string; created_at: string;
 };
 
 export class DurableTaskOwner {
@@ -235,6 +260,12 @@ export class DurableTaskOwner {
     ])));
   }
 
+  async progress(taskId: string, after = 0, limit = 40): Promise<ProgressEvent[]> {
+    const requests = await this.harness.snapshot(Requests, BACKGROUND_CONTEXT);
+    return (requests?.entries[taskId]?.progress ?? [])
+      .filter((event) => event.id > after).slice(0, limit);
+  }
+
   private nativeSubmission(taskId: string, entry?: { inputJson: string; createdAt?: string }): NativeSubmission | null {
     if (!entry || typeof entry.inputJson !== "string") return null;
     let input: unknown;
@@ -245,12 +276,51 @@ export class DurableTaskOwner {
     if (params.native_cli !== true || typeof params.identity !== "string"
       || typeof params.instruction !== "string" || typeof params.workspace !== "string") return null;
     return { task_id: taskId, identity: params.identity, instruction: params.instruction,
-      workspace: params.workspace, created_at: entry.createdAt ?? new Date(0).toISOString() };
+      workspace: params.workspace,
+      session_album_key: typeof params.session_album_key === "string" ? params.session_album_key : undefined,
+      session_name: typeof params.session_name === "string" ? params.session_name : undefined,
+      created_at: entry.createdAt ?? new Date(0).toISOString() };
   }
 
   async describe(taskId: string): Promise<NativeSubmission | null> {
     const requests = await this.harness.snapshot(Requests, BACKGROUND_CONTEXT);
     return this.nativeSubmission(taskId, requests?.entries[taskId]);
+  }
+
+  async describeProduct(taskId: string): Promise<{
+    task_id: string; kind: ProductKind; params: Record<string, unknown>;
+    created_at: string; cancelled_at: string | null;
+  } | null> {
+    const requests = await this.harness.snapshot(Requests, BACKGROUND_CONTEXT);
+    const entry = requests?.entries[taskId];
+    if (!entry) return null;
+    let input: unknown;
+    try { input = JSON.parse(entry.inputJson); } catch { return null; }
+    if (!input || typeof input !== "object" || !("kind" in input) || !("params" in input)
+      || typeof input.params !== "object" || !input.params || Array.isArray(input.params)) return null;
+    const kind = input.kind;
+    if (typeof kind !== "string" || !["agent-run", "song-lyrics", "song-render",
+      "digital-twin-journal", "digital-twin-classify", "digital-twin-daily-journal"].includes(kind)) return null;
+    const params = input.params as Record<string, unknown>;
+    return { task_id: taskId, kind: kind as ProductKind, params,
+      created_at: entry.createdAt ?? new Date(0).toISOString(),
+      cancelled_at: typeof entry.cancelledAt === "string" ? entry.cancelledAt : null };
+  }
+
+  async cancelProduct(taskId: string, identity: string): Promise<void> {
+    await this.root.commit(async (tx) => {
+      const requests = await tx.doc(Requests);
+      const entry = requests.entries[taskId];
+      if (!entry) throw new Error("song generation not found");
+      let input: unknown;
+      try { input = JSON.parse(entry.inputJson); } catch { throw new Error("song generation not found"); }
+      if (!input || typeof input !== "object" || !("kind" in input) || input.kind !== "song-lyrics"
+        || !("params" in input) || typeof input.params !== "object" || !input.params
+        || (input.params as Record<string, unknown>).identity !== identity) {
+        throw new Error("song generation not found");
+      }
+      entry.cancelledAt ??= new Date().toISOString();
+    }, BACKGROUND_CONTEXT);
   }
 
   async listNative(identity: string, limit = 50): Promise<Array<NativeSubmission & { result: OwnerSnapshot | null }>> {

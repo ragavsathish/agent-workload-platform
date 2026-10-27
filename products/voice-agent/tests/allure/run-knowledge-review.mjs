@@ -527,6 +527,21 @@ async function main() {
     await emit([gate('pi-durable-owner-c2', { ...owner, code: 1 }, ownerAttachment,
       `Native Pytest Allure results unavailable: ${error.message}`)]);
   }
+  const productResults = join(runRoot, 'pi-durable-product-workflows-native-allure');
+  const products = await runCommand('pi-durable-product-workflows', 'uv', [
+    'run', '--project', 'apps/gateway', 'pytest', '-q',
+    'packages/tasking/tests/infrastructure/test_pi_durable_product_workflows.py',
+    `--alluredir=${productResults}`,
+  ], { env: { PYTHONPATH: 'apps/gateway/src:packages/tasking/src:packages/telemetry/src' } });
+  const productsAttachment = await attachLog('pi-durable-product-workflows', products.logPath);
+  try {
+    const items = await readNativePytestResults(productResults, resultsRoot,
+      { suite: 'Pi Durable product workflows', id: 'pi-durable-product-workflows' });
+    await recordParsed('pi-durable-product-workflows', products, items, 4);
+  } catch (error) {
+    await emit([gate('pi-durable-product-workflows', { ...products, code: 1 }, productsAttachment,
+      `Native product workflow Allure results unavailable: ${error.message}`)]);
+  }
   const rust = await runCommand('knowledge-core-rust', 'cargo', ['test', '--manifest-path', 'components/personal-knowledge-ts/core/Cargo.toml']);
   const rustAttachment = await attachLog('knowledge-core-rust', rust.logPath);
   await recordParsed('knowledge-core-rust', rust,

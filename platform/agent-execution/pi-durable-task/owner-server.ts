@@ -10,23 +10,27 @@ import { DurableTaskOwner, type ProductInput, type ValidationInput } from "./own
 
 type Request = {
   id: string;
-  command: "submit" | "get" | "get_many" | "describe" | "list_native" | "abort" | "retry" | "inspect";
+  command: "submit" | "get" | "get_many" | "describe" | "describe_product" | "cancel_product"
+    | "progress" | "list_native" | "abort" | "retry" | "inspect";
   taskId?: string;
   taskIds?: string[];
   identity?: string;
   limit?: number;
+  after?: number;
   requestId?: string;
   input?: ValidationInput | ProductInput;
 };
 
-const MAX_REQUEST_BYTES = 32_768;
+// Daily journal task inputs carry up to 200 KB of bounded, redacted source messages.
+const MAX_REQUEST_BYTES = 256_000;
 const TASK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
 function validRequest(value: unknown): value is Request {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
   return typeof item.id === "string" && item.id.length <= 100
-    && ["submit", "get", "get_many", "describe", "list_native", "abort", "retry", "inspect"].includes(String(item.command));
+    && ["submit", "get", "get_many", "describe", "describe_product", "cancel_product",
+      "progress", "list_native", "abort", "retry", "inspect"].includes(String(item.command));
 }
 
 function send(socket: Socket, value: object): void {
@@ -67,7 +71,7 @@ export async function serveOwner(storagePath: string, socketPath: string, restar
                 if (typeof request.requestId !== "string" || !TASK_ID.test(request.requestId)
                     || !request.input
                     || !("kind" in request.input
-                      ? ["agent-run", "song-lyrics", "song-render", "digital-twin-journal", "digital-twin-classify"].includes(request.input.kind)
+                      ? ["agent-run", "song-lyrics", "song-render", "digital-twin-journal", "digital-twin-classify", "digital-twin-daily-journal"].includes(request.input.kind)
                         && request.input.requestId === request.requestId
                         && !!request.input.params && typeof request.input.params === "object"
                         && !Array.isArray(request.input.params)
@@ -92,6 +96,25 @@ export async function serveOwner(storagePath: string, socketPath: string, restar
               case "describe":
                 if (typeof request.taskId !== "string" || !TASK_ID.test(request.taskId)) throw new Error("task ID required");
                 data = await owner!.describe(request.taskId);
+                break;
+              case "describe_product":
+                if (typeof request.taskId !== "string" || !TASK_ID.test(request.taskId)) throw new Error("task ID required");
+                data = await owner!.describeProduct(request.taskId);
+                break;
+              case "cancel_product":
+                if (typeof request.taskId !== "string" || !TASK_ID.test(request.taskId)
+                    || typeof request.identity !== "string" || request.identity.length < 3
+                    || request.identity.length > 320) throw new Error("task ID and owner identity required");
+                await owner!.cancelProduct(request.taskId, request.identity);
+                data = { cancelled: true };
+                break;
+              case "progress":
+                if (typeof request.taskId !== "string" || !TASK_ID.test(request.taskId)
+                    || !Number.isInteger(request.after) || request.after! < 0
+                    || !Number.isInteger(request.limit) || request.limit! < 1 || request.limit! > 100) {
+                  throw new Error("task ID and bounded progress cursor required");
+                }
+                data = await owner!.progress(request.taskId, request.after, request.limit);
                 break;
               case "list_native":
                 if (typeof request.identity !== "string" || request.identity.length < 3 || request.identity.length > 320

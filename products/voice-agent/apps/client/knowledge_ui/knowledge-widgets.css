@@ -26,6 +26,9 @@ button.knowledge-note-card.selected { border-color: color-mix(in srgb, var(--pi-
 .knowledge-graph .map-legend .legend-note { border-color: var(--pi-color-accent); border-radius: 3px; background: var(--pi-color-surface-raised); }
 .knowledge-graph .map-legend .legend-capture { border-radius: 0; background: var(--pi-color-surface); }
 .knowledge-graph .map-legend .legend-topic { border: 0; border-radius: 2px; background: var(--pi-color-accent); transform: rotate(45deg); }
+.knowledge-graph .map-legend .legend-session { border: 0; border-radius: 50%; background: var(--pi-color-info); }
+.knowledge-graph .map-legend .legend-task { border-color: var(--pi-color-accent); background: var(--pi-color-accent); transform: rotate(45deg); }
+.knowledge-graph .map-legend .legend-classification { border: 0; border-radius: 2px; background: var(--pi-color-warning); transform: rotate(45deg); }
 .knowledge-graph .map-canvas { flex: 1; min-height: 420px; background-image: radial-gradient(var(--pi-color-border) .75px, transparent .75px); background-size: 18px 18px; }
 .knowledge-graph .map-node-list { display: flex; gap: 6px; overflow: auto; padding: 8px 12px; border-top: 1px solid var(--pi-color-border); }
 .knowledge-graph .map-node-list button { flex: none; max-width: 240px; min-height: 44px; padding: 7px 11px; border: 1px solid var(--pi-color-border); border-radius: var(--pi-radius-sm, 5px); background: var(--pi-color-surface-raised); color: var(--pi-color-text-muted); font-size: 11px; line-height: 1.35; text-align: left; overflow-wrap: anywhere; cursor: pointer; }

@@ -1,4 +1,10 @@
-# Personal digital twin vocabulary decision
+# Personal digital twin vocabulary research (superseded proposal)
+
+This document records the initial narrow vocabulary choice. It predates the daily Codex journal and
+the separate assertion-classification graph, and its claim that the model needs no custom terms is
+no longer sufficient. For the current data mapping and proposed application profile, see
+[`ontology-application-profile.md`](ontology-application-profile.md). No production migration has
+been approved by this proposal.
 
 Keep the first version small and use established vocabularies instead of creating a custom ontology:
 

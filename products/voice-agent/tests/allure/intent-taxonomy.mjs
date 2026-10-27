@@ -7,9 +7,13 @@ function inferBehavior(suite, title) {
   if (suite === 'Playwright · knowledge-c2-mock') return behavior('Knowledge and review', 'Review decisions', 'Keep a corrected journal entry linked across C2 mock boundaries');
   if (suite === 'Playwright · knowledge-live') return behavior('Knowledge and review', 'Review decisions', 'Correct a test-owned entry in the deployed graph');
   if (suite === 'Playwright · diagnostics-c2-mock') return behavior('Voice conversation', 'Input diagnostics', 'Inspect conversation diagnostics');
-  if (suite === 'Playwright · durable-c2-mock') return behavior('Durable work', 'Task execution', 'Approve scratch work and inspect C2 failures');
+  if (suite === 'Playwright · durable-c2-mock') return behavior('Durable work', 'Task execution', 'Submit from a voice session, follow the task, and inspect C2 failures');
   if (suite === 'Playwright · flutter-responsive-c2-mock') return behavior('Voice conversation', 'Voice interface', 'Navigate Flutter home and workspace across screen sizes');
   if (suite === 'Pi Durable owner C2 mock') return behavior('Durable work', 'Task execution', 'Create, query, abort, and retry tasks through the owner client');
+  if (suite === 'Pi Durable product workflows') {
+    if (/song/u.test(name)) return behavior('Media creation', 'Song workflow', 'Create lyrics and request rendering as native Pi Durable tasks');
+    return behavior('Digital twin', 'Journal and classification', 'Submit both learning tasks independently to Pi Durable');
+  }
   if (suite === 'Playwright · pi-durable-mcp-integration') {
     if (/follow-up/u.test(name)) return behavior('Durable work', 'Task execution', 'Continue a task conversation from voice');
     if (/gondolin|host/u.test(name)) return behavior('Durable work', 'Task execution', 'Run task tools in the selected environment');
@@ -29,7 +33,7 @@ function inferBehavior(suite, title) {
     'Complete a tailnet voice turn with correlated Tempo and OTel evidence');
   if (suite === 'Playwright · diagnostics') return behavior('Voice conversation', 'Input diagnostics', 'Inspect a conversation replay and audio levels');
   if (suite === 'Playwright · task-diagram') return behavior('Durable work', 'Task diagrams', 'Open a persisted task diagram');
-  if (suite === 'Playwright · durable') return behavior('Durable work', 'Task execution', 'Approve work and retrieve its artifact');
+  if (suite === 'Playwright · durable') return behavior('Durable work', 'Task execution', 'Submit work and retrieve its artifact');
   if (suite === 'Playwright · durable-cli') return behavior('Durable work', 'Task execution', 'Submit with Pi Durable CLI and follow work in Flutter');
   if (suite === 'Playwright · grafana') return behavior('Operations', 'Architecture dashboard', 'Inspect the live C4 health map');
   if (suite === 'Playwright · tailnet-owner-integration') return behavior('Gateway access', 'Capabilities', 'Reject a different tailnet user at protected routes');
@@ -54,7 +58,6 @@ function inferBehavior(suite, title) {
     if (/song_/u.test(name)) return behavior('Media creation', 'Song workflow', 'Review and render a song');
     if (/digital_twin_query/u.test(name)) return behavior('Digital twin', 'Personal context', 'Read scoped personal context');
     if (/completed_turn/u.test(name)) return behavior('Digital twin', 'Turn ingestion', 'Queue a completed turn once');
-    if (/task_approval/u.test(name)) return behavior('Durable work', 'Task approval', 'Approve a task with trace context');
     if (/task_artifact/u.test(name)) return behavior('Durable work', 'Task artifacts', 'Download an owned artifact');
     if (/task_progress|tasks_can_be/u.test(name)) return behavior('Durable work', 'Task progress', 'Inspect task state by session');
     if (/journal_edit/u.test(name)) return behavior('Knowledge and review', 'Journal editing', 'Edit journal topics safely');
@@ -106,7 +109,6 @@ const journeys = {
   'Durable work': {
     Workspace: 'Continue durable work',
     'Task execution': 'Continue durable work',
-    'Task approval': 'Continue durable work',
     'Task artifacts': 'Continue durable work',
     'Task progress': 'Continue durable work',
     'Task diagrams': 'Continue durable work',
@@ -115,6 +117,7 @@ const journeys = {
   'Digital twin': {
     'Personal context': 'Use personal context',
     'Turn ingestion': 'Record a completed conversation',
+    'Journal and classification': 'Process a completed owner turn',
   },
   'Media creation': { 'Song workflow': 'Create and review a song' },
   Operations: { 'Architecture dashboard': 'Inspect system health' },
@@ -137,6 +140,7 @@ function layerFor(suite, title) {
   if (suite === 'Playwright · durable-c2-mock') return 'integration';
   if (suite === 'Playwright · flutter-responsive-c2-mock') return 'integration';
   if (suite === 'Pi Durable owner C2 mock') return 'integration';
+  if (suite === 'Pi Durable product workflows') return 'integration';
   if (suite === 'Playwright · pi-durable-mcp-integration') return 'integration';
   if (suite === 'Playwright · knowledge-base') return 'integration';
   if (suite === 'Playwright · task-diagram') return 'integration';

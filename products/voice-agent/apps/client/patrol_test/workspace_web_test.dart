@@ -51,7 +51,7 @@ void main() {
     await _completeTypedTurn($, 'Inspect the fixture');
     await _interruptTypedTurn($, 'Interrupt the fixture');
     await _openTaskBoard($);
-    await _approveTaskProposal($, 'fixture-task');
+    await _assertTaskIsAlreadySubmitted($, 'fixture-task');
     await _createAgentTask($, 'fixture-task-2', 'Publish the fixture report');
     await _cancelAgentTask($, 'fixture-task-2');
     await _inspectMobileSessionHistory($, 'fixture-live');
@@ -155,12 +155,12 @@ Future<void> _openTaskBoard(PatrolIntegrationTester $) async {
   await $('Review the fixture deployment').waitUntilVisible();
 }
 
-Future<void> _approveTaskProposal(
+Future<void> _assertTaskIsAlreadySubmitted(
   PatrolIntegrationTester $,
   String taskId,
 ) async {
-  await $(Key('approve-$taskId')).tap();
-  await $('APPROVED').waitUntilVisible();
+  await $(Key('task-$taskId')).waitUntilVisible();
+  expect($(Key('approve-$taskId')), findsNothing);
 }
 
 Future<void> _createAgentTask(

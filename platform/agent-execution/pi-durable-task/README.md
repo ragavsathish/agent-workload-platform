@@ -43,7 +43,9 @@ reads that repository's token from `GITEA_TASK_TOKEN_DIR` on the host. The
 declared Clojure start hook configures the guest's Git remote and, when
 installed, Tea login. Gondolin exposes only a placeholder to the VM and
 substitutes the token in HTTP authorization headers for the allowed Gitea
-upstream. Token values do not belong in Pi JSON or the repository.
+upstream. The host-side Gitea route accepts Git and API paths for the declared
+repository plus the two identity/version probes; requests for other repositories
+are rejected before forwarding. Token values do not belong in Pi JSON or the repository.
 Scratch tasks and workspaces without a declaration receive no Gitea writer.
 The voice VM uses its separate instance-admin token. The Clojure stop hook
 pushes committed work after each settled task submission (including follow-ups).

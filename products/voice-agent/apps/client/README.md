@@ -116,8 +116,8 @@ files: provide any Compose `.env` or `--env-file` from the session's worktree.
 This dev guest build lacks usable Docker bridge networking. Pi's `session_start`
 hook automatically layers the VM-only `.pi/compose.dev.yml` over the existing
 deployment Compose file on guest host networking when the shared cache is
-mounted. It starts observability, S3Mock, Oxigraph,
-Postgres, and Gitea with disposable state. It does not run the production
+mounted. It starts observability, S3Mock, Oxigraph, and Gitea with disposable
+state. It does not run the production
 voice-edge/gateway/Tailscale stack or copy host secrets into the VM.
 
 Playwright and the mock can both use guest loopback. External browser preview
@@ -171,7 +171,7 @@ the responsive voice shell and the typed Pi/task workspace. The workspace uses
 the production `VoiceApi` against an external deterministic HTTP fixture rather
 than constructing screens or injecting a Dart fake. It covers context compaction,
 resuming a persisted Pi session, consecutive typed turns without waiting for TTS,
-streamed response interruption, task approval, task creation, task cancellation,
+streamed response interruption, direct durable task submission, task cancellation,
 and opening Mermaid, Marp, Excalidraw, trace, and journal MCP presentations.
 
 The wrapper applies a version-checked workaround for Patrol 4.10.0's trace

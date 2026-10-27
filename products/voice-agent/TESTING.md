@@ -35,7 +35,7 @@ It verifies:
 - protected endpoint authentication and the deployed Voice Edge feature contract;
 - Tailscale Serve routing when an authenticated tailnet is available;
 - native LaunchAgent state and host/Gondolin metric endpoints;
-- real Grafana MCP, Oxigraph, Postgres, Gitea, Prometheus, and Tempo contracts;
+- real Grafana MCP, Oxigraph, Gitea, Prometheus, and Tempo contracts;
 - restricted database, repository, token, and network capabilities.
 
 Ansible verification establishes the **deployment envelope**. It does not replace a user journey:
@@ -45,7 +45,7 @@ Ansible verification establishes the **deployment envelope**. It does not replac
 | `make verify` | Read-only deployed configuration, security, dependency, and telemetry contract |
 | `make cycle-test` | Start/stop/recovery and lifecycle behavior that intentionally changes deployed state |
 | `make blackbox-voice` | Real voice protocol journey without requiring a durable task result |
-| `make blackbox-remote-session` | Persistent spoken session that proposes, approves, attaches, and converses with an Agent Task |
+| `make blackbox-remote-session` | Persistent spoken session that submits, attaches, and converses with a Pi Durable task |
 | `make blackbox-e2e` | Real voice journey plus durable effects and fresh exercised-path metrics |
 | `make playwright-voice` | Browser and Flutter behavior through local ingress |
 | Tailnet Playwright targets | Behavior specifically owned by authenticated ingress |
@@ -71,15 +71,15 @@ make blackbox-e2e
 make blackbox-personal-knowledge
 make blackbox-remote-session
 make blackbox-voice \
-  UTTERANCE="Propose a task in the default workspace to inspect it without changing files"
+  UTTERANCE="Inspect the default workspace without changing files and report what you find"
 
-# Multiple turns, including approval, can be passed as JSON:
-BLACKBOX_UTTERANCES_JSON='["Propose a task in the default workspace to report ready without changing files", "Approve that pending task now"]' \
+# Multiple turns can be passed as JSON:
+BLACKBOX_UTTERANCES_JSON='["Inspect the default workspace without changing files", "Attach to the task you just submitted", "What have you found so far?"]' \
   make blackbox-voice
 ```
 
 Multiple utterances share one WebRTC peer and one Voice Session. The remote-session target uses that
-boundary for propose, approve, attach, and follow-up turns, then requires fresh successful
+boundary for direct submission, attach, and follow-up turns, then requires fresh successful
 Pi Voice remote-session attachment and command metrics. This prevents an ordinary local response from passing
 as a remote Agent Task conversation.
 
@@ -107,7 +107,7 @@ make publish-workspace \
   REPOSITORY=/path/to/agent-workload-platform
 ```
 
-The proposal stores the resulting content-addressed S3 URI, not a host filesystem path.
+The submitted native task stores the resulting content-addressed S3 URI, not a host filesystem path.
 Verification also asserts that S3Mock is loopback-only and has no Documents bind mount.
 The runner intentionally prints only audio byte counts and event counts; it never prints recognized
 or synthesized text. Compose verification fails if Docker logging is enabled for the voice edge or
@@ -137,24 +137,19 @@ tailnet routing. Run those separately with `make playwright-tailnet-voice` or
 page itself needs tunnel coverage.
 It requires a fresh increment from every application runtime on the exercised path: Voice Edge
 (`voice.session`), Inference Broker (`inference.pi`), Pi Voice Service (`pi.turn`), and Agent Gateway
-(`task.propose`). It also requires the `component.started` lifecycle series from those services plus
+(`task.submit`). It also requires the `component.started` lifecycle series from those services plus
 the Pi Task Worker, Image Builder manager, and native Gitea builder runner. A stale operation metric from an earlier run cannot satisfy
 the exercised-path gate.
 
-Verify durable results without displaying capabilities:
-
-```bash
-docker compose --env-file deploy/.env \
-  -f deploy/compose.yml -f deploy/compose.local-test.yml \
-  exec -T postgres psql -U voice_agents -d voice_agents -P pager=off \
-  -c "SELECT id, identity, workspace, status, task_id, created_at FROM voice_task_proposals ORDER BY created_at DESC LIMIT 5"
-```
+The Allure attachment `voice-session-pi-durable-journey` records the submitted
+native task ID, terminal result, and artifact verification for the C2 journey.
+The deployed durable suite follows the same ID through the owner-backed task API.
 
 Expected security properties:
 
-- a proposal is `pending` in Postgres before a later explicit approval;
-- “propose and approve” in one turn remains pending;
-- approval creates one Pi Durable task id and does not expose the signed approval token to voice-edge;
+- the Gateway submits one native Pi Durable task for each valid session request;
+- the task is scoped to the authenticated owner identity and the task ID is shown in Flutter;
+- task submission goes directly to Pi Durable; no approval endpoint or approval capability is exposed to voice-edge;
 - missing/replayed session tokens and hostile origins fail the WebSocket handshake;
 - missing gateway bearer credentials return 401, wrong identities return 403, and workspace escapes
   return 400;
@@ -162,8 +157,8 @@ Expected security properties:
 - owner/provider failures remain durable in Pi Durable SQLite and never cause an unsandboxed
   fallback.
 
-The test is deliberately exploratory: inspect transcript segmentation and the exact plan persisted
-by the LLM, and vary silence, clipping, identity, origin, workspace, and approval phrasing. A
+The test is deliberately exploratory: inspect transcript segmentation and the task submitted
+by the LLM, and vary silence, clipping, identity, origin, workspace, and failure phrasing. A
 successful transport test does not imply a successful agent run; Pi provider login remains a
 separate host prerequisite documented in
 [HOST_REQUIREMENTS.md](HOST_REQUIREMENTS.md).

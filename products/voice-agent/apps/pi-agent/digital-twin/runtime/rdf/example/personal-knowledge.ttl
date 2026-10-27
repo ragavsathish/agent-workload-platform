@@ -1,0 +1,76 @@
+@prefix pk: <urn:voice-agent:personal-knowledge:ontology#> .
+@prefix oa: <http://www.w3.org/ns/oa#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix schema: <https://schema.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<urn:example:owner:1> a schema:Person, prov:Person ; schema:name "Example owner" .
+<urn:example:session:1> a schema:Conversation, prov:Entity .
+
+<urn:example:message:1> a schema:Message, prov:Entity ;
+    schema:identifier "message-1" ;
+    schema:sender <urn:example:owner:1> ;
+    schema:text "I use Playwright for browser testing." ;
+    schema:dateSent "2026-10-27T10:00:00Z"^^xsd:dateTimeStamp ;
+    schema:isPartOf <urn:example:session:1> .
+
+<urn:example:journal:2026-10-27> a pk:DailyJournal, schema:DigitalDocument, prov:Entity ;
+    pk:journalDate "2026-10-27"^^xsd:date ;
+    pk:timeZone "Europe/Helsinki" ;
+    schema:hasPart <urn:example:journal-entry:1> ;
+    prov:wasGeneratedBy <urn:example:activity:journal:1> ;
+    prov:wasDerivedFrom <urn:example:message:1> .
+
+<urn:example:activity:journal:1> a prov:Activity ;
+    prov:used <urn:example:message:1> ;
+    prov:generated <urn:example:journal-entry:1> ;
+    prov:endedAtTime "2026-10-27T10:01:00Z"^^xsd:dateTimeStamp .
+
+<urn:example:journal-entry:1> a pk:JournalEntry, pk:ReflectionExcerpt, schema:CreativeWork, prov:Entity ;
+    pk:journalEntryKind <urn:voice-agent:personal-knowledge:concept:journal-kind:learning> ;
+    schema:text "I use Playwright for browser testing." ;
+    prov:wasDerivedFrom <urn:example:message:1> ;
+    prov:wasGeneratedBy <urn:example:activity:journal:1> .
+
+<urn:example:classifier:1> a prov:SoftwareAgent ; schema:name "Example classifier" .
+<urn:example:activity:classification:1> a pk:ClassificationActivity, prov:Activity ;
+    prov:used <urn:example:message:1> ;
+    prov:wasAssociatedWith <urn:example:classifier:1> ;
+    prov:generated <urn:example:decision:1>, <urn:example:annotation:1>, <urn:example:candidate:1> .
+
+<urn:example:decision:1> a pk:ClassificationDecision, prov:Entity ;
+    pk:predictedKind <urn:voice-agent:personal-knowledge:concept:assertion-kind:skill-evidence> ;
+    pk:confidence "0.91"^^xsd:decimal ;
+    pk:profileFieldConfidence "0.99"^^xsd:decimal ;
+    pk:decisionFor <urn:example:message:1> ;
+    pk:hasProbability <urn:example:probability:1> ;
+    prov:wasGeneratedBy <urn:example:activity:classification:1> .
+
+<urn:example:probability:1> a pk:ProbabilityAssignment ;
+    pk:probabilityFor <urn:voice-agent:personal-knowledge:concept:assertion-kind:skill-evidence> ;
+    pk:probabilityValue "0.91"^^xsd:decimal .
+
+<urn:example:annotation:1> a oa:Annotation ;
+    oa:motivatedBy oa:classifying ;
+    oa:hasTarget <urn:example:message:1> ;
+    oa:hasBody <urn:example:decision:1> ;
+    prov:wasGeneratedBy <urn:example:activity:classification:1> .
+
+<urn:example:candidate:1> a pk:CandidateAssertion, schema:Claim, prov:Entity ;
+    schema:text "I use Playwright for browser testing." ;
+    pk:evidenceQuote "I use Playwright for browser testing." ;
+    pk:assertionKind <urn:voice-agent:personal-knowledge:concept:assertion-kind:skill-evidence> ;
+    pk:reviewState <urn:voice-agent:personal-knowledge:concept:review-state:pending> ;
+    prov:wasDerivedFrom <urn:example:message:1> ;
+    prov:wasGeneratedBy <urn:example:activity:classification:1> .
+
+<urn:example:review:1> a pk:ReviewEvent, schema:ReviewAction, prov:Activity ;
+    pk:reviewedResource <urn:example:profile-fact:1> ;
+    pk:action <urn:voice-agent:personal-knowledge:concept:review-action:accept> ;
+    prov:wasAssociatedWith <urn:example:owner:1> ;
+    prov:endedAtTime "2026-10-27T10:02:00Z"^^xsd:dateTimeStamp .
+
+<urn:example:profile-fact:1> a pk:ProfileFact, schema:Claim, prov:Entity ;
+    schema:text "I use Playwright for browser testing." ;
+    pk:reviewState <urn:voice-agent:personal-knowledge:concept:review-state:accepted> ;
+    prov:wasGeneratedBy <urn:example:review:1> .

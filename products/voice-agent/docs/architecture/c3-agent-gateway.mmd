@@ -1,6 +1,5 @@
 flowchart LR
     CALLERS[External containers<br/><b>Voice Edge and Wassette</b><br/>owner task and knowledge requests]
-    DB[(External data store<br/><b>PostgreSQL</b><br/>proposals and song state)]
     S3[(External data store<br/><b>S3Mock</b><br/>immutable workspace pointers)]
     OXIGRAPH[(External data store<br/><b>Oxigraph</b><br/>private profile and learning RDF)]
     OWNER[External container<br/><b>Pi Durable Owner</b><br/>native task state and results]
@@ -10,21 +9,19 @@ flowchart LR
         direction TB
         AUTH["Component<br/><b>Capability Authenticator</b><br/>constant-time bearer-token validation"]
         IDENTITY["Component<br/><b>Identity Policy</b><br/>normalizes and requires the single configured owner"]
-        API["Component<br/><b>Task API</b><br/>propose, list, inspect, approve, and cancel"]
+        API["Component<br/><b>Task API</b><br/>submit, list, inspect, and cancel"]
         KNOWLEDGE["Component<br/><b>Personal Knowledge API</b><br/>bounded profile and learning queries"]
         REVIEW["Component<br/><b>Journal Review API</b><br/>ingest, feedback, and assertion decisions"]
         SPARQL["Component<br/><b>Knowledge Store Adapter</b><br/>fixed queries and bounded review updates"]
-        SERVICE["Component<br/><b>Task Service</b><br/>owns proposal and durable-task lifecycle"]
-        APPROVAL["Component<br/><b>Approval Authority</b><br/>plan hash, signed claims, expiry, and binding"]
+        SERVICE["Component<br/><b>Task Service</b><br/>submits and projects native task lifecycle"]
         WORKSPACE["Component<br/><b>Workspace Resolver</b><br/>allowlisted logical name to immutable S3 URI"]
         QUEUE["Component<br/><b>Pi Durable Owner Client</b><br/>submit, abort, and query over private HTTP"]
-        VIEW["Component<br/><b>Public View Projector</b><br/>removes approval token and raw Pi events"]
+        VIEW["Component<br/><b>Public View Projector</b><br/>bounds task results and removes raw Pi events"]
         TELEMETRY["Component<br/><b>Gateway Telemetry</b><br/>content-free operation spans"]
 
         AUTH --> IDENTITY --> API --> SERVICE
         IDENTITY --> KNOWLEDGE --> SPARQL
         IDENTITY --> REVIEW --> SPARQL
-        SERVICE --> APPROVAL
         SERVICE --> WORKSPACE
         SERVICE --> QUEUE
         SERVICE --> VIEW
@@ -34,7 +31,6 @@ flowchart LR
     end
 
     CALLERS -->|"bearer-authenticated owner request"| AUTH
-    SERVICE -->|"proposal transactions"| DB
     QUEUE -->|"native task operations"| OWNER
     WORKSPACE -->|"read current immutable pointer"| S3
     SPARQL -->|"bounded SELECT and UPDATE"| OXIGRAPH
@@ -46,6 +42,6 @@ flowchart LR
     classDef component fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7,stroke-width:2px;
     classDef external fill:#6b7280,color:#fff,stroke:#374151,stroke-width:2px;
     classDef data fill:#fef3c7,color:#78350f,stroke:#d97706,stroke-width:2px;
-    class AUTH,IDENTITY,API,KNOWLEDGE,REVIEW,SPARQL,SERVICE,APPROVAL,WORKSPACE,QUEUE,VIEW,TELEMETRY component;
+    class AUTH,IDENTITY,API,KNOWLEDGE,REVIEW,SPARQL,SERVICE,WORKSPACE,QUEUE,VIEW,TELEMETRY component;
     class CALLERS,OTEL,OWNER external;
-    class DB,S3,OXIGRAPH data;
+    class S3,OXIGRAPH data;

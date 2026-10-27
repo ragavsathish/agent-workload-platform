@@ -2,6 +2,10 @@ import type { ElementDefinition } from 'cytoscape';
 import { useEffect, useRef } from 'react';
 import './knowledge-widgets.css';
 
+export type KnowledgeGraphNode = { id: string; label: string; kind: string; text?: string; entryId?: string };
+export type KnowledgeGraphEdge = { id: string; source: string; target: string; label: string };
+export type KnowledgeGraphData = { nodes: KnowledgeGraphNode[]; edges: KnowledgeGraphEdge[] };
+
 export type KnowledgeGraphEntry = {
   id: string;
   text: string;
@@ -12,6 +16,7 @@ export type KnowledgeGraphEntry = {
 
 export type KnowledgeGraphProps = {
   entries: KnowledgeGraphEntry[];
+  graphData?: KnowledgeGraphData;
   selectedId?: string;
   scopeSummary?: string;
   theme?: 'dark' | 'light';
@@ -24,7 +29,7 @@ export type KnowledgeGraphProps = {
 const mapLabel = (value: string) => value.length > 34 ? `${value.slice(0, 31).trimEnd()}…` : value;
 
 export function KnowledgeGraph({
-  entries, selectedId, scopeSummary, theme, onSelectEntry, onSelectTopic, onSelectSource, onReset,
+  entries, graphData, selectedId, scopeSummary, theme, onSelectEntry, onSelectTopic, onSelectSource, onReset,
 }: KnowledgeGraphProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<import('cytoscape').Core | null>(null);
@@ -39,9 +44,13 @@ export function KnowledgeGraph({
     let disposed = false;
     let graph: import('cytoscape').Core | undefined;
     const elements: ElementDefinition[] = [];
+    if (graphData?.nodes.length) {
+      for (const node of graphData.nodes) elements.push({ data: { id: node.id, label: mapLabel(node.label), kind: node.kind, entryId: node.entryId } });
+      for (const edge of graphData.edges) elements.push({ data: { id: edge.id, source: edge.source, target: edge.target, label: edge.label } });
+    }
     const sources = new Map<string, KnowledgeGraphEntry>();
     const topics = new Set<string>();
-    for (const entry of entries) {
+    for (const entry of graphData?.nodes.length ? [] : entries) {
       sources.set(entry.sourceId, entry);
       elements.push({ data: { id: entry.id, label: mapLabel(entry.text), kind: 'note', entryId: entry.id } });
       elements.push({ data: { id: `edge-source-${entry.id}`, source: entry.id, target: entry.sourceId, label: 'from capture' } });
@@ -69,7 +78,11 @@ export function KnowledgeGraph({
         maxZoom: 2,
         style: [
           { selector: 'node', style: { 'background-color': token('--pi-color-info'), label: 'data(label)', color: token('--pi-color-text'), 'font-family': 'Source Code Pro, monospace', 'font-size': 10, 'text-wrap': 'wrap', 'text-max-width': '140px', 'text-valign': 'center', 'text-halign': 'center', width: 34, height: 34, 'border-width': 2, 'border-color': token('--pi-color-canvas') } },
-          { selector: 'node[kind="note"]', style: { shape: 'round-rectangle', width: 160, height: 62, 'background-color': token('--pi-color-surface-raised'), 'border-color': token('--pi-color-accent'), 'text-max-width': '138px', 'font-size': 9, padding: '8px' } },
+          { selector: 'node[kind="note"], node[kind="daily_journal"]', style: { shape: 'round-rectangle', width: 160, height: 62, 'background-color': token('--pi-color-surface-raised'), 'border-color': token('--pi-color-accent'), 'text-max-width': '138px', 'font-size': 9, padding: '8px' } },
+          { selector: 'node[kind="journal_record"]', style: { shape: 'round-rectangle', width: 142, height: 54, 'background-color': token('--pi-color-surface'), 'border-color': token('--pi-color-info'), 'text-max-width': '124px', 'font-size': 8, padding: '6px' } },
+          { selector: 'node[kind="codex_session"]', style: { shape: 'ellipse', width: 118, height: 48, 'background-color': token('--pi-color-info'), 'border-color': token('--pi-color-info'), color: token('--pi-color-accent-text'), 'font-size': 8, 'text-max-width': '104px' } },
+          { selector: 'node[kind="pi_durable_task"]', style: { shape: 'diamond', width: 110, height: 55, 'background-color': token('--pi-color-accent'), 'border-color': token('--pi-color-accent'), color: token('--pi-color-accent-text'), 'font-size': 8, 'text-max-width': '96px' } },
+          { selector: 'node[kind="classifier_annotation"]', style: { shape: 'hexagon', width: 148, height: 58, 'background-color': token('--pi-color-warning'), 'border-color': token('--pi-color-warning'), color: token('--pi-color-text'), 'font-size': 8, 'text-max-width': '132px' } },
           { selector: 'node[kind="source"]', style: { shape: 'rectangle', width: 110, height: 38, 'background-color': token('--pi-color-surface'), 'border-color': token('--pi-color-border-strong'), 'font-size': 8, 'text-max-width': '100px' } },
           { selector: 'node[kind="topic"]', style: { shape: 'hexagon', width: 100, height: 54, 'background-color': token('--pi-color-accent'), color: token('--pi-color-accent-text'), 'font-size': 9, 'text-max-width': '88px' } },
           { selector: 'edge', style: { width: 1.5, 'line-color': token('--pi-color-border-strong'), 'target-arrow-color': token('--pi-color-border-strong'), 'target-arrow-shape': 'triangle', 'curve-style': 'bezier', label: 'data(label)', color: token('--pi-color-text-muted'), 'font-size': 7, 'text-background-color': token('--pi-color-canvas'), 'text-background-opacity': 0.9, 'text-background-padding': '2px' } },
@@ -78,10 +91,16 @@ export function KnowledgeGraph({
       });
       graphRef.current = graph;
       if (selectedIdRef.current) {
-        const selected = graph.getElementById(selectedIdRef.current);
+        const selected = graph.getElementById(selectedIdRef.current).nonempty()
+          ? graph.getElementById(selectedIdRef.current)
+          : graph.getElementById(`urn:awp:${selectedIdRef.current}`);
         if (selected.nonempty()) selected.select();
       }
-      graph.on('tap', 'node[kind="note"]', (event) => {
+      graph.on('tap', 'node[kind="note"], node[kind="daily_journal"]', (event) => {
+        const entry = entries.find(({ id }) => id === event.target.data('entryId'));
+        if (entry) callbacksRef.current.onSelectEntry?.(entry);
+      });
+      graph.on('tap', 'node[kind="classifier_annotation"]', (event) => {
         const entry = entries.find(({ id }) => id === event.target.data('entryId'));
         if (entry) callbacksRef.current.onSelectEntry?.(entry);
       });
@@ -96,31 +115,37 @@ export function KnowledgeGraph({
       graph?.destroy();
       if (graphRef.current === graph) graphRef.current = null;
     };
-  }, [entries, theme]);
+  }, [entries, graphData, theme]);
 
   useEffect(() => {
     const graph = graphRef.current;
     if (!graph) return;
     graph.nodes().unselect();
     if (selectedId) {
-      const selected = graph.getElementById(selectedId);
+      const selected = graph.getElementById(selectedId).nonempty()
+        ? graph.getElementById(selectedId)
+        : graph.getElementById(`urn:awp:${selectedId}`);
       if (selected.nonempty()) selected.select();
     }
   }, [entries, selectedId]);
 
   return <section className="knowledge-graph map-panel pi-surface" aria-label="Knowledge relationship map">
-    <div className="map-heading"><div><h2>Knowledge map</h2><p>Notes · captures · topic tags</p></div><div className="map-controls">
+    <div className="map-heading"><div><h2>Knowledge graph</h2><p>{graphData?.nodes.length ? 'Daily journals · activity and reflections · Codex sessions · Pi Durable tasks · classifier predictions' : 'Notes · captures · topic tags'}</p></div><div className="map-controls">
       <button className="pi-button" type="button" aria-label="Zoom out map" title="Zoom out" onClick={() => { const graph = graphRef.current; if (graph) graph.zoom({ level: graph.zoom() / 1.25, renderedPosition: { x: graph.width() / 2, y: graph.height() / 2 } }); }}>−</button>
       <button className="pi-button" type="button" aria-label="Zoom in map" title="Zoom in" onClick={() => { const graph = graphRef.current; if (graph) graph.zoom({ level: graph.zoom() * 1.25, renderedPosition: { x: graph.width() / 2, y: graph.height() / 2 } }); }}>+</button>
       <button className="pi-button" type="button" onClick={() => graphRef.current?.fit(undefined, 32)}>Fit map</button>
       {onReset && <button className="pi-button map-reset" type="button" onClick={onReset}>Reset</button>}
     </div></div>
-    <div className="map-legend" aria-label="Map legend"><span><i className="legend-note" /> Journal note</span><span><i className="legend-capture" /> Source capture</span><span><i className="legend-topic" /> Topic tag</span></div>
-    <div className="map-canvas" ref={canvasRef} role="img" aria-label={`Relationship map with ${entries.length} journal notes. Use the journal list to navigate notes, or select a note or topic node.`} />
+    <div className="map-legend" aria-label="Graph legend">
+      {graphData?.nodes.length
+        ? <><span><i className="legend-note" /> Daily journal</span><span><i className="legend-capture" /> Activity / reflection</span><span><i className="legend-session" /> Codex session</span><span><i className="legend-task" /> Pi Durable task</span><span><i className="legend-classification" /> Unreviewed classification</span></>
+        : <><span><i className="legend-note" /> Journal note</span><span><i className="legend-capture" /> Source capture</span><span><i className="legend-topic" /> Topic tag</span></>}
+    </div>
+    <div className="map-canvas" ref={canvasRef} role="img" aria-label={`Knowledge graph with ${graphData?.nodes.length ?? entries.length} nodes and ${graphData?.edges.length ?? entries.length} relationships. Select a daily journal node to open its content.`} />
     <div className="map-node-list" aria-label="Keyboard accessible graph nodes">
       {entries.map((entry) => <button type="button" key={entry.id} className={selectedId === entry.id ? 'selected' : ''} aria-pressed={selectedId === entry.id} onClick={() => onSelectEntry?.(entry)}>{entry.text}</button>)}
       {topicLabels.map((topic) => <button type="button" key={`topic:${topic}`} onClick={() => onSelectTopic?.(topic)}>Topic: {topic}</button>)}
     </div>
-    <div className="map-scope">Showing {entries.length} {entries.length === 1 ? 'note' : 'notes'}{scopeSummary ? ` · ${scopeSummary}` : ''} · select a topic node to filter the journal</div>
+    <div className="map-scope">Showing {graphData?.nodes.length ?? entries.length} nodes · {graphData?.edges.length ?? entries.length} relationships{scopeSummary ? ` · ${scopeSummary}` : ''}</div>
   </section>;
 }

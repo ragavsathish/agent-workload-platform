@@ -32,6 +32,13 @@ imports the tar into Gondolin before starting Pi. The runner VM keeps Docker
 CLI and Compose for config rendering, but runs no Docker daemon and has no host
 socket. See [DOCKER_JOB_API.md](image-builder/DOCKER_JOB_API.md).
 
+The host manager reads `GITEA_ADMIN_TOKEN` and installs it as a Gondolin HTTP
+policy secret for the builder VM. Gondolin substitutes the token only on
+requests to the configured Gitea endpoint. The placeholder is withheld from
+the VM-wide environment so ordinary runner jobs cannot use it; a trusted IaC
+invocation must receive it explicitly. The builder's Gitea account is distinct
+from the voice session's account.
+
 Measured Mac capacity and OTel queries are in the
 [development-VM benchmark report](benchmarks/README.md). Focused research notes
 cover [Docker storage selection](../../../docs/research/gondolin-docker-storage-driver-overlay2-vs-vfs.md),

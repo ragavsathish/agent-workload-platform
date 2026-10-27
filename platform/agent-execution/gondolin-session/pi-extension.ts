@@ -12,7 +12,8 @@ import {
   type McpTransportFactory,
 } from "@earendil-works/pi-coding-agent";
 
-import { GondolinSession, guestHookCommand, resolveGuestHook, resolveGuestHooks } from "./session.js";
+import { GondolinSession, guestHookCommand, resolveGuestHook, resolveGuestHooks,
+  rewriteGiteaRepositoryRequest } from "./session.js";
 import { taskVmCheckpointPath, TaskVmLease } from "./task-vm-state.js";
 
 // Pi exposes custom MCP transport factories but not its default factory. Resolve the implementation
@@ -403,15 +404,8 @@ export default function gondolinSessionExtension(pi: ExtensionAPI): void {
                   GITEA_TOKEN: { value: gitea.token, hosts: [gitea.upstream.hostname] },
                 },
                 allowedInternalHosts: [gitea.upstream.hostname],
-                onRequest: (request: Request) => {
-                  const requested = new URL(request.url);
-                  if (requested.hostname !== gitea.guest.hostname) return request;
-                  if (requested.port !== gitea.guest.port) return new Response("Gitea destination denied", { status: 403 });
-                  requested.protocol = gitea.upstream.protocol;
-                  requested.hostname = gitea.upstream.hostname;
-                  requested.port = gitea.upstream.port;
-                  return new Request(requested, request);
-                },
+                onRequest: (request: Request) => rewriteGiteaRepositoryRequest(
+                  request, gitea.guest, gitea.upstream, gitea.owner, gitea.repository),
               } : {}),
             }
           : false,

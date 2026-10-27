@@ -30,7 +30,7 @@ test('submits with Pi Durable CLI and follows the task in Flutter', async ({ pag
       expect(task.id).toBe(taskId);
       expect(task.workspace).toBe('scratch');
       expect(task.instruction).toContain(`${marker}.txt`);
-      expect(task.status).toBe('approved');
+      expect(task.status).toBe('submitted');
     });
 
     const card = page.locator(`[flt-semantics-identifier="task-${taskId}"]`);

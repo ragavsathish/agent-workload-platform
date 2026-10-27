@@ -175,8 +175,7 @@ def _validate_chat(payload: dict[str, Any]) -> None:
     if not isinstance(tools, list) or len(tools) > 4:
         raise HTTPException(status_code=400, detail="invalid tool list")
     allowed_tools = {
-        "propose_agent_task",
-        "approve_agent_task",
+        "submit_agent_task",
         "get_agent_task",
         "cancel_agent_task",
     }

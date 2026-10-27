@@ -1,7 +1,7 @@
 # Voice Agent
 
 A private browser voice interface for the Agent Workload Platform on Apple Silicon. Docker Compose
-runs the browser-facing voice edge, Tailscale ingress, narrow task gateway, and Postgres. MLX,
+runs the browser-facing voice edge, Tailscale ingress, and narrow task gateway. MLX,
 Ollama, Pi, Gondolin, and Wassette remain native on macOS where Apple acceleration and VM-backed
 tool isolation are available.
 
@@ -72,11 +72,11 @@ ownership and planned extractions are documented in
   setup, while tailnet ACLs authenticate which devices can reach the listener.
 - The voice edge is non-root, read-only, capability-free, resource-bounded, and has no host mount or
   Docker socket.
-- Separate bearer capabilities expose only bounded inference and propose/status/approve/cancel.
+- Separate bearer capabilities expose bounded inference and direct task submit/status/cancel.
 - Voice edge and gateway containers use Docker's `none` log driver; Pipecat's shared Loguru handler
   is removed so transcripts, LLM context, and audio-adjacent payloads are never formatted as logs.
 - OpenTelemetry exports only manually defined, low-cardinality operation counts, durations, and
-  traces. It has no log exporter and records no audio, text, identity, workspace, proposal ID,
+  traces. It has no log exporter and records no audio, text, identity, workspace, task ID,
   exception message, URL parameter, request body, or response body.
 - Database credentials, Pi/provider authentication, sessions, and writable workspaces never enter the voice
   container.
@@ -90,12 +90,10 @@ ownership and planned extractions are documented in
   workspace at `/workspace`; the persistent voice VM shallow-clones committed source
   from Gitea into its local `/workspace`. Browser and permission-scoped Wassette
   tools are additional capabilities.
-- Durable delegation is deliberately **YOLO voice submission** for now: the Pi
-  Voice Service may create and immediately queue a task when the owner asks for
-  asynchronous work. A separately created proposal still requires a later
-  explicit approval turn. The gateway binds approvals to identity, proposal,
-  plan hash, and expiry. This is convenient, not phishing-resistant; a UI or
-  Face ID/WebAuthn capability should replace the side-effect boundary later.
+- Durable delegation submits a native Pi Durable task when the owner asks for
+  asynchronous work. The Gateway binds the task to the authenticated Tailscale
+  identity, and the Flutter board follows that same native task ID. Submission
+  does not create a pending proposal or require a second approval turn.
 
 Docker Desktop's Linux VM is the voice-service isolation boundary. Its containers share that VM,
 so this is intentionally simpler and weaker than a dedicated per-service micro-VM. The risky agent
@@ -150,7 +148,7 @@ docker exec pipecat-mlx-voice-tailscale-1 tailscale serve status
 ```
 
 If the proxy exists but the page does not open, use `make up`, wait for
-`voice-edge`, `agent-gateway`, Postgres, and S3Mock to become healthy, and then
+`voice-edge`, `agent-gateway`, and S3Mock to become healthy, and then
 run `make verify`. Open the URL from a device connected to the same tailnet;
 the Mac's ordinary DNS resolver does not need to resolve the private MagicDNS
 name when the Mac itself is not connected as a Tailscale client.
@@ -172,26 +170,26 @@ make recreate     # immutable container recreation plus verification
 make cycle-test   # three stop/recreate/schema cycles plus final recovery
 make benchmark-mlx # warm CPU, RSS, tokens/s, and realtime-factor benchmark
 make publish-workspace WORKSPACE_ID=agent-workload-platform REPOSITORY=/path/to/repository
-make blackbox-voice UTTERANCE="Propose a task in the default workspace to inspect it"
-make blackbox-e2e # synthetic voice through Pipecat plus a Postgres assertion
+make blackbox-voice UTTERANCE="Submit a task in the default workspace to inspect it"
+make blackbox-e2e # synthetic voice through Pipecat plus direct Pi Durable task assertions
 make playwright-grafana # render every C4 panel and attach colors, screenshot, and trace
 make digital-twin-pull-judge # download the official Selene 1 Mini Q4 judge for LM Studio
 make digital-twin-load-judge # load Selene with the API identifier used by the eval
 make digital-twin-eval # compare Von, optional Jev, and local Clef; LM Studio Selene judges outputs
 make digital-twin-judge-calibration # run grouped development/holdout judge calibration
 make digital-twin-judge-report RESULTS=digital-twin/eval/results/judge-calibration.json
-make down         # stop native and Compose services; preserve Postgres and Tailscale volumes
+make down         # stop native and Compose services; preserve data volumes
 make check        # tests, lint, type checks, build, Compose and plist validation
 ```
 
-`make start` installs and starts the native services after Postgres, S3Mock, and Gitea are healthy.
+`make start` installs and starts the native services after S3Mock and Gitea are healthy.
 Use `make native-start` after installation when those container dependencies are already running.
 `make native-stop` unloads the services, so launchd will not immediately restart jobs configured
 with `KeepAlive`. `make down` stops native services before stopping Compose. `make native-status`
 reads launchd state without changing it; `make verify` checks service readiness.
 
-Postgres and S3Mock are published only on host loopback so the native Pi worker can consume the
-Pi Durable task state and immutable workspace bundles. The bearer-protected agent gateway is also published on
+S3Mock is published only on host loopback so the native Pi Durable owner can consume immutable
+workspace bundles and store task artifacts. The bearer-protected agent gateway is also published on
 host loopback so the optional Pi voice backend can use bounded task-lifecycle and read-only
 personal-knowledge operations.
 The same gateway exposes a review-gated durable music workflow. Creating a generation starts an
@@ -224,8 +222,8 @@ instruments the digest-verified VoxLock ONNX graph at build time to expose that 
 only frequency-band aggregates, not model tensors. The live view polls a bounded microphone
 envelope rather than sending replayable audio samples. Synthesized speech exists only in memory while
 streaming. Transcripts remain in the in-memory conversation context for the active call and are
-discarded with it. Postgres stores only an explicitly proposed task instruction. The Pi Durable
-owner retains each task conversation in native SQLite so the voice agent can attach to the
+discarded with it. Pi Durable stores each directly submitted task and its native conversation in
+SQLite so the voice agent can attach to the
 still-running or recently settled task. The owner manages a mode-0600 Unix socket that accepts
 only bounded conversational commands; its
 outbound projection includes assistant text and command status, never model reasoning, tool arguments,
@@ -303,7 +301,7 @@ Both native endpoints bind only to Mac loopback; OTel reaches them through Docke
 
 The Pi Durable owner keeps task state in a private SQLite store and exposes a
 mode-0600 local socket for native inspection, abort, and retry. The Gateway uses
-its authenticated loopback HTTP interface to submit and query approved tasks.
+its authenticated loopback HTTP interface to submit and query native tasks.
 The owner endpoint is not routed through Tailscale ingress.
 
 Grafana, Grafana MCP, and OTLP/HTTP bind only to Mac loopback. OTLP/gRPC, Prometheus, Tempo, and Loki ports are not
@@ -315,7 +313,7 @@ private local monitoring, not production.
 The same authenticated origin serves the voice UI at `/`, the committed source mirror at `/git/`,
 and the knowledge query route at `/oxigraph/query`. Tailscale authenticates the connection and strips spoofed identity
 headers; Traefik then uses the edge's forward-auth endpoint to require the exact configured owner
-before any route is served. Prometheus, OTLP, the Agent Gateway, S3Mock, Postgres, and the Traefik
+before any route is served. Prometheus, OTLP, the Agent Gateway, S3Mock, and the Traefik
 dashboard have no tailnet route.
 
 For browser testing on the Docker host, the voice UI is also available at

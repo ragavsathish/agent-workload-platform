@@ -8,8 +8,10 @@ abort, and `retryTask`. A bounded private HTTP endpoint serves the Gateway;
 a mode-0600 Unix socket serves local inspection and recovery. Both use the
 same owner process and store.
 
-PostgreSQL still holds public proposals, song generations, and safe progress.
-The public task/result JSON shape and approval flow are unchanged. The owner
+At the initial owner cutover, PostgreSQL still held task proposals, song
+generations, and safe progress. This follow-up removes that task proposal and
+approval lifecycle: voice sessions now submit directly to Pi Durable. The public
+task/result JSON shape is preserved. The owner
 returns a stable UUID as the public task ID; repeated submissions with the
 same request ID and input return that task. Changed input is rejected.
 
@@ -51,12 +53,12 @@ not migrated.
   parked-task retry, abort, outage, and unauthorized scenarios.
 - `packages/tasking/tests/infrastructure/test_pi_durable_owner_mock.py`
   calls the production Python client over HTTP against that Babashka mock.
-- The deployed journey proposes and approves a scratch task through the
-  public Gateway, then reads the Pi result and artifact through the same API.
-  On 2026-10-25, proposal `c3902ba1-11f7-4f44-b1e6-1c17898125c3` completed
-  and its workspace artifact contained `durable-cutover.txt` with the exact
-  requested bytes `verified-2d928121\n`.
+- The earlier deployed journey proposed and approved a scratch task through
+  the public Gateway, then read the Pi result and artifact through the same API.
+  It is historical evidence for the former workflow; current coverage uses
+  direct submission from the voice session.
 
-The C2 mock models the private owner protocol only. It does not emulate Pi's
-conversation, tool replay, or S3. The deployed journey supplies that separate
-confidence signal.
+The C2 mock models the voice-session tool call to the owner route and the
+private owner protocol. It does not emulate Pi's model intent recognition,
+tool replay, or S3. The deployed journey supplies that separate confidence
+signal.

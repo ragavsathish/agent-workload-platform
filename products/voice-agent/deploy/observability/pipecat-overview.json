@@ -144,12 +144,12 @@
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "description": "Voice-created task proposals and decisions during the selected range.",
+      "description": "Voice task submissions and cancellations during the selected range.",
       "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "unit": "short"}, "overrides": []},
       "gridPos": {"h": 8, "w": 8, "x": 0, "y": 32},
       "id": 12,
       "options": {"displayMode": "gradient", "legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false}, "maxVizHeight": 300, "minVizHeight": 16, "minVizWidth": 8, "namePlacement": "auto", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showUnfilled": true, "sizing": "auto", "valueMode": "color"},
-      "targets": [{"editorMode": "code", "expr": "round(sum by (app_operation) (increase(pipecat_operation_total{app_operation=~\"task.propose|task.approve|task.cancel\"}[$__range])))", "instant": true, "legendFormat": "{{app_operation}}", "range": false, "refId": "A"}],
+      "targets": [{"editorMode": "code", "expr": "round(sum by (app_operation) (increase(pipecat_operation_total{app_operation=~\"task.submit|task.cancel\"}[$__range])))", "instant": true, "legendFormat": "{{app_operation}}", "range": false, "refId": "A"}],
       "title": "Agent task activity",
       "type": "bargauge"
     },

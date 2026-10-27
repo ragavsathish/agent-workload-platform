@@ -10,24 +10,28 @@ from rdflib import Graph
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validate digital-twin Turtle with SHACL")
     parser.add_argument("data", type=Path, help="Directory containing Turtle data files")
-    parser.add_argument("--shapes", type=Path, required=True, help="SHACL Turtle file")
+    parser.add_argument("--shapes", type=Path, action="append", required=True, help="SHACL Turtle file; may be repeated")
+    parser.add_argument("--vocabulary", type=Path, action="append", default=[], help="Vocabulary Turtle file; may be repeated")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     graph = Graph()
+    for path in args.vocabulary:
+        graph.parse(path, format="turtle")
     paths = sorted(args.data.glob("*.ttl")) if args.data.is_dir() else [args.data]
     if not paths:
         raise SystemExit(f"No Turtle files found under {args.data}")
     for path in paths:
         graph.parse(path, format="turtle")
 
+    shapes = Graph()
+    for path in args.shapes:
+        shapes.parse(path, format="turtle")
     conforms, _results_graph, report = validate(
         data_graph=graph,
-        shacl_graph=str(args.shapes),
-        data_graph_format="turtle",
-        shacl_graph_format="turtle",
+        shacl_graph=shapes,
         inference="none",
         abort_on_first=False,
         allow_infos=False,

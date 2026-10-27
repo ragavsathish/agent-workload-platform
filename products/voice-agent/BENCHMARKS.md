@@ -20,10 +20,12 @@ Five-run steady-state result:
 | TTS, 10.05 s speech | 0.39 s | 78.5% | 99.5% | 732 MiB | 732 MiB | 26.0× realtime |
 | STT, 10.05 s speech | 0.49 s | 15.1% | 25.6% | 729 MiB | 732 MiB | 20.5× realtime |
 
-On this machine, the warm inference processes therefore occupy about 8.44 GiB RSS combined. Idle
-Compose services added approximately 262 MiB: voice-edge 192 MiB, gateway 45 MiB, Postgres 25 MiB,
-and the unauthenticated local-test network anchor under 1 MiB. The native worker used another
-30 MiB. System memory remained healthy with 58% reported free after the run.
+On this machine, the warm inference processes therefore occupy about 8.44 GiB RSS combined. The
+historical Compose stack measured approximately 262 MiB of idle services: voice-edge 192 MiB,
+gateway 45 MiB, Postgres 25 MiB, and the unauthenticated local-test network anchor under 1 MiB.
+Postgres has since been removed from the active task stack in favor of Pi Durable; these numbers
+are a historical baseline, not current service sizing. The native worker used another 30 MiB.
+System memory remained healthy with 58% reported free after the run.
 
 CPU percentages use macOS process CPU time, where 100% means one fully occupied logical CPU. MLX
 executes most tensor work on the Apple GPU, so CPU utilization is intentionally modest. RSS on

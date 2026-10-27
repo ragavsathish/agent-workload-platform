@@ -70,7 +70,6 @@ const SCRUBBED_WASSETTE_ENV = {
   GITHUB_TOKEN: "",
   INFERENCE_BROKER_TOKEN: "",
   KNOWLEDGE_GATEWAY_TOKEN: "",
-  ORCHESTRATOR_APPROVAL_SECRET: "",
   TASK_GATEWAY_TOKEN: "",
 };
 
@@ -119,7 +118,7 @@ export function createRemoteTaskSessionRegistration(remote: {
       description: "Attach this voice conversation to one currently running durable Pi task.",
       parameters: Type.Object({
         task_id: Type.String({
-          description: "The exact lowercase UUID task_id returned after task approval.",
+          description: "The exact lowercase UUID task_id returned after task submission.",
           minLength: 36,
           maxLength: 36,
         }),

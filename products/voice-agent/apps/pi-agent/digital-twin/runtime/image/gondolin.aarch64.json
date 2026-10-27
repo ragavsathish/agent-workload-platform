@@ -9,7 +9,7 @@
     "krunfwVersion": "v5.2.1"
   },
   "oci": {
-    "image": "digital-twin-ingest:v1",
+    "image": "digital-twin-ingest:story-v3",
     "runtime": "docker",
     "platform": "linux/arm64",
     "pullPolicy": "never"

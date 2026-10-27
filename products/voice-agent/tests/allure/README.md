@@ -17,10 +17,12 @@ It writes an Allure report under the ignored
 repository `artifacts/test-reports/<run-id>/report/` directory and records its path in
 `artifacts/test-reports/latest.json`.
 Run `make allure-durable` when validating the full durable path. It adds a real scratch task
-through the owner browser route, approves it in the task board, waits for the isolated worker,
-and downloads the workspace ZIP through the browser. The test verifies that ZIP contains the
-unique file requested in the task. This opt-in run uses the authenticated tailnet browser bridge
-and starts a real Pi task; the routine report omits it to avoid creating work on every run.
+from the voice session, follows it in the task board, listens to its progress narration, waits for
+the isolated worker, and downloads the workspace ZIP through the browser. The Allure evidence
+includes the synthesized WAV size and the browser audio media request, and the test verifies that
+the ZIP contains the unique file requested in the task. This opt-in run uses the authenticated
+tailnet browser bridge and starts a real Pi task; the routine report omits it to avoid creating work
+on every run.
 For the direct CLI journey, set `DURABLE_CLI_TEST_IDENTITY` to the exact Voice Edge login and run
 `make playwright-durable-cli`. Ansible submits a fresh native task through the local Pi Durable
 CLI, then Playwright verifies its owner-visible Flutter card, Listen to agent control, progress,

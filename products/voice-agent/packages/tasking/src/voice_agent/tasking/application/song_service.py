@@ -1,12 +1,10 @@
-"""Durable, review-gated lyric and song generation lifecycle."""
+"""Pi Durable backed lyric and song generation lifecycle."""
 
 from __future__ import annotations
 
 import uuid
 from typing import Any
 
-import psycopg
-from psycopg.rows import dict_row
 from voice_agent.tasking.application.service import bounded_trace_context
 from voice_agent.tasking.domain.song_lifecycle import (
     RenderReadiness,
@@ -52,6 +50,14 @@ class SongService:
             else None
         )
 
+    @staticmethod
+    def lyrics_task_id(generation_id: str) -> str:
+        return str(uuid.uuid5(uuid.NAMESPACE_URL, f"song-lyrics:{generation_id}"))
+
+    @staticmethod
+    def render_task_id(generation_id: str) -> str:
+        return str(uuid.uuid5(uuid.NAMESPACE_URL, f"song-render:{generation_id}"))
+
     def create(
         self,
         *,
@@ -81,39 +87,21 @@ class SongService:
                 else resolve_workspace(workspace, self.settings.workspace_roots)
             )
         generation_id = str(uuid.uuid4())
-        task_id = self.owner.submit(
+        request_id = self.lyrics_task_id(generation_id)
+        self.owner.submit(
             "song-lyrics",
-            {"generation_id": generation_id, "identity": identity,
-             "brief": cleaned_brief, "workspace": str(resolved_workspace),
-             "style": cleaned_style, "duration_seconds": duration_seconds,
-             "trace_context": bounded_trace_context(trace_context)},
-            str(uuid.uuid5(uuid.NAMESPACE_URL, f"song-lyrics:{generation_id}")),
+            {
+                "generation_id": generation_id,
+                "identity": identity,
+                "brief": cleaned_brief,
+                "workspace": str(resolved_workspace),
+                "style": cleaned_style,
+                "duration_seconds": duration_seconds,
+                "trace_context": bounded_trace_context(trace_context),
+            },
+            request_id,
         )
-        with (
-            psycopg.connect(self.settings.database_url) as conn,
-            conn.cursor(row_factory=dict_row) as cursor,
-        ):
-            cursor.execute(
-                """
-                INSERT INTO voice_song_generations
-                    (id, identity, brief, workspace, style, duration_seconds, lyrics_task_id)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-                RETURNING *
-                """,
-                (
-                    generation_id,
-                    identity,
-                    cleaned_brief,
-                    str(resolved_workspace),
-                    cleaned_style,
-                    duration_seconds,
-                    task_id,
-                ),
-            )
-            row = cursor.fetchone()
-        if row is None:
-            raise RuntimeError("song generation insert returned no row")
-        return self._view(row)
+        return self._view(self._get_owned(identity, generation_id))
 
     def get(self, *, identity: str, generation_id: str) -> dict[str, Any]:
         return self._view(self._get_owned(identity, generation_id))
@@ -125,86 +113,38 @@ class SongService:
         generation_id: str,
         trace_context: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        with (
-            psycopg.connect(self.settings.database_url) as conn,
-            conn.cursor(row_factory=dict_row) as cursor,
-        ):
-            cursor.execute(
-                """
-                SELECT * FROM voice_song_generations
-                WHERE id = %s AND identity = %s
-                FOR UPDATE
-                """,
-                (generation_id, identity),
-            )
-            row = cursor.fetchone()
-            if row is None:
-                raise SongGenerationError("song generation not found")
-            lyrics = self._snapshot(row["lyrics_task_id"])
-            readiness, manifest = decide_render(
-                cancelled=row["cancelled_at"] is not None,
-                render_requested=bool(row["render_task_id"]),
-                lyrics=lyrics,
-            )
-            if readiness == "already_requested":
-                return self._view(row)
-            if rejection := RENDER_REJECTIONS.get(readiness):
-                raise SongGenerationError(rejection)
-            if readiness != "ready" or manifest is None:
-                raise RuntimeError("ready song render decision omitted its manifest")
-            task_id = self.owner.submit(
-                "song-render",
-                {"generation_id": generation_id, "identity": identity,
-                 "manifest": manifest.to_dict(),
-                 "trace_context": bounded_trace_context(trace_context)},
-                str(uuid.uuid5(uuid.NAMESPACE_URL, f"song-render:{generation_id}")),
-            )
-            cursor.execute(
-                """
-                UPDATE voice_song_generations
-                SET render_task_id = %s, render_requested_at = now()
-                WHERE id = %s
-                RETURNING *
-                """,
-                (task_id, generation_id),
-            )
-            row = cursor.fetchone()
-        if row is None:
-            raise RuntimeError("song render update returned no row")
-        return self._view(row)
+        row = self._get_owned(identity, generation_id)
+        lyrics = self._snapshot(row["lyrics_task_id"])
+        readiness, manifest = decide_render(
+            cancelled=row["cancelled_at"] is not None,
+            render_requested=bool(row["render_task_id"]),
+            lyrics=lyrics,
+        )
+        if readiness == "already_requested":
+            return self._view(row)
+        if rejection := RENDER_REJECTIONS.get(readiness):
+            raise SongGenerationError(rejection)
+        if readiness != "ready" or manifest is None:
+            raise RuntimeError("ready song render decision omitted its manifest")
+        self.owner.submit(
+            "song-render",
+            {
+                "generation_id": generation_id,
+                "identity": identity,
+                "manifest": manifest.to_dict(),
+                "trace_context": bounded_trace_context(trace_context),
+            },
+            self.render_task_id(generation_id),
+        )
+        return self._view(self._get_owned(identity, generation_id))
 
     def cancel(self, *, identity: str, generation_id: str) -> dict[str, Any]:
-        with (
-            psycopg.connect(self.settings.database_url) as conn,
-            conn.cursor(row_factory=dict_row) as cursor,
-        ):
-            cursor.execute(
-                """
-                SELECT * FROM voice_song_generations
-                WHERE id = %s AND identity = %s
-                FOR UPDATE
-                """,
-                (generation_id, identity),
-            )
-            row = cursor.fetchone()
-            if row is None:
-                raise SongGenerationError("song generation not found")
-            if row["cancelled_at"] is None:
-                task_id = row["render_task_id"] or row["lyrics_task_id"]
-                self.owner.abort(str(task_id))
-                cursor.execute(
-                    """
-                    UPDATE voice_song_generations
-                    SET cancelled_at = now()
-                    WHERE id = %s
-                    RETURNING *
-                    """,
-                    (generation_id,),
-                )
-                row = cursor.fetchone()
-        if row is None:
-            raise RuntimeError("song cancellation returned no row")
-        return self._view(row)
+        row = self._get_owned(identity, generation_id)
+        if row["cancelled_at"] is None:
+            self.owner.cancel_product(row["lyrics_task_id"], identity)
+            task_id = row["render_task_id"] or row["lyrics_task_id"]
+            self.owner.abort(task_id)
+        return self._view(self._get_owned(identity, generation_id))
 
     def audio(self, *, identity: str, generation_id: str) -> bytes:
         if self.artifacts is None:
@@ -219,18 +159,41 @@ class SongService:
             raise SongGenerationError(str(exc)) from exc
 
     def _get_owned(self, identity: str, generation_id: str) -> dict[str, Any]:
-        with (
-            psycopg.connect(self.settings.database_url) as conn,
-            conn.cursor(row_factory=dict_row) as cursor,
+        try:
+            uuid.UUID(generation_id)
+        except ValueError as exc:
+            raise SongGenerationError("song generation not found") from exc
+        lyrics_task_id = self.lyrics_task_id(generation_id)
+        lyrics = self.owner.describe_product(lyrics_task_id)
+        if (
+            lyrics is None
+            or lyrics.get("kind") != "song-lyrics"
+            or lyrics.get("params", {}).get("identity") != identity
+            or lyrics.get("params", {}).get("generation_id") != generation_id
         ):
-            cursor.execute(
-                "SELECT * FROM voice_song_generations WHERE id = %s AND identity = %s",
-                (generation_id, identity),
-            )
-            row = cursor.fetchone()
-        if row is None:
             raise SongGenerationError("song generation not found")
-        return row
+        params = lyrics["params"]
+        render_task_id = self.render_task_id(generation_id)
+        render = self.owner.describe_product(render_task_id)
+        if render is not None and (
+            render.get("kind") != "song-render"
+            or render.get("params", {}).get("identity") != identity
+            or render.get("params", {}).get("generation_id") != generation_id
+        ):
+            raise SongGenerationError("song generation not found")
+        return {
+            "id": generation_id,
+            "identity": identity,
+            "brief": params["brief"],
+            "workspace": params["workspace"],
+            "style": params["style"],
+            "duration_seconds": params["duration_seconds"],
+            "lyrics_task_id": lyrics_task_id,
+            "render_task_id": render_task_id if render is not None else None,
+            "created_at": lyrics["created_at"],
+            "render_requested_at": render["created_at"] if render is not None else None,
+            "cancelled_at": lyrics["cancelled_at"],
+        }
 
     def _snapshot(self, task_id: object) -> SongTaskSnapshot:
         snapshot = self.owner.get(str(task_id))

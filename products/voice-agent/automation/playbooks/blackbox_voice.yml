@@ -5,13 +5,13 @@
   vars:
     blackbox_full_e2e: true
     blackbox_default_utterance: >-
-      Propose a task in the default workspace to report voice black box complete
+      Submit a task in the default workspace to report voice black box complete
       without changing files
     telemetry_operations:
       - { service: pipecat-voice-edge, operation: voice.session }
       - { service: pipecat-mlx-inference, operation: inference.pi }
       - { service: pipecat-pi-voice, operation: pi.turn }
-      - { service: pipecat-agent-gateway, operation: task.propose }
+      - { service: pipecat-agent-gateway, operation: task.submit }
     telemetry_lifecycle_services:
       - pipecat-voice-edge
       - pipecat-mlx-inference
@@ -43,11 +43,6 @@
              if lookup('ansible.builtin.env', 'BLACKBOX_UTTERANCES_JSON')
              else [lookup('ansible.builtin.env', 'BLACKBOX_UTTERANCE')
                    | default(blackbox_default_utterance, true)] }}
-        blackbox_expected_workspace: >-
-          {{ blackbox_env.splitlines()
-             | select('match', '^VOICE_DEFAULT_WORKSPACE=')
-             | first
-             | regex_replace('^VOICE_DEFAULT_WORKSPACE=', '') }}
       no_log: true
 
     - name: Detect an authenticated Tailscale sidecar
@@ -83,7 +78,6 @@
         services:
           - tailscale
           - s3mock
-          - postgres
           - agent-gateway
           - voice-edge
         state: present
@@ -91,18 +85,6 @@
         wait: true
       environment:
         ORCHESTRATOR_ALLOWED_USERS: "{{ blackbox_identity }}"
-      no_log: true
-
-    - name: Count proposals before the full test
-      community.postgresql.postgresql_query:
-        login_host: 127.0.0.1
-        login_port: 54329
-        login_user: voice_agents
-        login_password: "{{ lookup('ansible.builtin.file', voice_agent_root + '/deploy/secrets/postgres-password') }}"
-        login_db: voice_agents
-        query: SELECT count(*)::integer AS proposal_count FROM voice_task_proposals
-      register: blackbox_proposals_before
-      when: blackbox_full_e2e | bool
       no_log: true
 
     - name: Snapshot exercised-path metrics
@@ -161,37 +143,6 @@
     - name: Report the payload-free voice probe result
       ansible.builtin.debug:
         msg: "{{ blackbox_voice_result.stdout_lines }}"
-
-    - name: Read the newest proposal
-      community.postgresql.postgresql_query:
-        login_host: 127.0.0.1
-        login_port: 54329
-        login_user: voice_agents
-        login_password: "{{ lookup('ansible.builtin.file', voice_agent_root + '/deploy/secrets/postgres-password') }}"
-        login_db: voice_agents
-        query: >-
-          SELECT identity, status, workspace,
-          (SELECT count(*)::integer FROM voice_task_proposals) AS proposal_count
-          FROM voice_task_proposals ORDER BY created_at DESC LIMIT 1
-      register: blackbox_latest_proposal
-      when: blackbox_full_e2e | bool
-      no_log: true
-
-    - name: Verify proposal persistence
-      ansible.builtin.assert:
-        that:
-          - blackbox_latest_proposal.query_result | length == 1
-          - blackbox_latest_proposal.query_result[0].proposal_count == blackbox_proposals_before.query_result[0].proposal_count + 1
-          - blackbox_latest_proposal.query_result[0].identity == blackbox_identity
-          - blackbox_latest_proposal.query_result[0].status == 'pending'
-          - >-
-            blackbox_latest_proposal.query_result[0].workspace is match(
-              '^s3://agent-artifacts/workspaces/'
-              + blackbox_expected_workspace
-              + '/sources/.+\\.bundle$'
-            )
-        fail_msg: The synthetic voice turn did not create exactly one valid pending proposal.
-      when: blackbox_full_e2e | bool
 
     - name: Wait for fresh exercised-path metrics
       ansible.builtin.uri:

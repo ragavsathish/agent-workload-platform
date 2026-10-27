@@ -1677,7 +1677,7 @@ class _TaskBoard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Review work proposed by Pi and follow execution to its output.',
+                      'Run work directly with Pi Durable and follow execution to its output.',
                       style: TextStyle(color: PiColors.of(context).muted),
                     ),
                   ],
@@ -1960,13 +1960,6 @@ class _TaskCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                if (task.status == 'pending')
-                  FilledButton.icon(
-                    key: Key('approve-${task.id}'),
-                    onPressed: busy ? null : () => onAction('approve'),
-                    icon: const Icon(Icons.check_rounded, size: 16),
-                    label: const Text('Approve'),
-                  ),
                 OutlinedButton.icon(
                   key: Key('cancel-${task.id}'),
                   onPressed: busy ? null : () => onAction('cancel'),
@@ -2114,7 +2107,7 @@ class _NoticeBanner extends StatelessWidget {
 Color _stateColor(BuildContext context, String state) => switch (state) {
   'completed' || 'succeeded' => PiColors.of(context).green,
   'running' => PiColors.of(context).blue,
-  'pending' || 'approved' || 'sleeping' => PiColors.of(context).orange,
+  'pending' || 'sleeping' => PiColors.of(context).orange,
   'cancelled' || 'failed' => PiColors.of(context).danger,
   _ => PiColors.of(context).muted,
 };
@@ -2122,8 +2115,7 @@ Color _stateColor(BuildContext context, String state) => switch (state) {
 String _stateLabel(AgentTask task) => switch (task.state) {
   'completed' || 'succeeded' => 'Completed',
   'running' => 'Running',
-  'pending' => 'Waiting for approval',
-  'approved' => 'Approved',
+  'pending' => 'Queued',
   'sleeping' => 'Waiting',
   'cancelled' => 'Cancelled',
   'failed' => 'Failed',

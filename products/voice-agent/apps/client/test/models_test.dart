@@ -166,7 +166,7 @@ void main() {
       'instruction': 'Inspect the repository',
       'workspace': '/workspace',
       'plan_hash': 'abc',
-      'status': 'approved',
+      'status': 'submitted',
       'created_at': '2026-10-15T20:00:00Z',
       'result': {'state': 'running'},
     });

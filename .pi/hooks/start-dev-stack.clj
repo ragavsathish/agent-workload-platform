@@ -152,24 +152,15 @@
                                       (java.nio.file.attribute.PosixFilePermissions/fromString "rw-r--r--")))))
   (let [routes (-> (read-text "/workspace/products/voice-agent/deploy/traefik/routes.yml")
                    (str/replace "http://otel-lgtm:3000" "http://127.0.0.1:3000")
-                   (str/replace "http://gitea:3000" "http://127.0.0.1:3001")
-                   (str/replace "http://habitat:7890" "http://127.0.0.1:7890"))
+                   (str/replace "http://gitea:3000" "http://127.0.0.1:3001"))
         traefik (str/replace (read-text "/workspace/products/voice-agent/deploy/traefik/traefik.yml")
                              "address: \"127.0.0.1:8080\""
                              "address: \"127.0.0.1:8082\"")]
     (write-text! (str secret-directory "/traefik-routes.yml") routes)
     (write-text! (str secret-directory "/traefik.yml") traefik))
-  (let [postgres-password (ensure-secret! "postgres-password" (random-secret))
-        habitat-password (ensure-secret! "habitat-database-password" postgres-password)
-        sql-template (read-text "/workspace/.pi/postgres-full-mock-init.sql.template")
-        sql (str/replace sql-template "__HABITAT_PASSWORD__"
-                         (str/replace habitat-password "'" "''"))]
-    (write-text! (str secret-directory "/compose-full-mock-init.sql") sql)
-    (ensure-secret! "database-url"
-                    (str "postgresql://voice_agents:" postgres-password "@127.0.0.1:5432/voice_agents")))
   (let [broker-token (ensure-secret! "broker-token" (random-secret))]
     (doseq [name ["agent-gateway-token" "digital-twin-reader-token"
-                  "digital-twin-writer-token" "approval-secret"
+                  "digital-twin-writer-token"
                   "grafana-admin-password" "grafana-mcp-caller-token"]]
       (ensure-secret! name (random-secret)))
     (start-inference-mock! broker-token)
@@ -186,9 +177,7 @@
                   "VOICE_DEFAULT_WORKSPACE" "/workspace"
                   "OLLAMA_MODEL" "dev-mock"}]
     (cond-> (merge base defaults)
-      full-stack (merge {"POSTGRES_PASSWORD" (read-secret "postgres-password")
-                         "HABITAT_DB_PASSWORD" (read-secret "habitat-database-password")
-                         "INFERENCE_BROKER_TOKEN" broker-token
+      full-stack (merge {"INFERENCE_BROKER_TOKEN" broker-token
                          "AGENT_GATEWAY_TOKEN" (read-secret "agent-gateway-token")
                          "DIGITAL_TWIN_READER_TOKEN" (read-secret "digital-twin-reader-token")
                          "DIGITAL_TWIN_WRITER_TOKEN" (read-secret "digital-twin-writer-token")
@@ -251,8 +240,8 @@
               compose-environment (assoc environment "COMPOSE_CACHE_SERVICES"
                                          (str/join "," preload-services))
               base-services (filter (set services)
-                                    ["postgres" "s3mock-init" "s3mock" "oxigraph-init" "oxigraph"
-                                     "gitea" "habitat" "fluent-bit" "otel-lgtm"])]
+                                    ["s3mock-init" "s3mock" "oxigraph-init" "oxigraph"
+                                     "gitea" "fluent-bit" "otel-lgtm"])]
           (if full-stack
             (apply run-compose compose-environment "up" "--detach" base-services)
             (apply run-compose compose-environment "up" "--detach" "--wait" "--wait-timeout" "180"

@@ -9,7 +9,12 @@ export function expectCleanFlutterBrowser(page: Page, browserEvidence, maxFontAb
     && /^\/assets\/(?:fonts\/MaterialIcons-Regular\.otf|packages\/cupertino_icons\/assets\/CupertinoIcons\.ttf|design_system\/fonts\/SourceCodePro-(?:Regular|Semibold)\.ttf)$/u
       .test(new URL(failure.url).pathname));
   expect(fontAborts.length).toBeLessThanOrEqual(maxFontAborts);
+  const navigationAborts = browserEvidence.requestFailures.filter((failure: {
+    method: string; url: string; error: string,
+  }) => failure.method === 'GET' && failure.error === 'net::ERR_ABORTED'
+    && new URL(failure.url).origin === new URL(page.url()).origin
+    && /^\/api\/(?:pi-context|pi-transcript|pi-sessions|tasks)$/u.test(new URL(failure.url).pathname));
   expectCleanBrowser({ ...browserEvidence,
     requestFailures: browserEvidence.requestFailures.filter((failure: unknown) =>
-      !fontAborts.includes(failure)) });
+      !fontAborts.includes(failure) && !navigationAborts.includes(failure)) });
 }

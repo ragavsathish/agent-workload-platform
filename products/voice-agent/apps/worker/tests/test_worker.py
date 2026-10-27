@@ -1,5 +1,4 @@
 import json
-import io
 import os
 import subprocess
 from dataclasses import replace
@@ -11,8 +10,6 @@ import pytest
 from opentelemetry.propagate import inject
 from voice_agent.tasking.infrastructure.config import Settings
 
-from voice_worker.native_task import execute
-from voice_worker.workspace_effect import prepare, finish, main as workspace_effect_main, task_repository
 from voice_worker.main import (
     continue_task_trace,
     prepare_repository_image,
@@ -20,42 +17,16 @@ from voice_worker.main import (
     run_digital_twin,
     run_song_render,
     scratch_root_reaches_account_home,
-    task_progress_publisher,
     validate_worker,
 )
-
-
-def test_task_progress_keeps_later_updates_after_a_fast_burst(monkeypatch) -> None:
-    stored: list[str] = []
-
-    class Connection:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            return None
-
-        def execute(self, _query, values):
-            stored.append(values[1])
-
-    monkeypatch.setattr("voice_worker.main.psycopg.connect", lambda _url: Connection())
-    publish = task_progress_publisher("postgresql://test", "task-id")
-    for index in range(101):
-        publish(f"Action {index}.")
-
-    assert len(stored) == 101
-    assert stored[-1] == "Action 100."
-    publish("The agent is reading source files.")
-    assert stored[-1] == "The agent is reading source files."
+from voice_worker.native_task import execute
+from voice_worker.workspace_effect import finish, prepare, task_repository
 
 
 def settings(tmp_path: Path, *, sandboxed: bool) -> Settings:
     return Settings(
-        database_url="postgresql://test",
-        approval_secret="s" * 32,
         allowed_users=(),
         workspace_roots=(tmp_path,),
-        approval_ttl_seconds=300,
         pi_model="openai-codex/gpt-5",
         pi_thinking="medium",
         pi_session_dir=tmp_path / "sessions",
@@ -121,6 +92,27 @@ def test_digital_twin_task_invokes_the_dedicated_vm_runner(tmp_path: Path, monke
     assert observed["command"] == [configured.node_binary, str(runner)]
     assert json.loads(observed["input"])["sessionId"] == "session-7"
     assert result == {"entries": 1}
+
+
+def test_daily_journal_uses_the_native_digital_twin_task_path(tmp_path: Path, monkeypatch) -> None:
+    configured = replace(settings(tmp_path, sandboxed=True), worker_scratch_root=tmp_path / "scratch")
+    monkeypatch.setattr("voice_worker.native_task.validate_worker", lambda _settings: None)
+    observed = {}
+
+    def run(_settings, payload):
+        observed.update(payload)
+        return {"mode": "daily-journal", "journalDate": payload["journalDate"]}
+
+    monkeypatch.setattr("voice_worker.native_task.run_digital_twin", run)
+    result = execute(
+        "digital-twin-daily-journal",
+        {"mode": "daily-journal", "journalDate": "2026-10-17", "timeZone": "Europe/Helsinki"},
+        "task-daily-1",
+        configured,
+    )
+
+    assert result == {"mode": "daily-journal", "journalDate": "2026-10-17"}
+    assert observed["mode"] == "daily-journal"
 
 
 def test_journal_decision_metrics_are_payload_free(monkeypatch) -> None:
@@ -215,24 +207,6 @@ def test_task_repository_uses_the_published_workspace_identity() -> None:
     assert task_repository(f"s3://agent-artifacts/workspaces/full-wasm-server/sources/{digest}.bundle") == "full-wasm-server"
     with pytest.raises(ValueError, match="does not identify a repository"):
         task_repository("../../other")
-
-
-def test_workspace_progress_uses_the_bounded_owner_feed(monkeypatch, capsys) -> None:
-    observed: list[str] = []
-    monkeypatch.setattr("voice_worker.workspace_effect.Settings.from_env", lambda: settings(Path("/tmp"), sandboxed=False))
-    monkeypatch.setattr("voice_worker.workspace_effect.task_progress_publisher",
-                        lambda _url, _task_id: observed.append)
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({
-        "action": "progress", "requestId": "11111111-1111-4111-8111-111111111111",
-        "spoken": "Using read." + "x" * 300,
-    })))
-    previous_umask = os.umask(0o077)
-    try:
-        workspace_effect_main()
-    finally:
-        os.umask(previous_umask)
-    assert observed == [("Using read." + "x" * 300)[:240]]
-    assert json.loads(capsys.readouterr().out) == {}
 
 
 def test_native_owner_task_rejects_unknown_kind(tmp_path: Path, monkeypatch) -> None:

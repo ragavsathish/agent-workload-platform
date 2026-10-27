@@ -80,6 +80,8 @@ test("orchestrator Pi registers Wassette through native deferred MCP", async () 
   const event = promptEvent();
   handlers.get("before_agent_start")(event);
   assert.match(event.systemPromptOptions.sections.wassette, /capability-controlled WebAssembly/u);
+  assert.match(event.systemPromptOptions.sections.wassette, /submit-agent-task/u);
+  assert.match(event.systemPromptOptions.sections.wassette, /Do not say the submission tool is unavailable/u);
   assert.match(event.systemPromptOptions.sections.music, /review-gated/u);
 });
 
