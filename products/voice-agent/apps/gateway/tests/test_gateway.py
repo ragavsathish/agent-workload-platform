@@ -110,6 +110,25 @@ def test_tasks_can_be_queried_by_exact_session_name(monkeypatch):
     }
 
 
+def test_task_list_reports_owner_outage_as_service_unavailable(monkeypatch):
+    gateway = load_gateway(monkeypatch)
+
+    class UnavailableTasks:
+        def list(self, **_kwargs):
+            raise RuntimeError("Pi Durable owner is unavailable")
+
+    monkeypatch.setattr(gateway, "service", lambda: UnavailableTasks())
+    client = TestClient(gateway.app)
+    response = client.get(
+        "/v1/tasks",
+        params={"identity": "owner@example.com"},
+        headers={"Authorization": f"Bearer {'g' * 32}"},
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Pi Durable task owner is unavailable"}
+
+
 def test_task_progress_requires_owner_identity_and_forwards_cursor(monkeypatch):
     gateway = load_gateway(monkeypatch)
     observed = {}

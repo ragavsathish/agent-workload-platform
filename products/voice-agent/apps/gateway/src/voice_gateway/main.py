@@ -1062,13 +1062,16 @@ async def list_tasks(
     _: None = Depends(authenticate),
 ):
     with telemetry.observe("task.list"):
-        results = await asyncio.to_thread(
-            service().list,
-            identity=normalized_identity(identity),
-            limit=limit,
-            session_name=session_name,
-        )
-        return [voice_view(result) for result in results]
+        try:
+            results = await asyncio.to_thread(
+                service().list,
+                identity=normalized_identity(identity),
+                limit=limit,
+                session_name=session_name,
+            )
+            return [voice_view(result) for result in results]
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail="Pi Durable task owner is unavailable") from exc
 
 
 @app.get("/v1/tasks/{proposal_id}")
