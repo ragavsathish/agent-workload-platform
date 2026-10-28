@@ -2,12 +2,44 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import uuid
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+from opentelemetry import metrics, trace
+
+_transport_errors = metrics.get_meter("pipecat-mlx-voice").create_counter(
+    "pi_durable.owner.transport.errors",
+    description="Pi Durable owner transport failures by bounded cause and command",
+)
+
+
+def _failure_kind(exc: HTTPError | URLError | TimeoutError) -> str:
+    if isinstance(exc, HTTPError):
+        code = exc.code or 0
+        if 400 <= code < 500:
+            return "http_4xx"
+        if 500 <= code < 600:
+            return "http_5xx"
+        return "http_other"
+    reason = exc.reason if isinstance(exc, URLError) else exc
+    if isinstance(reason, TimeoutError):
+        return "timeout"
+    if isinstance(reason, OSError):
+        if reason.errno is None:
+            return "network_other"
+        return {
+            errno.ENETUNREACH: "network_unreachable",
+            errno.EHOSTUNREACH: "host_unreachable",
+            errno.ECONNREFUSED: "connection_refused",
+            errno.ECONNRESET: "connection_reset",
+            errno.ETIMEDOUT: "timeout",
+        }.get(reason.errno, "network_other")
+    return "network_other"
 
 
 class PiDurableOwner:
@@ -26,7 +58,11 @@ class PiDurableOwner:
         try:
             with urlopen(request, timeout=30) as response:
                 envelope = json.load(response)
-        except (HTTPError, URLError) as exc:
+        except (HTTPError, URLError, TimeoutError) as exc:
+            attributes = {"owner.command": command, "owner.failure_kind": _failure_kind(exc)}
+            _transport_errors.add(1, attributes)
+            span = trace.get_current_span()
+            span.set_attributes(attributes)
             raise RuntimeError("Pi Durable owner is unavailable") from exc
         if not envelope.get("success"):
             raise RuntimeError(str(envelope.get("error", "Pi Durable owner rejected the request")))
