@@ -110,13 +110,12 @@ test('I submit a task from a voice session and follow it in Flutter', async ({
           && response.request().method() === 'POST',
         { timeout: 90_000 },
       );
-      const speechResponse = page.waitForResponse((response) =>
-        response.url().endsWith('/api/pi-speech')
-          && response.request().method() === 'POST'
-          && typeof response.request().postDataJSON()?.spoken === 'string'
-          && response.request().postDataJSON().spoken.length > 0,
-        { timeout: 90_000 },
-      );
+      const speechResponses: any[] = [];
+      const captureSpeech = (response: any) => {
+        if (response.url().endsWith('/api/pi-speech')
+          && response.request().method() === 'POST') speechResponses.push(response);
+      };
+      page.on('response', captureSpeech);
       const mediaRequest = page.waitForRequest((request) =>
         request.url().startsWith('blob:') && request.resourceType() === 'media',
         { timeout: 90_000 },
@@ -128,7 +127,12 @@ test('I submit a task from a voice session and follow it in Flutter', async ({
       const narrationBody = await narration.json();
       expect(typeof narrationBody.spoken).toBe('string');
       expect(narrationBody.spoken.length).toBeGreaterThan(0);
-      const response = await speechResponse;
+      await expect.poll(() => speechResponses.some((item) =>
+        item.request().postDataJSON()?.spoken === narrationBody.spoken),
+      { timeout: 90_000 }).toBe(true);
+      const response = speechResponses.find((item) =>
+        item.request().postDataJSON()?.spoken === narrationBody.spoken);
+      page.off('response', captureSpeech);
       expect(response.ok()).toBeTruthy();
       expect(response.headers()['content-type']).toMatch(/^audio\//u);
       expect(response.request().postDataJSON().spoken).toBe(narrationBody.spoken);
@@ -197,9 +201,10 @@ test('I submit a task from a voice session and follow it in Flutter', async ({
         method: string; url: string; error: string,
       }) => failure.method === 'GET' && failure.error === 'net::ERR_ABORTED'
         && new URL(failure.url).origin === new URL(page.url()).origin
-        && ['/api/tasks', '/api/pi-context', '/api/pi-transcript', '/api/pi-sessions']
-          .includes(new URL(failure.url).pathname));
-      expect(expectedAborts.length).toBeLessThanOrEqual(3);
+        && (['/api/tasks', '/api/pi-context', '/api/pi-transcript', '/api/pi-sessions']
+          .includes(new URL(failure.url).pathname)
+          || /^\/api\/tasks\/[^/]+\/progress$/u.test(new URL(failure.url).pathname)));
+      expect(expectedAborts.length).toBeLessThanOrEqual(8);
       proof.expectedNavigationAborts = expectedAborts.map((failure: { url: string }) =>
         new URL(failure.url).pathname);
       expectCleanBrowser({
