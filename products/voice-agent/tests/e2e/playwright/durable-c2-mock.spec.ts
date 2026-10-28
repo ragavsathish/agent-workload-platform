@@ -52,8 +52,11 @@ test('voice session submits directly to Pi Durable and I follow the task in Flut
   });
 
   const task = await allure.step('When I ask Pi in this session to submit a scratch task', async () => {
-    await page.getByRole('textbox', { name: 'Message Pi…' })
-      .fill(`Submit a scratch task: ${instruction}`);
+    const composer = page.getByRole('textbox', { name: 'Message Pi…' });
+    const message = `Submit a scratch task: ${instruction}`;
+    await composer.click();
+    await composer.pressSequentially(message);
+    await expect(composer).toHaveValue(message);
     const responsePromise = page.waitForResponse((response) =>
       response.url().endsWith('/api/pi-message') && response.request().method() === 'POST');
     await page.getByRole('button', { name: 'Send message' }).click();

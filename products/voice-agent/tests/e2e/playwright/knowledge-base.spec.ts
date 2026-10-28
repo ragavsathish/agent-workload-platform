@@ -12,33 +12,39 @@ const emitMapNodeTap = async (page, nodeId: string) => page.locator('.map-canvas
 
 const firstId = `${'a'.repeat(32)}:entry:1`;
 const graphId = `${'a'.repeat(32)}:entry:2`;
+const daysAgo = (days: number, time: string) => {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() - days);
+  return `${date.toISOString().slice(0, 10)}T${time}Z`;
+};
+const recentDate = daysAgo(1, '15:42:00');
 
 const journalFixture = [
   {
     id: firstId, kind: 'decision',
     text: 'Keep durable memory separate from accepted facts until the owner reviews it.',
-    createdAt: '2026-10-22T15:42:00Z', sourceId: 'capture-voice-1022',
+    createdAt: recentDate, sourceId: 'capture-voice-1022',
     sourceLabel: 'Voice session · 22 Oct', transcript: 'Keep durable memory separate until I have reviewed it.',
     topics: ['Knowledge review', 'Privacy'],
   },
   {
     id: graphId, kind: 'idea',
     text: 'A graph view should help me discover connections without hiding the original journal note.',
-    createdAt: '2026-10-22T15:35:00Z', sourceId: 'capture-voice-1022',
+    createdAt: daysAgo(1, '15:35:00'), sourceId: 'capture-voice-1022',
     sourceLabel: 'Voice session · 22 Oct', transcript: 'A graph could show relationships between notes.',
     topics: ['Knowledge review', 'User experience'],
   },
   {
     id: 'note-linked-views', kind: 'idea',
     text: 'Selecting a topic should keep the journal list, graph, and note details in sync.',
-    createdAt: '2026-10-12T10:30:00Z', sourceId: 'capture-voice-1012',
+    createdAt: daysAgo(20, '10:30:00'), sourceId: 'capture-voice-1012',
     sourceLabel: 'Voice session · 12 Oct', transcript: 'The topic list and graph and actual notes should stay connected.',
     topics: ['Knowledge review', 'User experience'],
   },
   {
     id: 'note-local-first', kind: 'decision',
     text: 'Keep personal knowledge local and expose only bounded, read-only views to the browser.',
-    createdAt: '2026-10-19T09:18:00Z', sourceId: 'capture-voice-1019',
+    createdAt: daysAgo(3, '09:18:00'), sourceId: 'capture-voice-1019',
     sourceLabel: 'Voice session · 19 Oct', transcript: 'The digital twin is personal data. It should stay local.',
     topics: ['Digital twin', 'Privacy'],
   },
@@ -51,7 +57,16 @@ const installOxigraphFixture = async (page) => {
     const request = route.request();
     expect(request.method()).toBe('POST');
     expect(request.headers()['content-type']).toContain('application/sparql-query');
-    expect(request.postData()).toContain('GRAPH <urn:awp:digital-twin:graph:journal>');
+    if (request.postData()?.includes('SELECT ?from ?fromKind')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/sparql-results+json',
+        body: JSON.stringify({ head: { vars: ['from', 'to', 'relation'] }, results: { bindings: [] } }),
+      });
+      return;
+    }
+    expect(request.postData()).toContain('<urn:awp:digital-twin:graph:journal>');
+    expect(request.postData()).toContain('<urn:pk:digital-twin:graph:journal>');
     const bindings = state.entries.flatMap((entry) => entry.topics.map((topic) => ({
       id: bind(entry.id), kind: bind(entry.kind), text: bind(entry.text), createdAt: bind(entry.createdAt),
       sourceId: bind(entry.sourceId), sourceLabel: bind(entry.sourceLabel),
@@ -94,7 +109,7 @@ test('browses, filters, and maps journal notes with synchronized details', async
     await page.goto('/knowledge/', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: 'Journal & knowledge' })).toBeVisible();
     await expect(page.getByText('Live Oxigraph', { exact: true })).toBeVisible();
-    await expect(page.locator('#date-2026-10-22')).toBeVisible();
+    await expect(page.locator(`#date-${recentDate.slice(0, 10)}`)).toBeVisible();
     await expect(page.getByRole('button', { name: /Keep durable memory separate/ })).toBeVisible();
   });
   await allure.step('When I filter notes by topic', async () => {
@@ -105,11 +120,11 @@ test('browses, filters, and maps journal notes with synchronized details', async
     await expect(page.getByRole('region', { name: 'Active filters' }))
       .toContainText('Topic: Knowledge review');
     await expect(page.getByRole('heading', { name: 'Knowledge review' })).toBeVisible();
-    await expect(page.getByText('3 notes · newest first')).toBeVisible();
+    await expect(page.getByText('3 records · newest first')).toBeVisible();
   });
   await allure.step('When I clear the filter and select a note', async () => {
     await page.getByRole('button', { name: 'Remove Topic: Knowledge review filter' }).click();
-    await expect(page.getByText('4 notes · newest first')).toBeVisible();
+    await expect(page.getByText('4 records · newest first')).toBeVisible();
     await page.getByRole('button', { name: /Selecting a topic should keep the journal list/ }).click();
   });
   await allure.step('Then the selected note details match the journal', async () => {
@@ -156,17 +171,17 @@ test('combines type and date filters and removes them independently', async ({ p
     await page.getByRole('radio', { name: 'Last 7 days' }).check();
   });
   await allure.step('Then only matching notes remain', async () => {
-    await expect(page.getByText('2 notes · newest first')).toBeVisible();
+    await expect(page.getByText('2 records · newest first')).toBeVisible();
     await expect(page.getByRole('region', { name: 'Active filters' }).getByRole('button'))
       .toHaveCount(3);
   });
   await allure.step('When I remove each filter independently', async () => {
     await page.getByRole('button', { name: 'Remove Type: Decision filter' }).click();
-    await expect(page.getByText('3 notes · newest first')).toBeVisible();
+    await expect(page.getByText('3 records · newest first')).toBeVisible();
     await page.getByRole('button', { name: 'Remove Date: Last 7 days filter' }).click();
   });
   await allure.step('Then the full journal list returns', async () => {
-    await expect(page.getByText('4 notes · newest first')).toBeVisible();
+    await expect(page.getByText('4 records · newest first')).toBeVisible();
     await expect(page.getByRole('region', { name: 'Active filters' })).toHaveCount(0);
   });
   await allure.step('And the browser reports no unexpected errors', async () => {
@@ -195,7 +210,7 @@ test('maps Cytoscape node events to journal state', async ({ page, browserEviden
   await allure.step('Then the journal filters to that topic', async () => {
     await expect(page.getByRole('button', { name: 'Journal', exact: false })).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByRole('heading', { name: 'Privacy' })).toBeVisible();
-    await expect(page.getByText('2 notes · newest first')).toBeVisible();
+    await expect(page.getByText('2 records · newest first')).toBeVisible();
   });
   await allure.step('When I select a capture node', async () => {
     await page.getByRole('button', { name: 'Map', exact: false }).click();
@@ -205,7 +220,7 @@ test('maps Cytoscape node events to journal state', async ({ page, browserEviden
   await allure.step('Then the journal shows the linked capture', async () => {
     await expect(page.getByRole('button', { name: 'Journal', exact: false })).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('input[placeholder^="Search notes"]')).toHaveValue('Voice session · 19 Oct');
-    await expect(page.getByText('1 note · newest first')).toBeVisible();
+    await expect(page.getByText('1 record · newest first')).toBeVisible();
     await expect(page.getByRole('complementary', { name: 'Selected journal note' }))
       .toContainText('Keep personal knowledge local and expose only bounded, read-only views to the browser.');
   });

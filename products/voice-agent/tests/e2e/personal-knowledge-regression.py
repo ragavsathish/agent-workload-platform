@@ -10,6 +10,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any
+from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[2]
 COMPOSE = [
@@ -33,27 +34,15 @@ def configured_identity() -> str:
 
 
 def sparql_update(update: str) -> None:
-    subprocess.run(
-        [
-            *COMPOSE,
-            "exec",
-            "-T",
-            "gitea",
-            "wget",
-            "-q",
-            "-O",
-            "-",
-            "--header",
-            "Content-Type: application/sparql-update",
-            "--post-file",
-            "/dev/stdin",
-            "http://oxigraph:7878/update",
-        ],
-        cwd=ROOT,
-        input=update,
-        text=True,
-        check=True,
+    request = Request(
+        "http://127.0.0.1:7878/update",
+        data=update.encode("utf-8"),
+        headers={"Content-Type": "application/sparql-update"},
+        method="POST",
     )
+    with urlopen(request, timeout=15) as response:
+        if response.status != 204:
+            raise RuntimeError(f"Oxigraph update failed: {response.status}")
 
 
 def read_response(process: subprocess.Popen[str], request_id: int) -> dict[str, Any]:

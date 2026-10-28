@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 
-TRACE_SEARCH_TIMEOUT_SECONDS = 60
+TRACE_SEARCH_TIMEOUT_SECONDS = 120
 
 
 class GrafanaMcp:
@@ -204,7 +204,7 @@ def main() -> None:
                 "server": initialized["serverInfo"],
                 "toolCount": len(tools),
                 "traceApp": trace_app,
-                "traceId": trace_id,
+                "traceId": trace_id.zfill(32),
                 "traceSearchSeconds": round(time.monotonic() - trace_search_started, 3),
                 "dashboard": "voice-c4-heatmap",
                 "promql": 'up{job="grafana-mcp"}',

@@ -1,12 +1,14 @@
 PREFIX schema: <https://schema.org/>
 PREFIX legacy: <urn:pk:digital-twin:predicate:>
+PREFIX awp: <urn:awp:digital-twin:predicate:>
 PREFIX pk: <urn:voice-agent:personal-knowledge:ontology#>
 PREFIX prov: <http://www.w3.org/ns/prov#>
 PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
 
 SELECT ?id ?kind ?recordKind ?text ?createdAt ?sourceId ?sourceLabel ?transcript ?topic WHERE {
   {
-    GRAPH <urn:pk:digital-twin:graph:journal> {
+    VALUES ?journalGraph { <urn:pk:digital-twin:graph:journal> <urn:awp:digital-twin:graph:journal> }
+    GRAPH ?journalGraph {
       ?entry a schema:CreativeWork ;
         schema:additionalType ?kind ;
         schema:text ?text ;
@@ -14,12 +16,19 @@ SELECT ?id ?kind ?recordKind ?text ?createdAt ?sourceId ?sourceLabel ?transcript
         schema:isBasedOn ?source .
       FILTER(?kind IN ("thought", "idea", "question", "decision", "goal", "learning"))
       BIND("journal_note" AS ?recordKind)
-      BIND(STRAFTER(STR(?entry), "urn:voice-agent:personal-knowledge:journal:") AS ?id)
-      BIND(STRAFTER(STR(?source), "urn:pk:digital-twin:journal:") AS ?sourceId)
+      BIND(IF(STRSTARTS(STR(?entry), "urn:awp:digital-twin:journal:"),
+        STRAFTER(STR(?entry), "urn:awp:digital-twin:journal:"),
+        STRAFTER(STR(?entry), "urn:voice-agent:personal-knowledge:journal:")) AS ?id)
+      BIND(IF(STRSTARTS(STR(?source), "urn:awp:digital-twin:journal:"),
+        STRAFTER(STR(?source), "urn:awp:digital-twin:journal:"),
+        STRAFTER(STR(?source), "urn:pk:digital-twin:journal:")) AS ?sourceId)
       OPTIONAL { ?entry schema:keywords ?topic }
       OPTIONAL { ?entry legacy:status ?status }
-      FILTER NOT EXISTS { ?entry pk:journalEntryKind ?typedKind }
-      FILTER(!BOUND(?status) || ?status != "deleted")
+      OPTIONAL { ?entry awp:status ?legacyStatus }
+      FILTER(?journalGraph = <urn:awp:digital-twin:graph:journal> ||
+        NOT EXISTS { ?entry pk:journalEntryKind ?typedKind })
+      FILTER((!BOUND(?status) || ?status != "deleted") &&
+        (!BOUND(?legacyStatus) || ?legacyStatus != "deleted"))
       FILTER NOT EXISTS {
         ?dailyPage schema:hasPart ?entry .
         { ?dailyPage a pk:DailyJournal } UNION { ?dailyPage legacy:recordKind "codex_daily_journal" }

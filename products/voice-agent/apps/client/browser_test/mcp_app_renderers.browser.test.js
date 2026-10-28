@@ -88,7 +88,7 @@ const presentations = [
     title: 'Journal Review',
     src: '/journal-review/main.html',
     selector: '#app[data-ready="true"]',
-    labels: ['Review journal extraction', 'Use reviewed labels before training', 'Knowledge map', 'Voice stays active'],
+    labels: ['Review journal extraction', 'Use reviewed labels before training', 'Knowledge graph', 'Voice stays active'],
     value: {
       kind: 'journal-review',
       reviewId: 'review-fixture',

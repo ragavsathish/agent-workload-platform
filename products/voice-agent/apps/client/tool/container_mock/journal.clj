@@ -3,7 +3,7 @@
             [clojure.string :as str])
   (:import [java.net URLDecoder]))
 
-(def journal-graph "urn:awp:digital-twin:graph:journal")
+(def journal-graphs ["urn:pk:digital-twin:graph:journal" "urn:awp:digital-twin:graph:journal"])
 (def ^:private entry-path #"^/(?:api/knowledge|v1/digital-twin)/journal/([^/]+)/(feedback|assertion-review)$")
 (def ^:private kinds #{"thought" "idea" "question" "decision" "goal" "learning"})
 (defn- bounded-string? [value maximum]
@@ -67,16 +67,18 @@
 (defn- query-response [state {:keys [method path body headers]}]
   (if (or (not= method "POST")
           (not (str/includes? (get headers "content-type" "") "application/sparql-query"))
-          (not (str/includes? (or body "") (str "GRAPH <" journal-graph ">")))
+          (not (some #(str/includes? (or body "") (str "<" % ">")) journal-graphs))
           (not (re-find #"(?i)\bSELECT\b" (or body ""))))
     (result state 400 {:detail "Only the journal SELECT contract is supported"})
-    (let [bindings (vec (mapcat (fn [id]
+    (let [graph-query? (str/includes? body "SELECT ?from ?fromKind")
+          bindings (if graph-query? [] (vec (mapcat (fn [id]
                                  (let [entry (get-in state [:entries id])]
                                    (for [topic (:topics entry)] (binding entry topic))))
-                               (:order state)))
+                               (:order state))))
           updated (record-event state "OXIGRAPH" method path nil 200)]
-      (result updated 200 {:head {:vars ["id" "kind" "text" "createdAt" "sourceId"
-                                        "sourceLabel" "transcript" "topic"]}
+      (result updated 200 {:head {:vars (if graph-query? ["from" "to" "relation"]
+                                    ["id" "kind" "text" "createdAt" "sourceId"
+                                     "sourceLabel" "transcript" "topic"])}
                            :results {:bindings bindings}} "application/sparql-results+json"))))
 
 (defn- decode-entry-id [encoded]
