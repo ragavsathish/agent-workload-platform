@@ -20,7 +20,7 @@
               },
               "datasourceUid": "prometheus",
               "model": {
-                "expr": "6 - count(count by (service_name) (pipecat_operation_total{app_operation=\"component.started\",service_name=~\"pipecat-voice-edge|pipecat-mlx-inference|pipecat-pi-voice|pipecat-agent-gateway|pipecat-image-builder|pi-durable-owner\"})) or vector(6)",
+                "expr": "6 - count(count by (service_name) (present_over_time(pipecat_operation_total{app_operation=\"component.started\",service_name=~\"pipecat-voice-edge|pipecat-mlx-inference|pipecat-pi-voice|pipecat-agent-gateway|pipecat-image-builder|pi-durable-owner\"}[90s]))) or vector(6)",
                 "instant": true,
                 "intervalMs": 1000,
                 "maxDataPoints": 43200,
@@ -91,7 +91,7 @@
           ],
           "noDataState": "Alerting",
           "execErrState": "Alerting",
-          "for": "3m",
+          "for": "1m",
           "annotations": {
             "summary": "A core service stopped exporting metrics. Check process health and OTEL connectivity."
           },

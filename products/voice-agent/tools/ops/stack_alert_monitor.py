@@ -6,18 +6,36 @@ import argparse
 import base64
 import hashlib
 import json
+import math
 import os
+import re
 import socket
 import sqlite3
 import sys
 import time
 import uuid
 from pathlib import Path
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 GRAFANA_ALERTS_URL = "http://127.0.0.1:3300/api/prometheus/grafana/api/v1/alerts"
 PROMETHEUS_URL = "http://127.0.0.1:9091"
 COOLDOWN_SECONDS = 1800
+SAFE_LABEL = re.compile(r"^[A-Za-z0-9_.:/-]{1,100}$")
+DIAGNOSTIC_QUERIES = {
+    "awp_core_telemetry_missing": {
+        "core_telemetry_age_seconds": 'time() - timestamp(pipecat_operation_total{app_operation="component.started",service_name=~"pipecat-voice-edge|pipecat-mlx-inference|pipecat-pi-voice|pipecat-agent-gateway|pipecat-image-builder|pi-durable-owner"})',
+    },
+    "awp_infrastructure_scrape_down": {
+        "scrape_up": 'up{job=~"macos-host-system|docker-desktop-system|gondolin-vms|grafana-mcp"}',
+    },
+    "awp_voice_operation_errors": {
+        "voice_errors_by_operation": 'sum by (service_name,app_operation) (increase(pipecat_operation_total{app_outcome="error",service_name=~"pipecat-voice-edge|pipecat-mlx-inference|pipecat-pi-voice",app_operation!="task.gateway"}[5m]))',
+    },
+    "awp_owner_transport_errors": {
+        "owner_errors_by_kind": 'sum by (owner_command,owner_failure_kind) (increase(pi_durable_owner_transport_errors_total[5m]))',
+    },
+}
 GRAFANA_OUTAGE_RULE = {
     "title": "Grafana alert API unavailable",
     "promql": "up",
@@ -103,14 +121,54 @@ def incident_key(alert: dict, rules: dict[str, dict[str, str]]) -> str | None:
     return f"{uid}:{fingerprint}"
 
 
+def collect_evidence(uid: str, rule: dict[str, str]) -> str:
+    """Capture bounded, payload-free Prometheus facts on the host."""
+    snapshot: dict[str, object] = {"captured_at_unix": int(time.time()), "queries": {}}
+    queries = {"alert_value": rule["promql"], **DIAGNOSTIC_QUERIES.get(uid, {})}
+    for name, expression in queries.items():
+        request = Request(f"{PROMETHEUS_URL}/api/v1/query?{urlencode({'query': expression})}")
+        try:
+            with urlopen(request, timeout=3) as response:
+                document = json.load(response)
+            if document.get("status") != "success":
+                raise ValueError("Prometheus query failed")
+            samples = []
+            for item in document.get("data", {}).get("result", [])[:12]:
+                raw = item.get("value", [None, None])[1]
+                value = float(raw)
+                if not math.isfinite(value):
+                    continue
+                labels = {
+                    key: label
+                    for key, label in item.get("metric", {}).items()
+                    if key in {"service_name", "app_operation", "job", "instance", "owner_command", "owner_failure_kind"}
+                    and isinstance(label, str) and SAFE_LABEL.fullmatch(label)
+                }
+                samples.append({"labels": labels, "value": round(value, 3)})
+            snapshot["queries"][name] = samples
+        except Exception as exc:
+            snapshot["queries"][name] = {"unavailable": type(exc).__name__}
+    rendered = json.dumps(snapshot, separators=(",", ":"))
+    if len(rendered) <= 4000:
+        return rendered
+    snapshot["queries"] = {
+        name: value[:2] if isinstance(value, list) else value
+        for name, value in snapshot["queries"].items()
+    }
+    snapshot["truncated"] = True
+    return json.dumps(snapshot, separators=(",", ":"))
+
+
 def instruction_for(uid: str, rule: dict[str, str]) -> str:
+    evidence = collect_evidence(uid, rule)
     return (
         f"Investigate the firing stack health alert {rule['title']} ({uid}). "
-        f"Meaning: {rule['summary']} Query the local Prometheus read-only API at "
-        f"{PROMETHEUS_URL} using this PromQL: {rule['promql']} "
-        "Inspect relevant service health and recent traces. Report observed evidence, "
-        "probable cause, impact, and a recommended next action. Do not change files, "
-        "restart services, or perform remediation."
+        f"Meaning: {rule['summary']} Host monitor PromQL: {rule['promql']} "
+        f"Host-collected, payload-free evidence: {evidence} "
+        "This task sandbox cannot access the host's 127.0.0.1 Prometheus endpoint. "
+        "Use the supplied evidence to report observed facts, probable cause, impact, "
+        "uncertainties, and a recommended next action. Do not claim checks you could not run. "
+        "Do not change files, restart services, or perform remediation."
     )
 
 

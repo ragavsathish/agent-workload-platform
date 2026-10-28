@@ -311,8 +311,9 @@ Mac disk space, and Docker VM memory. `tools/config/generate_stack_alerts.py`
 regenerates the rule file. The host LaunchAgent
 `com.sathish.pipecat-stack-alert-monitor` polls Grafana once a minute and opens
 one Pi Durable investigation per firing incident, with a 30-minute cooldown
-after resolution. Investigations are read-only and use the rule's committed
-query and summary; alert payloads are not placed in task instructions. Three
+after resolution. The host monitor attaches bounded, payload-free Prometheus
+query results to each task and instructs the agent to investigate without
+remediation; alert payloads are not placed in task instructions. Three
 failed Grafana polls also open an investigation. Inspect the Grafana alerting
 page, the `~/Library/Logs/PipecatEdge/stack-alert-monitor.log` file, and Pi
 Durable's native task list when troubleshooting. The monitor stores deduplication

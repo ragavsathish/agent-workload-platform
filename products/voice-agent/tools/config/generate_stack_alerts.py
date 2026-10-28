@@ -9,9 +9,9 @@ RULES = (
     (
         "awp_core_telemetry_missing",
         "Core service telemetry missing",
-        '6 - count(count by (service_name) (pipecat_operation_total{app_operation="component.started",service_name=~"pipecat-voice-edge|pipecat-mlx-inference|pipecat-pi-voice|pipecat-agent-gateway|pipecat-image-builder|pi-durable-owner"})) or vector(6)',
+        '6 - count(count by (service_name) (present_over_time(pipecat_operation_total{app_operation="component.started",service_name=~"pipecat-voice-edge|pipecat-mlx-inference|pipecat-pi-voice|pipecat-agent-gateway|pipecat-image-builder|pi-durable-owner"}[90s]))) or vector(6)',
         0,
-        "3m",
+        "1m",
         "A core service stopped exporting metrics. Check process health and OTEL connectivity.",
     ),
     (
