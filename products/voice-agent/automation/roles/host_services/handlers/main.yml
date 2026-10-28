@@ -8,3 +8,8 @@
   until: not host_services_restart_result.failed
   retries: 15
   delay: 1
+
+- name: Restart stack alert monitor
+  community.general.launchd:
+    name: com.sathish.pipecat-stack-alert-monitor
+    state: restarted

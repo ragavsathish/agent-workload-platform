@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.sathish.pipecat-stack-alert-monitor</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/dotenvx</string>
+    <string>run</string><string>--quiet</string><string>--strict</string><string>-f</string>
+    <string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/apps/worker/worker.env</string>
+    <string>--</string>
+    <string>/opt/homebrew/bin/python3</string>
+    <string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/observability/stack-alert-monitor.py</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge</string>
+  <key>RunAtLoad</key><true/>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>HOME</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge/runtime-home</string>
+    <key>PI_DURABLE_ALERT_RUNTIME</key><string>/Users/sathish.narayanan/Library/Application Support/PipecatEdge</string>
+  </dict>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>/Users/sathish.narayanan/Library/Logs/PipecatEdge/stack-alert-monitor.log</string>
+  <key>StandardErrorPath</key><string>/Users/sathish.narayanan/Library/Logs/PipecatEdge/stack-alert-monitor.log</string>
+</dict>
+</plist>

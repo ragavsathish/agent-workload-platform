@@ -256,6 +256,7 @@ services:
     volumes:
       - otel-lgtm-data:/data
       - ./observability/dashboards.yml:/otel-lgtm/grafana/conf/provisioning/dashboards/pipecat.yml:ro
+      - ./observability/stack-alerts.json:/otel-lgtm/grafana/conf/provisioning/alerting/stack-alerts.json:ro
       - ./observability/pipecat-overview.json:/otel-lgtm/grafana/conf/provisioning/dashboards/pipecat/pipecat-overview.json:ro
       - ./observability/system-overview.json:/otel-lgtm/grafana/conf/provisioning/dashboards/pipecat/system-overview.json:ro
       - ./observability/storage-capacity.json:/otel-lgtm/grafana/conf/provisioning/dashboards/pipecat/storage-capacity.json:ro

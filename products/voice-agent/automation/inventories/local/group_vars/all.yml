@@ -80,6 +80,7 @@ launch_agents:
   - com.sathish.pipecat-host-observability
   - com.sathish.pipecat-pi-voice
   - com.sathish.pipecat-pi-durable-owner
+  - com.sathish.pipecat-stack-alert-monitor
 
 compose_one_shot_services:
   - s3mock-init

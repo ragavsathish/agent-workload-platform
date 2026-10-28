@@ -58,6 +58,7 @@ host_services_log_names:
   - worker
   - image-builder
   - host-observability
+  - stack-alert-monitor
   - digital-twin-listener
   - digital-twin-classifier
 

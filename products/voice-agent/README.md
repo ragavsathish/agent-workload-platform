@@ -304,6 +304,20 @@ mode-0600 local socket for native inspection, abort, and retry. The Gateway uses
 its authenticated loopback HTTP interface to submit and query native tasks.
 The owner endpoint is not routed through Tailscale ingress.
 
+Grafana provisions eight stack health alerts from
+`deploy/observability/stack-alerts.json`: core telemetry, infrastructure scrapes,
+voice and browser task errors, Pi Durable owner transport, collector rejections,
+Mac disk space, and Docker VM memory. `tools/config/generate_stack_alerts.py`
+regenerates the rule file. The host LaunchAgent
+`com.sathish.pipecat-stack-alert-monitor` polls Grafana once a minute and opens
+one Pi Durable investigation per firing incident, with a 30-minute cooldown
+after resolution. Investigations are read-only and use the rule's committed
+query and summary; alert payloads are not placed in task instructions. Three
+failed Grafana polls also open an investigation. Inspect the Grafana alerting
+page, the `~/Library/Logs/PipecatEdge/stack-alert-monitor.log` file, and Pi
+Durable's native task list when troubleshooting. The monitor stores deduplication
+state in the private `alert-monitor/incidents.sqlite` runtime file.
+
 Grafana, Grafana MCP, and OTLP/HTTP bind only to Mac loopback. OTLP/gRPC, Prometheus, Tempo, and Loki ports are not
 published. Gateway and edge stdout is retained only in bounded local Docker logs for `make logs`;
 applications do not send the OpenTelemetry logs signal. Telemetry is stored in the

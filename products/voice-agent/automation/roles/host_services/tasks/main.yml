@@ -169,6 +169,14 @@
   no_log: true
   notify: Restart host services
 
+- name: Install Grafana alert monitor read credential
+  ansible.builtin.copy:
+    src: "{{ voice_agent_root }}/deploy/secrets/grafana-admin-password"
+    dest: "{{ host_services_runtime_dir }}/secrets/grafana-admin-password"
+    mode: "0600"
+  no_log: true
+  notify: Restart stack alert monitor
+
 - name: Create private classifier cache
   ansible.builtin.file:
     path: "{{ ansible_facts.user_dir }}/.cache/huggingface"
@@ -218,6 +226,20 @@
     dest: "{{ host_services_runtime_dir }}/apps/host-observability/gondolin-exporter.mjs"
     mode: "0600"
   notify: Restart host services
+
+- name: Install stack alert monitor source
+  ansible.builtin.copy:
+    src: "{{ voice_agent_root }}/tools/ops/stack_alert_monitor.py"
+    dest: "{{ host_services_runtime_dir }}/observability/stack-alert-monitor.py"
+    mode: "0600"
+  notify: Restart stack alert monitor
+
+- name: Install stack alert rules for the monitor
+  ansible.builtin.copy:
+    src: "{{ voice_agent_root }}/deploy/observability/stack-alerts.json"
+    dest: "{{ host_services_runtime_dir }}/observability/stack-alerts.json"
+    mode: "0600"
+  notify: Restart stack alert monitor
 
 - name: Install host storage collector
   ansible.builtin.copy:
