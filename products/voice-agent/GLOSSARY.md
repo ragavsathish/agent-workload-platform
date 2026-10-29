@@ -36,6 +36,10 @@ _Avoid_: Pi backend, LLM service
 
 ## Durable work
 
+**Task Request**:
+An owner's intent to delegate one bounded unit of work. Repeating the same request after an uncertain response refers to the same Agent Task; a deliberate new task is a new request.
+_Avoid_: Job submission, duplicate task
+
 **Tasking Context**:
 The bounded context that submits durable work directly to Pi Durable and owns
 task status, cancellation, and artifacts. It receives completed text, never live audio.

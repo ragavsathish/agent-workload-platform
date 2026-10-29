@@ -1,5 +1,39 @@
 # Voice agent test report
 
+## Measurement oracle
+
+The normative [harness spec](../../../../harness/spec.feature) describes the instrument
+in stable, reviewable Gherkin scenarios. Its source and the accepted golden are both
+packaged in the OCI artifact; the checker refuses a spec that differs from its packaged
+copy.
+
+Run `make allure-oracle-check` from `products/voice-agent` or the repository root before
+using a report as baseline evidence. It creates synthetic tool output and compares a
+canonical projection of 17 Allure cases and their C4 coverage audit with the
+[OCI oracle artifact](measurement-oracle.oci/index.json). Its manifest has artifact type
+`application/vnd.agent-workload-platform.measurement-oracle.v1+json`; its two data
+layers are the expected JSON projection and `harness/spec.feature`. The checker verifies
+every blob digest and size
+before comparison. The fixture exercises
+Playwright and native steps, Patrol web, pytest JUnit and native Allure, Vitest, Node TAP,
+Rust, a repository probe, and a failed command gate. It checks statuses, retries,
+labels, steps, attachment references, and coverage counts without a deployed stack,
+credentials, or private test data. The combined report runner runs this gate before
+starting its own tests; `make check` runs it too.
+
+To review a deliberate measurement change, run
+`node tests/allure/measurement-oracle.mjs --candidate > /tmp/measurement-candidate.json`
+from `products/voice-agent`, then run
+`node tests/allure/measurement-oracle-oci.mjs pack /tmp/measurement-candidate.json /tmp/measurement-oracle-candidate.oci`.
+Compare the candidate projection with the accepted layer, review the changed adapter or
+coverage rule and case denominator, and only then replace the committed OCI layout.
+`pack` requires a new output directory and cannot overwrite the accepted layout.
+Use `oras manifest fetch --oci-layout tests/allure/measurement-oracle.oci:measurement-oracle-v1`
+to inspect it with standard OCI tooling. This oracle currently
+checks the combined-report adapters and coverage audit. Network extraction from
+Playwright trace HAR files and the standalone Allure-to-spec extractor need separate
+fixtures before they can supply trusted baseline measurements.
+
 From `products/voice-agent`, run `make allure-voice-agent` after the local deployment is
 ready. The command runs deployed voice, diagnostics, and authenticated Grafana C4
 Playwright journeys; route-fixture and Compose-backed knowledge tests; five

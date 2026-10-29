@@ -1,3 +1,8 @@
+---
+type: reference
+title: "UX research: browsing a digital-twin knowledge base"
+---
+
 # UX research: browsing a digital-twin knowledge base
 
 **Status:** Research and product-design recommendation

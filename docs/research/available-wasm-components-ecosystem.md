@@ -1,3 +1,8 @@
+---
+type: reference
+title: "Available WebAssembly components: ecosystem and Wassette compatibility"
+---
+
 # Available WebAssembly components: ecosystem and Wassette compatibility
 
 _Research date: 2026-08-31; registry checked again 2026-09-01. Sources are

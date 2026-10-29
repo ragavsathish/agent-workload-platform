@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 import { cp, mkdir, readFile, rename, rm, stat } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const voiceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+execFileSync(process.execPath, [join(voiceRoot, 'tests/allure/measurement-oracle.mjs'), '--check'],
+  { cwd: voiceRoot, stdio: 'inherit' });
 const reportRoot = resolve(voiceRoot, '../../artifacts/test-reports');
 const { runId } = JSON.parse(await readFile(join(reportRoot, 'latest.json'), 'utf8'));
 if (!/^\d{4}-\d{2}-\d{2}T[\w-]+Z-\d+$/u.test(runId)) {

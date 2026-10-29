@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 VOICE_AGENT_DIR := products/voice-agent
-VOICE_AGENT_TARGETS := setup build check start up logs status verify down recreate
+VOICE_AGENT_TARGETS := setup build check start up logs status verify down recreate allure-oracle-check automation-spec-check go-spec-check
 VOICE_AGENT_TARGETS += login host-preflight pull-model install-host-services
 VOICE_AGENT_TARGETS += native-start native-stop native-restart native-status
 WASM_TARGETS := wasm-setup wasm-build wasm-check wasm-install wasm-clean
@@ -29,7 +29,7 @@ GONDOLIN_DEV_IMAGE_STORE ?= $(HOME)/.cache/gondolin/$(GONDOLIN_ARCH)
 GONDOLIN_DEV_CACHE_HANDOFF ?=
 GONDOLIN_COMPOSE_CACHE_HANDOFF ?= $(HOME)/.cache/gondolin/compose-cache-handoff
 GONDOLIN_IMAGE_BUILDER_HANDOFF ?= $(HOME)/Library/Application Support/PipecatEdge/gondolin-image-handoff
-.PHONY: help FORCE $(VOICE_AGENT_TARGETS) $(WASM_TARGETS) gondolin-session-build gondolin-builder-build gondolin-dev-build gondolin-dev-cache gondolin-dev-cache-import gondolin-docker-job-api-up gondolin-docker-job-api-down gondolin-docker-job-api-test
+.PHONY: help FORCE $(VOICE_AGENT_TARGETS) $(WASM_TARGETS) docs-check context-spec-check event-model-check event-source-simulate event-persona-simulate event-storming-render event-storming-walk-render owner-workday-render component-regeneration-render one-big-wall-render orchestrator-theme-render gondolin-session-build gondolin-builder-build gondolin-dev-build gondolin-dev-cache gondolin-dev-cache-import gondolin-docker-job-api-up gondolin-docker-job-api-down gondolin-docker-job-api-test
 
 help:
 	@printf '%s\n' \
@@ -46,6 +46,8 @@ help:
 		'  make wasm-build     Build every WASM component' \
 		'  make wasm-check     Check every WASM component' \
 		'  make wasm-install   Install every WASM component into Wassette' \
+		'  make event-source-simulate  Replay parallel event deliveries and report convergence' \
+		'  make event-persona-simulate  Ask local LLM personas, then replay their events' \
 		'  make voice-TARGET   Run any additional Voice Agent target' \
 		'  make gondolin-session-build | gondolin-builder-build | gondolin-dev-build' \
 		'  make gondolin-docker-job-api-up|down  Run or stop the host Docker API service' \
@@ -59,6 +61,43 @@ voice-%: FORCE
 	$(MAKE) -C $(VOICE_AGENT_DIR) $*
 
 FORCE:
+
+event-model-check:
+	node docs/event-model/check.mjs
+
+context-spec-check:
+	node docs/spec/contexts/check.mjs
+
+docs-check: context-spec-check event-model-check
+	ruby docs/check_okf.rb
+	node docs/spec/ansible/check.mjs
+	node docs/spec/go/check.mjs
+
+event-source-simulate:
+	node docs/event-model/simulate-parallel-sources.mjs > docs/event-model/parallel-source-simulation.json
+	cat docs/event-model/parallel-source-simulation.json
+
+event-persona-simulate:
+	node docs/event-model/simulate-personas.mjs > docs/event-model/persona-simulation.json
+	cat docs/event-model/persona-simulation.json
+
+event-storming-render:
+	python3 docs/event-model/render_event_storming.py
+
+event-storming-walk-render:
+	python3 docs/event-model/render_event_storming_walk.py
+
+owner-workday-render:
+	python3 docs/event-model/render_owner_workday_walk.py
+
+component-regeneration-render:
+	python3 docs/event-model/render_component_regeneration_walk.py
+
+one-big-wall-render:
+	python3 docs/event-model/render_one_big_wall.py
+
+orchestrator-theme-render:
+	python3 docs/event-model/render_orchestrator_theme.py
 
 gondolin-session-build:
 	docker compose --profile $(GONDOLIN_PROFILE) -f platform/agent-execution/gondolin-session/gondolin/compose.yaml build $(GONDOLIN_BROWSER_SERVICE)

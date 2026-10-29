@@ -1,3 +1,8 @@
+---
+type: reference
+title: "Monorepo organization"
+---
+
 # Monorepo organization
 
 The repository is organized around product and bounded-context ownership.

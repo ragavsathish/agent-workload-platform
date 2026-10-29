@@ -1,3 +1,8 @@
+---
+type: decision
+title: "0001: Organize the monorepo by product and bounded context"
+---
+
 # 0001: Organize the monorepo by product and bounded context
 
 Status: Accepted

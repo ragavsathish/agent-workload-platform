@@ -1,0 +1,40 @@
+{
+  "model": "proposed parallel event-source read model",
+  "runs": 1000,
+  "sourceStreams": 10,
+  "distinctEvents": 25,
+  "totalDeliveries": 36317,
+  "converged": 1000,
+  "naiveOrderSensitiveFailures": 342,
+  "firstNaiveFailureSeed": 1,
+  "firstNaiveFailureOrder": {
+    "releaseApprovalDelivery": 15,
+    "soundtrackDelivery": 28
+  },
+  "incomplete": {
+    "missingLyricsApprovalBlocksRelease": true,
+    "missingQualificationBlocksPr": true,
+    "missingImageRegistrationBlocksResult": true,
+    "wrongSongPinBlocksRelease": true,
+    "wrongQualificationPinBlocksPr": true
+  },
+  "conflictingEventRejected": true,
+  "finalProjection": {
+    "changeId": "awp-change-001",
+    "knowledgeReviewed": true,
+    "imageReady": true,
+    "taskAccepted": true,
+    "executionReady": true,
+    "resultCaptured": true,
+    "measurementReady": true,
+    "qualified": true,
+    "prOpen": true,
+    "lyricsApproved": true,
+    "songReady": true,
+    "soundtrack": true,
+    "releaseReady": true,
+    "deployed": true,
+    "verified": true,
+    "investigationCaptured": true
+  }
+}

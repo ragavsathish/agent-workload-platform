@@ -7,7 +7,7 @@ import test from 'node:test';
 import { inferIntent } from './intent-taxonomy.mjs';
 import { inferC4Scope } from './c4-traceability.mjs';
 import { c2Elements, coverageAudit, coverageAuditMarkdown, evidenceMode, validateC4Traceability } from './coverage-audit.mjs';
-import { attachNativePlaywrightSteps, attachPlaywrightEvidence, nativePytestResults, readNativePytestResults, nodeTapResults, patrolResults, playwrightResults, pytestJunitResults, rustTestResults, vitestResults } from './run-knowledge-review.mjs';
+import { attachNativePlaywrightSteps, attachPlaywrightEvidence, commandGate, nativePytestResults, probeResult, readNativePytestResults, nodeTapResults, patrolResults, playwrightResults, pytestJunitResults, rustTestResults, testResult, vitestResults } from './run-knowledge-review.mjs';
 
 test('removes completed ingress and telemetry journeys from remaining paths only when they pass', () => {
   const item = (suite, name, status) => ({ name, status,
@@ -153,6 +153,9 @@ test('fails report generation when a test points to a retired C2 name or missing
     { name: 'c4Container', value: 'Pi Task Worker' },
     { name: 'c4View', value: 'missing.mmd' },
   ] }], model, ['c2-container.mmd']), /unknown C2 container Pi Task Worker[\s\S]*unknown C4 view missing.mmd/u);
+  assert.throws(() => validateC4Traceability([{ ...item, labels: [
+    { name: 'c4Level', value: 'Unmapped' },
+  ] }], model, ['c2-container.mmd']), /unmapped C4 scope/u);
 });
 
 test('audits C2 gaps and counts only passed evidence for each journey layer', () => {
@@ -429,4 +432,54 @@ test('converts Vitest cases and Node TAP subtests without counting TAP totals', 
   const tap = nodeTapResults('TAP version 13\n# Subtest: save correction\nok 1 - save correction\n# Subtest: reject bad evidence\nnot ok 2 - reject bad evidence\n1..2\n# tests 2\n', 1000, 'node.log');
   assert.deepEqual(tap.map((result) => result.status), ['passed', 'failed']);
   assert.equal(tap.length, 2);
+});
+
+test('unknown statuses fail, and missing command output stays visible', () => {
+  const result = testResult({ fullName: 'voice.synthetic.unknown', name: 'unknown',
+    status: 'mystery', suite: 'Gateway', framework: 'pytest', start: 1000 });
+  assert.equal(result.status, 'failed');
+  const gate = commandGate('missing-results', { code: 1, started: 1000, duration: 2,
+    error: 'Expected 1 result, received 0' }, 'command.log');
+  assert.equal(gate.status, 'failed');
+  assert.equal(gate.statusDetails.message, 'Expected 1 result, received 0');
+  assert.equal(gate.attachments[0].source, 'command.log');
+  const probe = probeResult({ id: 'trace', suite: 'Grafana MCP observability',
+    title: 'queries the live C4 dashboard and a fresh Tempo trace through Grafana MCP',
+    run: { code: 0, started: 1000, duration: 2, error: '' }, attachment: 'probe.log' });
+  assert.equal(probe.status, 'passed');
+  assert.equal(probe.attachments[0].source, 'probe.log');
+});
+
+test('non-skipped Playwright cases require native behavior steps', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'voice-allure-no-steps-'));
+  try {
+    await writeFile(join(root, 'one-result.json'), JSON.stringify({
+      name: 'voice case', status: 'passed', start: 100, stop: 101,
+      steps: [{ name: 'After Hooks', status: 'passed', start: 100, stop: 101 }],
+    }));
+    await assert.rejects(attachNativePlaywrightSteps(root, [{
+      uuid: 'one', fullName: 'voice.playwright.voice.case', name: 'voice case', status: 'passed',
+    }]), /No Allure\.step entries for voice\.playwright\.voice\.case/u);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('Playwright evidence outside the run is refused', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'voice-allure-escape-'));
+  try {
+    const output = join(root, 'playwright');
+    const results = join(root, 'allure-results');
+    await mkdir(output);
+    await mkdir(results);
+    const data = { suites: [{ specs: [{ file: 'voice.spec.ts', title: 'voice journey', tests: [{
+      projectName: 'voice', results: [{ status: 'passed', startTime: '2026-10-25T00:00:00Z',
+        duration: 10, attachments: [{ name: 'trace', contentType: 'application/zip',
+          path: join(root, 'outside', 'trace.zip') }] }],
+    }] }] }] };
+    await assert.rejects(attachPlaywrightEvidence(data, playwrightResults(data), output, results),
+      /Playwright evidence escapes its output directory/u);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

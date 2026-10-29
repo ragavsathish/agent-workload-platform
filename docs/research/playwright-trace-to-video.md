@@ -1,3 +1,8 @@
+---
+type: reference
+title: "Rendering video from a Playwright trace"
+---
+
 # Rendering video from a Playwright trace
 
 _Research date: 2026-10-17. Primary sources only. Repository baseline:

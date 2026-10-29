@@ -1,3 +1,8 @@
+---
+type: reference
+title: "RDF and visualization for the cognitive journal"
+---
+
 # RDF and visualization for the cognitive journal
 
 **Status:** Research and design recommendation

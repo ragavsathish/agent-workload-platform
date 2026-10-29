@@ -1,3 +1,8 @@
+---
+type: decision
+title: "0002: Separate Voice Agent apps from shared bounded-context packages"
+---
+
 # 0002: Separate Voice Agent apps from shared bounded-context packages
 
 Status: Accepted

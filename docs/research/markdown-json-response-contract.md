@@ -1,3 +1,8 @@
+---
+type: reference
+title: "Markdown JSON and rich-response contract research"
+---
+
 # Markdown JSON and rich-response contract research
 
 Research date: 2026-10-16.

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 2,
+  "mediaType": "application/vnd.oci.image.index.v1+json",
+  "manifests": [
+    {
+      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+      "digest": "sha256:4815a10699c7aabf5dcfb12d5d3ed8d6d8deb4676356f23f36a44d568397447a",
+      "size": 948,
+      "annotations": {
+        "org.opencontainers.image.ref.name": "measurement-oracle-v1"
+      }
+    }
+  ]
+}

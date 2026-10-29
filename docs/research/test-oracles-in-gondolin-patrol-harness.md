@@ -1,3 +1,8 @@
+---
+type: reference
+title: "Test oracles in the Gondolin Patrol harness"
+---
+
 # Test oracles in the Gondolin Patrol harness
 
 _Research note: 2026-10-21. Scope: the current manual Compose plus Patrol VM benchmark._

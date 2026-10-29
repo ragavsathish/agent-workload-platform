@@ -1,3 +1,8 @@
+---
+type: reference
+title: "Reducing retained Gondolin task VM disk use"
+---
+
 # Reducing retained Gondolin task VM disk use
 
 Research date: 2026-10-20. Scope: `@earendil-works/gondolin` **0.13.0** and the Pi task VM integration in this repository. This note records checkpoint-size measurements and optimization options. The historical Patrol checkpoints described below have since been explicitly disposed; their logs and results remain. Current storage-driver measurements are in the [benchmark report](../../platform/agent-execution/gondolin-session/benchmarks/README.md), and the in-guest Docker choice is documented in the [Overlay2/VFS research note](gondolin-docker-storage-driver-overlay2-vs-vfs.md).

@@ -5,13 +5,13 @@ WASM_ACTIONS := setup build check install clean
 
 .PHONY: help setup build check up start deployment-prepare logs down recreate verify cycle-test
 .PHONY: $(WASM_ACTIONS:%=wasm-%) FORCE
-.PHONY: automation-setup automation-check automation-verify automation-cycle automation-preflight automation-deploy-edge
+.PHONY: automation-setup automation-check automation-spec-check go-spec-check automation-verify automation-cycle automation-preflight automation-deploy-edge
 .PHONY: automation-digital-twin-e2e automation-playwright automation-blackbox-e2e
 .PHONY: automation-blackbox-voice automation-observability
 .PHONY: login status grafana-password grafana-mcp-token warm-models benchmark-mlx publish-workspace
 .PHONY: blackbox-voice blackbox-e2e blackbox-personal-knowledge blackbox-remote-session
 .PHONY: playwright-voice playwright-diagnostics playwright-diagnostics-c2-mock playwright-knowledge-base playwright-knowledge-c2-mock playwright-knowledge-live playwright-durable-c2-mock playwright-task-diagram playwright-durable playwright-durable-cli playwright-grafana playwright-readme-demo playwright-tailnet-voice test-voice-edge-c2-mock test-broker-pi-stream-c2-mock
-.PHONY: allure-knowledge-review allure-voice-agent allure-durable allure-durable-cli allure-publish allure-c4-coverage
+.PHONY: allure-knowledge-review allure-voice-agent allure-durable allure-durable-cli allure-publish allure-c4-coverage allure-oracle-check
 .PHONY: playwright-tailnet-diagnostics host-preflight install-host-services storage-collector-build
 .PHONY: native-start native-stop native-restart native-status
 .PHONY: config-init config-check
@@ -59,6 +59,8 @@ help:
 		'                      Check mock-backed UI at mobile, tablet, and desktop sizes' \
 		'  make allure-knowledge-review' \
 		'                      Run knowledge and MCP tests with a local Allure report' \
+		'  make allure-oracle-check' \
+		'                      Check synthetic measurement adapters and coverage golden' \
 		'  make verify         Verify deployed infrastructure' \
 		'  make wasm-ACTION    Run setup, build, check, install, or clean for all components' \
 		'  make wasm-ACTION-COMPONENT' \
@@ -170,7 +172,13 @@ cycle-test: automation-cycle
 automation-setup:
 	$(ANSIBLE_GALAXY) collection install --upgrade -r automation/requirements.yml
 
-automation-check:
+automation-spec-check:
+	node ../../docs/spec/ansible/check.mjs
+
+go-spec-check:
+	node ../../docs/spec/go/check.mjs
+
+automation-check: automation-spec-check
 	@for playbook in automation/playbooks/*.yml; do \
 		$(ANSIBLE) --syntax-check "$$playbook" || exit 1; \
 	done
@@ -305,6 +313,10 @@ allure-pi-durable-products:
 
 allure-voice-agent:
 	node tests/allure/run-knowledge-review.mjs
+
+allure-oracle-check:
+	node tests/allure/measurement-oracle.mjs --check
+	node --test tests/allure/measurement-oracle-oci.test.mjs tests/allure/run-knowledge-review.test.mjs
 
 allure-c4-coverage:
 	node tests/allure/refresh-c4-coverage.mjs
@@ -473,7 +485,7 @@ test-tailnet-owner:
 pull-model:
 	ollama pull qwen3.5:9b-mlx
 
-check: require-babashka wasm-check automation-check
+check: require-babashka wasm-check automation-check allure-oracle-check go-spec-check
 	bb deploy/observability/c4-dashboard_test.clj
 	pnpm --dir ../.. --filter @agent-workload-platform/otel test
 	pnpm --dir ../.. --filter @agent-workload-platform/gondolin-session check

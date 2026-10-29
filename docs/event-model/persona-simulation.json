@@ -1,0 +1,191 @@
+{
+  "kind": "synthetic LLM persona event-source simulation",
+  "model": "qwen3.5:4b-mlx",
+  "runsPerScenario": 100,
+  "scenarios": [
+    {
+      "id": "clean-change",
+      "evidence": {
+        "reviewedFinding": true,
+        "duplicateChange": false,
+        "imageRefMatches": true,
+        "taskResultCaptured": true,
+        "oracleQualified": true,
+        "behaviorChecksPassed": true,
+        "lyricManifestGroundedInDiff": true,
+        "lyricsContainPrivateData": false,
+        "prSoundtrackPinned": true,
+        "rollbackDocumented": true
+      },
+      "decisions": [
+        {
+          "persona": "owner",
+          "decision": "approve",
+          "reason": "The evidence confirms the finding is reviewed and not a duplicate change, satisfying the conditions to proceed as an improvement task.",
+          "guardPassed": true,
+          "admitted": true
+        },
+        {
+          "persona": "runtime",
+          "decision": "approve",
+          "reason": "The evidence confirms that both the registered image handoff (imageRefMatches: true) and the captured result (taskResultCaptured: true) are available, satisfying the stated conditions.",
+          "guardPassed": true,
+          "admitted": true
+        },
+        {
+          "persona": "qualification",
+          "decision": "approve",
+          "reason": "The provided evidence explicitly states that both the oracle check and behavior checks passed, meeting the conditions for qualification.",
+          "guardPassed": true,
+          "admitted": true
+        },
+        {
+          "persona": "lyrics",
+          "decision": "approve",
+          "reason": "The evidence confirms the lyrics are grounded in the diff and contain no private data, meeting approval criteria.",
+          "guardPassed": true,
+          "admitted": true
+        },
+        {
+          "persona": "release",
+          "decision": "approve",
+          "reason": "All stated conditions for release are met: the oracle is qualified, behavior checks have passed, the soundtrack is pinned, and a rollback has been documented.",
+          "guardPassed": true,
+          "admitted": true
+        }
+      ],
+      "emittedEventIds": [
+        "knowledge:1",
+        "knowledge:2",
+        "image:1",
+        "image:2",
+        "task:1",
+        "task:2",
+        "task:3",
+        "task:4",
+        "task:5",
+        "measurement:1",
+        "measurement:2",
+        "qualification:1",
+        "pr:1",
+        "pr:2",
+        "lyricTask:1",
+        "lyricTask:2",
+        "lyricTask:3",
+        "renderTask:1",
+        "renderTask:2",
+        "release:1",
+        "release:2",
+        "release:3",
+        "alert:1",
+        "alert:2",
+        "alert:3"
+      ],
+      "converged": 100,
+      "finalProjection": {
+        "changeId": "awp-change-001",
+        "knowledgeReviewed": true,
+        "imageReady": true,
+        "taskAccepted": true,
+        "executionReady": true,
+        "resultCaptured": true,
+        "measurementReady": true,
+        "qualified": true,
+        "prOpen": true,
+        "lyricsApproved": true,
+        "songReady": true,
+        "soundtrack": true,
+        "releaseReady": true,
+        "deployed": true,
+        "verified": true,
+        "investigationCaptured": true
+      }
+    },
+    {
+      "id": "failed-behavior-check",
+      "evidence": {
+        "reviewedFinding": true,
+        "duplicateChange": false,
+        "imageRefMatches": true,
+        "taskResultCaptured": true,
+        "oracleQualified": true,
+        "behaviorChecksPassed": false,
+        "lyricManifestGroundedInDiff": true,
+        "lyricsContainPrivateData": false,
+        "prSoundtrackPinned": true,
+        "rollbackDocumented": true
+      },
+      "decisions": [
+        {
+          "persona": "owner",
+          "decision": "approve",
+          "reason": "The evidence confirms the finding is reviewed and not a duplicate change, meeting the stated conditions for becoming an improvement task.",
+          "guardPassed": true,
+          "admitted": true
+        },
+        {
+          "persona": "runtime",
+          "decision": "approve",
+          "reason": "The evidence confirms that both the registered image handoff (imageRefMatches: true) and the captured result (taskResultCaptured: true) are available, satisfying the stated conditions.",
+          "guardPassed": true,
+          "admitted": true
+        },
+        {
+          "persona": "qualification",
+          "decision": "hold",
+          "reason": "The behavior checks failed (behaviorChecksPassed: false), which prevents qualification despite the oracle passing.",
+          "guardPassed": false,
+          "admitted": false
+        },
+        {
+          "persona": "lyrics",
+          "decision": "approve",
+          "reason": "The evidence confirms the lyrics are grounded in the diff and contain no private data, meeting approval criteria.",
+          "guardPassed": true,
+          "admitted": true
+        },
+        {
+          "persona": "release",
+          "decision": "hold",
+          "reason": "The change cannot be approved because the behavior checks have failed (behaviorChecksPassed: false), despite the soundtrack being pinned and rollback being documented.",
+          "guardPassed": false,
+          "admitted": false
+        }
+      ],
+      "emittedEventIds": [
+        "knowledge:1",
+        "knowledge:2",
+        "image:1",
+        "image:2",
+        "task:1",
+        "task:2",
+        "task:3",
+        "task:4",
+        "task:5",
+        "measurement:1",
+        "alert:1",
+        "alert:2",
+        "alert:3"
+      ],
+      "converged": 100,
+      "finalProjection": {
+        "changeId": "awp-change-001",
+        "knowledgeReviewed": true,
+        "imageReady": true,
+        "taskAccepted": true,
+        "executionReady": true,
+        "resultCaptured": true,
+        "measurementReady": false,
+        "qualified": false,
+        "prOpen": false,
+        "lyricsApproved": false,
+        "songReady": false,
+        "soundtrack": false,
+        "releaseReady": false,
+        "deployed": false,
+        "verified": false,
+        "investigationCaptured": true
+      }
+    }
+  ]
+}

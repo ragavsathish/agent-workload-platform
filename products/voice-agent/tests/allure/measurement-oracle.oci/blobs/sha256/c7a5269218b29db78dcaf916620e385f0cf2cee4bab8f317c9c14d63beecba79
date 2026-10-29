@@ -1,0 +1,822 @@
+{
+  "schema": 1,
+  "cases": [
+    {
+      "fullName": "voice.gate.missing-results",
+      "name": "missing-results",
+      "status": "failed",
+      "error": "Expected 1 result, received 0",
+      "framework": "repository-runner",
+      "suite": "Command gates",
+      "epic": "Voice Agent",
+      "feature": "missing-results",
+      "validationLayer": "contract",
+      "c4Level": "Execution gate",
+      "c4Containers": [],
+      "c4Views": [],
+      "steps": [],
+      "attachments": [
+        {
+          "name": "Test command output",
+          "type": "text/plain",
+          "present": true
+        }
+      ]
+    },
+    {
+      "fullName": "voice.node.journal-review-mcp.reject bad evidence",
+      "name": "reject bad evidence",
+      "status": "failed",
+      "error": "See the attached Node test output.",
+      "framework": "node:test",
+      "suite": "Journal MCP contract",
+      "epic": "Voice Agent",
+      "feature": "reject bad evidence",
+      "validationLayer": "integration",
+      "c4Level": "C2 container contract",
+      "c4Containers": [
+        "Journal Review MCP"
+      ],
+      "c4Views": [
+        "c2-container.mmd"
+      ],
+      "steps": [],
+      "attachments": [
+        {
+          "name": "Test command output",
+          "type": "text/plain",
+          "present": true
+        }
+      ]
+    },
+    {
+      "fullName": "voice.node.journal-review-mcp.save correction",
+      "name": "save correction",
+      "status": "passed",
+      "framework": "node:test",
+      "suite": "Journal MCP contract",
+      "epic": "Knowledge and review",
+      "feature": "Correct and review journal knowledge",
+      "validationLayer": "integration",
+      "c4Level": "C2 container contract",
+      "c4Containers": [
+        "Journal Review MCP"
+      ],
+      "c4Views": [
+        "c2-container.mmd"
+      ],
+      "steps": [],
+      "attachments": []
+    },
+    {
+      "fullName": "voice.patrol-web.voice",
+      "name": "Voice shell and navigation",
+      "status": "passed",
+      "framework": "patrol",
+      "suite": "Patrol web",
+      "epic": "Voice conversation",
+      "feature": "Talk with Pi",
+      "validationLayer": "journey",
+      "c4Level": "C3 browser journey",
+      "c4Containers": [
+        "Browser Voice Client"
+      ],
+      "c4Views": [
+        "c3-browser-client.mmd"
+      ],
+      "steps": [],
+      "attachments": [
+        {
+          "name": "Patrol Playwright trace",
+          "type": "application/vnd.allure.playwright-trace",
+          "present": true
+        },
+        {
+          "name": "Patrol HTML report",
+          "type": "text/html",
+          "present": true
+        },
+        {
+          "name": "Patrol trace evidence",
+          "type": "application/json",
+          "present": true
+        }
+      ]
+    },
+    {
+      "fullName": "voice.patrol-web.workspace",
+      "name": "Workspace and durable work",
+      "status": "failed",
+      "error": "workspace failed",
+      "framework": "patrol",
+      "suite": "Patrol web",
+      "epic": "Durable work",
+      "feature": "Continue durable work",
+      "validationLayer": "integration",
+      "c4Level": "C3 browser journey",
+      "c4Containers": [
+        "Browser Voice Client"
+      ],
+      "c4Views": [
+        "c3-browser-client.mmd"
+      ],
+      "steps": [],
+      "attachments": [
+        {
+          "name": "Patrol trace evidence",
+          "type": "application/json",
+          "present": true
+        }
+      ]
+    },
+    {
+      "fullName": "voice.playwright.durable.durable.spec.ts.I submit a task from a voice session and follow it in Flutter",
+      "name": "I submit a task from a voice session and follow it in Flutter",
+      "status": "passed",
+      "flaky": true,
+      "framework": "playwright",
+      "suite": "Playwright · durable",
+      "epic": "Durable work",
+      "feature": "Continue durable work",
+      "validationLayer": "journey",
+      "c4Level": "C1/C2 system journey",
+      "c4Containers": [
+        "Tailnet Ingress",
+        "Path Router",
+        "Browser Voice Client",
+        "Voice Edge",
+        "Agent Gateway",
+        "Pi Durable Owner",
+        "Pi Durable Owner Store",
+        "Task Tool Sandbox",
+        "Workspace and Result Store"
+      ],
+      "c4Views": [
+        "c1-system-context.mmd",
+        "c2-container.mmd",
+        "c3-pi-task-worker.mmd",
+        "c3-task-tool-runtime.mmd",
+        "d2-delegated-task.mmd"
+      ],
+      "steps": [
+        {
+          "name": "Attempt 1",
+          "status": "failed",
+          "steps": [
+            {
+              "name": "Given an owner task exists",
+              "status": "passed",
+              "duration": 20
+            },
+            {
+              "name": "Then the artifact is missing",
+              "status": "failed",
+              "duration": 20
+            }
+          ],
+          "duration": 100
+        },
+        {
+          "name": "Attempt 2",
+          "status": "passed",
+          "steps": [
+            {
+              "name": "Given an owner task exists",
+              "status": "passed",
+              "duration": 20
+            },
+            {
+              "name": "Then the artifact is available",
+              "status": "passed",
+              "duration": 20
+            }
+          ],
+          "duration": 100
+        }
+      ],
+      "attachments": [
+        {
+          "name": "Attempt 1: Playwright trace",
+          "type": "application/vnd.allure.playwright-trace",
+          "present": true
+        },
+        {
+          "name": "Attempt 2: proof",
+          "type": "application/json",
+          "present": true
+        }
+      ]
+    },
+    {
+      "fullName": "voice.playwright.voice.voice.spec.ts.renders the official Grafana trace MCP App inside voice chat",
+      "name": "renders the official Grafana trace MCP App inside voice chat",
+      "status": "skipped",
+      "framework": "playwright",
+      "suite": "Playwright · voice",
+      "epic": "Embedded apps",
+      "feature": "Inspect a trace in Pi",
+      "validationLayer": "journey",
+      "c4Level": "C2 cross-container journey",
+      "c4Containers": [
+        "Browser Voice Client",
+        "Voice Edge",
+        "Grafana MCP",
+        "Metrics and Traces"
+      ],
+      "c4Views": [
+        "c2-container.mmd",
+        "c3-browser-client.mmd"
+      ],
+      "steps": [],
+      "attachments": []
+    },
+    {
+      "fullName": "voice.probe.trace-probe",
+      "name": "queries the live C4 dashboard and a fresh Tempo trace through Grafana MCP",
+      "status": "passed",
+      "framework": "repository-probe",
+      "suite": "Grafana MCP observability",
+      "epic": "Embedded apps",
+      "feature": "Inspect a trace in Pi",
+      "validationLayer": "observability",
+      "c4Level": "C2 deployed observability",
+      "c4Containers": [
+        "Grafana MCP",
+        "Metrics and Traces"
+      ],
+      "c4Views": [
+        "c2-container.mmd"
+      ],
+      "steps": [],
+      "attachments": [
+        {
+          "name": "Test command output",
+          "type": "text/plain",
+          "present": true
+        }
+      ]
+    },
+    {
+      "fullName": "voice.pytest.owner.tests.test_owner#test_owner_client_lifecycle_and_idempotency",
+      "name": "test_owner_client_lifecycle_and_idempotency",
+      "status": "passed",
+      "framework": "pytest",
+      "suite": "Pi Durable owner C2 mock",
+      "epic": "Durable work",
+      "feature": "Continue durable work",
+      "validationLayer": "integration",
+      "c4Level": "C2 fixture-backed integration",
+      "c4Containers": [
+        "Agent Gateway",
+        "Pi Durable Owner"
+      ],
+      "c4Views": [
+        "c2-container.mmd",
+        "c3-pi-task-worker.mmd",
+        "d2-delegated-task.mmd"
+      ],
+      "steps": [
+        {
+          "name": "Given an owner exists",
+          "status": "passed",
+          "duration": 6
+        },
+        {
+          "name": "Then one result is returned",
+          "status": "passed",
+          "duration": 6
+        }
+      ],
+      "attachments": [
+        {
+          "name": "owner proof",
+          "type": "application/json",
+          "present": true
+        }
+      ]
+    },
+    {
+      "fullName": "voice.pytest.tests.test_gateway.test_fail",
+      "name": "test_fail",
+      "status": "failed",
+      "error": "Expected <value>",
+      "framework": "pytest",
+      "suite": "Gateway",
+      "epic": "Voice Agent",
+      "feature": "test_fail",
+      "validationLayer": "contract",
+      "c4Level": "C3 gateway contract",
+      "c4Containers": [
+        "Agent Gateway"
+      ],
+      "c4Views": [
+        "c3-agent-gateway.mmd"
+      ],
+      "steps": [],
+      "attachments": [
+        {
+          "name": "Test command output",
+          "type": "text/plain",
+          "present": true
+        }
+      ]
+    },
+    {
+      "fullName": "voice.pytest.tests.test_gateway.test_ok",
+      "name": "test_ok",
+      "status": "passed",
+      "framework": "pytest",
+      "suite": "Gateway",
+      "epic": "Voice Agent",
+      "feature": "test_ok",
+      "validationLayer": "contract",
+      "c4Level": "C3 gateway contract",
+      "c4Containers": [
+        "Agent Gateway"
+      ],
+      "c4Views": [
+        "c3-agent-gateway.mmd"
+      ],
+      "steps": [],
+      "attachments": []
+    },
+    {
+      "fullName": "voice.pytest.tests.test_gateway.test_skip",
+      "name": "test_skip",
+      "status": "skipped",
+      "framework": "pytest",
+      "suite": "Gateway",
+      "epic": "Voice Agent",
+      "feature": "test_skip",
+      "validationLayer": "contract",
+      "c4Level": "C3 gateway contract",
+      "c4Containers": [
+        "Agent Gateway"
+      ],
+      "c4Views": [
+        "c3-agent-gateway.mmd"
+      ],
+      "steps": [],
+      "attachments": [
+        {
+          "name": "Test command output",
+          "type": "text/plain",
+          "present": true
+        }
+      ]
+    },
+    {
+      "fullName": "voice.rust.personal-knowledge-core.tests::one",
+      "name": "tests::one",
+      "status": "passed",
+      "framework": "cargo test",
+      "suite": "Knowledge core",
+      "epic": "Voice Agent",
+      "feature": "tests::one",
+      "validationLayer": "unit",
+      "c4Level": "Code-level unit",
+      "c4Containers": [],
+      "c4Views": [],
+      "steps": [],
+      "attachments": []
+    },
+    {
+      "fullName": "voice.rust.personal-knowledge-core.tests::three",
+      "name": "tests::three",
+      "status": "skipped",
+      "framework": "cargo test",
+      "suite": "Knowledge core",
+      "epic": "Voice Agent",
+      "feature": "tests::three",
+      "validationLayer": "unit",
+      "c4Level": "Code-level unit",
+      "c4Containers": [],
+      "c4Views": [],
+      "steps": [],
+      "attachments": [
+        {
+          "name": "Test command output",
+          "type": "text/plain",
+          "present": true
+        }
+      ]
+    },
+    {
+      "fullName": "voice.rust.personal-knowledge-core.tests::two",
+      "name": "tests::two",
+      "status": "failed",
+      "error": "See the attached Cargo test output.",
+      "framework": "cargo test",
+      "suite": "Knowledge core",
+      "epic": "Voice Agent",
+      "feature": "tests::two",
+      "validationLayer": "unit",
+      "c4Level": "Code-level unit",
+      "c4Containers": [],
+      "c4Views": [],
+      "steps": [],
+      "attachments": [
+        {
+          "name": "Test command output",
+          "type": "text/plain",
+          "present": true
+        }
+      ]
+    },
+    {
+      "fullName": "voice.vitest.app.test.js.rejects resources outside the explicit MCP App allowlist",
+      "name": "rejects resources outside the explicit MCP App allowlist",
+      "status": "failed",
+      "error": "unexpected resource",
+      "framework": "vitest",
+      "suite": "MCP App browser",
+      "epic": "Embedded apps",
+      "feature": "Use MCP apps in Pi",
+      "validationLayer": "integration",
+      "c4Level": "C3 browser integration",
+      "c4Containers": [
+        "Browser Voice Client"
+      ],
+      "c4Views": [
+        "c3-browser-client.mmd"
+      ],
+      "steps": [],
+      "attachments": [
+        {
+          "name": "Test command output",
+          "type": "text/plain",
+          "present": true
+        }
+      ]
+    },
+    {
+      "fullName": "voice.vitest.app.test.js.renders Mermaid inside the least-privilege sandbox",
+      "name": "renders Mermaid inside the least-privilege sandbox",
+      "status": "passed",
+      "framework": "vitest",
+      "suite": "MCP App browser",
+      "epic": "Embedded apps",
+      "feature": "Use MCP apps in Pi",
+      "validationLayer": "integration",
+      "c4Level": "C3 browser integration",
+      "c4Containers": [
+        "Browser Voice Client"
+      ],
+      "c4Views": [
+        "c3-browser-client.mmd"
+      ],
+      "steps": [],
+      "attachments": []
+    }
+  ],
+  "coverage": {
+    "cases": 17,
+    "journeys": [
+      {
+        "intendedUse": "Durable work",
+        "journey": "Continue durable work",
+        "layers": {
+          "journey": {
+            "passed": 1,
+            "skipped": 0,
+            "failed": 0
+          },
+          "integration": {
+            "passed": 1,
+            "skipped": 0,
+            "failed": 1
+          }
+        },
+        "systemPathPassed": 1,
+        "failed": 1
+      },
+      {
+        "intendedUse": "Embedded apps",
+        "journey": "Inspect a trace in Pi",
+        "layers": {
+          "journey": {
+            "passed": 0,
+            "skipped": 1,
+            "failed": 0
+          },
+          "observability": {
+            "passed": 1,
+            "skipped": 0,
+            "failed": 0
+          }
+        },
+        "systemPathPassed": 0,
+        "failed": 0
+      },
+      {
+        "intendedUse": "Embedded apps",
+        "journey": "Use MCP apps in Pi",
+        "layers": {
+          "integration": {
+            "passed": 1,
+            "skipped": 0,
+            "failed": 1
+          }
+        },
+        "systemPathPassed": 0,
+        "failed": 1
+      },
+      {
+        "intendedUse": "Knowledge and review",
+        "journey": "Correct and review journal knowledge",
+        "layers": {
+          "integration": {
+            "passed": 1,
+            "skipped": 0,
+            "failed": 0
+          }
+        },
+        "systemPathPassed": 0,
+        "failed": 0
+      },
+      {
+        "intendedUse": "Voice Agent",
+        "journey": "reject bad evidence",
+        "layers": {
+          "integration": {
+            "passed": 0,
+            "skipped": 0,
+            "failed": 1
+          }
+        },
+        "systemPathPassed": 0,
+        "failed": 1
+      },
+      {
+        "intendedUse": "Voice Agent",
+        "journey": "test_fail",
+        "layers": {
+          "contract": {
+            "passed": 0,
+            "skipped": 0,
+            "failed": 1
+          }
+        },
+        "systemPathPassed": 0,
+        "failed": 1
+      },
+      {
+        "intendedUse": "Voice Agent",
+        "journey": "test_ok",
+        "layers": {
+          "contract": {
+            "passed": 1,
+            "skipped": 0,
+            "failed": 0
+          }
+        },
+        "systemPathPassed": 0,
+        "failed": 0
+      },
+      {
+        "intendedUse": "Voice Agent",
+        "journey": "test_skip",
+        "layers": {
+          "contract": {
+            "passed": 0,
+            "skipped": 1,
+            "failed": 0
+          }
+        },
+        "systemPathPassed": 0,
+        "failed": 0
+      },
+      {
+        "intendedUse": "Voice Agent",
+        "journey": "tests::one",
+        "layers": {
+          "unit": {
+            "passed": 1,
+            "skipped": 0,
+            "failed": 0
+          }
+        },
+        "systemPathPassed": 0,
+        "failed": 0
+      },
+      {
+        "intendedUse": "Voice Agent",
+        "journey": "tests::three",
+        "layers": {
+          "unit": {
+            "passed": 0,
+            "skipped": 1,
+            "failed": 0
+          }
+        },
+        "systemPathPassed": 0,
+        "failed": 0
+      },
+      {
+        "intendedUse": "Voice Agent",
+        "journey": "tests::two",
+        "layers": {
+          "unit": {
+            "passed": 0,
+            "skipped": 0,
+            "failed": 1
+          }
+        },
+        "systemPathPassed": 0,
+        "failed": 1
+      },
+      {
+        "intendedUse": "Voice conversation",
+        "journey": "Talk with Pi",
+        "layers": {
+          "journey": {
+            "passed": 1,
+            "skipped": 0,
+            "failed": 0
+          }
+        },
+        "systemPathPassed": 0,
+        "failed": 0
+      }
+    ],
+    "activeC2": [
+      {
+        "name": "Browser Voice Client",
+        "passed": 3,
+        "skipped": 1,
+        "failed": 2,
+        "deployedPassed": 1,
+        "fixturePassed": 2,
+        "contractPassed": 0
+      },
+      {
+        "name": "Tailnet Ingress",
+        "passed": 1,
+        "skipped": 0,
+        "failed": 0,
+        "deployedPassed": 1,
+        "fixturePassed": 0,
+        "contractPassed": 0
+      },
+      {
+        "name": "Path Router",
+        "passed": 1,
+        "skipped": 0,
+        "failed": 0,
+        "deployedPassed": 1,
+        "fixturePassed": 0,
+        "contractPassed": 0
+      },
+      {
+        "name": "Voice Edge",
+        "passed": 1,
+        "skipped": 1,
+        "failed": 0,
+        "deployedPassed": 1,
+        "fixturePassed": 0,
+        "contractPassed": 0
+      },
+      {
+        "name": "Journal Review MCP",
+        "passed": 1,
+        "skipped": 0,
+        "failed": 1,
+        "deployedPassed": 0,
+        "fixturePassed": 1,
+        "contractPassed": 0
+      },
+      {
+        "name": "Agent Gateway",
+        "passed": 3,
+        "skipped": 1,
+        "failed": 1,
+        "deployedPassed": 1,
+        "fixturePassed": 1,
+        "contractPassed": 1
+      },
+      {
+        "name": "Pi Durable Owner",
+        "passed": 2,
+        "skipped": 0,
+        "failed": 0,
+        "deployedPassed": 1,
+        "fixturePassed": 1,
+        "contractPassed": 0
+      },
+      {
+        "name": "Task Tool Sandbox",
+        "passed": 1,
+        "skipped": 0,
+        "failed": 0,
+        "deployedPassed": 1,
+        "fixturePassed": 0,
+        "contractPassed": 0
+      },
+      {
+        "name": "Metrics and Traces",
+        "passed": 1,
+        "skipped": 1,
+        "failed": 0,
+        "deployedPassed": 1,
+        "fixturePassed": 0,
+        "contractPassed": 0
+      },
+      {
+        "name": "Grafana MCP",
+        "passed": 1,
+        "skipped": 1,
+        "failed": 0,
+        "deployedPassed": 1,
+        "fixturePassed": 0,
+        "contractPassed": 0
+      },
+      {
+        "name": "Pi Durable Owner Store",
+        "passed": 1,
+        "skipped": 0,
+        "failed": 0,
+        "deployedPassed": 1,
+        "fixturePassed": 0,
+        "contractPassed": 0
+      },
+      {
+        "name": "Workspace and Result Store",
+        "passed": 1,
+        "skipped": 0,
+        "failed": 0,
+        "deployedPassed": 1,
+        "fixturePassed": 0,
+        "contractPassed": 0
+      }
+    ],
+    "activeViews": [
+      {
+        "name": "c1-system-context.mmd",
+        "passed": 1,
+        "skipped": 0,
+        "failed": 0,
+        "deployedPassed": 1,
+        "fixturePassed": 0,
+        "contractPassed": 0
+      },
+      {
+        "name": "c2-container.mmd",
+        "passed": 4,
+        "skipped": 1,
+        "failed": 1,
+        "deployedPassed": 2,
+        "fixturePassed": 2,
+        "contractPassed": 0
+      },
+      {
+        "name": "c3-agent-gateway.mmd",
+        "passed": 1,
+        "skipped": 1,
+        "failed": 1,
+        "deployedPassed": 0,
+        "fixturePassed": 0,
+        "contractPassed": 1
+      },
+      {
+        "name": "c3-browser-client.mmd",
+        "passed": 2,
+        "skipped": 1,
+        "failed": 2,
+        "deployedPassed": 0,
+        "fixturePassed": 2,
+        "contractPassed": 0
+      },
+      {
+        "name": "c3-pi-task-worker.mmd",
+        "passed": 2,
+        "skipped": 0,
+        "failed": 0,
+        "deployedPassed": 1,
+        "fixturePassed": 1,
+        "contractPassed": 0
+      },
+      {
+        "name": "c3-task-tool-runtime.mmd",
+        "passed": 1,
+        "skipped": 0,
+        "failed": 0,
+        "deployedPassed": 1,
+        "fixturePassed": 0,
+        "contractPassed": 0
+      },
+      {
+        "name": "d2-delegated-task.mmd",
+        "passed": 2,
+        "skipped": 0,
+        "failed": 0,
+        "deployedPassed": 1,
+        "fixturePassed": 1,
+        "contractPassed": 0
+      }
+    ],
+    "verifiedPaths": {
+      "ownerIngress": false,
+      "voiceTelemetry": false
+    }
+  }
+}

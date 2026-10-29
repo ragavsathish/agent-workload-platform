@@ -5,6 +5,10 @@ verification, lifecycle testing, and infrastructure-backed integration tests.
 Application tests remain in their native language when they exercise an
 in-process module or a local adapter.
 
+The [language-neutral Gherkin contract](../../../docs/spec/ansible/index.md) covers
+all current playbook entry points and maps their supporting roles and task files.
+Run `make automation-spec-check` to check that inventory without running deployment.
+
 Docker Compose reads only `deploy/.env` plus explicit files in
 `deploy/secrets/`. Native services read their own ignored, least-privilege files
 under `deploy/host-env/`; `make setup` initializes missing files from

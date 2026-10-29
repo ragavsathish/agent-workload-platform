@@ -1,3 +1,8 @@
+---
+type: reference
+title: "VoxLock integration and validation"
+---
+
 # VoxLock integration and validation
 
 Status: implemented as an opt-in Pipecat input filter. Updated 2026-10-14.

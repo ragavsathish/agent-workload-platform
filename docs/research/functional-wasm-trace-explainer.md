@@ -1,3 +1,8 @@
+---
+type: reference
+title: "Functional WASI composition for the Playwright trace explainer"
+---
+
 # Functional WASI composition for the Playwright trace explainer
 
 _Research date: 2026-10-18. Primary sources only. Repository baseline:

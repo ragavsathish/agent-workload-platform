@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 2,
+  "mediaType": "application/vnd.oci.image.manifest.v1+json",
+  "artifactType": "application/vnd.agent-workload-platform.measurement-oracle.v1+json",
+  "config": {
+    "mediaType": "application/vnd.oci.empty.v1+json",
+    "digest": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+    "size": 2
+  },
+  "layers": [
+    {
+      "mediaType": "application/vnd.agent-workload-platform.measurement-oracle.golden.v1+json",
+      "digest": "sha256:c7a5269218b29db78dcaf916620e385f0cf2cee4bab8f317c9c14d63beecba79",
+      "size": 20540,
+      "annotations": {
+        "org.opencontainers.image.title": "measurement-oracle.golden.json"
+      }
+    },
+    {
+      "mediaType": "text/plain",
+      "digest": "sha256:5f33930a9072b48179a2e84533adb1b385bc10ffcfcddd47d5859ad31efdcaca",
+      "size": 7705,
+      "annotations": {
+        "org.opencontainers.image.title": "harness/spec.feature"
+      }
+    }
+  ]
+}

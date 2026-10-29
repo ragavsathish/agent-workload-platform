@@ -1,3 +1,8 @@
+---
+type: reference
+title: "Pi + Gondolin development VM"
+---
+
 # Pi + Gondolin development VM
 
 _Architecture and original probe notes, 2026-10-19. The measured implementation

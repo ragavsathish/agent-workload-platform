@@ -28,7 +28,7 @@ worker emits Kokoro audio, captions, and payload-free render telemetry.
 Listen to **Let Me Hear the Work** in its
 [contemporary R&B](docs/assets/let-me-hear-the-work.m4a) or
 [late-1950s soul](docs/assets/let-me-hear-the-work-soul-take.m4a) arrangement.
-The [pull request soundtrack workflow](../../docs/pull-request-soundtrack-workflow.md)
+The [pull request soundtrack workflow](../../docs/wow/pull-request-soundtrack-workflow.md)
 documents lyric review, durable rendering, artifact checks, and publication.
 
 ## Product structure

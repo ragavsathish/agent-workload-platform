@@ -24,7 +24,7 @@ const allureStatus = (status) => {
   if (['skipped', 'pending', 'todo'].includes(status)) return 'skipped';
   return 'failed';
 };
-const testResult = ({ fullName, name, status, suite, framework, start, duration = 0, message = '', attachment,
+export const testResult = ({ fullName, name, status, suite, framework, start, duration = 0, message = '', attachment,
   testMethod, testClass }) => {
   const uuid = randomUUID();
   const started = Number.isFinite(start) ? start : Date.now();
@@ -54,6 +54,18 @@ const testResult = ({ fullName, name, status, suite, framework, start, duration 
     ...(attachment ? { attachments: [{ name: 'Test command output', source: attachment, type: 'text/plain' }] } : {}),
   };
 };
+
+export const commandGate = (name, run, attachment, message = run.error) => testResult({
+  fullName: `voice.gate.${name}`, name, status: run.code === 0 ? 'passed' : 'failed',
+  suite: 'Command gates', framework: 'repository-runner', start: run.started,
+  duration: run.duration, message, attachment,
+});
+
+export const probeResult = ({ id, suite, title, run, message = run.error, attachment }) => testResult({
+  fullName: `voice.probe.${id}`, name: title, status: run.code === 0 && !message ? 'passed' : 'failed',
+  suite, framework: 'repository-probe', start: run.started, duration: run.duration,
+  message, attachment,
+});
 
 function playwrightCases(data) {
   const cases = [];
@@ -327,6 +339,8 @@ async function runCommand(name, command, args, { cwd = voiceRoot, env = {} } = {
 }
 
 async function main() {
+  execFileSync(process.execPath, [join(voiceRoot, 'tests/allure/measurement-oracle.mjs'), '--check'],
+    { cwd: voiceRoot, stdio: 'inherit' });
   await mkdir(resultsRoot, { recursive: true });
   const emitted = [];
   const attachLog = async (name, logPath) => {
@@ -340,11 +354,7 @@ async function main() {
       await writeFile(join(resultsRoot, `${item.uuid}-result.json`), `${JSON.stringify(item)}\n`);
     }
   };
-  const gate = (name, run, attachment, message = run.error) => testResult({
-    fullName: `voice.gate.${name}`, name, status: run.code === 0 ? 'passed' : 'failed',
-    suite: 'Command gates', framework: 'repository-runner', start: run.started,
-    duration: run.duration, message, attachment,
-  });
+  const gate = commandGate;
   const recordParsed = async (name, run, items, expectedCount = 1) => {
     await emit(items);
     if (run.code !== 0 || items.length < expectedCount) {
@@ -362,11 +372,7 @@ async function main() {
       try { proof = validate(output); } catch (error) { message = error.message; }
     }
     const attachment = await attachLog(id, run.logPath);
-    const item = testResult({
-      fullName: `voice.probe.${id}`, name: title, status: run.code === 0 && !message ? 'passed' : 'failed',
-      suite, framework: 'repository-probe', start: run.started, duration: run.duration,
-      message, attachment,
-    });
+    const item = probeResult({ id, suite, title, run, message, attachment });
     if (proof) {
       const source = `${item.uuid}-proof.json`;
       await writeFile(join(resultsRoot, source), `${JSON.stringify(proof, null, 2)}\n`);

@@ -1,3 +1,8 @@
+---
+type: reference
+title: "Docker storage in Gondolin: Overlay2 vs VFS"
+---
+
 # Docker storage in Gondolin: Overlay2 vs VFS
 
 **Decision:** use Docker's classic `overlay2` driver for the development Compose stack inside Gondolin VMs. Keep startup fail-closed when OverlayFS is unavailable. Keep VFS as a deliberate diagnostic/control option, not the default.

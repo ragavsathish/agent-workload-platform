@@ -1,3 +1,8 @@
+---
+type: reference
+title: "Open-source text annotation UI for journal review"
+---
+
 # Open-source text annotation UI for journal review
 
 Research date: 2026-10-18. Sources are project-owned repositories and documentation.

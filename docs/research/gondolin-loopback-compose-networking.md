@@ -1,3 +1,8 @@
+---
+type: reference
+title: "Gondolin loopback and Compose networking"
+---
+
 # Gondolin loopback and Compose networking
 
 _Research note: 2026-10-20. Scope: the current agent-workload-platform

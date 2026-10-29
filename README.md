@@ -101,9 +101,10 @@ The repository Makefile is the main orchestrator and delegates product work to
 
 ## Documentation
 
+- [Documentation guide: domain, architecture, method, and verified slices](docs/index.md)
 - [Voice Agent operations and development](products/voice-agent/README.md)
 - [Architecture views](products/voice-agent/docs/architecture/README.md)
 - [Product vocabulary](products/voice-agent/GLOSSARY.md)
 - [Repository organization](docs/monorepo-organization.md)
-- [Pull request soundtrack workflow](docs/pull-request-soundtrack-workflow.md)
+- [Pull request soundtrack workflow](docs/wow/pull-request-soundtrack-workflow.md)
 - [Imported source provenance](PROVENANCE.md)

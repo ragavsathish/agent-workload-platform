@@ -1,8 +1,15 @@
+---
+type: howto
+title: "Pull request soundtrack workflow"
+---
+
 # Pull request soundtrack workflow
 
-Use this workflow when a large change benefits from a pull request description
-that includes both an engineering summary and a song. The song is optional; the
-pull request must remain understandable without playing it.
+Use this workflow for an AWP self-evolution pull request: its reviewed diff
+grounds the lyrics, and its pull request body includes both the complete lyrics
+and a reviewer-accessible song link alongside the engineering summary. For other
+changes, the soundtrack remains optional. Every pull request must remain
+understandable without playing the song.
 
 ## Prerequisites and boundaries
 
@@ -157,7 +164,7 @@ git push
 Keep media separate from unrelated application or infrastructure changes. If
 the same song has multiple arrangements, use distinct filenames and say that
 the lyrics are shared. For example, this guide links to the committed
-[R&B take](../products/voice-agent/docs/assets/let-me-hear-the-work.m4a).
+[R&B take](../../products/voice-agent/docs/assets/let-me-hear-the-work.m4a).
 Use repository-relative links in both READMEs:
 
 In the repository root README use `products/voice-agent/docs/assets/<song-slug>.m4a`;
