@@ -48,3 +48,12 @@ Feature: Tasking
       When lyrics are prepared and the owner requests rendering
       Then lyric and render work have separate task identities
       And an incomplete or failed lyric result cannot start rendering
+
+  Rule: Admitted work survives uncertain dispatch
+
+    @bc-c2-007 @agreed
+    Scenario: Dispatch uncertainty preserves the admitted task
+      Given a task was saved but dispatch acknowledgement was lost
+      When the owner retries the same request identity
+      Then dispatch can resume with the original native task identity
+      And no second task identity is created
